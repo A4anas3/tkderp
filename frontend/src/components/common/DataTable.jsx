@@ -16,6 +16,7 @@ export default function DataTable({
   searchPlaceholder = 'Search records...',
   headerActions,
   emptyMessage = 'No records found.',
+  onRowClick,
 }) {
   const [localSearch, setLocalSearch] = useState(searchValue);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -98,21 +99,36 @@ export default function DataTable({
                 </td>
               </tr>
             ) : (
-              data.map((row, rIdx) => (
-                <tr
-                  key={row.id || rIdx}
-                  className="hover:bg-slate-50/80 transition-colors"
-                >
-                  {columns.map((col, cIdx) => (
-                    <td
-                      key={cIdx}
-                      className={`px-3 py-2 text-black ${col.className || ''}`}
-                    >
-                      {col.render ? col.render(row, rIdx) : row[col.accessor] ?? '—'}
-                    </td>
-                  ))}
-                </tr>
-              ))
+              data.map((row, rIdx) => {
+                const isClickable = typeof onRowClick === 'function';
+                return (
+                  <tr
+                    key={row.id || rIdx}
+                    onClick={(e) => {
+                      if (!isClickable) return;
+                      // Don't trigger row click if clicked on an interactive element
+                      if (e.target.closest('button, a, input, select, textarea, [data-no-row-click]')) {
+                        return;
+                      }
+                      onRowClick(row, rIdx);
+                    }}
+                    className={`transition-colors ${
+                      isClickable
+                        ? 'hover:bg-indigo-50/50 cursor-pointer active:bg-indigo-100/50'
+                        : 'hover:bg-slate-50/80'
+                    }`}
+                  >
+                    {columns.map((col, cIdx) => (
+                      <td
+                        key={cIdx}
+                        className={`px-3 py-2 text-black ${col.className || ''}`}
+                      >
+                        {col.render ? col.render(row, rIdx) : row[col.accessor] ?? '—'}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

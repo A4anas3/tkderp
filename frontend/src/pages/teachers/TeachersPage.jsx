@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Plus, Edit2, UserCheck, UserX, Phone, Mail, Award, BookOpen } from 'lucide-react';
 import DataTable from '../../components/common/DataTable';
 import Modal from '../../components/common/Modal';
@@ -6,10 +7,12 @@ import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
+import TeacherDetailModal from '../../components/modals/TeacherDetailModal';
 import { teacherApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 
 export default function TeachersPage() {
+  const navigate = useNavigate();
   const { success, error } = useToast();
   const [teachers, setTeachers] = useState([]);
   const [total, setTotal] = useState(0);
@@ -20,6 +23,7 @@ export default function TeachersPage() {
   // Modal State
   const [modalOpen, setModalOpen] = useState(false);
   const [editingTeacher, setEditingTeacher] = useState(null);
+  const [detailTeacher, setDetailTeacher] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
@@ -206,6 +210,7 @@ export default function TeachersPage() {
         }}
         onRefresh={loadTeachers}
         loading={loading}
+        onRowClick={(t) => setDetailTeacher(t)}
         searchPlaceholder="Search teacher by name or mobile..."
         emptyMessage="No faculty records found."
       />
@@ -292,6 +297,15 @@ export default function TeachersPage() {
           </div>
         </form>
       </Modal>
+
+      {/* Teacher Detail Modal */}
+      <TeacherDetailModal
+        isOpen={!!detailTeacher}
+        onClose={() => setDetailTeacher(null)}
+        teacher={detailTeacher}
+        onEditTeacher={(t) => handleOpenEdit(t)}
+        onViewRoster={(t) => navigate('/reports/subject-revenue')}
+      />
     </div>
   );
 }

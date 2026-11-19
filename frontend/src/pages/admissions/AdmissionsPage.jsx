@@ -10,6 +10,8 @@ import { useAuth } from '../../context/AuthContext';
 import AdmissionReceiptModal from '../../components/receipts/AdmissionReceiptModal';
 import QuickPaymentModal from '../../components/modals/QuickPaymentModal';
 import PaymentReceiptModal from '../../components/receipts/PaymentReceiptModal';
+import AdmissionDetailModal from '../../components/modals/AdmissionDetailModal';
+import { formatCycleLabel, evaluateCycleStatus } from '../../utils/dateCycleUtils';
 
 export default function AdmissionsPage() {
   const navigate = useNavigate();
@@ -26,6 +28,7 @@ export default function AdmissionsPage() {
   const [slipToShow, setSlipToShow] = useState(null);
   const [payAdmissionId, setPayAdmissionId] = useState(null);
   const [paymentReceiptToShow, setPaymentReceiptToShow] = useState(null);
+  const [detailModalAdmission, setDetailModalAdmission] = useState(null);
 
   const loadAdmissions = useCallback(async () => {
     setLoading(true);
@@ -98,6 +101,29 @@ export default function AdmissionsPage() {
           ))}
         </div>
       ),
+    },
+    {
+      header: 'Rolling Fee Cycle',
+      render: (a) => {
+        const vFrom = a.valid_from || a.admission_date;
+        const vTo = a.valid_to;
+        const cycle = evaluateCycleStatus(vTo, a.balance_due);
+        return (
+          <div className="text-xs">
+            <span className="font-mono font-bold text-black block">
+              {formatCycleLabel(vFrom, vTo)}
+            </span>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className="text-[10px] text-indigo-700 font-semibold bg-indigo-50 border border-indigo-200 px-1 py-0.2 rounded">
+                Day {vFrom ? parseInt(vFrom.split('-')[2], 10) : '—'}
+              </span>
+              <Badge size="xs" variant={cycle.variant}>
+                {cycle.label}
+              </Badge>
+            </div>
+          </div>
+        );
+      },
     },
     {
       header: 'Total Payable',
@@ -241,8 +267,18 @@ export default function AdmissionsPage() {
         }}
         onRefresh={loadAdmissions}
         loading={loading}
+        onRowClick={(row) => setDetailModalAdmission(row)}
         searchPlaceholder="Search by purchase transaction ID or student name..."
         emptyMessage="No course purchases found."
+      />
+
+      {/* Admission Detail Modal */}
+      <AdmissionDetailModal
+        isOpen={!!detailModalAdmission}
+        onClose={() => setDetailModalAdmission(null)}
+        admission={detailModalAdmission}
+        onPrintSlip={(adm) => setSlipToShow(adm)}
+        onCollectFee={(admId) => setPayAdmissionId(admId)}
       />
 
       {/* Admission Slip Modal */}

@@ -21,6 +21,7 @@ import PaymentReceiptModal from '../../components/receipts/PaymentReceiptModal';
 import EditPaymentModal from '../../components/modals/EditPaymentModal';
 import IssueRefundModal from '../../components/modals/IssueRefundModal';
 import RefundReceiptModal from '../../components/receipts/RefundReceiptModal';
+import PaymentDetailModal from '../../components/modals/PaymentDetailModal';
 
 export default function PaymentsPage() {
   const { error } = useToast();
@@ -44,6 +45,7 @@ export default function PaymentsPage() {
   // Modals
   const [isCollectModalOpen, setIsCollectModalOpen] = useState(false);
   const [receiptToShow, setReceiptToShow] = useState(null);
+  const [detailPayment, setDetailPayment] = useState(null);
 
   // Edit Payment Modal
   const [editingPayment, setEditingPayment] = useState(null);
@@ -368,6 +370,7 @@ export default function PaymentsPage() {
           }}
           onRefresh={loadPayments}
           loading={loadingPayments}
+          onRowClick={(p) => setDetailPayment(p)}
           searchPlaceholder="Search by student name, receipt number, or reference..."
           emptyMessage="No fee payments recorded."
         />
@@ -389,6 +392,7 @@ export default function PaymentsPage() {
           }}
           onRefresh={loadRefunds}
           loading={loadingRefunds}
+          onRowClick={(r) => setRefundReceiptToShow(r)}
           searchPlaceholder="Search by student name or refund voucher number..."
           emptyMessage="No fee refunds recorded yet."
         />
@@ -449,6 +453,17 @@ export default function PaymentsPage() {
         isOpen={!!refundReceiptToShow}
         onClose={() => setRefundReceiptToShow(null)}
         refund={refundReceiptToShow}
+      />
+
+      {/* Payment Detail Modal */}
+      <PaymentDetailModal
+        isOpen={!!detailPayment}
+        onClose={() => setDetailPayment(null)}
+        payment={detailPayment}
+        isAdmin={isAdmin}
+        onPrintReceipt={(p) => handleViewReceipt(p)}
+        onIssueRefund={(p) => handleOpenRefund(p)}
+        onEditPayment={(p) => handleOpenEditPayment(p)}
       />
     </div>
   );

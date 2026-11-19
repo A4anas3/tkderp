@@ -24,20 +24,32 @@ import {
   BookOpen,
   GraduationCap,
   Calendar,
-  AlertCircle
+  AlertCircle,
+  ChevronsLeft,
+  ChevronsRight,
+  ChevronLeft,
+  Info
 } from 'lucide-react';
 import StatCard from '../../components/common/StatCard';
 import Badge from '../../components/common/Badge';
 import DateRangeFilter from '../../components/common/DateRangeFilter';
 import QuickPaymentModal from '../../components/modals/QuickPaymentModal';
+import SubjectDetailModal from '../../components/modals/SubjectDetailModal';
+import TeacherDetailModal from '../../components/modals/TeacherDetailModal';
+import BatchDetailModal from '../../components/modals/BatchDetailModal';
 import { reportApi } from '../../services/allApis';
+import { formatIndianDate, formatCycleLabel, evaluateCycleStatus } from '../../utils/dateCycleUtils';
+
+const PAGE_SIZE = 10;
 
 /**
  * Sub-table displaying enrolled students with rolling date-to-date billing cycles.
+ * Equipped with dedicated search, pagination, and clickable rows to student profile.
  */
-function StudentRosterSubtable({ students, contextType = 'subject', onCollectFee }) {
+function StudentRosterSubtable({ students = [], contextType = 'subject', onCollectFee }) {
   const navigate = useNavigate();
   const [filterText, setFilterText] = useState('');
+  const [page, setPage] = useState(1);
 
   const filtered = useMemo(() => {
     if (!students) return [];
@@ -50,6 +62,13 @@ function StudentRosterSubtable({ students, contextType = 'subject', onCollectFee
       s.admission_number?.toLowerCase().includes(q)
     ));
   }, [students, filterText]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pagedStudents = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filtered.slice(start, start + PAGE_SIZE);
+  }, [filtered, currentPage]);
 
   if (!students || students.length === 0) {
     return (
@@ -68,7 +87,7 @@ function StudentRosterSubtable({ students, contextType = 'subject', onCollectFee
             Enrolled Students ({filtered.length} of {students.length})
           </span>
           <span className="text-[11px] text-slate-600 hidden sm:inline font-medium">
-            · Date-to-date rolling monthly cycle roster
+            · Date-to-date rolling monthly cycle roster (click any student row for profile)
           </span>
         </div>
         <div className="relative w-full sm:w-64">
@@ -77,7 +96,10 @@ function StudentRosterSubtable({ students, contextType = 'subject', onCollectFee
             type="text"
             placeholder="Search student, code, mobile..."
             value={filterText}
-            onChange={(e) => setFilterText(e.target.value)}
+            onChange={(e) => {
+              setFilterText(e.target.value);
+              setPage(1);
+            }}
             className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 text-black placeholder:text-slate-400 font-medium"
           />
         </div>
@@ -102,8 +124,16 @@ function StudentRosterSubtable({ students, contextType = 'subject', onCollectFee
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {filtered.map((s, idx) => (
-              <tr key={idx} className="hover:bg-slate-50 transition-colors">
+            {pagedStudents.map((s, idx) => (
+              <tr
+                key={idx}
+                onClick={(e) => {
+                  if (e.target.closest('button, a, input, [data-no-click]')) return;
+                  navigate(`/students/${s.student_id}`);
+                }}
+                className="hover:bg-indigo-50/40 cursor-pointer transition-colors"
+                title="Click to view student profile & enrollment ledger"
+              >
                 {/* Student info */}
                 <td className="p-2.5">
                   <div className="flex items-center gap-2">
@@ -119,17 +149,14 @@ function StudentRosterSubtable({ students, contextType = 'subject', onCollectFee
                       </div>
                     )}
                     <div>
-                      <div
-                        className="font-bold text-black hover:text-indigo-600 cursor-pointer"
-                        onClick={() => navigate(`/students/${s.student_id}`)}
-                      >
+                      <div className="font-bold text-black hover:text-indigo-600 transition">
                         {s.student_name}
                       </div>
-                      <div className="font-mono text-[11px] text-slate-600">
+                      <div className="font-mono text-[11px] text-slate-600 font-semibold">
                         {s.student_code}
                       </div>
                       {s.mobile && (
-                        <div className="text-[11px] text-slate-600">
+                        <div className="text-[11px] text-slate-600 font-mono">
                           📞 {s.mobile}
                         </div>
                       )}
@@ -160,13 +187,13 @@ function StudentRosterSubtable({ students, contextType = 'subject', onCollectFee
                 {/* Rolling Cycle Window */}
                 <td className="p-2.5">
                   <div className="font-mono font-bold text-black text-xs">
-                    {s.cycle_label}
+                    {s.cycle_label || formatCycleLabel(s.valid_from, s.valid_to)}
                   </div>
                   <div className="text-[11px] text-indigo-700 font-semibold">
-                    {s.billing_cycle_anchor || `Day ${s.billing_day} cycle`}
+                    {s.billing_cycle_anchor || `Day ${s.billing_day || 1} cycle`}
                   </div>
                   <div className="text-[10px] text-slate-600 font-medium">
-                    Next Due: {s.next_due_date}
+                    Next Due: {s.next_due_date || '—'}
                   </div>
                 </td>
 
@@ -212,7 +239,7 @@ function StudentRosterSubtable({ students, contextType = 'subject', onCollectFee
                 </td>
 
                 {/* Actions */}
-                <td className="p-2.5 text-center">
+                <td className="p-2.5 text-center" data-no-click>
                   <div className="flex items-center justify-center gap-1.5">
                     <button
                       onClick={() => navigate(`/students/${s.student_id}`)}
@@ -239,6 +266,54 @@ function StudentRosterSubtable({ students, contextType = 'subject', onCollectFee
           </tbody>
         </table>
       </div>
+
+      {/* Subtable Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between text-xs text-slate-600 pt-1 px-1">
+          <span>
+            Showing <strong className="text-black">{(currentPage - 1) * PAGE_SIZE + 1}</strong> to{' '}
+            <strong className="text-black">{Math.min(currentPage * PAGE_SIZE, filtered.length)}</strong> of{' '}
+            <strong className="text-black">{filtered.length}</strong> students
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPage(1)}
+              disabled={currentPage <= 1}
+              className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              title="First Page"
+            >
+              <ChevronsLeft className="w-3.5 h-3.5 text-black" />
+            </button>
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage <= 1}
+              className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Previous Page"
+            >
+              <ChevronLeft className="w-3.5 h-3.5 text-black" />
+            </button>
+            <span className="px-2 py-0.5 font-medium text-black">
+              Page {currentPage} of {totalPages}
+            </span>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage >= totalPages}
+              className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Next Page"
+            >
+              <ChevronRight className="w-3.5 h-3.5 text-black" />
+            </button>
+            <button
+              onClick={() => setPage(totalPages)}
+              disabled={currentPage >= totalPages}
+              className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Last Page"
+            >
+              <ChevronsRight className="w-3.5 h-3.5 text-black" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -255,6 +330,21 @@ export default function SubjectRevenuePage() {
   const [expandedSubjects, setExpandedSubjects] = useState({});
   const [expandedTeachers, setExpandedTeachers] = useState({});
   const [expandedBatches, setExpandedBatches] = useState({});
+
+  // Searches & Pagination for each Ledger
+  const [subjectSearch, setSubjectSearch] = useState('');
+  const [subjectPage, setSubjectPage] = useState(1);
+
+  const [teacherSearch, setTeacherSearch] = useState('');
+  const [teacherPage, setTeacherPage] = useState(1);
+
+  const [batchSearch, setBatchSearch] = useState('');
+  const [batchPage, setBatchPage] = useState(1);
+
+  // Detail Modals
+  const [selectedSubjectDetail, setSelectedSubjectDetail] = useState(null);
+  const [selectedTeacherDetail, setSelectedTeacherDetail] = useState(null);
+  const [selectedBatchDetail, setSelectedBatchDetail] = useState(null);
 
   // Fee collection modal state
   const [payModalOpen, setPayModalOpen] = useState(false);
@@ -314,11 +404,65 @@ export default function SubjectRevenuePage() {
   };
 
   const summary = subjectData?.summary || {};
-  const items = subjectData?.items || [];
+  const rawItems = subjectData?.items || [];
+
+  // Filtered and Paginated Subjects
+  const filteredSubjects = useMemo(() => {
+    if (!subjectSearch.trim()) return rawItems;
+    const q = subjectSearch.toLowerCase().trim();
+    return rawItems.filter(
+      (s) => s.subject_name?.toLowerCase().includes(q) || s.subject_code?.toLowerCase().includes(q)
+    );
+  }, [rawItems, subjectSearch]);
+
+  const subjectTotalPages = Math.max(1, Math.ceil(filteredSubjects.length / PAGE_SIZE));
+  const currentSubjectPage = Math.min(subjectPage, subjectTotalPages);
+  const pagedSubjects = useMemo(() => {
+    const start = (currentSubjectPage - 1) * PAGE_SIZE;
+    return filteredSubjects.slice(start, start + PAGE_SIZE);
+  }, [filteredSubjects, currentSubjectPage]);
+
+  // Filtered and Paginated Teachers
+  const filteredTeachers = useMemo(() => {
+    if (!teacherSearch.trim()) return teacherData;
+    const q = teacherSearch.toLowerCase().trim();
+    return teacherData.filter(
+      (t) =>
+        t.teacher_name?.toLowerCase().includes(q) ||
+        t.teacher_code?.toLowerCase().includes(q) ||
+        t.specialization?.toLowerCase().includes(q)
+    );
+  }, [teacherData, teacherSearch]);
+
+  const teacherTotalPages = Math.max(1, Math.ceil(filteredTeachers.length / PAGE_SIZE));
+  const currentTeacherPage = Math.min(teacherPage, teacherTotalPages);
+  const pagedTeachers = useMemo(() => {
+    const start = (currentTeacherPage - 1) * PAGE_SIZE;
+    return filteredTeachers.slice(start, start + PAGE_SIZE);
+  }, [filteredTeachers, currentTeacherPage]);
+
+  // Filtered and Paginated Batches
+  const filteredBatches = useMemo(() => {
+    if (!batchSearch.trim()) return batchData;
+    const q = batchSearch.toLowerCase().trim();
+    return batchData.filter(
+      (b) =>
+        b.batch_name?.toLowerCase().includes(q) ||
+        b.batch_code?.toLowerCase().includes(q) ||
+        b.teacher_name?.toLowerCase().includes(q)
+    );
+  }, [batchData, batchSearch]);
+
+  const batchTotalPages = Math.max(1, Math.ceil(filteredBatches.length / PAGE_SIZE));
+  const currentBatchPage = Math.min(batchPage, batchTotalPages);
+  const pagedBatches = useMemo(() => {
+    const start = (currentBatchPage - 1) * PAGE_SIZE;
+    return filteredBatches.slice(start, start + PAGE_SIZE);
+  }, [filteredBatches, currentBatchPage]);
 
   // Chart data formatting: Show active top subjects and avoid label crowding
   const chartData = useMemo(() => {
-    const activeItems = items
+    const activeItems = rawItems
       .filter((itm) => itm.total_booked > 0)
       .sort((a, b) => b.total_booked - a.total_booked)
       .slice(0, 10);
@@ -330,7 +474,7 @@ export default function SubjectRevenuePage() {
       Collected: itm.total_collected,
       Outstanding: itm.balance_due,
     }));
-  }, [items]);
+  }, [rawItems]);
 
   return (
     <div className="space-y-4">
@@ -367,7 +511,7 @@ export default function SubjectRevenuePage() {
                 </span>
               </span>
               <span className="text-[11px] bg-white px-2.5 py-0.5 rounded border border-indigo-300 font-bold text-black">
-                {items.length} Subjects Active
+                {rawItems.length} Subjects Active
               </span>
             </div>
           )}
@@ -461,7 +605,7 @@ export default function SubjectRevenuePage() {
               }`}
             >
               <BookOpen className="w-3.5 h-3.5" />
-              <span>Subject Ledgers ({items.length})</span>
+              <span>Subject Ledgers ({rawItems.length})</span>
             </button>
             <button
               onClick={() => setActiveTab('teachers')}
@@ -489,19 +633,31 @@ export default function SubjectRevenuePage() {
 
           {/* 1. Subject Revenue & Enrollment Ledger */}
           {(activeTab === 'all' || activeTab === 'subjects') && (
-            <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-200 mb-3 gap-2">
+            <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-slate-200 gap-2">
                 <div>
                   <h2 className="text-sm font-bold text-black flex items-center gap-2">
                     <BookOpen className="w-4 h-4 text-indigo-600" />
                     <span>Subject Revenue & Enrolled Student Rosters</span>
                   </h2>
                   <p className="text-[11px] text-slate-500">
-                    Click any subject row or student count to expand and inspect rolling fee cycles
+                    Click any subject row to inspect rolling cycle student roster; click 'Detail' for curriculum status
                   </p>
                 </div>
-                <div className="text-[11px] text-slate-600 bg-slate-100 px-2 py-1 rounded font-medium">
-                  {items.length} Subjects
+
+                {/* Subject Search Box */}
+                <div className="relative w-full sm:w-64">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search subject by name or code..."
+                    value={subjectSearch}
+                    onChange={(e) => {
+                      setSubjectSearch(e.target.value);
+                      setSubjectPage(1);
+                    }}
+                    className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 text-black placeholder:text-slate-400 font-medium"
+                  />
                 </div>
               </div>
 
@@ -516,103 +672,184 @@ export default function SubjectRevenuePage() {
                       <th className="p-2.5 text-right">Total Billed</th>
                       <th className="p-2.5 text-right text-emerald-800">Actual Collected</th>
                       <th className="p-2.5 text-right text-rose-700">Balance Due</th>
-                      <th className="p-2.5 text-center">Roster</th>
+                      <th className="p-2.5 text-center">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {items.map((s, idx) => {
-                      const isExpanded = !!expandedSubjects[s.subject_id];
-                      return (
-                        <React.Fragment key={idx}>
-                          <tr
-                            className={`hover:bg-slate-50 transition-colors cursor-pointer ${
-                              isExpanded ? 'bg-indigo-50/20' : ''
-                            }`}
-                            onClick={() => toggleSubjectExpand(s.subject_id)}
-                          >
-                            <td className="p-2.5 font-bold text-black flex items-center gap-1.5">
-                              {isExpanded ? (
-                                <ChevronDown className="w-4 h-4 text-indigo-600 shrink-0" />
-                              ) : (
-                                <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
-                              )}
-                              {s.subject_code === 'GREEN-CARD' ? (
-                                <Award className="w-4 h-4 text-purple-600 shrink-0" />
-                              ) : null}
-                              <span className="hover:text-indigo-600">{s.subject_name}</span>
-                            </td>
-                            <td className="p-2.5 font-mono text-slate-700 font-semibold">{s.subject_code}</td>
-                            <td className="p-2.5 text-right font-mono text-slate-800 font-semibold">
-                              ₹{s.default_fee.toFixed(2)}
-                            </td>
-                            <td className="p-2.5 text-center">
-                              <span
-                                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold transition-all ${
-                                  isExpanded
-                                    ? 'bg-indigo-600 text-white shadow-xs'
-                                    : s.enrolled_count > 0
-                                    ? 'bg-indigo-100 text-indigo-900 border border-indigo-200'
-                                    : 'bg-slate-100 text-slate-700'
-                                }`}
-                              >
-                                <Users className="w-3 h-3" />
-                                {s.enrolled_count}
-                              </span>
-                            </td>
-                            <td className="p-2.5 text-right font-mono font-bold text-black">
-                              ₹{s.total_booked.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                            </td>
-                            <td className="p-2.5 text-right font-mono font-bold text-emerald-800">
-                              ₹{s.total_collected.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                            </td>
-                            <td className="p-2.5 text-right font-mono font-bold text-rose-700">
-                              ₹{s.balance_due.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                            </td>
-                            <td className="p-2.5 text-center">
-                              <span className="text-[11px] font-semibold text-indigo-600 hover:underline">
-                                {isExpanded ? 'Hide Roster ▲' : 'View Roster ▼'}
-                              </span>
-                            </td>
-                          </tr>
-
-                          {/* Expanded Student Roster Accordion */}
-                          {isExpanded && (
-                            <tr>
-                              <td colSpan={8} className="p-0 border-b border-indigo-200 bg-indigo-50/20">
-                                <div className="p-3 border-l-4 border-indigo-600">
-                                  <StudentRosterSubtable
-                                    students={s.students}
-                                    contextType="subject"
-                                    onCollectFee={handleOpenFeeModal}
-                                  />
+                    {pagedSubjects.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="py-6 text-center text-slate-500">
+                          No subjects matching '{subjectSearch}'.
+                        </td>
+                      </tr>
+                    ) : (
+                      pagedSubjects.map((s, idx) => {
+                        const isExpanded = !!expandedSubjects[s.subject_id];
+                        return (
+                          <React.Fragment key={idx}>
+                            <tr
+                              className={`hover:bg-slate-50 transition-colors cursor-pointer ${
+                                isExpanded ? 'bg-indigo-50/20' : ''
+                              }`}
+                              onClick={() => toggleSubjectExpand(s.subject_id)}
+                            >
+                              <td className="p-2.5 font-bold text-black flex items-center gap-1.5">
+                                {isExpanded ? (
+                                  <ChevronDown className="w-4 h-4 text-indigo-600 shrink-0" />
+                                ) : (
+                                  <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                                )}
+                                {s.subject_code === 'GREEN-CARD' ? (
+                                  <Award className="w-4 h-4 text-purple-600 shrink-0" />
+                                ) : null}
+                                <span className="hover:text-indigo-600">{s.subject_name}</span>
+                              </td>
+                              <td className="p-2.5 font-mono text-slate-700 font-semibold">{s.subject_code}</td>
+                              <td className="p-2.5 text-right font-mono text-slate-800 font-semibold">
+                                ₹{s.default_fee.toFixed(2)}
+                              </td>
+                              <td className="p-2.5 text-center">
+                                <span
+                                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold transition-all ${
+                                    isExpanded
+                                      ? 'bg-indigo-600 text-white shadow-xs'
+                                      : s.enrolled_count > 0
+                                      ? 'bg-indigo-100 text-indigo-900 border border-indigo-200'
+                                      : 'bg-slate-100 text-slate-700'
+                                  }`}
+                                >
+                                  <Users className="w-3 h-3" />
+                                  {s.enrolled_count}
+                                </span>
+                              </td>
+                              <td className="p-2.5 text-right font-mono font-bold text-black">
+                                ₹{s.total_booked.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                              </td>
+                              <td className="p-2.5 text-right font-mono font-bold text-emerald-800">
+                                ₹{s.total_collected.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                              </td>
+                              <td className="p-2.5 text-right font-mono font-bold text-rose-700">
+                                ₹{s.balance_due.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                              </td>
+                              <td className="p-2.5 text-center" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <button
+                                    onClick={() => setSelectedSubjectDetail(s)}
+                                    title="View Subject Curriculum Status"
+                                    className="px-2 py-0.5 text-[11px] font-semibold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded border border-slate-300 flex items-center gap-0.5"
+                                  >
+                                    <Info className="w-3 h-3 text-slate-500" />
+                                    <span>Detail</span>
+                                  </button>
+                                  <button
+                                    onClick={() => toggleSubjectExpand(s.subject_id)}
+                                    className="text-[11px] font-semibold text-indigo-600 hover:underline px-1 py-0.5"
+                                  >
+                                    {isExpanded ? 'Hide ▲' : 'Roster ▼'}
+                                  </button>
                                 </div>
                               </td>
                             </tr>
-                          )}
-                        </React.Fragment>
-                      );
-                    })}
+
+                            {/* Expanded Student Roster Accordion */}
+                            {isExpanded && (
+                              <tr>
+                                <td colSpan={8} className="p-0 border-b border-indigo-200 bg-indigo-50/20">
+                                  <div className="p-3 border-l-4 border-indigo-600">
+                                    <StudentRosterSubtable
+                                      students={s.students}
+                                      contextType="subject"
+                                      onCollectFee={handleOpenFeeModal}
+                                    />
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
+
+              {/* Subject Ledger Pagination */}
+              {subjectTotalPages > 1 && (
+                <div className="flex items-center justify-between text-xs text-slate-600 pt-2 border-t border-slate-100">
+                  <span>
+                    Showing <strong className="text-black">{(currentSubjectPage - 1) * PAGE_SIZE + 1}</strong> to{' '}
+                    <strong className="text-black">{Math.min(currentSubjectPage * PAGE_SIZE, filteredSubjects.length)}</strong> of{' '}
+                    <strong className="text-black">{filteredSubjects.length}</strong> subjects
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setSubjectPage(1)}
+                      disabled={currentSubjectPage <= 1}
+                      className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                      title="First Page"
+                    >
+                      <ChevronsLeft className="w-3.5 h-3.5 text-black" />
+                    </button>
+                    <button
+                      onClick={() => setSubjectPage((p) => Math.max(1, p - 1))}
+                      disabled={currentSubjectPage <= 1}
+                      className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                      title="Previous Page"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5 text-black" />
+                    </button>
+                    <span className="px-2 py-0.5 font-medium text-black">
+                      Page {currentSubjectPage} of {subjectTotalPages}
+                    </span>
+                    <button
+                      onClick={() => setSubjectPage((p) => Math.min(subjectTotalPages, p + 1))}
+                      disabled={currentSubjectPage >= subjectTotalPages}
+                      className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                      title="Next Page"
+                    >
+                      <ChevronRight className="w-3.5 h-3.5 text-black" />
+                    </button>
+                    <button
+                      onClick={() => setSubjectPage(subjectTotalPages)}
+                      disabled={currentSubjectPage >= subjectTotalPages}
+                      className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                      title="Last Page"
+                    >
+                      <ChevronsRight className="w-3.5 h-3.5 text-black" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
           {/* 2. Teacher-Wise Associated Subject Revenue */}
           {(activeTab === 'all' || activeTab === 'teachers') && (
-            <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-200 mb-3 gap-2">
+            <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-slate-200 gap-2">
                 <div>
                   <h2 className="text-sm font-bold text-black flex items-center gap-2">
                     <GraduationCap className="w-4 h-4 text-indigo-600" />
                     <span>Teacher-Wise Revenue & Student Rosters</span>
                   </h2>
                   <p className="text-[11px] text-slate-500">
-                    Faculty-assigned students with individual rolling fee cycles and renewal due tracking
+                    Click any teacher row to view assigned student roster with rolling fee cycles; click 'Detail' for profile
                   </p>
                 </div>
-                <div className="text-[11px] text-slate-600 bg-slate-100 px-2 py-1 rounded font-medium">
-                  {teacherData.length} Teachers
+
+                {/* Teacher Search Box */}
+                <div className="relative w-full sm:w-64">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search teacher by name or specialization..."
+                    value={teacherSearch}
+                    onChange={(e) => {
+                      setTeacherSearch(e.target.value);
+                      setTeacherPage(1);
+                    }}
+                    className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 text-black placeholder:text-slate-400 font-medium"
+                  />
                 </div>
               </div>
 
@@ -628,18 +865,18 @@ export default function SubjectRevenuePage() {
                       <th className="p-2.5 text-right">Total Billed</th>
                       <th className="p-2.5 text-right text-emerald-800">Collected</th>
                       <th className="p-2.5 text-right text-rose-700">Due</th>
-                      <th className="p-2.5 text-center">Roster</th>
+                      <th className="p-2.5 text-center">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {teacherData.length === 0 ? (
+                    {pagedTeachers.length === 0 ? (
                       <tr>
                         <td colSpan={9} className="py-6 text-center text-slate-500">
-                          No teacher revenue recorded in this period.
+                          No teachers matching '{teacherSearch}'.
                         </td>
                       </tr>
                     ) : (
-                      teacherData.map((t, idx) => {
+                      pagedTeachers.map((t, idx) => {
                         const isExpanded = !!expandedTeachers[t.teacher_id];
                         return (
                           <React.Fragment key={idx}>
@@ -683,10 +920,23 @@ export default function SubjectRevenuePage() {
                               <td className="p-2.5 text-right font-mono font-bold text-rose-700">
                                 ₹{t.balance_due.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                               </td>
-                              <td className="p-2.5 text-center">
-                                <span className="text-[11px] font-semibold text-indigo-600 hover:underline">
-                                  {isExpanded ? 'Hide Roster ▲' : 'View Roster ▼'}
-                                </span>
+                              <td className="p-2.5 text-center" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <button
+                                    onClick={() => setSelectedTeacherDetail(t)}
+                                    title="View Teacher Detail & Active Status"
+                                    className="px-2 py-0.5 text-[11px] font-semibold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded border border-slate-300 flex items-center gap-0.5"
+                                  >
+                                    <Info className="w-3 h-3 text-slate-500" />
+                                    <span>Detail</span>
+                                  </button>
+                                  <button
+                                    onClick={() => toggleTeacherExpand(t.teacher_id)}
+                                    className="text-[11px] font-semibold text-indigo-600 hover:underline px-1 py-0.5"
+                                  >
+                                    {isExpanded ? 'Hide ▲' : 'Roster ▼'}
+                                  </button>
+                                </div>
                               </td>
                             </tr>
 
@@ -711,24 +961,84 @@ export default function SubjectRevenuePage() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Teacher Ledger Pagination */}
+              {teacherTotalPages > 1 && (
+                <div className="flex items-center justify-between text-xs text-slate-600 pt-2 border-t border-slate-100">
+                  <span>
+                    Showing <strong className="text-black">{(currentTeacherPage - 1) * PAGE_SIZE + 1}</strong> to{' '}
+                    <strong className="text-black">{Math.min(currentTeacherPage * PAGE_SIZE, filteredTeachers.length)}</strong> of{' '}
+                    <strong className="text-black">{filteredTeachers.length}</strong> teachers
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setTeacherPage(1)}
+                      disabled={currentTeacherPage <= 1}
+                      className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                      title="First Page"
+                    >
+                      <ChevronsLeft className="w-3.5 h-3.5 text-black" />
+                    </button>
+                    <button
+                      onClick={() => setTeacherPage((p) => Math.max(1, p - 1))}
+                      disabled={currentTeacherPage <= 1}
+                      className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                      title="Previous Page"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5 text-black" />
+                    </button>
+                    <span className="px-2 py-0.5 font-medium text-black">
+                      Page {currentTeacherPage} of {teacherTotalPages}
+                    </span>
+                    <button
+                      onClick={() => setTeacherPage((p) => Math.min(teacherTotalPages, p + 1))}
+                      disabled={currentTeacherPage >= teacherTotalPages}
+                      className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                      title="Next Page"
+                    >
+                      <ChevronRight className="w-3.5 h-3.5 text-black" />
+                    </button>
+                    <button
+                      onClick={() => setTeacherPage(teacherTotalPages)}
+                      disabled={currentTeacherPage >= teacherTotalPages}
+                      className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                      title="Last Page"
+                    >
+                      <ChevronsRight className="w-3.5 h-3.5 text-black" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
           {/* 3. Batch-Wise Collections & Realized Revenue */}
           {(activeTab === 'all' || activeTab === 'batches') && (
-            <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-200 mb-3 gap-2">
+            <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-slate-200 gap-2">
                 <div>
                   <h2 className="text-sm font-bold text-black flex items-center gap-2">
                     <Users className="w-4 h-4 text-indigo-600" />
                     <span>Batch-Wise Collections & Realized Revenue</span>
                   </h2>
                   <p className="text-[11px] text-slate-500">
-                    Batch-level aggregates with hall rooms and enrolled student details
+                    Batch-level aggregates with hall rooms, enrolled students, and classroom status
                   </p>
                 </div>
-                <div className="text-[11px] text-slate-600 bg-slate-100 px-2 py-1 rounded font-medium">
-                  {batchData.length} Batches
+
+                {/* Batch Search Box */}
+                <div className="relative w-full sm:w-64">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search batch by name, code, teacher..."
+                    value={batchSearch}
+                    onChange={(e) => {
+                      setBatchSearch(e.target.value);
+                      setBatchPage(1);
+                    }}
+                    className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 text-black placeholder:text-slate-400 font-medium"
+                  />
                 </div>
               </div>
 
@@ -745,18 +1055,18 @@ export default function SubjectRevenuePage() {
                       <th className="p-2.5 text-right text-emerald-800">Collected</th>
                       <th className="p-2.5 text-right text-rose-700">Due</th>
                       <th className="p-2.5 text-center">Status</th>
-                      <th className="p-2.5 text-center">Roster</th>
+                      <th className="p-2.5 text-center">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {batchData.length === 0 ? (
+                    {pagedBatches.length === 0 ? (
                       <tr>
                         <td colSpan={10} className="py-6 text-center text-slate-500">
-                          No batch revenue recorded in this period.
+                          No batches matching '{batchSearch}'.
                         </td>
                       </tr>
                     ) : (
-                      batchData.map((b, idx) => {
+                      pagedBatches.map((b, idx) => {
                         const isExpanded = !!expandedBatches[b.batch_id];
                         return (
                           <React.Fragment key={idx}>
@@ -805,10 +1115,23 @@ export default function SubjectRevenuePage() {
                                   {b.status}
                                 </Badge>
                               </td>
-                              <td className="p-2.5 text-center">
-                                <span className="text-[11px] font-semibold text-indigo-600 hover:underline">
-                                  {isExpanded ? 'Hide Roster ▲' : 'View Roster ▼'}
-                                </span>
+                              <td className="p-2.5 text-center" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <button
+                                    onClick={() => setSelectedBatchDetail(b)}
+                                    title="View Batch Detail & Active Status"
+                                    className="px-2 py-0.5 text-[11px] font-semibold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded border border-slate-300 flex items-center gap-0.5"
+                                  >
+                                    <Info className="w-3 h-3 text-slate-500" />
+                                    <span>Detail</span>
+                                  </button>
+                                  <button
+                                    onClick={() => toggleBatchExpand(b.batch_id)}
+                                    className="text-[11px] font-semibold text-indigo-600 hover:underline px-1 py-0.5"
+                                  >
+                                    {isExpanded ? 'Hide ▲' : 'Roster ▼'}
+                                  </button>
+                                </div>
                               </td>
                             </tr>
 
@@ -833,6 +1156,54 @@ export default function SubjectRevenuePage() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Batch Ledger Pagination */}
+              {batchTotalPages > 1 && (
+                <div className="flex items-center justify-between text-xs text-slate-600 pt-2 border-t border-slate-100">
+                  <span>
+                    Showing <strong className="text-black">{(currentBatchPage - 1) * PAGE_SIZE + 1}</strong> to{' '}
+                    <strong className="text-black">{Math.min(currentBatchPage * PAGE_SIZE, filteredBatches.length)}</strong> of{' '}
+                    <strong className="text-black">{filteredBatches.length}</strong> batches
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setBatchPage(1)}
+                      disabled={currentBatchPage <= 1}
+                      className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                      title="First Page"
+                    >
+                      <ChevronsLeft className="w-3.5 h-3.5 text-black" />
+                    </button>
+                    <button
+                      onClick={() => setBatchPage((p) => Math.max(1, p - 1))}
+                      disabled={currentBatchPage <= 1}
+                      className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                      title="Previous Page"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5 text-black" />
+                    </button>
+                    <span className="px-2 py-0.5 font-medium text-black">
+                      Page {currentBatchPage} of {batchTotalPages}
+                    </span>
+                    <button
+                      onClick={() => setBatchPage((p) => Math.min(batchTotalPages, p + 1))}
+                      disabled={currentBatchPage >= batchTotalPages}
+                      className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                      title="Next Page"
+                    >
+                      <ChevronRight className="w-3.5 h-3.5 text-black" />
+                    </button>
+                    <button
+                      onClick={() => setBatchPage(batchTotalPages)}
+                      disabled={currentBatchPage >= batchTotalPages}
+                      className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                      title="Last Page"
+                    >
+                      <ChevronsRight className="w-3.5 h-3.5 text-black" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </>
@@ -852,6 +1223,30 @@ export default function SubjectRevenuePage() {
           }}
         />
       )}
+
+      {/* Subject Detail Modal */}
+      <SubjectDetailModal
+        isOpen={!!selectedSubjectDetail}
+        onClose={() => setSelectedSubjectDetail(null)}
+        subject={selectedSubjectDetail}
+        onToggleRoster={(subId) => toggleSubjectExpand(subId)}
+      />
+
+      {/* Teacher Detail Modal */}
+      <TeacherDetailModal
+        isOpen={!!selectedTeacherDetail}
+        onClose={() => setSelectedTeacherDetail(null)}
+        teacher={selectedTeacherDetail}
+        onViewRoster={(t) => toggleTeacherExpand(t.teacher_id)}
+      />
+
+      {/* Batch Detail Modal */}
+      <BatchDetailModal
+        isOpen={!!selectedBatchDetail}
+        onClose={() => setSelectedBatchDetail(null)}
+        batch={selectedBatchDetail}
+        onToggleRoster={(batchId) => toggleBatchExpand(batchId)}
+      />
     </div>
   );
 }

@@ -1,5 +1,104 @@
 from decimal import Decimal, ROUND_HALF_UP
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
+import calendar
+from datetime import date, timedelta
+
+
+def compute_rolling_cycle_end(start_d: date, months: int = 1) -> Tuple[date, date]:
+    """
+    Given joining/cycle start date start_d (e.g. 2026-11-19) and months count (default 1):
+    Calculates next renewal start (e.g. 2026-12-19) and current cycle end date (2026-12-18).
+    Rule: joined 19 Nov -> month is 19 Nov to 18 Dec, next 19 Dec to 18 Jan.
+    Never forces 1st-to-1st calendar month.
+    """
+    m_count = max(1, months)
+    year = start_d.year
+    month = start_d.month + m_count
+    while month > 12:
+        month -= 12
+        year += 1
+    _, max_days = calendar.monthrange(year, month)
+    target_day = min(start_d.day, max_days)
+    next_cycle_start = date(year, month, target_day)
+    cycle_end = next_cycle_start - timedelta(days=1)
+    return cycle_end, next_cycle_start
+
+
+def evaluate_student_rolling_cycle(
+    valid_from: Optional[date],
+    valid_to: Optional[date],
+    admission_date: date,
+    balance_due: Decimal,
+    net_price: Decimal,
+    amount_collected: Decimal
+) -> Dict[str, Any]:
+    """
+    Evaluates rolling date-to-date coaching cycle parameters, remaining days,
+    anchor billing day of month, renewal due date, and cycle status.
+    Rule: joined 19 Nov -> month is 19 Nov to 18 Dec, next 19 Dec to 18 Jan.
+    """
+    today = date.today()
+    c_start = valid_from or admission_date
+    if valid_to:
+        c_end = valid_to
+        next_due = c_end + timedelta(days=1)
+    else:
+        c_end, next_due = compute_rolling_cycle_end(c_start, 1)
+
+    days_remaining = (c_end - today).days
+    billing_day = c_start.day
+
+    if balance_due > Decimal("0.00") and today > c_end:
+        cycle_status = "OVERDUE"
+        status_label = "Payment Overdue"
+        badge_variant = "danger"
+        status_subtext = f"Cycle ended {c_end.strftime('%d %b %Y')} · Overdue by {(today - c_end).days}d"
+    elif today > c_end:
+        cycle_status = "RENEWAL_DUE"
+        status_label = "Renewal Due"
+        badge_variant = "warning"
+        status_subtext = f"Cycle ended {c_end.strftime('%d %b %Y')} · Next renewal due"
+    elif today < c_start:
+        cycle_status = "UPCOMING"
+        status_label = "Upcoming"
+        badge_variant = "neutral"
+        status_subtext = f"Starts on {c_start.strftime('%d %b %Y')}"
+    elif days_remaining <= 5:
+        cycle_status = "DUE_SOON"
+        status_label = "Expiring Soon"
+        badge_variant = "warning"
+        status_subtext = f"{days_remaining}d remaining · Renewal on {next_due.strftime('%d %b')}"
+    else:
+        cycle_status = "ACTIVE"
+        status_label = "Active"
+        badge_variant = "success"
+        status_subtext = f"{days_remaining}d remaining in cycle"
+
+    if balance_due <= Decimal("0.00") and net_price > Decimal("0.00"):
+        payment_status = "PAID"
+    elif amount_collected > Decimal("0.00"):
+        payment_status = "PARTIAL"
+    else:
+        payment_status = "UNPAID"
+
+    return {
+        "valid_from": str(c_start),
+        "valid_to": str(c_end),
+        "billing_day": billing_day,
+        "cycle_label": f"{c_start.strftime('%d %b %Y')} → {c_end.strftime('%d %b %Y')}",
+        "billing_cycle_anchor": f"Day {billing_day} of month",
+        "next_due_date": str(next_due),
+        "days_remaining": days_remaining,
+        "cycle_status": cycle_status,
+        "status_label": status_label,
+        "badge_variant": badge_variant,
+        "status_subtext": status_subtext,
+        "payment_status": payment_status,
+        "net_price": float(net_price),
+        "amount_collected": float(amount_collected),
+        "balance_due": float(balance_due)
+    }
+
 
 def round_money(val: Decimal) -> Decimal:
     return val.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)

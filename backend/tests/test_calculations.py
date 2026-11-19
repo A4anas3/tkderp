@@ -119,3 +119,49 @@ def test_allocate_payment_proportionally():
     assert alloc_map[item1_id] == Decimal("303.03")
     assert alloc_map[item2_id] == Decimal("454.55")
     assert alloc_map[item3_id] == Decimal("242.42")
+
+
+def test_rolling_monthly_cycle_calculations():
+    """
+    Test user specified rolling cycle rules:
+    - Joined 19 Nov -> month is 19 Nov to 18 Dec, next 19 Dec to 18 Jan. Never force 1st-to-1st.
+    - Joined 1 Oct -> 1 Oct to 31 Oct, next 1 Nov to 30 Nov.
+    - Multi-month duration: e.g. 2 months from 19 Nov -> 19 Nov to 18 Jan, next 19 Jan.
+    """
+    from datetime import date
+    from app.common.calculations import compute_rolling_cycle_end, evaluate_student_rolling_cycle
+
+    # 1 month from Nov 19
+    cycle_end, next_start = compute_rolling_cycle_end(date(2026, 11, 19), 1)
+    assert cycle_end == date(2026, 12, 18)
+    assert next_start == date(2026, 12, 19)
+
+    # Next month from Dec 19
+    cycle_end_2, next_start_2 = compute_rolling_cycle_end(next_start, 1)
+    assert cycle_end_2 == date(2027, 1, 18)
+    assert next_start_2 == date(2027, 1, 19)
+
+    # 1 month from Oct 1
+    cycle_end_oct, next_start_oct = compute_rolling_cycle_end(date(2026, 10, 1), 1)
+    assert cycle_end_oct == date(2026, 10, 31)
+    assert next_start_oct == date(2026, 11, 1)
+
+    # 2 months duration from Nov 19
+    cycle_end_2m, next_start_2m = compute_rolling_cycle_end(date(2026, 11, 19), 2)
+    assert cycle_end_2m == date(2027, 1, 18)
+    assert next_start_2m == date(2027, 1, 19)
+
+    # Evaluation
+    eval_res = evaluate_student_rolling_cycle(
+        valid_from=date(2026, 11, 19),
+        valid_to=None,
+        admission_date=date(2026, 11, 19),
+        balance_due=Decimal("0.00"),
+        net_price=Decimal("2000.00"),
+        amount_collected=Decimal("2000.00")
+    )
+    assert eval_res["valid_to"] == "2026-12-18"
+    assert eval_res["next_due_date"] == "2026-12-19"
+    assert eval_res["billing_day"] == 19
+    assert eval_res["payment_status"] == "PAID"
+

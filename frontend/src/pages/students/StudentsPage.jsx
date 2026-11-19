@@ -252,6 +252,7 @@ export default function StudentsPage() {
           }}
           onRefresh={loadStudents}
           loading={loading}
+          onRowClick={(s) => navigate(`/students/${s.id}`)}
           searchPlaceholder="Search by student name, mobile no, student code, or admission no..."
           emptyMessage="No students found."
         />

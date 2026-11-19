@@ -23,6 +23,7 @@ from app.modules.students.schemas import (
 )
 from app.core.dependencies import require_cashier_or_admin, require_staff, require_admin
 from app.common.pagination import PageResponse
+from app.common.calculations import compute_rolling_cycle_end
 
 def compress_avatar_image(file_bytes: bytes, max_kb: int = 20) -> bytes:
     """
@@ -401,7 +402,7 @@ async def get_student_last_batch_period(
         item, adm = result
         last_end = item.valid_to or adm.valid_to or adm.admission_date
         suggested_start = last_end + timedelta(days=1)
-        suggested_end = suggested_start + timedelta(days=30)
+        suggested_end = compute_rolling_cycle_end(suggested_start, 1)[0]
         return {
             "student_id": str(student_id),
             "batch_id": str(batch_id) if batch_id else None,
@@ -413,7 +414,7 @@ async def get_student_last_batch_period(
         }
     else:
         suggested_start = today
-        suggested_end = today + timedelta(days=30)
+        suggested_end = compute_rolling_cycle_end(suggested_start, 1)[0]
         return {
             "student_id": str(student_id),
             "batch_id": str(batch_id) if batch_id else None,

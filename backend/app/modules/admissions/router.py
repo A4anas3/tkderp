@@ -17,7 +17,7 @@ from app.modules.admissions.schemas import (
     AdmissionCreate, AdmissionResponse, AdmissionCalculatePreviewRequest, AdmissionItemResponse, AdmissionRevokeRequest
 )
 from app.common.calculations import (
-    calculate_admission_financials, allocate_payment_proportionally
+    calculate_admission_financials, allocate_payment_proportionally, compute_rolling_cycle_end
 )
 from app.common.pagination import PaginationParams, PageResponse
 
@@ -131,7 +131,7 @@ async def create_admission(
         adm_valid_from = min(item_froms) if item_froms else payload.admission_date
     if not adm_valid_to:
         item_tos = [itm.valid_to for itm in payload.items if itm.valid_to]
-        adm_valid_to = max(item_tos) if item_tos else (adm_valid_from + timedelta(days=30))
+        adm_valid_to = max(item_tos) if item_tos else compute_rolling_cycle_end(adm_valid_from, 1)[0]
 
     admission = Admission(
         admission_number=adm_no,
@@ -204,7 +204,7 @@ async def create_admission(
             else:
                 itm_to = itm_from + timedelta(days=gc_validity_days)
         else:
-            itm_to = raw.valid_to or (itm_from + timedelta(days=30))
+            itm_to = raw.valid_to or compute_rolling_cycle_end(itm_from, 1)[0]
 
         ai = AdmissionItem(
             admission_id=admission.id,

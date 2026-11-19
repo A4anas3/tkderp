@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_
 
 from app.database.session import get_db
+from app.common.calculations import evaluate_student_rolling_cycle, compute_rolling_cycle_end
 from app.core.dependencies import require_staff, require_admin
 from app.database.models import (
     Admission, AdmissionItem, Subject, Batch, Teacher, PaymentAllocation, Payment,
@@ -46,67 +47,14 @@ def _evaluate_student_cycle(
     net_price: Decimal,
     amount_collected: Decimal
 ) -> Dict[str, Any]:
-    """
-    Evaluates rolling date-to-date coaching cycle parameters, remaining days,
-    anchor billing day of month, renewal due date, and cycle status.
-    """
-    today = date.today()
-    c_start = valid_from or admission_date
-    c_end = valid_to or (c_start + timedelta(days=30))
-    next_due = c_end + timedelta(days=1)
-    days_remaining = (c_end - today).days
-    billing_day = c_start.day
-
-    if balance_due > Decimal("0.00") and today > c_end:
-        cycle_status = "OVERDUE"
-        status_label = "Payment Overdue"
-        badge_variant = "danger"
-        status_subtext = f"Cycle ended {c_end.strftime('%d %b %Y')} · Overdue by {(today - c_end).days}d"
-    elif today > c_end:
-        cycle_status = "RENEWAL_DUE"
-        status_label = "Renewal Due"
-        badge_variant = "warning"
-        status_subtext = f"Cycle ended {c_end.strftime('%d %b %Y')} · Next renewal due"
-    elif today < c_start:
-        cycle_status = "UPCOMING"
-        status_label = "Upcoming"
-        badge_variant = "neutral"
-        status_subtext = f"Starts on {c_start.strftime('%d %b %Y')}"
-    elif days_remaining <= 5:
-        cycle_status = "DUE_SOON"
-        status_label = "Expiring Soon"
-        badge_variant = "warning"
-        status_subtext = f"{days_remaining}d remaining · Renewal on {next_due.strftime('%d %b')}"
-    else:
-        cycle_status = "ACTIVE"
-        status_label = "Active"
-        badge_variant = "success"
-        status_subtext = f"{days_remaining}d remaining in cycle"
-
-    if balance_due <= Decimal("0.00") and net_price > Decimal("0.00"):
-        payment_status = "PAID"
-    elif amount_collected > Decimal("0.00"):
-        payment_status = "PARTIAL"
-    else:
-        payment_status = "UNPAID"
-
-    return {
-        "valid_from": str(c_start),
-        "valid_to": str(c_end),
-        "billing_day": billing_day,
-        "cycle_label": f"{c_start.strftime('%d %b %Y')} → {c_end.strftime('%d %b %Y')}",
-        "billing_cycle_anchor": f"Day {billing_day} of month",
-        "next_due_date": str(next_due),
-        "days_remaining": days_remaining,
-        "cycle_status": cycle_status,
-        "status_label": status_label,
-        "badge_variant": badge_variant,
-        "status_subtext": status_subtext,
-        "payment_status": payment_status,
-        "net_price": float(net_price),
-        "amount_collected": float(amount_collected),
-        "balance_due": float(balance_due)
-    }
+    return evaluate_student_rolling_cycle(
+        valid_from=valid_from,
+        valid_to=valid_to,
+        admission_date=admission_date,
+        balance_due=balance_due,
+        net_price=net_price,
+        amount_collected=amount_collected
+    )
 
 
 

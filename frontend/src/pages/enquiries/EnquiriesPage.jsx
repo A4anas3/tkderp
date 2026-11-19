@@ -16,6 +16,7 @@ import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
+import EnquiryDetailModal from '../../components/modals/EnquiryDetailModal';
 import { enquiryApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 
@@ -35,6 +36,7 @@ export default function EnquiriesPage() {
 
   // Add Enquiry Modal
   const [addModalOpen, setAddModalOpen] = useState(false);
+  const [detailEnquiry, setDetailEnquiry] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     student_name: '',
@@ -374,6 +376,7 @@ export default function EnquiriesPage() {
         }}
         onRefresh={loadEnquiries}
         loading={loading}
+        onRowClick={(e) => setDetailEnquiry(e)}
         searchPlaceholder="Search enquiry by student name or mobile..."
         emptyMessage="No enquiry records found for this filter."
       />
@@ -464,6 +467,14 @@ export default function EnquiriesPage() {
           </div>
         </form>
       </Modal>
+
+      {/* Enquiry Detail Modal */}
+      <EnquiryDetailModal
+        isOpen={!!detailEnquiry}
+        onClose={() => setDetailEnquiry(null)}
+        enquiry={detailEnquiry}
+        onConvertToAdmission={(e) => handleConvertToAdmission(e)}
+      />
     </div>
   );
 }

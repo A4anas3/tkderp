@@ -29,6 +29,7 @@ import {
 import { useToast } from '../../context/ToastContext';
 import QuickStudentModal from '../../components/modals/QuickStudentModal';
 import AdmissionReceiptModal from '../../components/receipts/AdmissionReceiptModal';
+import { computeRollingCycle } from '../../utils/dateCycleUtils';
 
 export default function NewAdmissionPage() {
   const navigate = useNavigate();
@@ -87,10 +88,8 @@ export default function NewAdmissionPage() {
 
   const calculateEndDateFromMonths = (startDateStr, monthsCount) => {
     if (!startDateStr) return '';
-    const d = new Date(startDateStr);
-    const totalDays = Math.max(1, parseInt(monthsCount, 10) || 1) * 30;
-    d.setDate(d.getDate() + totalDays);
-    return d.toISOString().split('T')[0];
+    const rolling = computeRollingCycle(startDateStr, monthsCount);
+    return rolling ? rolling.endDate : '';
   };
 
   const handleBillingMonthsChange = (newMonths) => {
@@ -890,7 +889,7 @@ export default function NewAdmissionPage() {
                             ) : null;
                           })()}
                           <span className="ml-auto font-mono text-emerald-800 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
-                            Valid: {validFrom} &rarr; {calculateEndDateFromMonths(validFrom, itm.months || billingMonths || 1)} ({(itm.months || billingMonths || 1) * 30} days)
+                            Rolling Cycle: {validFrom} &rarr; {calculateEndDateFromMonths(validFrom, itm.months || billingMonths || 1)} ({itm.months || billingMonths || 1} Mo)
                           </span>
                         </div>
                       </div>
