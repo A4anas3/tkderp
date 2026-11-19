@@ -2,12 +2,18 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
 from decimal import Decimal
+from datetime import datetime, timezone
+import json
 import uuid
 
 from app.database.session import get_db
 from app.modules.students.models import Student
 from app.modules.admissions.models import Admission
-from app.modules.students.schemas import StudentCreate, StudentUpdate, StudentResponse, StudentDetailResponse
+from app.modules.audit.models import AuditLog
+from app.modules.students.schemas import (
+    StudentCreate, StudentUpdate, StudentRevokeRequest,
+    StudentResponse, StudentDetailResponse
+)
 from app.core.dependencies import require_cashier_or_admin, require_staff
 from app.common.pagination import PageResponse
 
@@ -153,6 +159,71 @@ async def update_student(
     if req.status is not None: student.status = req.status
     if req.notes is not None: student.notes = req.notes
 
+    await db.commit()
+    await db.refresh(student)
+    return StudentResponse.model_validate(student)
+
+@router.post("/{student_id}/revoke", response_model=StudentResponse)
+async def revoke_student(
+    student_id: uuid.UUID,
+    payload: StudentRevokeRequest,
+    db: AsyncSession = Depends(get_db),
+    user = Depends(require_cashier_or_admin)
+):
+    student = (await db.execute(select(Student).where(Student.id == student_id))).scalar_one_or_none()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    student.status = "REVOKED"
+    student.revoke_reason = payload.reason.strip()
+    student.revoked_at = datetime.now(timezone.utc)
+    student.revoked_by = user.id
+    student.has_green_card = False
+
+    audit = AuditLog(
+        user_id=user.id,
+        action="REVOKE_STUDENT",
+        entity_type="STUDENT",
+        entity_id=student.id,
+        details=json.dumps({
+            "student_code": student.student_code,
+            "student_name": student.name,
+            "reason": payload.reason.strip()
+        })
+    )
+    db.add(audit)
+    await db.commit()
+    await db.refresh(student)
+    return StudentResponse.model_validate(student)
+
+@router.post("/{student_id}/restore", response_model=StudentResponse)
+async def restore_student(
+    student_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user = Depends(require_cashier_or_admin)
+):
+    student = (await db.execute(select(Student).where(Student.id == student_id))).scalar_one_or_none()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    old_reason = student.revoke_reason
+    student.status = "ACTIVE"
+    student.revoke_reason = None
+    student.revoked_at = None
+    student.revoked_by = None
+
+    audit = AuditLog(
+        user_id=user.id,
+        action="RESTORE_STUDENT",
+        entity_type="STUDENT",
+        entity_id=student.id,
+        details=json.dumps({
+            "student_code": student.student_code,
+            "student_name": student.name,
+            "previous_revoke_reason": old_reason
+        })
+    )
+    db.add(audit)
     await db.commit()
     await db.refresh(student)
     return StudentResponse.model_validate(student)

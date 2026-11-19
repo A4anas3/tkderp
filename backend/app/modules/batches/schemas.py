@@ -7,6 +7,9 @@ import uuid
 class BatchSubjectItem(BaseModel):
     subject_id: uuid.UUID
     fee: Decimal = Field(..., ge=0)
+    teacher_id: Optional[uuid.UUID] = None
+    teacher_name_snapshot: Optional[str] = None
+    hall_number: Optional[str] = None
 
 class BatchSubjectResponse(BaseModel):
     id: uuid.UUID
@@ -14,6 +17,9 @@ class BatchSubjectResponse(BaseModel):
     subject_name: Optional[str] = None
     subject_code: Optional[str] = None
     fee: Decimal
+    teacher_id: Optional[uuid.UUID] = None
+    teacher_name_snapshot: Optional[str] = None
+    hall_number: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

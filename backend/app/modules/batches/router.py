@@ -77,7 +77,10 @@ async def list_batches(
                     subject_id=bs.subject_id,
                     subject_name=bs.subject.name if bs.subject else None,
                     subject_code=bs.subject.subject_code if bs.subject else None,
-                    fee=bs.fee
+                    fee=bs.fee,
+                    teacher_id=bs.teacher_id,
+                    teacher_name_snapshot=bs.teacher_name_snapshot,
+                    hall_number=bs.hall_number
                 )
             )
         response_items.append(
@@ -123,7 +126,10 @@ async def get_all_active_batches(
                 subject_id=bs.subject_id,
                 subject_name=bs.subject.name if bs.subject else None,
                 subject_code=bs.subject.subject_code if bs.subject else None,
-                fee=bs.fee
+                fee=bs.fee,
+                teacher_id=bs.teacher_id,
+                teacher_name_snapshot=bs.teacher_name_snapshot,
+                hall_number=bs.hall_number
             )
             for bs in b.subjects
         ]
@@ -187,10 +193,27 @@ async def create_batch(
     await db.flush()
 
     for item in payload.subjects:
+        sub_teacher_id = item.teacher_id or batch.teacher_id
+        sub_teacher_name = item.teacher_name_snapshot
+        if not sub_teacher_name and sub_teacher_id:
+            if sub_teacher_id == batch.teacher_id:
+                sub_teacher_name = batch.teacher_name_snapshot
+            else:
+                t_res = await db.execute(select(Teacher).where(Teacher.id == sub_teacher_id))
+                t_obj = t_res.scalar_one_or_none()
+                sub_teacher_name = t_obj.name if t_obj else "Unassigned"
+        elif not sub_teacher_name:
+            sub_teacher_name = batch.teacher_name_snapshot or "Unassigned"
+
+        sub_hall = item.hall_number or batch.hall_number
+
         bs = BatchSubject(
             batch_id=batch.id,
             subject_id=item.subject_id,
-            fee=item.fee
+            fee=item.fee,
+            teacher_id=sub_teacher_id,
+            teacher_name_snapshot=sub_teacher_name,
+            hall_number=sub_hall
         )
         db.add(bs)
 
@@ -225,7 +248,10 @@ async def get_batch(
             subject_id=bs.subject_id,
             subject_name=bs.subject.name if bs.subject else None,
             subject_code=bs.subject.subject_code if bs.subject else None,
-            fee=bs.fee
+            fee=bs.fee,
+            teacher_id=bs.teacher_id,
+            teacher_name_snapshot=bs.teacher_name_snapshot,
+            hall_number=bs.hall_number
         )
         for bs in batch.subjects
     ]
@@ -280,10 +306,27 @@ async def update_batch(
     if payload.subjects is not None:
         await db.execute(delete(BatchSubject).where(BatchSubject.batch_id == batch_id))
         for item in payload.subjects:
+            sub_teacher_id = item.teacher_id or batch.teacher_id
+            sub_teacher_name = item.teacher_name_snapshot
+            if not sub_teacher_name and sub_teacher_id:
+                if sub_teacher_id == batch.teacher_id:
+                    sub_teacher_name = batch.teacher_name_snapshot
+                else:
+                    t_res = await db.execute(select(Teacher).where(Teacher.id == sub_teacher_id))
+                    t_obj = t_res.scalar_one_or_none()
+                    sub_teacher_name = t_obj.name if t_obj else "Unassigned"
+            elif not sub_teacher_name:
+                sub_teacher_name = batch.teacher_name_snapshot or "Unassigned"
+
+            sub_hall = item.hall_number or batch.hall_number
+
             bs = BatchSubject(
                 batch_id=batch.id,
                 subject_id=item.subject_id,
-                fee=item.fee
+                fee=item.fee,
+                teacher_id=sub_teacher_id,
+                teacher_name_snapshot=sub_teacher_name,
+                hall_number=sub_hall
             )
             db.add(bs)
 

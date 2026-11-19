@@ -47,6 +47,7 @@ export default function NewAdmissionPage() {
   const [loadingRefs, setLoadingRefs] = useState(true);
 
   const [studentId, setStudentId] = useState(paramStudentId || '');
+  const [existingAdmissions, setExistingAdmissions] = useState([]);
   const [admissionDate, setAdmissionDate] = useState(new Date().toISOString().split('T')[0]);
   const [notes, setNotes] = useState('');
 
@@ -127,6 +128,9 @@ export default function NewAdmissionPage() {
             subject_id: firstSub.subject_id,
             item_name_snapshot: `${firstBatch.name} — ${firstSub.subject_name}`,
             original_price: Number(firstSub.fee),
+            teacher_id: firstSub.teacher_id || firstBatch.teacher_id || null,
+            teacher_name_snapshot: firstSub.teacher_name_snapshot || firstBatch.teacher_name_snapshot || null,
+            hall_number_snapshot: firstSub.hall_number || firstBatch.hall_number || null,
             discount_type: 'NONE',
             discount_value: 0,
           },
@@ -142,6 +146,23 @@ export default function NewAdmissionPage() {
   useEffect(() => {
     loadReferences();
   }, [loadReferences]);
+
+  // Fetch existing admissions for student to support multi-course purchase
+  useEffect(() => {
+    if (!studentId) {
+      setExistingAdmissions([]);
+      return;
+    }
+    const fetchStudentHistory = async () => {
+      try {
+        const res = await admissionApi.list({ student_id: studentId, page_size: 20 });
+        setExistingAdmissions(res.items || []);
+      } catch (e) {
+        console.error('Failed to load student existing admissions:', e);
+      }
+    };
+    fetchStudentHistory();
+  }, [studentId]);
 
   // Recalculate Live Preview whenever items, discounts, or GST change
   useEffect(() => {
@@ -196,6 +217,9 @@ export default function NewAdmissionPage() {
       subject_id: s.subject_id,
       item_name_snapshot: `${b.name} — ${s.subject_name}`,
       original_price: Number(s.fee),
+      teacher_id: s.teacher_id || b.teacher_id || null,
+      teacher_name_snapshot: s.teacher_name_snapshot || b.teacher_name_snapshot || null,
+      hall_number_snapshot: s.hall_number || b.hall_number || null,
       discount_type: 'NONE',
       discount_value: 0,
     };
@@ -214,6 +238,9 @@ export default function NewAdmissionPage() {
       green_card_id: gc.id,
       item_name_snapshot: gc.name,
       original_price: Number(gc.price),
+      teacher_id: null,
+      teacher_name_snapshot: null,
+      hall_number_snapshot: null,
       discount_type: 'NONE',
       discount_value: 0,
     };
@@ -238,6 +265,9 @@ export default function NewAdmissionPage() {
               subject_id: s.subject_id,
               item_name_snapshot: `${b.name} — ${s.subject_name}`,
               original_price: Number(s.fee),
+              teacher_id: s.teacher_id || b.teacher_id || null,
+              teacher_name_snapshot: s.teacher_name_snapshot || b.teacher_name_snapshot || null,
+              hall_number_snapshot: s.hall_number || b.hall_number || null,
             }
           : itm
       )
@@ -255,6 +285,9 @@ export default function NewAdmissionPage() {
             subject_id: newSubjId,
             item_name_snapshot: `${b?.name || 'Batch'} — ${s?.subject_name || 'Subject'}`,
             original_price: s ? Number(s.fee) : itm.original_price,
+            teacher_id: s?.teacher_id || b?.teacher_id || null,
+            teacher_name_snapshot: s?.teacher_name_snapshot || b?.teacher_name_snapshot || null,
+            hall_number_snapshot: s?.hall_number || b?.hall_number || null,
           };
         }
         return itm;
@@ -294,6 +327,9 @@ export default function NewAdmissionPage() {
         batch_id: itm.batch_id || null,
         subject_id: itm.subject_id || null,
         green_card_id: itm.green_card_id || null,
+        teacher_id: itm.teacher_id || null,
+        teacher_name_snapshot: itm.teacher_name_snapshot || null,
+        hall_number_snapshot: itm.hall_number_snapshot || null,
         item_name_snapshot: itm.item_name_snapshot,
         original_price: parseFloat(itm.original_price) || 0,
         discount_type: itm.discount_type,
@@ -394,6 +430,35 @@ export default function NewAdmissionPage() {
               required
             />
           </div>
+
+          {/* Existing Enrollments Alert for Multi-Course Purchase */}
+          {existingAdmissions.length > 0 && (
+            <div className="mt-3 bg-indigo-50 border border-indigo-200 rounded-lg p-3 text-xs space-y-1.5">
+              <div className="flex items-center justify-between font-bold text-indigo-950">
+                <span>Active Student Enrollments (Adding Another Course / Batch)</span>
+                <span className="bg-white border border-indigo-200 px-2 py-0.5 rounded text-[11px] text-indigo-700">
+                  {existingAdmissions.length} Existing Admissions
+                </span>
+              </div>
+              <div className="divide-y divide-indigo-100 max-h-36 overflow-y-auto">
+                {existingAdmissions.map((adm) => (
+                  <div key={adm.id} className="py-1 flex items-center justify-between text-[11px]">
+                    <div>
+                      <span className="font-mono font-bold text-black">{adm.admission_number}</span>
+                      <span className="text-slate-600 ml-2">({adm.admission_date})</span>
+                      <span className="text-slate-500 ml-2">
+                        {(adm.items || []).map((i) => i.item_name_snapshot).join(', ')}
+                      </span>
+                    </div>
+                    <div className="font-mono text-slate-700">
+                      Paid: <strong className="text-emerald-700">₹{Number(adm.amount_paid).toFixed(0)}</strong> · 
+                      Due: <strong className="text-rose-700">₹{Number(adm.balance_due).toFixed(0)}</strong>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Step 2: Enrolled Batches, Subjects & Individual Discounts */}
@@ -513,6 +578,13 @@ export default function NewAdmissionPage() {
                             className="w-full rounded border border-slate-300 bg-slate-100 font-mono font-bold text-black px-2 py-1 text-xs"
                           />
                         </div>
+
+                        {/* Snapshot badge preview */}
+                        <div className="sm:col-span-4 flex flex-wrap items-center gap-2 text-[11px] text-slate-700 bg-white border border-slate-200 rounded px-2.5 py-1 font-medium">
+                          <span>Faculty: <strong className="text-indigo-900">{itm.teacher_name_snapshot || currentBatch?.teacher_name_snapshot || 'Coordinator'}</strong></span>
+                          <span>•</span>
+                          <span>Classroom: <strong className="text-black">{itm.hall_number_snapshot || currentBatch?.hall_number || 'Main Hall'}</strong></span>
+                        </div>
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
@@ -532,6 +604,13 @@ export default function NewAdmissionPage() {
                             value={itm.original_price}
                             className="w-full rounded border border-slate-300 bg-slate-100 font-mono font-bold text-black px-2 py-1 text-xs"
                           />
+                        </div>
+
+                        {/* Snapshot badge preview */}
+                        <div className="sm:col-span-4 flex flex-wrap items-center gap-2 text-[11px] text-slate-700 bg-white border border-slate-200 rounded px-2.5 py-1 font-medium">
+                          <span>Faculty: <strong className="text-indigo-900">{itm.teacher_name_snapshot || currentBatch?.teacher_name_snapshot || 'Coordinator'}</strong></span>
+                          <span>•</span>
+                          <span>Classroom: <strong className="text-black">{itm.hall_number_snapshot || currentBatch?.hall_number || 'Main Hall'}</strong></span>
                         </div>
                       </div>
                     )}

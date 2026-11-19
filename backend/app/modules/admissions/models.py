@@ -55,6 +55,11 @@ class AdmissionItem(BaseModel):
     subject_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("subjects.id"), nullable=True, index=True)
     green_card_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("green_card_products.id"), nullable=True)
     
+    # Subject-wise Faculty and Hall snapshot (stored directly - no runtime joins required)
+    teacher_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("teachers.id"), nullable=True, index=True)
+    teacher_name_snapshot: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
+    hall_number_snapshot: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    
     item_name_snapshot: Mapped[str] = mapped_column(String(200), nullable=False)
     original_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     

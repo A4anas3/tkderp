@@ -85,8 +85,20 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission }) {
                 {(admission.items || []).map((itm, i) => (
                   <tr key={i}>
                     <td className="p-1.5 text-black">
-                      <span className="font-semibold">{itm.item_name_snapshot}</span>
-                      <span className="text-[10px] text-slate-500 block">Type: {itm.item_type}</span>
+                      <span className="font-bold text-black block">{itm.item_name_snapshot}</span>
+                      <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-700 mt-0.5">
+                        {itm.teacher_name_snapshot && (
+                          <span className="bg-slate-100 border border-slate-200 px-1.5 py-0.2 rounded text-black font-medium">
+                            Faculty: <strong className="text-indigo-900">{itm.teacher_name_snapshot}</strong>
+                          </span>
+                        )}
+                        {itm.hall_number_snapshot && (
+                          <span className="bg-slate-100 border border-slate-200 px-1.5 py-0.2 rounded text-black font-medium">
+                            Classroom: <strong className="text-black">{itm.hall_number_snapshot}</strong>
+                          </span>
+                        )}
+                        <span className="text-slate-400">({itm.item_type})</span>
+                      </div>
                     </td>
                     <td className="p-1.5 text-right font-mono text-black">
                       ₹{Number(itm.original_price).toFixed(2)}

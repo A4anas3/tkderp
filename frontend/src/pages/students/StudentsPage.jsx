@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UserPlus, Phone, Award, ChevronRight, Eye } from 'lucide-react';
+import { UserPlus, Phone, Award, ChevronRight, Eye, UserX, AlertTriangle } from 'lucide-react';
 import DataTable from '../../components/common/DataTable';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
@@ -15,6 +15,7 @@ export default function StudentsPage() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [addModalOpen, setAddModalOpen] = useState(false);
 
@@ -25,6 +26,7 @@ export default function StudentsPage() {
         page,
         page_size: 15,
         search: search.trim() || undefined,
+        status: statusFilter || undefined,
       });
       setStudents(res.items || []);
       setTotal(res.total || 0);
@@ -33,7 +35,7 @@ export default function StudentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search]);
+  }, [page, search, statusFilter]);
 
   useEffect(() => {
     loadStudents();
@@ -101,9 +103,18 @@ export default function StudentsPage() {
     },
     {
       header: 'Status',
-      className: 'text-center w-20',
+      className: 'text-center w-24',
       render: (s) => (
-        <Badge size="xs" variant={s.status === 'ACTIVE' ? 'success' : 'neutral'}>
+        <Badge
+          size="xs"
+          variant={
+            s.status === 'REVOKED'
+              ? 'danger'
+              : s.status === 'ACTIVE'
+              ? 'success'
+              : 'neutral'
+          }
+        >
           {s.status}
         </Badge>
       ),
@@ -134,9 +145,26 @@ export default function StudentsPage() {
           </p>
         </div>
 
-        <Button variant="primary" icon={UserPlus} onClick={() => setAddModalOpen(true)}>
-          Register Student
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* Status Filter Dropdown */}
+          <select
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setPage(1);
+            }}
+            className="rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-black focus:outline-none focus:border-indigo-600"
+          >
+            <option value="">All Statuses</option>
+            <option value="ACTIVE">Active Students</option>
+            <option value="REVOKED">Revoked Students</option>
+            <option value="INACTIVE">Inactive Students</option>
+          </select>
+
+          <Button variant="primary" icon={UserPlus} onClick={() => setAddModalOpen(true)}>
+            Register Student
+          </Button>
+        </div>
       </div>
 
       <DataTable
@@ -154,7 +182,7 @@ export default function StudentsPage() {
         onRefresh={loadStudents}
         loading={loading}
         searchPlaceholder="Search by student name, mobile no, student code, or admission no..."
-        emptyMessage="No students registered yet."
+        emptyMessage="No students found."
       />
 
       <QuickStudentModal

@@ -1,4 +1,5 @@
 import uuid
+from datetime import date
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
@@ -487,3 +488,163 @@ async def test_storage_abstraction_providers():
     o_provider = OracleObjectStorageProvider()
     assert c_provider is not None
     assert o_provider is not None
+
+@pytest.mark.asyncio
+async def test_student_revocation_and_restoration():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        admin_login = await client.post("/api/auth/login", json={"username": "ADM001", "password": "Admin@1234"})
+        token = admin_login.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # 1. Create a test student
+        stu_res = await client.post("/api/students", json={
+            "name": "Revoke Test Student",
+            "mobile": "9811199999",
+            "status": "ACTIVE"
+        }, headers=headers)
+        assert stu_res.status_code == 201
+        student = stu_res.json()
+        student_id = student["id"]
+        assert student["status"] == "ACTIVE"
+
+        # 2. Revoke student
+        revoke_res = await client.post(f"/api/students/{student_id}/revoke", json={
+            "reason": "Left institute voluntarily for relocation"
+        }, headers=headers)
+        assert revoke_res.status_code == 200
+        revoked_stu = revoke_res.json()
+        assert revoked_stu["status"] == "REVOKED"
+        assert revoked_stu["revoke_reason"] == "Left institute voluntarily for relocation"
+        assert revoked_stu["revoked_at"] is not None
+
+        # 3. Restore student
+        restore_res = await client.post(f"/api/students/{student_id}/restore", headers=headers)
+        assert restore_res.status_code == 200
+        restored_stu = restore_res.json()
+        assert restored_stu["status"] == "ACTIVE"
+        assert restored_stu["revoke_reason"] is None
+
+
+@pytest.mark.asyncio
+async def test_refund_and_payment_edit_flow():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        admin_login = await client.post("/api/auth/login", json={"username": "ADM001", "password": "Admin@1234"})
+        token = admin_login.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # 1. Create student
+        stu_res = await client.post("/api/students", json={
+            "name": "Refund Flow Student",
+            "mobile": "9876500001",
+            "status": "ACTIVE"
+        }, headers=headers)
+        student_id = stu_res.json()["id"]
+
+        # 2. Get subject
+        sub_res = await client.get("/api/subjects", headers=headers)
+        sub_id = sub_res.json()["items"][0]["id"]
+        sub_fee = sub_res.json()["items"][0]["default_fee"]
+
+        # 3. Create admission with initial payment
+        adm_res = await client.post("/api/admissions", json={
+            "student_id": student_id,
+            "items": [{
+                "item_type": "BATCH_SUBJECT",
+                "subject_id": sub_id,
+                "item_name_snapshot": "Mathematics Advanced",
+                "original_price": 5000.0,
+                "discount_type": "NONE",
+                "discount_value": 0,
+                "teacher_name_snapshot": "Dr. R.K. Sharma",
+                "hall_number_snapshot": "Hall 4B"
+            }],
+            "overall_discount_type": "NONE",
+            "overall_discount_value": 0,
+            "initial_payment": {
+                "amount": 2000.0,
+                "payment_mode": "CASH",
+                "notes": "Initial deposit"
+            }
+        }, headers=headers)
+        assert adm_res.status_code == 201
+        adm_data = adm_res.json()
+        adm_id = adm_data["id"]
+        assert float(adm_data["amount_paid"]) == 2000.0
+        assert adm_data["items"][0]["teacher_name_snapshot"] == "Dr. R.K. Sharma"
+        assert adm_data["items"][0]["hall_number_snapshot"] == "Hall 4B"
+
+        # 4. Fetch the payment record
+        pay_res = await client.get(f"/api/payments?admission_id={adm_id}", headers=headers)
+        assert pay_res.status_code == 200
+        payments = pay_res.json()["items"]
+        assert len(payments) == 1
+        payment_id = payments[0]["id"]
+
+        # 5. Edit payment (cashier changed notes & mode, and updated amount to 2500)
+        edit_res = await client.put(f"/api/payments/{payment_id}", json={
+            "amount": 2500.0,
+            "payment_mode": "UPI",
+            "transaction_reference": "UPI987654321",
+            "notes": "Corrected cash to UPI and updated received amount",
+            "edit_reason": "Receipt correction after bank credit check"
+        }, headers=headers)
+        assert edit_res.status_code == 200
+        edited_pay = edit_res.json()
+        assert float(edited_pay["amount"]) == 2500.0
+        assert edited_pay["payment_mode"] == "UPI"
+        assert edited_pay["transaction_reference"] == "UPI987654321"
+
+        # Verify admission updated
+        check_adm = await client.get(f"/api/admissions?student_id={student_id}", headers=headers)
+        assert float(check_adm.json()["items"][0]["amount_paid"]) == 2500.0
+
+        # 6. Issue a partial fee refund of ₹500
+        ref_res = await client.post("/api/payments/refund", json={
+            "admission_id": adm_id,
+            "payment_id": payment_id,
+            "amount": 500.0,
+            "refund_mode": "CASH",
+            "reason": "Class timing conflict with college exams",
+            "notes": "Approved by Director"
+        }, headers=headers)
+        assert ref_res.status_code == 201
+        ref_data = ref_res.json()
+        assert float(ref_data["amount"]) == 500.0
+        assert ref_data["refund_number"].startswith("REF")
+        ref_id = ref_data["id"]
+
+        # 7. Get Refund Receipt
+        rec_res = await client.get(f"/api/payments/refunds/{ref_id}/receipt", headers=headers)
+        assert rec_res.status_code == 200
+        rec_data = rec_res.json()
+        assert float(rec_data["amount"]) == 500.0
+        assert float(rec_data["net_amount_paid_after_refund"]) == 2000.0
+
+        # 8. List refunds
+        list_refs = await client.get("/api/payments/refunds", headers=headers)
+        assert list_refs.status_code == 200
+        assert list_refs.json()["total"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_date_range_reports():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        admin_login = await client.post("/api/auth/login", json={"username": "ADM001", "password": "Admin@1234"})
+        token = admin_login.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        today_str = date.today().isoformat()
+        # Subject revenue with date range
+        s_res = await client.get(f"/api/reports/subject-revenue?from_date={today_str}&to_date={today_str}", headers=headers)
+        assert s_res.status_code == 200
+        s_data = s_res.json()
+        assert "summary" in s_data
+        assert s_data["filters"]["from_date"] == today_str
+
+        # Cash movement with date range
+        c_res = await client.get(f"/api/reports/cash-movement?from_date={today_str}&to_date={today_str}", headers=headers)
+        assert c_res.status_code == 200
+        c_data = c_res.json()
+        assert "total_inflows" in c_data
+        assert "total_refunds" in c_data
+        assert "breakdown" in c_data

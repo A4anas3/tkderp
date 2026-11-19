@@ -9,6 +9,8 @@ import {
   BookOpen,
   CheckSquare,
   Square,
+  Building,
+  UserCheck,
 } from 'lucide-react';
 import DataTable from '../../components/common/DataTable';
 import Modal from '../../components/common/Modal';
@@ -45,7 +47,8 @@ export default function BatchesPage() {
     end_date: '',
     status: 'ACTIVE',
   });
-  const [selectedSubjects, setSelectedSubjects] = useState({}); // { subject_id: fee }
+  // selectedSubjects: { [subject_id]: { fee: number, teacher_id: string, hall_number: string } }
+  const [selectedSubjects, setSelectedSubjects] = useState({});
 
   const loadBatches = useCallback(async () => {
     setLoading(true);
@@ -86,9 +89,10 @@ export default function BatchesPage() {
 
   const handleOpenAdd = () => {
     setEditingBatch(null);
+    const defaultTeacherId = teachers.length > 0 ? teachers[0].id : '';
     setFormData({
       name: '',
-      teacher_id: teachers.length > 0 ? teachers[0].id : '',
+      teacher_id: defaultTeacherId,
       class_category: 'Class 9-10',
       hall_number: 'Hall 13',
       schedule: 'Mon-Fri 09:00 AM - 11:00 AM',
@@ -96,10 +100,14 @@ export default function BatchesPage() {
       end_date: '',
       status: 'ACTIVE',
     });
-    // Default select first subject if available
+
     const initialSub = {};
     if (allSubjects.length > 0) {
-      initialSub[allSubjects[0].id] = allSubjects[0].default_fee;
+      initialSub[allSubjects[0].id] = {
+        fee: allSubjects[0].default_fee,
+        teacher_id: defaultTeacherId,
+        hall_number: 'Hall 13',
+      };
     }
     setSelectedSubjects(initialSub);
     setModalOpen(true);
@@ -117,9 +125,14 @@ export default function BatchesPage() {
       end_date: b.end_date || '',
       status: b.status,
     });
+
     const subMap = {};
     (b.subjects || []).forEach((bs) => {
-      subMap[bs.subject_id] = bs.fee;
+      subMap[bs.subject_id] = {
+        fee: bs.fee,
+        teacher_id: bs.teacher_id || b.teacher_id || '',
+        hall_number: bs.hall_number || b.hall_number || 'Hall 13',
+      };
     });
     setSelectedSubjects(subMap);
     setModalOpen(true);
@@ -131,29 +144,38 @@ export default function BatchesPage() {
       if (next[subj.id] !== undefined) {
         delete next[subj.id];
       } else {
-        next[subj.id] = subj.default_fee;
+        next[subj.id] = {
+          fee: subj.default_fee,
+          teacher_id: formData.teacher_id || '',
+          hall_number: formData.hall_number || 'Hall 13',
+        };
       }
       return next;
     });
   };
 
-  const handleSubjectFeeChange = (subjId, feeVal) => {
+  const handleSubjectFieldChange = (subjId, field, val) => {
     setSelectedSubjects((prev) => ({
       ...prev,
-      [subjId]: feeVal,
+      [subjId]: {
+        ...(prev[subjId] || {}),
+        [field]: val,
+      },
     }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.name.trim() || !formData.hall_number.trim()) {
-      error('Batch name and hall number are required');
+      error('Batch name and default hall number are required');
       return;
     }
 
-    const subjectItems = Object.entries(selectedSubjects).map(([subjId, fee]) => ({
+    const subjectItems = Object.entries(selectedSubjects).map(([subjId, conf]) => ({
       subject_id: subjId,
-      fee: parseFloat(fee) || 0,
+      fee: parseFloat(conf.fee) || 0,
+      teacher_id: conf.teacher_id || formData.teacher_id || null,
+      hall_number: conf.hall_number?.trim() || formData.hall_number.trim(),
     }));
 
     if (subjectItems.length === 0) {
@@ -210,7 +232,7 @@ export default function BatchesPage() {
       ),
     },
     {
-      header: 'Assigned Faculty Snapshot',
+      header: 'Assigned Faculty',
       render: (b) => (
         <div className="text-xs">
           <span className="font-semibold text-black block">
@@ -226,20 +248,28 @@ export default function BatchesPage() {
       ),
     },
     {
-      header: 'Hall Number',
+      header: 'Default Hall',
       accessor: 'hall_number',
       className: 'font-medium text-xs w-24',
     },
     {
-      header: 'Subjects Included & Fees',
+      header: 'Subjects, Teachers & Halls',
       render: (b) => (
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap gap-1.5 max-w-md">
           {(b.subjects || []).map((s) => (
             <span
               key={s.id}
-              className="inline-flex items-center gap-1 bg-indigo-50 border border-indigo-200 text-indigo-900 px-1.5 py-0.5 rounded text-[11px]"
+              className="inline-flex flex-col bg-slate-50 border border-slate-300 text-black px-2 py-1 rounded text-[11px] shadow-2xs"
             >
-              <strong>{s.subject_name}</strong>: ₹{Number(s.fee).toFixed(0)}
+              <div className="flex items-center justify-between gap-2">
+                <strong className="text-indigo-900">{s.subject_name}</strong>
+                <span className="font-mono font-bold text-emerald-800">₹{Number(s.fee).toFixed(0)}</span>
+              </div>
+              <div className="text-[10px] text-slate-600 flex items-center gap-2 mt-0.5">
+                <span>{s.teacher_name_snapshot || b.teacher_name_snapshot}</span>
+                <span>•</span>
+                <span className="font-semibold text-black">{s.hall_number || b.hall_number}</span>
+              </div>
             </span>
           ))}
         </div>
@@ -285,7 +315,7 @@ export default function BatchesPage() {
         <div>
           <h1 className="text-xl font-bold text-black tracking-tight">Coaching Batches</h1>
           <p className="text-xs text-slate-500">
-            Create batches, attach faculty snapshots, schedule halls, and assign subject fees
+            Create batches combining subjects, assign specific teachers & hall numbers per subject, and preserve snapshots
           </p>
         </div>
 
@@ -317,15 +347,15 @@ export default function BatchesPage() {
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         title={editingBatch ? 'Edit Batch Configuration' : 'Create New Batch'}
-        subtitle="Faculty snapshot is automatically preserved without requiring relational joins"
-        maxWidth="max-w-xl"
+        subtitle="Classes happen in different halls with different faculty. Snapshots are stored cleanly without joins."
+        maxWidth="max-w-2xl"
       >
         <form onSubmit={handleSubmit} className="space-y-3.5">
           <Input
             label="Batch Name"
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            placeholder="e.g. KK Chauhan 9-10"
+            placeholder="e.g. KK Chauhan Foundation 9-10"
             required
             autoFocus
           />
@@ -333,17 +363,17 @@ export default function BatchesPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-black mb-1">
-                Assigned Faculty / Teacher
+                Primary Batch Coordinator / Teacher
               </label>
               <select
                 value={formData.teacher_id}
                 onChange={(e) => setFormData({ ...formData, teacher_id: e.target.value })}
-                className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs sm:text-sm text-black focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 shadow-sm"
+                className="w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-black focus:outline-none focus:border-indigo-600"
               >
-                <option value="">Select Faculty...</option>
+                <option value="">-- Select Faculty --</option>
                 {teachers.map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.name} ({t.specialization})
+                    {t.name} ({t.teacher_code})
                   </option>
                 ))}
               </select>
@@ -360,7 +390,7 @@ export default function BatchesPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
-              label="Hall / Classroom Number"
+              label="Default Hall / Classroom Number"
               value={formData.hall_number}
               onChange={(e) => setFormData({ ...formData, hall_number: e.target.value })}
               placeholder="e.g. Hall 13"
@@ -397,48 +427,90 @@ export default function BatchesPage() {
             />
           </div>
 
-          {/* Multi-Subject Selection with Custom Fee inputs */}
+          {/* Flexible Subject Configuration (Fee, Faculty, Hall Number per subject) */}
           <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/50 space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-bold uppercase tracking-wider text-black">
-                Assign Subjects & Custom Fees in this Batch <span className="text-rose-600">*</span>
-              </label>
-              <span className="text-[11px] text-slate-500">
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-black block">
+                  Select Subjects, Faculty & Hall Numbers <span className="text-rose-600">*</span>
+                </label>
+                <span className="text-[11px] text-slate-500">
+                  Assign each subject its specific teacher and hall number where classes take place
+                </span>
+              </div>
+              <span className="text-xs bg-indigo-100 text-indigo-900 font-bold px-2 py-0.5 rounded">
                 {Object.keys(selectedSubjects).length} Selected
               </span>
             </div>
 
-            <div className="max-h-48 overflow-y-auto divide-y divide-slate-200 bg-white border border-slate-200 rounded-md">
+            <div className="max-h-60 overflow-y-auto divide-y divide-slate-200 bg-white border border-slate-200 rounded-md">
               {allSubjects.map((s) => {
-                const isSelected = selectedSubjects[s.id] !== undefined;
+                const conf = selectedSubjects[s.id];
+                const isSelected = conf !== undefined;
                 return (
                   <div
                     key={s.id}
-                    className="p-2 flex items-center justify-between text-xs hover:bg-slate-50 transition"
+                    className={`p-2.5 text-xs transition ${isSelected ? 'bg-indigo-50/30' : 'hover:bg-slate-50'}`}
                   >
-                    <label className="flex items-center gap-2 cursor-pointer flex-1">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => handleSubjectToggle(s)}
-                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                      />
-                      <span className="font-semibold text-black">{s.name}</span>
-                      <span className="text-[10px] text-slate-400">({s.subject_code})</span>
-                    </label>
+                    <div className="flex items-center justify-between gap-2">
+                      <label className="flex items-center gap-2 cursor-pointer flex-1">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => handleSubjectToggle(s)}
+                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span className="font-bold text-black text-sm">{s.name}</span>
+                        <span className="text-[11px] text-slate-500 font-mono">({s.subject_code})</span>
+                      </label>
+
+                      {isSelected && (
+                        <div className="flex items-center gap-1">
+                          <span className="text-slate-600 text-xs font-mono font-bold">Fee ₹</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={conf.fee ?? s.default_fee}
+                            onChange={(e) => handleSubjectFieldChange(s.id, 'fee', e.target.value)}
+                            className="w-24 text-xs font-mono font-bold text-black border border-slate-300 rounded px-1.5 py-1 bg-white focus:outline-none focus:border-indigo-600"
+                          />
+                        </div>
+                      )}
+                    </div>
 
                     {isSelected && (
-                      <div className="flex items-center gap-1.5 w-32">
-                        <span className="text-slate-500 text-xs font-mono">₹</span>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={selectedSubjects[s.id] ?? s.default_fee}
-                          onChange={(e) => handleSubjectFeeChange(s.id, e.target.value)}
-                          placeholder="Fee"
-                          className="w-full text-xs font-mono font-bold text-black border border-slate-300 rounded px-1.5 py-1 focus:outline-none focus:border-indigo-600"
-                        />
+                      <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 pl-6">
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">
+                            Faculty / Teacher:
+                          </label>
+                          <select
+                            value={conf.teacher_id || ''}
+                            onChange={(e) => handleSubjectFieldChange(s.id, 'teacher_id', e.target.value)}
+                            className="w-full text-xs border border-slate-300 rounded px-2 py-1 bg-white text-black font-medium focus:outline-none focus:border-indigo-600"
+                          >
+                            <option value="">-- Batch Main Coordinator --</option>
+                            {teachers.map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {t.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">
+                            Hall / Room Number:
+                          </label>
+                          <input
+                            type="text"
+                            value={conf.hall_number || ''}
+                            onChange={(e) => handleSubjectFieldChange(s.id, 'hall_number', e.target.value)}
+                            placeholder="e.g. Hall 1, Room 102"
+                            className="w-full text-xs border border-slate-300 rounded px-2 py-1 bg-white text-black font-medium focus:outline-none focus:border-indigo-600"
+                          />
+                        </div>
                       </div>
                     )}
                   </div>

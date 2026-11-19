@@ -62,6 +62,14 @@ export const studentApi = {
     const res = await api.put(`/students/${id}`, data);
     return res.data;
   },
+  revoke: async (id, reason) => {
+    const res = await api.post(`/students/${id}/revoke`, { reason });
+    return res.data;
+  },
+  restore: async (id) => {
+    const res = await api.post(`/students/${id}/restore`);
+    return res.data;
+  },
 };
 
 export const enquiryApi = {
@@ -188,8 +196,24 @@ export const paymentApi = {
     const res = await api.post('/payments', payload);
     return res.data;
   },
+  update: async (id, data) => {
+    const res = await api.put(`/payments/${id}`, data);
+    return res.data;
+  },
+  refund: async (data) => {
+    const res = await api.post('/payments/refund', data);
+    return res.data;
+  },
+  listRefunds: async (params) => {
+    const res = await api.get('/payments/refunds', { params });
+    return res.data;
+  },
   getReceipt: async (id) => {
     const res = await api.get(`/payments/${id}/receipt`);
+    return res.data;
+  },
+  getRefundReceipt: async (id) => {
+    const res = await api.get(`/payments/refunds/${id}/receipt`);
     return res.data;
   },
 };
@@ -226,20 +250,21 @@ export const expenseApi = {
 };
 
 export const reportApi = {
-  getSubjectRevenue: async () => {
-    const res = await api.get('/reports/subject-revenue');
+  getSubjectRevenue: async (params) => {
+    const res = await api.get('/reports/subject-revenue', { params });
     return res.data;
   },
-  getBatchRevenue: async () => {
-    const res = await api.get('/reports/batch-revenue');
+  getBatchRevenue: async (params) => {
+    const res = await api.get('/reports/batch-revenue', { params });
     return res.data;
   },
-  getTeacherRevenue: async () => {
-    const res = await api.get('/reports/teacher-revenue');
+  getTeacherRevenue: async (params) => {
+    const res = await api.get('/reports/teacher-revenue', { params });
     return res.data;
   },
-  getCashMovement: async (year = 2026) => {
-    const res = await api.get('/reports/cash-movement', { params: { year } });
+  getCashMovement: async (params = 2026) => {
+    const queryParams = typeof params === 'object' ? params : { year: params };
+    const res = await api.get('/reports/cash-movement', { params: queryParams });
     return res.data;
   },
 };

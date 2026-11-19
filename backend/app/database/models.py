@@ -7,7 +7,7 @@ from app.modules.subjects.models import Subject
 from app.modules.batches.models import Batch, BatchSubject
 from app.modules.green_card.models import GreenCardProduct
 from app.modules.admissions.models import Admission, AdmissionItem
-from app.modules.payments.models import Payment, PaymentAllocation
+from app.modules.payments.models import Payment, PaymentAllocation, Refund
 from app.modules.expenses.models import ExpenseCategory, Expense, SalaryRecord
 from app.modules.audit.models import AuditLog
 
@@ -26,6 +26,7 @@ __all__ = [
     "AdmissionItem",
     "Payment",
     "PaymentAllocation",
+    "Refund",
     "ExpenseCategory",
     "Expense",
     "SalaryRecord",

@@ -34,6 +34,12 @@ class BatchSubject(BaseModel):
     batch_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("batches.id", ondelete="CASCADE"), nullable=False, index=True)
     subject_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("subjects.id"), nullable=False, index=True)
     fee: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("0.00"))
+    
+    # Subject-wise Faculty and Hall snapshot (classes happen in different hall numbers with different teachers)
+    teacher_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("teachers.id"), nullable=True, index=True)
+    teacher_name_snapshot: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
+    hall_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
 
     batch: Mapped["Batch"] = relationship("Batch", back_populates="subjects")
     subject: Mapped["Subject"] = relationship("app.modules.subjects.models.Subject", lazy="joined")
+    teacher: Mapped[Optional["app.modules.teachers.models.Teacher"]] = relationship("app.modules.teachers.models.Teacher", lazy="joined")

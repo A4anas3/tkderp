@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 from app.database.session import get_db
 from app.core.dependencies import require_staff, require_cashier_or_admin, require_admin
 from app.database.models import (
-    Admission, AdmissionItem, Student, Payment, PaymentAllocation, GreenCardProduct, User
+    Admission, AdmissionItem, Student, Payment, PaymentAllocation, GreenCardProduct, User, BatchSubject
 )
 from app.modules.admissions.schemas import (
     AdmissionCreate, AdmissionResponse, AdmissionCalculatePreviewRequest, AdmissionItemResponse
@@ -162,12 +162,36 @@ async def create_admission(
                 if gc_prod:
                     gc_validity_days = gc_prod.validity_days
 
+        # Resolve teacher and hall snapshots
+        t_id = raw.teacher_id
+        t_name = raw.teacher_name_snapshot
+        h_no = raw.hall_number_snapshot
+
+        if (not t_name or not h_no) and raw.batch_id and raw.subject_id:
+            bs_res = await db.execute(
+                select(BatchSubject).where(
+                    BatchSubject.batch_id == raw.batch_id,
+                    BatchSubject.subject_id == raw.subject_id
+                )
+            )
+            bs_obj = bs_res.scalar_one_or_none()
+            if bs_obj:
+                if not t_id and bs_obj.teacher_id:
+                    t_id = bs_obj.teacher_id
+                if not t_name and bs_obj.teacher_name_snapshot:
+                    t_name = bs_obj.teacher_name_snapshot
+                if not h_no and bs_obj.hall_number:
+                    h_no = bs_obj.hall_number
+
         ai = AdmissionItem(
             admission_id=admission.id,
             item_type=raw.item_type,
             batch_id=raw.batch_id,
             subject_id=raw.subject_id,
             green_card_id=raw.green_card_id,
+            teacher_id=t_id,
+            teacher_name_snapshot=t_name,
+            hall_number_snapshot=h_no,
             item_name_snapshot=raw.item_name_snapshot,
             original_price=c_itm["original_price"],
             discount_type=raw.discount_type,

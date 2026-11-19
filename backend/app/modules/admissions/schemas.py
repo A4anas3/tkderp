@@ -9,6 +9,9 @@ class AdmissionItemCreate(BaseModel):
     batch_id: Optional[uuid.UUID] = None
     subject_id: Optional[uuid.UUID] = None
     green_card_id: Optional[uuid.UUID] = None
+    teacher_id: Optional[uuid.UUID] = None
+    teacher_name_snapshot: Optional[str] = None
+    hall_number_snapshot: Optional[str] = None
     item_name_snapshot: str = Field(..., min_length=2, max_length=200)
     original_price: Decimal = Field(..., ge=0)
     discount_type: str = Field(default="NONE", pattern="^(NONE|FIXED|PERCENTAGE)$")
@@ -21,6 +24,9 @@ class AdmissionItemResponse(BaseModel):
     batch_id: Optional[uuid.UUID] = None
     subject_id: Optional[uuid.UUID] = None
     green_card_id: Optional[uuid.UUID] = None
+    teacher_id: Optional[uuid.UUID] = None
+    teacher_name_snapshot: Optional[str] = None
+    hall_number_snapshot: Optional[str] = None
     item_name_snapshot: str
     original_price: Decimal
     discount_type: str

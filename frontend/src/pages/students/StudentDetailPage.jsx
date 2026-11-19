@@ -12,6 +12,9 @@ import {
   Plus,
   FileText,
   Printer,
+  UserX,
+  RotateCcw,
+  AlertTriangle,
 } from 'lucide-react';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
@@ -21,11 +24,14 @@ import { useToast } from '../../context/ToastContext';
 import QuickPaymentModal from '../../components/modals/QuickPaymentModal';
 import PaymentReceiptModal from '../../components/receipts/PaymentReceiptModal';
 import AdmissionReceiptModal from '../../components/receipts/AdmissionReceiptModal';
+import IssueRefundModal from '../../components/modals/IssueRefundModal';
+import RefundReceiptModal from '../../components/receipts/RefundReceiptModal';
+import RevokeStudentModal from '../../components/modals/RevokeStudentModal';
 
 export default function StudentDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { error } = useToast();
+  const { success, error } = useToast();
   const [student, setStudent] = useState(null);
   const [admissions, setAdmissions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -35,6 +41,13 @@ export default function StudentDetailPage() {
   const [targetAdmissionId, setTargetAdmissionId] = useState(null);
   const [receiptToShow, setReceiptToShow] = useState(null);
   const [admissionSlipToShow, setAdmissionSlipToShow] = useState(null);
+
+  // Revocation & Refund Modals
+  const [revokeModalOpen, setRevokeModalOpen] = useState(false);
+  const [refundModalOpen, setRefundModalOpen] = useState(false);
+  const [selectedAdmissionForRefund, setSelectedAdmissionForRefund] = useState(null);
+  const [refundReceiptToShow, setRefundReceiptToShow] = useState(null);
+  const [restoring, setRestoring] = useState(false);
 
   const fetchStudentData = async () => {
     setLoading(true);
@@ -56,6 +69,19 @@ export default function StudentDetailPage() {
     fetchStudentData();
   }, [id]);
 
+  const handleRestore = async () => {
+    setRestoring(true);
+    try {
+      await studentApi.restore(student.id);
+      success(`Student ${student.name} restored to ACTIVE status`);
+      fetchStudentData();
+    } catch (err) {
+      error(err.message || 'Failed to restore student');
+    } finally {
+      setRestoring(false);
+    }
+  };
+
   if (loading) {
     return <div className="p-8 text-center text-xs text-slate-500 animate-pulse">Loading Student Profile...</div>;
   }
@@ -71,8 +97,42 @@ export default function StudentDetailPage() {
     );
   }
 
+  const isRevoked = student.status === 'REVOKED';
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
+      {/* Revocation Alert Banner */}
+      {isRevoked && (
+        <div className="bg-rose-50 border-2 border-rose-300 rounded-lg p-3 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+            <div>
+              <span className="font-bold text-rose-950 uppercase tracking-wider block">
+                STUDENT ADMISSION HAS BEEN REVOKED
+              </span>
+              <p className="text-rose-800">
+                Reason: <strong className="text-black italic">{student.revoke_reason || 'Administrative action'}</strong>
+                {student.revoked_at && (
+                  <span className="text-slate-500 ml-2 font-mono">
+                    (Revoked on {new Date(student.revoked_at).toLocaleDateString('en-IN')})
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+
+          <Button
+            size="xs"
+            variant="primary"
+            loading={restoring}
+            onClick={handleRestore}
+            icon={RotateCcw}
+          >
+            Restore Student
+          </Button>
+        </div>
+      )}
+
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div className="flex items-center gap-3">
@@ -88,7 +148,7 @@ export default function StudentDetailPage() {
               <span className="font-mono text-xs px-2 py-0.5 rounded bg-slate-100 text-indigo-700 font-bold border border-slate-300">
                 {student.student_code}
               </span>
-              <Badge variant={student.status === 'ACTIVE' ? 'success' : 'neutral'}>
+              <Badge variant={isRevoked ? 'danger' : student.status === 'ACTIVE' ? 'success' : 'neutral'}>
                 {student.status}
               </Badge>
             </div>
@@ -98,8 +158,25 @@ export default function StudentDetailPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {Number(student.total_balance_due) > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Revoke / Restore Button */}
+          {isRevoked ? (
+            <Button size="xs" variant="secondary" onClick={handleRestore} loading={restoring}>
+              Restore Status
+            </Button>
+          ) : (
+            <Button
+              size="xs"
+              variant="danger"
+              icon={UserX}
+              onClick={() => setRevokeModalOpen(true)}
+            >
+              Revoke Student
+            </Button>
+          )}
+
+          {/* Collect Due Fee Button */}
+          {!isRevoked && Number(student.total_balance_due) > 0 && (
             <Button
               variant="success"
               icon={CreditCard}
@@ -113,19 +190,22 @@ export default function StudentDetailPage() {
             </Button>
           )}
 
-          <Button
-            variant="primary"
-            icon={Plus}
-            onClick={() =>
-              navigate(
-                `/admissions/new?student_id=${student.id}&name=${encodeURIComponent(
-                  student.name
-                )}`
-              )
-            }
-          >
-            New Admission
-          </Button>
+          {/* Purchase Another Course / Batch Shortcut */}
+          {!isRevoked && (
+            <Button
+              variant="primary"
+              icon={Plus}
+              onClick={() =>
+                navigate(
+                  `/admissions/new?student_id=${student.id}&name=${encodeURIComponent(
+                    student.name
+                  )}`
+                )
+              }
+            >
+              + Enroll in Another Course / Batch
+            </Button>
+          )}
         </div>
       </div>
 
@@ -227,17 +307,19 @@ export default function StudentDetailPage() {
             ) : (
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-600 space-y-2">
                 <p>No active Green Card membership.</p>
-                <Button
-                  size="xs"
-                  variant="secondary"
-                  onClick={() =>
-                    navigate(
-                      `/admissions/new?student_id=${student.id}&item_type=GREEN_CARD`
-                    )
-                  }
-                >
-                  Purchase Green Card
-                </Button>
+                {!isRevoked && (
+                  <Button
+                    size="xs"
+                    variant="secondary"
+                    onClick={() =>
+                      navigate(
+                        `/admissions/new?student_id=${student.id}&item_type=GREEN_CARD`
+                      )
+                    }
+                  >
+                    Purchase Green Card
+                  </Button>
+                )}
               </div>
             )}
           </div>
@@ -246,13 +328,30 @@ export default function StudentDetailPage() {
 
       {/* Admissions Taken List */}
       <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs">
-        <div className="pb-3 border-b border-slate-200 flex items-center justify-between">
+        <div className="pb-3 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
-            <h2 className="text-sm font-bold text-black">Admissions & Enrolled Batches</h2>
+            <h2 className="text-sm font-bold text-black">Admissions & Enrolled Batches / Courses</h2>
             <p className="text-xs text-slate-500">
-              History of all course admissions, subjects purchased, discounts, and payment balances
+              History of all course purchases, subjects with classroom halls & faculty snapshots, and payments
             </p>
           </div>
+
+          {!isRevoked && (
+            <Button
+              size="xs"
+              variant="primary"
+              icon={Plus}
+              onClick={() =>
+                navigate(
+                  `/admissions/new?student_id=${student.id}&name=${encodeURIComponent(
+                    student.name
+                  )}`
+                )
+              }
+            >
+              Add Another Course / Batch
+            </Button>
+          )}
         </div>
 
         <div className="mt-3 overflow-x-auto">
@@ -266,7 +365,7 @@ export default function StudentDetailPage() {
                 <tr>
                   <th className="p-2">Admission No</th>
                   <th className="p-2">Date</th>
-                  <th className="p-2">Enrolled Items</th>
+                  <th className="p-2">Enrolled Items (Faculty & Hall)</th>
                   <th className="p-2 text-right">Total Payable</th>
                   <th className="p-2 text-right">Paid</th>
                   <th className="p-2 text-right text-rose-700">Due</th>
@@ -280,14 +379,21 @@ export default function StudentDetailPage() {
                     <td className="p-2 font-mono font-bold text-black">{adm.admission_number}</td>
                     <td className="p-2 text-slate-600">{adm.admission_date}</td>
                     <td className="p-2">
-                      <div className="space-y-0.5">
+                      <div className="space-y-1">
                         {(adm.items || []).map((itm, i) => (
-                          <span
+                          <div
                             key={i}
-                            className="inline-block bg-slate-100 border border-slate-200 text-black px-1.5 py-0.5 rounded text-[11px] mr-1"
+                            className="bg-slate-50 border border-slate-200 text-black px-2 py-0.5 rounded text-[11px]"
                           >
-                            {itm.item_name_snapshot}
-                          </span>
+                            <span className="font-semibold text-indigo-950 block">{itm.item_name_snapshot}</span>
+                            {(itm.teacher_name_snapshot || itm.hall_number_snapshot) && (
+                              <span className="text-[10px] text-slate-600 block">
+                                {itm.teacher_name_snapshot && `Faculty: ${itm.teacher_name_snapshot}`}
+                                {itm.teacher_name_snapshot && itm.hall_number_snapshot && ' • '}
+                                {itm.hall_number_snapshot && `Hall: ${itm.hall_number_snapshot}`}
+                              </span>
+                            )}
+                          </div>
                         ))}
                       </div>
                     </td>
@@ -324,7 +430,23 @@ export default function StudentDetailPage() {
                         >
                           Slip
                         </Button>
-                        {Number(adm.balance_due) > 0 && (
+
+                        {/* Issue Refund Button */}
+                        {Number(adm.amount_paid) > 0 && (
+                          <Button
+                            size="xs"
+                            variant="secondary"
+                            onClick={() => {
+                              setSelectedAdmissionForRefund(adm);
+                              setRefundModalOpen(true);
+                            }}
+                          >
+                            Refund
+                          </Button>
+                        )}
+
+                        {/* Pay Due Button */}
+                        {Number(adm.balance_due) > 0 && !isRevoked && (
                           <Button
                             size="xs"
                             variant="success"
@@ -369,6 +491,37 @@ export default function StudentDetailPage() {
         isOpen={!!admissionSlipToShow}
         onClose={() => setAdmissionSlipToShow(null)}
         admission={admissionSlipToShow}
+      />
+
+      {/* Revoke Student Modal */}
+      <RevokeStudentModal
+        isOpen={revokeModalOpen}
+        onClose={() => setRevokeModalOpen(false)}
+        student={student}
+        onSuccess={() => {
+          fetchStudentData();
+        }}
+      />
+
+      {/* Issue Refund Modal */}
+      <IssueRefundModal
+        isOpen={refundModalOpen}
+        onClose={() => {
+          setRefundModalOpen(false);
+          setSelectedAdmissionForRefund(null);
+        }}
+        admission={selectedAdmissionForRefund}
+        onSuccess={(receipt) => {
+          setRefundReceiptToShow(receipt);
+          fetchStudentData();
+        }}
+      />
+
+      {/* Refund Receipt Modal */}
+      <RefundReceiptModal
+        isOpen={!!refundReceiptToShow}
+        onClose={() => setRefundReceiptToShow(null)}
+        refund={refundReceiptToShow}
       />
     </div>
   );
