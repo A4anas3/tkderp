@@ -7,6 +7,7 @@ import {
   Mail,
   MapPin,
   Calendar,
+  CalendarDays,
   Award,
   CreditCard,
   Plus,
@@ -15,12 +16,16 @@ import {
   UserX,
   RotateCcw,
   AlertTriangle,
+  Camera,
+  RefreshCw,
 } from 'lucide-react';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
 import StatCard from '../../components/common/StatCard';
+import Avatar from '../../components/common/Avatar';
 import { studentApi, admissionApi, paymentApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
+import { compressImage } from '../../utils/imageCompressor';
 import QuickPaymentModal from '../../components/modals/QuickPaymentModal';
 import PaymentReceiptModal from '../../components/receipts/PaymentReceiptModal';
 import AdmissionReceiptModal from '../../components/receipts/AdmissionReceiptModal';
@@ -36,6 +41,7 @@ export default function StudentDetailPage() {
   const [student, setStudent] = useState(null);
   const [admissions, setAdmissions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   // Modals
   const [payModalOpen, setPayModalOpen] = useState(false);
@@ -99,6 +105,23 @@ export default function StudentDetailPage() {
     }
   };
 
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingPhoto(true);
+    try {
+      const { file: compressedFile, sizeKb } = await compressImage(file, 20);
+      const updated = await studentApi.uploadPhoto(student.id, compressedFile);
+      setStudent((prev) => ({ ...prev, photo_url: updated.photo_url }));
+      success(`Profile photo updated successfully (${sizeKb} KB, <= 20 KB limit)`);
+    } catch (err) {
+      error(err.message || 'Failed to upload photo');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
   if (loading) {
     return <div className="p-8 text-center text-xs text-slate-500 animate-pulse">Loading Student Profile...</div>;
   }
@@ -159,6 +182,30 @@ export default function StudentDetailPage() {
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
+
+          {/* Student Profile Picture with Direct Upload (< 20 KB) */}
+          <div className="relative group">
+            <Avatar
+              src={student.photo_url}
+              name={student.name}
+              size="lg"
+              status={student.status}
+            />
+            <label
+              className="absolute -bottom-1 -right-1 p-1 bg-white border border-slate-300 rounded-full shadow-xs cursor-pointer hover:bg-indigo-50 hover:border-indigo-400 transition"
+              title="Change Profile Photo (auto-compressed to <= 20 KB)"
+            >
+              <Camera className="w-3.5 h-3.5 text-indigo-700" />
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handlePhotoUpload}
+                disabled={uploadingPhoto}
+                className="hidden"
+              />
+            </label>
+          </div>
+
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-bold text-black">{student.name}</h1>
@@ -403,7 +450,14 @@ export default function StudentDetailPage() {
                           </span>
                         )}
                       </td>
-                      <td className="p-2 text-slate-600">{adm.admission_date}</td>
+                      <td className="p-2 text-slate-600">
+                        <span className="font-semibold text-black block">{adm.admission_date}</span>
+                        {adm.valid_from && adm.valid_to && (
+                          <span className="text-[10px] text-indigo-800 bg-indigo-50 border border-indigo-200 px-1 py-0.2 rounded font-mono inline-block mt-0.5">
+                            {adm.valid_from} &rarr; {adm.valid_to}
+                          </span>
+                        )}
+                      </td>
                       <td className="p-2">
                         <div className="space-y-1">
                           {(adm.items || []).map((itm, i) => (
@@ -417,6 +471,11 @@ export default function StudentDetailPage() {
                                   {itm.teacher_name_snapshot && `Faculty: ${itm.teacher_name_snapshot}`}
                                   {itm.teacher_name_snapshot && itm.hall_number_snapshot && ' • '}
                                   {itm.hall_number_snapshot && `Hall: ${itm.hall_number_snapshot}`}
+                                </span>
+                              )}
+                              {itm.valid_from && itm.valid_to && (
+                                <span className="text-[10px] text-emerald-800 font-mono block">
+                                  Period: {itm.valid_from} to {itm.valid_to}
                                 </span>
                               )}
                             </div>
@@ -476,6 +535,24 @@ export default function StudentDetailPage() {
                           >
                             Slip
                           </Button>
+
+                          {/* Next Month Batch Fee Renewal */}
+                          {!isBatchRevoked && !isRevoked && (
+                            <Button
+                              size="xs"
+                              variant="primary"
+                              onClick={() =>
+                                navigate(
+                                  `/admissions/new?student_id=${student.id}&name=${encodeURIComponent(
+                                    student.name
+                                  )}&renew=1`
+                                )
+                              }
+                              title="Pay next month fee cycle"
+                            >
+                              + Next Month
+                            </Button>
+                          )}
 
                           {/* If Revoked: Offer Restore Batch */}
                           {isBatchRevoked ? (

@@ -16,6 +16,8 @@ class AdmissionItemCreate(BaseModel):
     original_price: Decimal = Field(..., ge=0)
     discount_type: str = Field(default="NONE", pattern="^(NONE|FIXED|PERCENTAGE)$")
     discount_value: Decimal = Field(default=Decimal("0.00"), ge=0)
+    valid_from: Optional[date] = None
+    valid_to: Optional[date] = None
 
 class AdmissionItemResponse(BaseModel):
     id: uuid.UUID
@@ -36,6 +38,8 @@ class AdmissionItemResponse(BaseModel):
     net_price: Decimal
     amount_collected: Decimal
     balance_due: Decimal
+    valid_from: Optional[date] = None
+    valid_to: Optional[date] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -54,6 +58,8 @@ class AdmissionCreate(BaseModel):
     gst_enabled: bool = False
     gst_rate: Decimal = Field(default=Decimal("18.00"), ge=0)
     notes: Optional[str] = None
+    valid_from: Optional[date] = None
+    valid_to: Optional[date] = None
     initial_payment: Optional[InitialPaymentData] = None
 
 class AdmissionRevokeRequest(BaseModel):
@@ -84,6 +90,8 @@ class AdmissionResponse(BaseModel):
     payment_status: str
     status: str
     notes: Optional[str] = None
+    valid_from: Optional[date] = None
+    valid_to: Optional[date] = None
     revocation_reason: Optional[str] = None
     revoked_at: Optional[datetime] = None
     revoked_by: Optional[uuid.UUID] = None

@@ -81,6 +81,16 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission }) {
             </div>
           </div>
 
+          {/* Fee Validity Period (When to When) */}
+          {admission.valid_from && admission.valid_to && (
+            <div className="bg-slate-50 border border-slate-200 rounded p-2 text-xs flex justify-between items-center font-medium">
+              <span className="text-slate-600">Fee Coverage Period (When to When):</span>
+              <span className="font-mono font-bold text-indigo-900">
+                {admission.valid_from} &rarr; {admission.valid_to}
+              </span>
+            </div>
+          )}
+
           {/* Purchased Items Table */}
           <div>
             <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">

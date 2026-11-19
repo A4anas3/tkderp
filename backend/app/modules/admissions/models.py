@@ -38,6 +38,10 @@ class Admission(BaseModel):
     payment_status: Mapped[str] = mapped_column(String(30), nullable=False, default="UNPAID", index=True) # UNPAID, PARTIALLY_PAID, PAID
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="ACTIVE") # ACTIVE, REVOKED, CANCELLED
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Date-to-date validity / fee period coverage (when to when)
+    valid_from: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    valid_to: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     
     # Batch / Course Revocation tracking
     revocation_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -81,5 +85,9 @@ class AdmissionItem(BaseModel):
     
     amount_collected: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("0.00"))
     balance_due: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+
+    # Date-to-date validity / fee period coverage (when to when)
+    valid_from: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    valid_to: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
 
     admission: Mapped["Admission"] = relationship("Admission", back_populates="items")

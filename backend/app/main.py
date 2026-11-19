@@ -44,7 +44,9 @@ app.add_middleware(
 # Mount local uploads for static serving
 uploads_path = os.path.abspath(settings.UPLOAD_DIR)
 os.makedirs(uploads_path, exist_ok=True)
+os.makedirs(os.path.join(uploads_path, "students"), exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=uploads_path), name="uploads")
+app.mount("/api/v1/uploads", StaticFiles(directory=uploads_path), name="api_uploads")
 
 # Include API Routers
 app.include_router(auth_router)

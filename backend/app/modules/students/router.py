@@ -1,14 +1,19 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_
+from sqlalchemy import select, func, or_, desc
 from decimal import Decimal
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date, timedelta
+from typing import Optional
 import json
 import uuid
+import os
+import io
+from PIL import Image
 
+from app.core.config import settings
 from app.database.session import get_db
 from app.modules.students.models import Student
-from app.modules.admissions.models import Admission
+from app.modules.admissions.models import Admission, AdmissionItem
 from app.modules.audit.models import AuditLog
 from app.modules.students.schemas import (
     StudentCreate, StudentUpdate, StudentRevokeRequest,
@@ -16,6 +21,37 @@ from app.modules.students.schemas import (
 )
 from app.core.dependencies import require_cashier_or_admin, require_staff
 from app.common.pagination import PageResponse
+
+def compress_avatar_image(file_bytes: bytes, max_kb: int = 20) -> bytes:
+    """
+    Compresses and resizes avatar image to ensure size is <= max_kb (default 20 KB).
+    """
+    max_bytes = max_kb * 1024
+    img = Image.open(io.BytesIO(file_bytes))
+    if img.mode in ("RGBA", "P"):
+        img = img.convert("RGB")
+    
+    # Target size: 360x360 maximum
+    img.thumbnail((360, 360), Image.Resampling.LANCZOS)
+    
+    # Progressive quality reduction
+    for q in [85, 75, 65, 55, 45, 35, 25]:
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=q, optimize=True)
+        if buf.tell() <= max_bytes or q == 25:
+            if buf.tell() <= max_bytes:
+                return buf.getvalue()
+            break
+            
+    # If still above max_bytes, downscale further to 240x240
+    img.thumbnail((240, 240), Image.Resampling.LANCZOS)
+    for q in [75, 60, 45, 30, 20]:
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=q, optimize=True)
+        if buf.tell() <= max_bytes or q == 20:
+            return buf.getvalue()
+            
+    return buf.getvalue()
 
 router = APIRouter(prefix="/api/students", tags=["Students"])
 
@@ -227,3 +263,135 @@ async def restore_student(
     await db.commit()
     await db.refresh(student)
     return StudentResponse.model_validate(student)
+
+@router.post("/upload-photo")
+async def upload_student_photo_standalone(
+    file: UploadFile = File(...),
+    user = Depends(require_cashier_or_admin)
+):
+    """
+    Upload and compress a student photo to <= 20 KB.
+    Used during quick student registration before record exists.
+    """
+    raw_bytes = await file.read()
+    if not raw_bytes:
+        raise HTTPException(status_code=400, detail="Empty file uploaded")
+    
+    try:
+        compressed_bytes = compress_avatar_image(raw_bytes, max_kb=20)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid image format: {str(e)}")
+
+    upload_dir = os.path.join(os.path.abspath(settings.UPLOAD_DIR), "students")
+    os.makedirs(upload_dir, exist_ok=True)
+    
+    filename = f"temp_{uuid.uuid4().hex[:12]}.jpg"
+    filepath = os.path.join(upload_dir, filename)
+    with open(filepath, "wb") as f:
+        f.write(compressed_bytes)
+
+    photo_url = f"/uploads/students/{filename}"
+    return {
+        "photo_url": photo_url,
+        "size_kb": round(len(compressed_bytes) / 1024, 2)
+    }
+
+@router.post("/{student_id}/photo", response_model=StudentResponse)
+async def upload_student_photo(
+    student_id: uuid.UUID,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    user = Depends(require_cashier_or_admin)
+):
+    """
+    Upload, compress to <= 20 KB and attach photo directly to an existing student.
+    """
+    student = (await db.execute(select(Student).where(Student.id == student_id))).scalar_one_or_none()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    raw_bytes = await file.read()
+    if not raw_bytes:
+        raise HTTPException(status_code=400, detail="Empty file uploaded")
+
+    try:
+        compressed_bytes = compress_avatar_image(raw_bytes, max_kb=20)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid image format: {str(e)}")
+
+    upload_dir = os.path.join(os.path.abspath(settings.UPLOAD_DIR), "students")
+    os.makedirs(upload_dir, exist_ok=True)
+
+    filename = f"stu_{student.student_code.lower()}_{uuid.uuid4().hex[:8]}.jpg"
+    filepath = os.path.join(upload_dir, filename)
+    with open(filepath, "wb") as f:
+        f.write(compressed_bytes)
+
+    student.photo_url = f"/uploads/students/{filename}"
+    await db.commit()
+    await db.refresh(student)
+    return StudentResponse.model_validate(student)
+
+@router.get("/{student_id}/last-batch-period")
+async def get_student_last_batch_period(
+    student_id: uuid.UUID,
+    batch_id: Optional[uuid.UUID] = None,
+    db: AsyncSession = Depends(get_db),
+    user = Depends(require_staff)
+):
+    """
+    Retrieves the ending date of the student's previous enrolled batch cycle.
+    Provides smart suggested next start date (next day after previous end) and end date (+30 days).
+    Admin can override the start date for the next cycle.
+    """
+    student = (await db.execute(select(Student).where(Student.id == student_id))).scalar_one_or_none()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    # Search for latest active admission item for this student
+    stmt = (
+        select(AdmissionItem, Admission)
+        .join(Admission, AdmissionItem.admission_id == Admission.id)
+        .where(
+            Admission.student_id == student_id,
+            Admission.status == "ACTIVE"
+        )
+    )
+    if batch_id:
+        stmt = stmt.where(AdmissionItem.batch_id == batch_id)
+
+    # Order by validity end date or admission date desc
+    stmt = stmt.order_by(
+        desc(func.coalesce(AdmissionItem.valid_to, Admission.valid_to, Admission.admission_date))
+    ).limit(1)
+
+    result = (await db.execute(stmt)).first()
+
+    today = date.today()
+    if result:
+        item, adm = result
+        last_end = item.valid_to or adm.valid_to or adm.admission_date
+        suggested_start = last_end + timedelta(days=1)
+        suggested_end = suggested_start + timedelta(days=30)
+        return {
+            "student_id": str(student_id),
+            "batch_id": str(batch_id) if batch_id else None,
+            "has_previous": True,
+            "last_end_date": last_end.isoformat(),
+            "suggested_start_date": suggested_start.isoformat(),
+            "suggested_end_date": suggested_end.isoformat(),
+            "item_name": item.item_name_snapshot
+        }
+    else:
+        suggested_start = today
+        suggested_end = today + timedelta(days=30)
+        return {
+            "student_id": str(student_id),
+            "batch_id": str(batch_id) if batch_id else None,
+            "has_previous": False,
+            "last_end_date": None,
+            "suggested_start_date": suggested_start.isoformat(),
+            "suggested_end_date": suggested_end.isoformat(),
+            "item_name": None
+        }
+

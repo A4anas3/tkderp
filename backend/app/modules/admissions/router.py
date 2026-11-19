@@ -123,6 +123,16 @@ async def create_admission(
         gst_rate=payload.gst_rate
     )
 
+    # Determine valid_from and valid_to for overall admission
+    adm_valid_from = payload.valid_from
+    adm_valid_to = payload.valid_to
+    if not adm_valid_from:
+        item_froms = [itm.valid_from for itm in payload.items if itm.valid_from]
+        adm_valid_from = min(item_froms) if item_froms else payload.admission_date
+    if not adm_valid_to:
+        item_tos = [itm.valid_to for itm in payload.items if itm.valid_to]
+        adm_valid_to = max(item_tos) if item_tos else (adm_valid_from + timedelta(days=30))
+
     admission = Admission(
         admission_number=adm_no,
         student_id=student.id,
@@ -144,6 +154,8 @@ async def create_admission(
         payment_status="UNPAID",
         status="ACTIVE",
         notes=payload.notes,
+        valid_from=adm_valid_from,
+        valid_to=adm_valid_to,
         created_by=current_user.id
     )
     db.add(admission)
@@ -184,6 +196,9 @@ async def create_admission(
                 if not h_no and bs_obj.hall_number:
                     h_no = bs_obj.hall_number
 
+        itm_from = raw.valid_from or adm_valid_from
+        itm_to = raw.valid_to or (itm_from + timedelta(days=30))
+
         ai = AdmissionItem(
             admission_id=admission.id,
             item_type=raw.item_type,
@@ -201,7 +216,9 @@ async def create_admission(
             overall_discount_share=c_itm["overall_discount_share"],
             net_price=c_itm["net_price"],
             amount_collected=Decimal("0.00"),
-            balance_due=c_itm["net_price"]
+            balance_due=c_itm["net_price"],
+            valid_from=itm_from,
+            valid_to=itm_to
         )
         db.add(ai)
         db_items.append(ai)

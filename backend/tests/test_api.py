@@ -719,3 +719,100 @@ async def test_batch_purchase_revocation_and_restoration():
         assert restored_adm["status"] == "ACTIVE"
         assert restored_adm["revocation_reason"] is None
         assert float(restored_adm["balance_due"]) == 3500.0  # 4000 total - 500 retained paid = 3500 due
+
+@pytest.mark.asyncio
+async def test_student_photo_compression_and_last_batch_period():
+    from PIL import Image
+    import io
+    import os
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        admin_login = await client.post("/api/auth/login", json={"username": "ADM001", "password": "Admin@1234"})
+        token = admin_login.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # 1. Test standalone photo compression (under 20 KB)
+        noise_bytes = os.urandom(300 * 300 * 3)
+        large_img = Image.frombytes("RGB", (300, 300), noise_bytes)
+        buf = io.BytesIO()
+        large_img.save(buf, format="JPEG", quality=95)
+        raw_img_bytes = buf.getvalue()
+        assert len(raw_img_bytes) > 20480  # original is bigger than 20 KB
+
+        upload_res = await client.post(
+            "/api/students/upload-photo",
+            files={"file": ("test_avatar.jpg", raw_img_bytes, "image/jpeg")},
+            headers=headers
+        )
+        assert upload_res.status_code == 200
+        u_data = upload_res.json()
+        assert u_data["size_kb"] <= 20.0
+        assert u_data["photo_url"].startswith("/uploads/students/")
+
+        # 2. Create student and attach photo
+        stu_res = await client.post("/api/students", json={
+            "name": "Photo Test Student",
+            "mobile": "9812344444",
+            "photo_url": u_data["photo_url"],
+            "status": "ACTIVE"
+        }, headers=headers)
+        assert stu_res.status_code == 201
+        student = stu_res.json()
+        student_id = student["id"]
+        assert student["photo_url"] == u_data["photo_url"]
+
+        # 3. Test direct student photo upload endpoint
+        attach_res = await client.post(
+            f"/api/students/{student_id}/photo",
+            files={"file": ("profile.jpg", raw_img_bytes, "image/jpeg")},
+            headers=headers
+        )
+        assert attach_res.status_code == 200
+        updated_stu = attach_res.json()
+        assert updated_stu["photo_url"].startswith("/uploads/students/stu_")
+
+        # 4. Enroll student in a batch with date-to-date validity (2026-11-01 to 2026-11-30)
+        subj_res = await client.post("/api/subjects", json={"name": "Photo Test Physics", "code": "PTP99", "standard_fee": 1500.0}, headers=headers)
+        subj_id = subj_res.json()["id"]
+        batch_res = await client.post("/api/batches", json={
+            "name": "Nov Photo Batch",
+            "hall_number": "Hall 1",
+            "subjects": [{"subject_id": subj_id, "fee": 1500.0}]
+        }, headers=headers)
+        assert batch_res.status_code == 201
+        batch_id = batch_res.json()["id"]
+
+        adm_res = await client.post("/api/admissions", json={
+            "student_id": student_id,
+            "admission_date": "2026-11-01",
+            "valid_from": "2026-11-01",
+            "valid_to": "2026-11-30",
+            "items": [{
+                "item_type": "BATCH_SUBJECT",
+                "batch_id": batch_id,
+                "subject_id": subj_id,
+                "item_name_snapshot": "Nov Photo Batch - Physics",
+                "original_price": 1500.0,
+                "valid_from": "2026-11-01",
+                "valid_to": "2026-11-30"
+            }]
+        }, headers=headers)
+        assert adm_res.status_code == 201
+        adm_data = adm_res.json()
+        assert adm_data["valid_from"] == "2026-11-01"
+        assert adm_data["valid_to"] == "2026-11-30"
+        assert adm_data["items"][0]["valid_from"] == "2026-11-01"
+        assert adm_data["items"][0]["valid_to"] == "2026-11-30"
+
+        # 5. Query last batch period suggestion for next month
+        period_res = await client.get(
+            f"/api/students/{student_id}/last-batch-period?batch_id={batch_id}",
+            headers=headers
+        )
+        assert period_res.status_code == 200
+        p_data = period_res.json()
+        assert p_data["has_previous"] is True
+        assert p_data["last_end_date"] == "2026-11-30"
+        # Suggested start is next day (2026-12-01)
+        assert p_data["suggested_start_date"] == "2026-12-01"
+        # Suggested end is 30 days later (2026-12-31)
+        assert p_data["suggested_end_date"] == "2026-12-31"

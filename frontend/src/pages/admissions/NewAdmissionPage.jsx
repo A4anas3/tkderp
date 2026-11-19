@@ -11,6 +11,7 @@ import {
   UserPlus,
   CheckCircle2,
   Percent,
+  CalendarDays,
 } from 'lucide-react';
 import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
@@ -49,6 +50,13 @@ export default function NewAdmissionPage() {
   const [studentId, setStudentId] = useState(paramStudentId || '');
   const [existingAdmissions, setExistingAdmissions] = useState([]);
   const [admissionDate, setAdmissionDate] = useState(new Date().toISOString().split('T')[0]);
+  const [validFrom, setValidFrom] = useState(new Date().toISOString().split('T')[0]);
+  const [validTo, setValidTo] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 30);
+    return d.toISOString().split('T')[0];
+  });
+  const [lastBatchPeriodInfo, setLastBatchPeriodInfo] = useState(null);
   const [notes, setNotes] = useState('');
 
   // Selected items: array of { tempId, item_type, batch_id, subject_id, green_card_id, item_name_snapshot, original_price, discount_type, discount_value }
@@ -147,22 +155,48 @@ export default function NewAdmissionPage() {
     loadReferences();
   }, [loadReferences]);
 
-  // Fetch existing admissions for student to support multi-course purchase
+  // Fetch existing admissions & last batch coverage period for student
   useEffect(() => {
     if (!studentId) {
       setExistingAdmissions([]);
+      setLastBatchPeriodInfo(null);
       return;
     }
     const fetchStudentHistory = async () => {
       try {
-        const res = await admissionApi.list({ student_id: studentId, page_size: 20 });
-        setExistingAdmissions(res.items || []);
+        const [admRes, periodRes] = await Promise.all([
+          admissionApi.list({ student_id: studentId, page_size: 20 }),
+          studentApi.getLastBatchPeriod(studentId),
+        ]);
+        setExistingAdmissions(admRes.items || []);
+
+        // Smart next batch period: defaults to next date after last batch end
+        if (periodRes && periodRes.has_previous) {
+          setLastBatchPeriodInfo(periodRes);
+          setValidFrom(periodRes.suggested_start_date);
+          setValidTo(periodRes.suggested_end_date);
+        } else {
+          setLastBatchPeriodInfo(null);
+          setValidFrom(admissionDate);
+          const d = new Date(admissionDate);
+          d.setDate(d.getDate() + 30);
+          setValidTo(d.toISOString().split('T')[0]);
+        }
       } catch (e) {
-        console.error('Failed to load student existing admissions:', e);
+        console.error('Failed to load student existing admissions or period info:', e);
       }
     };
     fetchStudentHistory();
-  }, [studentId]);
+  }, [studentId, admissionDate]);
+
+  const handleValidFromChange = (newFrom) => {
+    setValidFrom(newFrom);
+    if (newFrom) {
+      const d = new Date(newFrom);
+      d.setDate(d.getDate() + 30);
+      setValidTo(d.toISOString().split('T')[0]);
+    }
+  };
 
   // Recalculate Live Preview whenever items, discounts, or GST change
   useEffect(() => {
@@ -334,6 +368,8 @@ export default function NewAdmissionPage() {
         original_price: parseFloat(itm.original_price) || 0,
         discount_type: itm.discount_type,
         discount_value: parseFloat(itm.discount_value) || 0,
+        valid_from: itm.valid_from || validFrom,
+        valid_to: itm.valid_to || validTo,
       }));
 
       let initialPaymentPayload = null;
@@ -349,6 +385,8 @@ export default function NewAdmissionPage() {
       const payload = {
         student_id: studentId,
         admission_date: admissionDate,
+        valid_from: validFrom,
+        valid_to: validTo,
         items: itemsPayload,
         overall_discount_type: overallDiscountType,
         overall_discount_value: parseFloat(overallDiscountValue) || 0,
@@ -429,6 +467,53 @@ export default function NewAdmissionPage() {
               onChange={(e) => setAdmissionDate(e.target.value)}
               required
             />
+          </div>
+
+          {/* Date to Date Fee Period (When to When) Selection */}
+          <div className="pt-2 border-t border-slate-100 space-y-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+              <div>
+                <label className="text-xs font-bold text-black flex items-center gap-1.5">
+                  <CalendarDays className="w-4 h-4 text-indigo-600" />
+                  Fee Period / Coverage Dates (When to When)
+                </label>
+                <p className="text-[11px] text-slate-500">
+                  Select coverage period for this batch purchase (defaulted to next month or day after last batch end)
+                </p>
+              </div>
+
+              {lastBatchPeriodInfo?.has_previous && (
+                <span className="text-[10px] bg-amber-50 text-amber-900 border border-amber-200 px-2 py-0.5 rounded font-medium">
+                  Last batch ended on: <strong className="font-mono">{lastBatchPeriodInfo.last_end_date}</strong>
+                </span>
+              )}
+            </div>
+
+            {lastBatchPeriodInfo?.has_previous && (
+              <div className="bg-amber-50/70 border border-amber-200 rounded-md p-2 text-xs text-amber-900 flex items-center gap-2">
+                <CalendarDays className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>
+                  Previous batch ended on <strong>{lastBatchPeriodInfo.last_end_date}</strong>. By default, next fee cycle starts on <strong>{lastBatchPeriodInfo.suggested_start_date}</strong>. You can modify the start date below.
+                </span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Input
+                label="Coverage Start Date (From Date)"
+                type="date"
+                value={validFrom}
+                onChange={(e) => handleValidFromChange(e.target.value)}
+                required
+              />
+              <Input
+                label="Coverage End Date (To Date)"
+                type="date"
+                value={validTo}
+                onChange={(e) => setValidTo(e.target.value)}
+                required
+              />
+            </div>
           </div>
 
           {/* Existing Enrollments Alert for Multi-Course Purchase */}

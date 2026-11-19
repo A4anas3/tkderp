@@ -70,6 +70,28 @@ export const studentApi = {
     const res = await api.post(`/students/${id}/restore`);
     return res.data;
   },
+  uploadPhoto: async (id, file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await api.post(`/students/${id}/photo`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data;
+  },
+  uploadStandalonePhoto: async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await api.post('/students/upload-photo', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data;
+  },
+  getLastBatchPeriod: async (studentId, batchId) => {
+    const res = await api.get(`/students/${studentId}/last-batch-period`, {
+      params: { batch_id: batchId },
+    });
+    return res.data;
+  },
 };
 
 export const enquiryApi = {
