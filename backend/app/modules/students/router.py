@@ -12,6 +12,7 @@ from PIL import Image
 
 from app.core.config import settings
 from app.database.session import get_db
+from app.modules.users.models import User
 from app.modules.students.models import Student
 from app.modules.admissions.models import Admission, AdmissionItem
 from app.modules.audit.models import AuditLog
@@ -19,7 +20,7 @@ from app.modules.students.schemas import (
     StudentCreate, StudentUpdate, StudentRevokeRequest,
     StudentResponse, StudentDetailResponse
 )
-from app.core.dependencies import require_cashier_or_admin, require_staff
+from app.core.dependencies import require_cashier_or_admin, require_staff, require_admin
 from app.common.pagination import PageResponse
 
 def compress_avatar_image(file_bytes: bytes, max_kb: int = 20) -> bytes:
@@ -204,7 +205,7 @@ async def revoke_student(
     student_id: uuid.UUID,
     payload: StudentRevokeRequest,
     db: AsyncSession = Depends(get_db),
-    user = Depends(require_cashier_or_admin)
+    user: User = Depends(require_admin)
 ):
     student = (await db.execute(select(Student).where(Student.id == student_id))).scalar_one_or_none()
     if not student:
@@ -236,7 +237,7 @@ async def revoke_student(
 async def restore_student(
     student_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    user = Depends(require_cashier_or_admin)
+    user: User = Depends(require_admin)
 ):
     student = (await db.execute(select(Student).where(Student.id == student_id))).scalar_one_or_none()
     if not student:

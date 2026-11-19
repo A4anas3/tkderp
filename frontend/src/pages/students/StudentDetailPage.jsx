@@ -26,6 +26,7 @@ import Avatar from '../../components/common/Avatar';
 import { studentApi, admissionApi, paymentApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 import { compressImage } from '../../utils/imageCompressor';
+import { useAuth } from '../../context/AuthContext';
 import QuickPaymentModal from '../../components/modals/QuickPaymentModal';
 import PaymentReceiptModal from '../../components/receipts/PaymentReceiptModal';
 import AdmissionReceiptModal from '../../components/receipts/AdmissionReceiptModal';
@@ -38,6 +39,7 @@ export default function StudentDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { success, error } = useToast();
+  const { isAdmin } = useAuth();
   const [student, setStudent] = useState(null);
   const [admissions, setAdmissions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -223,20 +225,22 @@ export default function StudentDetailPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Revoke / Restore Button */}
-          {isRevoked ? (
-            <Button size="xs" variant="secondary" onClick={handleRestore} loading={restoring}>
-              Restore Status
-            </Button>
-          ) : (
-            <Button
-              size="xs"
-              variant="danger"
-              icon={UserX}
-              onClick={() => setRevokeModalOpen(true)}
-            >
-              Revoke Student
-            </Button>
+          {/* Revoke / Restore Button (Admin Only) */}
+          {isAdmin && (
+            isRevoked ? (
+              <Button size="xs" variant="secondary" onClick={handleRestore} loading={restoring}>
+                Restore Status
+              </Button>
+            ) : (
+              <Button
+                size="xs"
+                variant="danger"
+                icon={UserX}
+                onClick={() => setRevokeModalOpen(true)}
+              >
+                Revoke Student
+              </Button>
+            )
           )}
 
           {/* Collect Due Fee Button */}
@@ -554,33 +558,37 @@ export default function StudentDetailPage() {
                             </Button>
                           )}
 
-                          {/* If Revoked: Offer Restore Batch */}
+                          {/* If Revoked: Offer Restore Batch (Admin Only) */}
                           {isBatchRevoked ? (
-                            <Button
-                              size="xs"
-                              variant="primary"
-                              icon={RotateCcw}
-                              loading={restoringBatchId === adm.id}
-                              onClick={() => handleRestoreBatch(adm)}
-                            >
-                              Restore
-                            </Button>
-                          ) : (
-                            <>
-                              {/* Revoke Batch Button */}
+                            isAdmin && (
                               <Button
                                 size="xs"
-                                variant="danger"
-                                onClick={() => {
-                                  setSelectedAdmissionForBatchRevoke(adm);
-                                  setRevokeBatchModalOpen(true);
-                                }}
+                                variant="primary"
+                                icon={RotateCcw}
+                                loading={restoringBatchId === adm.id}
+                                onClick={() => handleRestoreBatch(adm)}
                               >
-                                Revoke
+                                Restore
                               </Button>
+                            )
+                          ) : (
+                            <>
+                              {/* Revoke Batch Button (Admin Only) */}
+                              {isAdmin && (
+                                <Button
+                                  size="xs"
+                                  variant="danger"
+                                  onClick={() => {
+                                    setSelectedAdmissionForBatchRevoke(adm);
+                                    setRevokeBatchModalOpen(true);
+                                  }}
+                                >
+                                  Revoke
+                                </Button>
+                              )}
 
-                              {/* Issue Refund Button */}
-                              {Number(adm.amount_paid) > 0 && (
+                              {/* Issue Refund Button (Admin Only) */}
+                              {isAdmin && Number(adm.amount_paid) > 0 && (
                                 <Button
                                   size="xs"
                                   variant="secondary"
@@ -593,7 +601,7 @@ export default function StudentDetailPage() {
                                 </Button>
                               )}
 
-                              {/* Pay Due Button */}
+                              {/* Pay Due Button (Cashier & Admin) */}
                               {Number(adm.balance_due) > 0 && !isRevoked && (
                                 <Button
                                   size="xs"

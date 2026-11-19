@@ -9,7 +9,7 @@ from sqlalchemy import select, func, or_, desc, delete
 from sqlalchemy.orm import selectinload
 
 from app.database.session import get_db
-from app.core.dependencies import require_staff, require_cashier_or_admin
+from app.core.dependencies import require_staff, require_cashier_or_admin, require_admin
 from app.database.models import (
     Payment, PaymentAllocation, Admission, AdmissionItem, Student, User, Refund, AuditLog
 )
@@ -278,7 +278,7 @@ async def update_payment(
     payment_id: uuid.UUID,
     payload: PaymentUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_cashier_or_admin)
+    current_user: User = Depends(require_admin)
 ):
     query = (
         select(Payment)
@@ -410,7 +410,7 @@ async def update_payment(
 async def process_refund(
     payload: RefundCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_cashier_or_admin)
+    current_user: User = Depends(require_admin)
 ):
     adm_res = await db.execute(
         select(Admission)

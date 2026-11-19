@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_
 
 from app.database.session import get_db
-from app.core.dependencies import require_staff
+from app.core.dependencies import require_staff, require_admin
 from app.database.models import (
     Admission, AdmissionItem, Subject, Batch, Teacher, PaymentAllocation, Payment,
     Expense, SalaryRecord, Refund, User
@@ -45,7 +45,7 @@ async def get_subject_revenue_report(
     month: Optional[int] = Query(None, ge=1, le=12, description="Specific month (1-12)"),
     year: Optional[int] = Query(None, description="Specific year (e.g. 2026)"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_admin)
 ):
     """
     Returns revenue breakdown by subject with date-to-date and month-wise filtering:
@@ -153,7 +153,7 @@ async def get_batch_revenue_report(
     month: Optional[int] = Query(None, ge=1, le=12, description="Specific month (1-12)"),
     year: Optional[int] = Query(None, description="Specific year (e.g. 2026)"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_admin)
 ):
     """
     Returns revenue breakdown by batch with date-to-date and month-wise filtering.
@@ -210,7 +210,7 @@ async def get_teacher_revenue_report(
     month: Optional[int] = Query(None, ge=1, le=12, description="Specific month (1-12)"),
     year: Optional[int] = Query(None, description="Specific year (e.g. 2026)"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_admin)
 ):
     """
     Teacher-wise associated subject and batch revenue report with date filtering.
@@ -268,7 +268,7 @@ async def get_cash_movement_report(
     month: Optional[int] = Query(None, ge=1, le=12, description="Specific month (1-12)"),
     year: Optional[int] = Query(None, description="Specific year (e.g. 2026)"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_admin)
 ):
     """
     Returns cash inflows (payments collected) vs outflows (daily expenses + salaries paid + fee refunds),

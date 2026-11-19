@@ -313,7 +313,7 @@ async def revoke_batch_purchase(
     admission_id: uuid.UUID,
     payload: AdmissionRevokeRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_cashier_or_admin)
+    current_user: User = Depends(require_admin)
 ):
     query = (
         select(Admission)
@@ -394,7 +394,7 @@ async def revoke_batch_purchase(
 async def restore_batch_purchase(
     admission_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_cashier_or_admin)
+    current_user: User = Depends(require_admin)
 ):
     query = (
         select(Admission)

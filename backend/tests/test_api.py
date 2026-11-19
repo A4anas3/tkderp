@@ -816,3 +816,123 @@ async def test_student_photo_compression_and_last_batch_period():
         assert p_data["suggested_start_date"] == "2026-12-01"
         # Suggested end is 30 days later (2026-12-31)
         assert p_data["suggested_end_date"] == "2026-12-31"
+
+
+@pytest.mark.asyncio
+async def test_comprehensive_backend_role_checks():
+    """
+    Validates backend role-based access control (RBAC):
+    - Cashier CANNOT perform admin actions (student revoke, batch revoke, fee refund, payment edit, revenue reports).
+    - Teacher CANNOT record payments, enroll students, or access admin analytics.
+    - Admin has full authorization across all endpoints.
+    """
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # 1. Log in as Cashier
+        c_login = await client.post("/api/auth/login", json={"username": "CSH001", "password": "Cashier@1234"})
+        assert c_login.status_code == 200
+        c_token = c_login.json()["access_token"]
+        c_headers = {"Authorization": f"Bearer {c_token}"}
+
+        # 2. Log in as Teacher
+        t_login = await client.post("/api/auth/login", json={"username": "TCH001", "password": "Teacher@1234"})
+        assert t_login.status_code == 200
+        t_token = t_login.json()["access_token"]
+        t_headers = {"Authorization": f"Bearer {t_token}"}
+
+        # 3. Log in as Admin
+        a_login = await client.post("/api/auth/login", json={"username": "ADM001", "password": "Admin@1234"})
+        assert a_login.status_code == 200
+        a_token = a_login.json()["access_token"]
+        a_headers = {"Authorization": f"Bearer {a_token}"}
+
+        dummy_uuid = str(uuid.uuid4())
+
+        # Cashier Tests:
+        # A) Cashier cannot access Admin Dashboard
+        res = await client.get("/api/dashboard/admin", headers=c_headers)
+        assert res.status_code == 403
+        assert "Required roles: ADMIN" in res.json()["detail"]
+
+        # B) Cashier can access Cashier Dashboard
+        res = await client.get("/api/dashboard/cashier", headers=c_headers)
+        assert res.status_code == 200
+
+        # C) Cashier cannot access Subject Revenue Report
+        res = await client.get("/api/reports/subject-revenue", headers=c_headers)
+        assert res.status_code == 403
+        assert "Required roles: ADMIN" in res.json()["detail"]
+
+        # D) Cashier cannot access Cash Movement Report
+        res = await client.get("/api/reports/cash-movement", headers=c_headers)
+        assert res.status_code == 403
+        assert "Required roles: ADMIN" in res.json()["detail"]
+
+        # E) Cashier cannot revoke student
+        res = await client.post(f"/api/students/{dummy_uuid}/revoke", json={"reason": "Test"}, headers=c_headers)
+        assert res.status_code == 403
+        assert "Required roles: ADMIN" in res.json()["detail"]
+
+        # F) Cashier cannot restore student
+        res = await client.post(f"/api/students/{dummy_uuid}/restore", headers=c_headers)
+        assert res.status_code == 403
+        assert "Required roles: ADMIN" in res.json()["detail"]
+
+        # G) Cashier cannot revoke batch purchase
+        res = await client.post(f"/api/admissions/{dummy_uuid}/revoke", json={"reason": "Test"}, headers=c_headers)
+        assert res.status_code == 403
+        assert "Required roles: ADMIN" in res.json()["detail"]
+
+        # H) Cashier cannot restore batch purchase
+        res = await client.post(f"/api/admissions/{dummy_uuid}/restore", headers=c_headers)
+        assert res.status_code == 403
+        assert "Required roles: ADMIN" in res.json()["detail"]
+
+        # I) Cashier cannot process fee refund
+        res = await client.post("/api/payments/refund", json={
+            "admission_id": dummy_uuid,
+            "amount": 500.0,
+            "refund_mode": "CASH",
+            "reason": "Test refund"
+        }, headers=c_headers)
+        assert res.status_code == 403
+        assert "Required roles: ADMIN" in res.json()["detail"]
+
+        # J) Cashier cannot edit past payment
+        res = await client.put(f"/api/payments/{dummy_uuid}", json={"amount": 1000.0}, headers=c_headers)
+        assert res.status_code == 403
+        assert "Required roles: ADMIN" in res.json()["detail"]
+
+        # K) Cashier cannot create batch or subject
+        res = await client.post("/api/batches", json={"name": "Test"}, headers=c_headers)
+        assert res.status_code == 403
+        res = await client.post("/api/subjects", json={"name": "Test", "default_fee": 100}, headers=c_headers)
+        assert res.status_code == 403
+
+        # Teacher Tests:
+        # A) Teacher cannot record payments
+        res = await client.post("/api/payments", json={
+            "admission_id": dummy_uuid,
+            "amount": 500.0,
+            "payment_mode": "CASH"
+        }, headers=t_headers)
+        assert res.status_code == 403
+        assert "Required roles: ADMIN, CASHIER" in res.json()["detail"]
+
+        # B) Teacher cannot create admissions
+        res = await client.post("/api/admissions", json={
+            "student_id": dummy_uuid,
+            "items": []
+        }, headers=t_headers)
+        assert res.status_code == 403
+
+        # C) Teacher can access Teacher Dashboard
+        res = await client.get("/api/dashboard/teacher", headers=t_headers)
+        assert res.status_code == 200
+
+        # Admin Tests:
+        # Admin can access revenue reports and dashboards
+        res = await client.get("/api/reports/subject-revenue", headers=a_headers)
+        assert res.status_code == 200
+        res = await client.get("/api/dashboard/admin", headers=a_headers)
+        assert res.status_code == 200
+

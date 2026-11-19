@@ -207,7 +207,7 @@ async def pay_salary(
     record_id: uuid.UUID,
     payload: PaySalaryRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_cashier_or_admin)
+    current_user: User = Depends(require_admin)
 ):
     res = await db.execute(select(SalaryRecord).where(SalaryRecord.id == record_id))
     record = res.scalar_one_or_none()

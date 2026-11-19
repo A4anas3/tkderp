@@ -15,6 +15,7 @@ import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
 import { paymentApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 import QuickPaymentModal from '../../components/modals/QuickPaymentModal';
 import PaymentReceiptModal from '../../components/receipts/PaymentReceiptModal';
 import EditPaymentModal from '../../components/modals/EditPaymentModal';
@@ -23,6 +24,7 @@ import RefundReceiptModal from '../../components/receipts/RefundReceiptModal';
 
 export default function PaymentsPage() {
   const { error } = useToast();
+  const { isAdmin } = useAuth();
   const [activeTab, setActiveTab] = useState('payments'); // 'payments' | 'refunds'
 
   // Payments State
@@ -208,22 +210,26 @@ export default function PaymentsPage() {
             Slip
           </Button>
 
-          <Button
-            size="xs"
-            variant="secondary"
-            icon={Edit2}
-            onClick={() => handleOpenEditPayment(p)}
-          >
-            Edit
-          </Button>
+          {isAdmin && (
+            <>
+              <Button
+                size="xs"
+                variant="secondary"
+                icon={Edit2}
+                onClick={() => handleOpenEditPayment(p)}
+              >
+                Edit
+              </Button>
 
-          <Button
-            size="xs"
-            variant="secondary"
-            onClick={() => handleOpenRefund(p)}
-          >
-            Refund
-          </Button>
+              <Button
+                size="xs"
+                variant="secondary"
+                onClick={() => handleOpenRefund(p)}
+              >
+                Refund
+              </Button>
+            </>
+          )}
         </div>
       ),
     },
