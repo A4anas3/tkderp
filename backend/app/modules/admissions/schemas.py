@@ -1,6 +1,6 @@
 from decimal import Decimal
 from typing import Optional, List
-from datetime import date
+from datetime import date, datetime
 from pydantic import BaseModel, Field, ConfigDict
 import uuid
 
@@ -56,9 +56,15 @@ class AdmissionCreate(BaseModel):
     notes: Optional[str] = None
     initial_payment: Optional[InitialPaymentData] = None
 
+class AdmissionRevokeRequest(BaseModel):
+    reason: str = Field(..., min_length=3, max_length=500)
+    refund_amount: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0)
+    refund_mode: str = Field(default="CASH", pattern="^(CASH|UPI|BANK_TRANSFER|OTHER)$")
+
 class AdmissionResponse(BaseModel):
     id: uuid.UUID
     admission_number: str
+    purchase_transaction_id: Optional[str] = None
     student_id: uuid.UUID
     student_name_snapshot: str
     admission_date: date
@@ -78,6 +84,9 @@ class AdmissionResponse(BaseModel):
     payment_status: str
     status: str
     notes: Optional[str] = None
+    revocation_reason: Optional[str] = None
+    revoked_at: Optional[datetime] = None
+    revoked_by: Optional[uuid.UUID] = None
     created_by: Optional[uuid.UUID] = None
     items: List[AdmissionItemResponse] = Field(default_factory=list)
 

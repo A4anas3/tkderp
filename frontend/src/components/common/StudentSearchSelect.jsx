@@ -206,7 +206,7 @@ export default function StudentSearchSelect({
             <span>
               {loading ? 'Searching backend...' : `Found ${results.length} registered student(s)`}
             </span>
-            <span className="text-[10px] text-slate-600">Search by Name, Mobile No, or Admission No</span>
+            <span className="text-[10px] text-slate-600">Search by Name, Mobile No, or Reg Code</span>
           </div>
 
           {results.length === 0 ? (

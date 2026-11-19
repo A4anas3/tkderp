@@ -27,6 +27,7 @@ import AdmissionReceiptModal from '../../components/receipts/AdmissionReceiptMod
 import IssueRefundModal from '../../components/modals/IssueRefundModal';
 import RefundReceiptModal from '../../components/receipts/RefundReceiptModal';
 import RevokeStudentModal from '../../components/modals/RevokeStudentModal';
+import RevokeBatchModal from '../../components/modals/RevokeBatchModal';
 
 export default function StudentDetailPage() {
   const { id } = useParams();
@@ -44,10 +45,13 @@ export default function StudentDetailPage() {
 
   // Revocation & Refund Modals
   const [revokeModalOpen, setRevokeModalOpen] = useState(false);
+  const [revokeBatchModalOpen, setRevokeBatchModalOpen] = useState(false);
+  const [selectedAdmissionForBatchRevoke, setSelectedAdmissionForBatchRevoke] = useState(null);
   const [refundModalOpen, setRefundModalOpen] = useState(false);
   const [selectedAdmissionForRefund, setSelectedAdmissionForRefund] = useState(null);
   const [refundReceiptToShow, setRefundReceiptToShow] = useState(null);
   const [restoring, setRestoring] = useState(false);
+  const [restoringBatchId, setRestoringBatchId] = useState(null);
 
   const fetchStudentData = async () => {
     setLoading(true);
@@ -79,6 +83,19 @@ export default function StudentDetailPage() {
       error(err.message || 'Failed to restore student');
     } finally {
       setRestoring(false);
+    }
+  };
+
+  const handleRestoreBatch = async (adm) => {
+    setRestoringBatchId(adm.id);
+    try {
+      await admissionApi.restore(adm.id);
+      success(`Batch purchase ${adm.purchase_transaction_id || adm.admission_number} restored to ACTIVE`);
+      fetchStudentData();
+    } catch (err) {
+      error(err.message || 'Failed to restore batch purchase');
+    } finally {
+      setRestoringBatchId(null);
     }
   };
 
@@ -203,7 +220,7 @@ export default function StudentDetailPage() {
                 )
               }
             >
-              + Enroll in Another Course / Batch
+              + Purchase Another Course / Batch
             </Button>
           )}
         </div>
@@ -213,10 +230,10 @@ export default function StudentDetailPage() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-white rounded-lg border border-slate-200 p-3 shadow-xs">
           <span className="text-[11px] font-semibold text-slate-500 uppercase">
-            Total Admissions
+            Total Purchases
           </span>
           <div className="text-xl font-bold text-black mt-0.5">{student.admissions_count}</div>
-          <span className="text-[10px] text-slate-500">Course admissions taken</span>
+          <span className="text-[10px] text-slate-500">Course purchases made</span>
         </div>
 
         <div className="bg-white rounded-lg border border-slate-200 p-3 shadow-xs">
@@ -326,11 +343,11 @@ export default function StudentDetailPage() {
         </div>
       </div>
 
-      {/* Admissions Taken List */}
+      {/* Admissions / Purchases Taken List */}
       <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs">
         <div className="pb-3 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
-            <h2 className="text-sm font-bold text-black">Admissions & Enrolled Batches / Courses</h2>
+            <h2 className="text-sm font-bold text-black">Course Purchases & Batch Enrollments</h2>
             <p className="text-xs text-slate-500">
               History of all course purchases, subjects with classroom halls & faculty snapshots, and payments
             </p>
@@ -349,7 +366,7 @@ export default function StudentDetailPage() {
                 )
               }
             >
-              Add Another Course / Batch
+              + Purchase Another Course / Batch
             </Button>
           )}
         </div>
@@ -357,13 +374,13 @@ export default function StudentDetailPage() {
         <div className="mt-3 overflow-x-auto">
           {admissions.length === 0 ? (
             <div className="py-8 text-center text-xs text-slate-500">
-              No admissions recorded for this student yet.
+              No course purchases recorded for this student yet.
             </div>
           ) : (
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
                 <tr>
-                  <th className="p-2">Admission No</th>
+                  <th className="p-2">Purchase Transaction ID</th>
                   <th className="p-2">Date</th>
                   <th className="p-2">Enrolled Items (Faculty & Hall)</th>
                   <th className="p-2 text-right">Total Payable</th>
@@ -374,94 +391,151 @@ export default function StudentDetailPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {admissions.map((adm) => (
-                  <tr key={adm.id} className="hover:bg-slate-50">
-                    <td className="p-2 font-mono font-bold text-black">{adm.admission_number}</td>
-                    <td className="p-2 text-slate-600">{adm.admission_date}</td>
-                    <td className="p-2">
-                      <div className="space-y-1">
-                        {(adm.items || []).map((itm, i) => (
-                          <div
-                            key={i}
-                            className="bg-slate-50 border border-slate-200 text-black px-2 py-0.5 rounded text-[11px]"
-                          >
-                            <span className="font-semibold text-indigo-950 block">{itm.item_name_snapshot}</span>
-                            {(itm.teacher_name_snapshot || itm.hall_number_snapshot) && (
-                              <span className="text-[10px] text-slate-600 block">
-                                {itm.teacher_name_snapshot && `Faculty: ${itm.teacher_name_snapshot}`}
-                                {itm.teacher_name_snapshot && itm.hall_number_snapshot && ' • '}
-                                {itm.hall_number_snapshot && `Hall: ${itm.hall_number_snapshot}`}
-                              </span>
+                {admissions.map((adm) => {
+                  const isBatchRevoked = adm.status === 'REVOKED';
+                  return (
+                    <tr key={adm.id} className={`hover:bg-slate-50 ${isBatchRevoked ? 'bg-rose-50/40 opacity-80' : ''}`}>
+                      <td className="p-2 font-mono font-bold text-black">
+                        <div>{adm.purchase_transaction_id || adm.admission_number}</div>
+                        {isBatchRevoked && (
+                          <span className="text-[10px] text-rose-700 font-normal">
+                            (Batch Revoked)
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-2 text-slate-600">{adm.admission_date}</td>
+                      <td className="p-2">
+                        <div className="space-y-1">
+                          {(adm.items || []).map((itm, i) => (
+                            <div
+                              key={i}
+                              className="bg-slate-50 border border-slate-200 text-black px-2 py-0.5 rounded text-[11px]"
+                            >
+                              <span className="font-semibold text-indigo-950 block">{itm.item_name_snapshot}</span>
+                              {(itm.teacher_name_snapshot || itm.hall_number_snapshot) && (
+                                <span className="text-[10px] text-slate-600 block">
+                                  {itm.teacher_name_snapshot && `Faculty: ${itm.teacher_name_snapshot}`}
+                                  {itm.teacher_name_snapshot && itm.hall_number_snapshot && ' • '}
+                                  {itm.hall_number_snapshot && `Hall: ${itm.hall_number_snapshot}`}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="p-2 text-right font-mono font-bold text-black">
+                        ₹{Number(adm.total_payable).toFixed(2)}
+                      </td>
+                      <td className="p-2 text-right font-mono text-emerald-800 font-semibold">
+                        ₹{Number(adm.amount_paid).toFixed(2)}
+                      </td>
+                      <td className="p-2 text-right font-mono text-rose-700 font-bold">
+                        {isBatchRevoked ? (
+                          <span className="line-through text-slate-400">₹0.00</span>
+                        ) : (
+                          `₹${Number(adm.balance_due).toFixed(2)}`
+                        )}
+                      </td>
+                      <td className="p-2 text-center">
+                        {isBatchRevoked ? (
+                          <div className="space-y-0.5">
+                            <Badge size="xs" variant="danger">
+                              REVOKED
+                            </Badge>
+                            {adm.revocation_reason && (
+                              <div
+                                className="text-[10px] text-rose-700 italic max-w-[120px] truncate mx-auto"
+                                title={adm.revocation_reason}
+                              >
+                                {adm.revocation_reason}
+                              </div>
                             )}
                           </div>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="p-2 text-right font-mono font-bold text-black">
-                      ₹{Number(adm.total_payable).toFixed(2)}
-                    </td>
-                    <td className="p-2 text-right font-mono text-emerald-800 font-semibold">
-                      ₹{Number(adm.amount_paid).toFixed(2)}
-                    </td>
-                    <td className="p-2 text-right font-mono text-rose-700 font-bold">
-                      ₹{Number(adm.balance_due).toFixed(2)}
-                    </td>
-                    <td className="p-2 text-center">
-                      <Badge
-                        size="xs"
-                        variant={
-                          adm.payment_status === 'PAID'
-                            ? 'success'
-                            : adm.payment_status === 'PARTIALLY_PAID'
-                            ? 'warning'
-                            : 'danger'
-                        }
-                      >
-                        {adm.payment_status}
-                      </Badge>
-                    </td>
-                    <td className="p-2 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          size="xs"
-                          variant="secondary"
-                          icon={Printer}
-                          onClick={() => setAdmissionSlipToShow(adm)}
-                        >
-                          Slip
-                        </Button>
-
-                        {/* Issue Refund Button */}
-                        {Number(adm.amount_paid) > 0 && (
+                        ) : (
+                          <Badge
+                            size="xs"
+                            variant={
+                              adm.payment_status === 'PAID'
+                                ? 'success'
+                                : adm.payment_status === 'PARTIALLY_PAID'
+                                ? 'warning'
+                                : 'danger'
+                            }
+                          >
+                            {adm.payment_status}
+                          </Badge>
+                        )}
+                      </td>
+                      <td className="p-2 text-right">
+                        <div className="flex items-center justify-end gap-1">
                           <Button
                             size="xs"
                             variant="secondary"
-                            onClick={() => {
-                              setSelectedAdmissionForRefund(adm);
-                              setRefundModalOpen(true);
-                            }}
+                            icon={Printer}
+                            onClick={() => setAdmissionSlipToShow(adm)}
                           >
-                            Refund
+                            Slip
                           </Button>
-                        )}
 
-                        {/* Pay Due Button */}
-                        {Number(adm.balance_due) > 0 && !isRevoked && (
-                          <Button
-                            size="xs"
-                            variant="success"
-                            onClick={() => {
-                              setTargetAdmissionId(adm.id);
-                              setPayModalOpen(true);
-                            }}
-                          >
-                            Pay
-                          </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          {/* If Revoked: Offer Restore Batch */}
+                          {isBatchRevoked ? (
+                            <Button
+                              size="xs"
+                              variant="primary"
+                              icon={RotateCcw}
+                              loading={restoringBatchId === adm.id}
+                              onClick={() => handleRestoreBatch(adm)}
+                            >
+                              Restore
+                            </Button>
+                          ) : (
+                            <>
+                              {/* Revoke Batch Button */}
+                              <Button
+                                size="xs"
+                                variant="danger"
+                                onClick={() => {
+                                  setSelectedAdmissionForBatchRevoke(adm);
+                                  setRevokeBatchModalOpen(true);
+                                }}
+                              >
+                                Revoke
+                              </Button>
+
+                              {/* Issue Refund Button */}
+                              {Number(adm.amount_paid) > 0 && (
+                                <Button
+                                  size="xs"
+                                  variant="secondary"
+                                  onClick={() => {
+                                    setSelectedAdmissionForRefund(adm);
+                                    setRefundModalOpen(true);
+                                  }}
+                                >
+                                  Refund
+                                </Button>
+                              )}
+
+                              {/* Pay Due Button */}
+                              {Number(adm.balance_due) > 0 && !isRevoked && (
+                                <Button
+                                  size="xs"
+                                  variant="success"
+                                  onClick={() => {
+                                    setTargetAdmissionId(adm.id);
+                                    setPayModalOpen(true);
+                                  }}
+                                >
+                                  Pay
+                                </Button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -498,6 +572,19 @@ export default function StudentDetailPage() {
         isOpen={revokeModalOpen}
         onClose={() => setRevokeModalOpen(false)}
         student={student}
+        onSuccess={() => {
+          fetchStudentData();
+        }}
+      />
+
+      {/* Revoke Batch Modal */}
+      <RevokeBatchModal
+        isOpen={revokeBatchModalOpen}
+        onClose={() => {
+          setRevokeBatchModalOpen(false);
+          setSelectedAdmissionForBatchRevoke(null);
+        }}
+        admission={selectedAdmissionForBatchRevoke}
         onSuccess={() => {
           fetchStudentData();
         }}

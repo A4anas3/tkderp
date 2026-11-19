@@ -59,8 +59,8 @@ export default function RefundReceiptModal({ isOpen, onClose, refund }) {
               <p className="font-mono text-[11px] text-slate-600">{refund.student_reg_no}</p>
             </div>
             <div className="text-right">
-              <p className="text-slate-500">Admission Reference:</p>
-              <p className="font-mono font-bold text-black">{refund.admission_number}</p>
+              <p className="text-slate-500">Purchase Transaction ID:</p>
+              <p className="font-mono font-bold text-black">{refund.purchase_transaction_id || refund.admission_number}</p>
             </div>
           </div>
 
@@ -89,10 +89,10 @@ export default function RefundReceiptModal({ isOpen, onClose, refund }) {
           {(refund.admission_total_payable !== undefined || refund.remaining_balance_due !== undefined) && (
             <div className="border border-slate-200 rounded p-2.5 text-xs space-y-1">
               <span className="font-bold text-black block uppercase text-[10px] tracking-wider mb-1">
-                Post-Refund Admission Balance Summary
+                Post-Refund Balance Summary
               </span>
               <div className="flex justify-between text-slate-600">
-                <span>Admission Total Billed:</span>
+                <span>Total Billed Fee:</span>
                 <span className="font-mono font-semibold text-black">
                   ₹{Number(refund.admission_total_payable || 0).toFixed(2)}
                 </span>

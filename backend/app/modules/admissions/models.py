@@ -1,8 +1,8 @@
 import uuid
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional, List
-from sqlalchemy import String, Date, Numeric, Boolean, Text, ForeignKey
+from sqlalchemy import String, Date, DateTime, Numeric, Boolean, Text, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base import BaseModel
@@ -36,10 +36,19 @@ class Admission(BaseModel):
     balance_due: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("0.00"))
     
     payment_status: Mapped[str] = mapped_column(String(30), nullable=False, default="UNPAID", index=True) # UNPAID, PARTIALLY_PAID, PAID
-    status: Mapped[str] = mapped_column(String(30), nullable=False, default="ACTIVE") # ACTIVE, CANCELLED
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="ACTIVE") # ACTIVE, REVOKED, CANCELLED
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     
+    # Batch / Course Revocation tracking
+    revocation_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    
     created_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+
+    @property
+    def purchase_transaction_id(self) -> str:
+        return self.admission_number
 
     # Relationships
     items: Mapped[List["AdmissionItem"]] = relationship("AdmissionItem", back_populates="admission", cascade="all, delete-orphan", lazy="selectin")

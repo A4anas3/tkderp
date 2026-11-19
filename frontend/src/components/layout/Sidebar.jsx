@@ -37,7 +37,7 @@ export default function Sidebar({ isOpen, onClose }) {
       items.push(
         {
           to: '/admissions',
-          label: 'Admissions',
+          label: 'Course Purchases',
           icon: CreditCard,
         },
         {

@@ -185,6 +185,14 @@ export const admissionApi = {
     const res = await api.post(`/admissions/${id}/cancel`);
     return res.data;
   },
+  revoke: async (id, data) => {
+    const res = await api.post(`/admissions/${id}/revoke`, data);
+    return res.data;
+  },
+  restore: async (id) => {
+    const res = await api.post(`/admissions/${id}/restore`);
+    return res.data;
+  },
 };
 
 export const paymentApi = {

@@ -15,7 +15,7 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission }) {
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Admission Invoice / Enrollment Slip"
+      title="Course Purchase Invoice / Enrollment Slip"
       maxWidth="max-w-2xl"
     >
       <div className="space-y-4">
@@ -32,18 +32,31 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission }) {
               Civil Lines Road, Thakurdwara • Contact: +91-98765-43210
             </p>
             <div className="mt-2 inline-block bg-indigo-50 border border-indigo-300 px-3 py-0.5 rounded text-[11px] font-bold text-indigo-900 uppercase tracking-widest">
-              STUDENT ADMISSION & ENROLLMENT INVOICE
+              STUDENT COURSE PURCHASE & ENROLLMENT INVOICE
             </div>
           </div>
+
+          {admission.status === 'REVOKED' && (
+            <div className="p-2 bg-rose-50 border border-rose-300 rounded text-center text-xs text-rose-800 font-bold uppercase tracking-wider">
+              [REVOKED BATCH PURCHASE - COURSE DROPPED]
+              {admission.revocation_reason && (
+                <span className="block normal-case font-normal text-rose-700 mt-0.5">
+                  Reason: {admission.revocation_reason}
+                </span>
+              )}
+            </div>
+          )}
 
           {/* Details */}
           <div className="grid grid-cols-2 gap-2 text-xs border-b border-slate-200 pb-3">
             <div>
-              <p className="text-slate-500">Admission No:</p>
-              <p className="font-bold font-mono text-black text-sm">{admission.admission_number}</p>
+              <p className="text-slate-500">Purchase Transaction ID:</p>
+              <p className="font-bold font-mono text-black text-sm">
+                {admission.purchase_transaction_id || admission.admission_number}
+              </p>
             </div>
             <div className="text-right">
-              <p className="text-slate-500">Admission Date:</p>
+              <p className="text-slate-500">Purchase Date:</p>
               <p className="font-semibold text-black">{admission.admission_date}</p>
             </div>
             <div>
@@ -54,14 +67,16 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission }) {
               <p className="text-slate-500">Payment Status:</p>
               <Badge
                 variant={
-                  admission.payment_status === 'PAID'
+                  admission.status === 'REVOKED'
+                    ? 'danger'
+                    : admission.payment_status === 'PAID'
                     ? 'success'
                     : admission.payment_status === 'PARTIALLY_PAID'
                     ? 'warning'
                     : 'danger'
                 }
               >
-                {admission.payment_status}
+                {admission.status === 'REVOKED' ? 'REVOKED' : admission.payment_status}
               </Badge>
             </div>
           </div>
@@ -169,7 +184,7 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission }) {
           {/* Signatures */}
           <div className="pt-6 flex items-end justify-between text-[11px] text-slate-600 border-t border-slate-200">
             <div>
-              <p>Admission verified & generated on {admission.admission_date}</p>
+              <p>Purchase verified & generated on {admission.admission_date}</p>
             </div>
             <div className="text-center">
               <div className="w-32 border-b border-black mb-1"></div>

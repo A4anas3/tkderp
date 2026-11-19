@@ -60,8 +60,8 @@ export default function PaymentReceiptModal({ isOpen, onClose, receipt }) {
               <p className="text-[11px] font-mono text-slate-600">ID: {receipt.student_reg_no}</p>
             </div>
             <div className="text-right">
-              <p className="text-slate-500">Admission No:</p>
-              <p className="font-bold font-mono text-black">{receipt.admission_number}</p>
+              <p className="text-slate-500">Purchase Transaction ID:</p>
+              <p className="font-bold font-mono text-black">{receipt.purchase_transaction_id || receipt.admission_number}</p>
               {receipt.student_mobile && (
                 <p className="text-[11px] text-slate-600">Mob: {receipt.student_mobile}</p>
               )}

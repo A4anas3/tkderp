@@ -93,8 +93,8 @@ export default function IssueRefundModal({
             <span className="font-bold text-black">{admission.student_name_snapshot}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-slate-500">Admission No:</span>
-            <span className="font-mono font-bold text-black">{admission.admission_number}</span>
+            <span className="text-slate-500">Purchase Transaction ID:</span>
+            <span className="font-mono font-bold text-black">{admission.purchase_transaction_id || admission.admission_number}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-slate-500">Total Billed:</span>

@@ -176,18 +176,18 @@ export default function CashierDashboard() {
         </div>
       </div>
 
-      {/* Due / Outstanding Admissions Table */}
+      {/* Due / Outstanding Purchases Table */}
       <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
         <div className="flex items-center justify-between pb-3 border-b border-slate-200">
           <div>
-            <h2 className="text-sm font-bold text-black">Admissions with Outstanding Fee Balances</h2>
+            <h2 className="text-sm font-bold text-black">Purchases with Outstanding Fee Balances</h2>
             <p className="text-[11px] text-slate-500">Follow up with students and record partial or full fee collections</p>
           </div>
           <button
             onClick={() => navigate('/admissions')}
             className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
           >
-            All Admissions <ArrowRight className="w-3.5 h-3.5" />
+            All Purchases <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
 
@@ -195,7 +195,7 @@ export default function CashierDashboard() {
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
               <tr>
-                <th className="p-2">Admission No</th>
+                <th className="p-2">Purchase Transaction ID</th>
                 <th className="p-2">Student Name</th>
                 <th className="p-2 text-right">Total Fee</th>
                 <th className="p-2 text-right">Paid</th>
@@ -208,13 +208,15 @@ export default function CashierDashboard() {
               {(data?.due_admissions || []).length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-6 text-center text-slate-500">
-                    No pending fee admissions!
+                    No pending fee purchases!
                   </td>
                 </tr>
               ) : (
                 data.due_admissions.map((adm) => (
                   <tr key={adm.id} className="hover:bg-slate-50">
-                    <td className="p-2 font-mono font-bold text-black">{adm.admission_number}</td>
+                    <td className="p-2 font-mono font-bold text-black">
+                      {adm.purchase_transaction_id || adm.admission_number}
+                    </td>
                     <td className="p-2 font-semibold text-black">{adm.student_name}</td>
                     <td className="p-2 text-right font-mono text-black">
                       ₹{adm.total_payable.toFixed(2)}

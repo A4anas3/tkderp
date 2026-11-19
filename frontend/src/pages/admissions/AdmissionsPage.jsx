@@ -64,9 +64,16 @@ export default function AdmissionsPage() {
 
   const columns = [
     {
-      header: 'Admission No',
-      accessor: 'admission_number',
-      className: 'font-mono font-bold text-indigo-700 w-32',
+      header: 'Purchase Transaction ID',
+      className: 'font-mono font-bold text-indigo-700 w-36',
+      render: (a) => (
+        <div>
+          <span>{a.purchase_transaction_id || a.admission_number}</span>
+          {a.status === 'REVOKED' && (
+            <span className="block text-[10px] text-rose-600 font-sans font-normal">(Revoked)</span>
+          )}
+        </div>
+      ),
     },
     {
       header: 'Student Name',
@@ -105,12 +112,19 @@ export default function AdmissionsPage() {
     {
       header: 'Due Balance',
       className: 'text-right font-mono font-bold text-rose-700 w-28',
-      render: (a) => `₹${Number(a.balance_due).toFixed(2)}`,
+      render: (a) => a.status === 'REVOKED' ? (
+        <span className="text-slate-400 line-through">₹0.00</span>
+      ) : (
+        `₹${Number(a.balance_due).toFixed(2)}`
+      ),
     },
     {
       header: 'Payment Status',
       className: 'text-center w-28',
       render: (a) => {
+        if (a.status === 'REVOKED') {
+          return <Badge size="xs" variant="danger">REVOKED</Badge>;
+        }
         const variants = {
           PAID: 'success',
           PARTIALLY_PAID: 'warning',
@@ -142,7 +156,7 @@ export default function AdmissionsPage() {
             variant="secondary"
             icon={Printer}
             onClick={() => setSlipToShow(a)}
-            title="View & Print Admission Slip"
+            title="View & Print Purchase Slip"
           >
             Slip
           </Button>
@@ -161,7 +175,7 @@ export default function AdmissionsPage() {
           {isAdmin && a.status === 'ACTIVE' && (
             <button
               onClick={() => handleCancelAdmission(a)}
-              title="Cancel Admission"
+              title="Cancel Purchase"
               className="p-1 rounded text-slate-400 hover:text-rose-600 transition"
             >
               <Ban className="w-3.5 h-3.5" />
@@ -177,21 +191,21 @@ export default function AdmissionsPage() {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
         <div>
-          <h1 className="text-xl font-bold text-black tracking-tight">Student Admissions</h1>
+          <h1 className="text-xl font-bold text-black tracking-tight">Course Purchases & Batch Invoices</h1>
           <p className="text-xs text-slate-500">
-            Multi-batch course admissions, itemized discounts, inclusive GST, and fee settlement
+            Multi-batch course purchases, itemized discounts, inclusive GST, and fee settlement
           </p>
         </div>
 
         <Button variant="primary" icon={Plus} onClick={() => navigate('/admissions/new')}>
-          New Admission
+          New Course Purchase
         </Button>
       </div>
 
       {/* Filter Tabs */}
       <div className="flex flex-wrap items-center gap-1.5 pt-1">
         {[
-          { label: 'All Admissions', value: '' },
+          { label: 'All Purchases', value: '' },
           { label: 'Unpaid Fees', value: 'UNPAID' },
           { label: 'Partially Paid', value: 'PARTIALLY_PAID' },
           { label: 'Fully Paid', value: 'PAID' },
@@ -227,8 +241,8 @@ export default function AdmissionsPage() {
         }}
         onRefresh={loadAdmissions}
         loading={loading}
-        searchPlaceholder="Search by admission number or student name..."
-        emptyMessage="No admissions found."
+        searchPlaceholder="Search by purchase transaction ID or student name..."
+        emptyMessage="No course purchases found."
       />
 
       {/* Admission Slip Modal */}

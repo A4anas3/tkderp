@@ -648,3 +648,74 @@ async def test_date_range_reports():
         assert "total_inflows" in c_data
         assert "total_refunds" in c_data
         assert "breakdown" in c_data
+
+@pytest.mark.asyncio
+async def test_batch_purchase_revocation_and_restoration():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        admin_login = await client.post("/api/auth/login", json={"username": "ADM001", "password": "Admin@1234"})
+        token = admin_login.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # 1. Create a student
+        stu_res = await client.post("/api/students", json={
+            "name": "Batch Revoke Test Student",
+            "mobile": "9812300000",
+            "status": "ACTIVE"
+        }, headers=headers)
+        student_id = stu_res.json()["id"]
+
+        # 2. Get subject
+        sub_res = await client.get("/api/subjects", headers=headers)
+        sub_id = sub_res.json()["items"][0]["id"]
+
+        # 3. Create a course purchase / admission for this batch
+        adm_res = await client.post("/api/admissions", json={
+            "student_id": student_id,
+            "items": [{
+                "item_type": "BATCH_SUBJECT",
+                "subject_id": sub_id,
+                "item_name_snapshot": "Physics Batch Revoke Test",
+                "original_price": 4000.0,
+                "discount_type": "NONE",
+                "discount_value": 0,
+            }],
+            "initial_payment": {
+                "amount": 1000.0,
+                "payment_mode": "CASH",
+                "notes": "Initial batch deposit"
+            }
+        }, headers=headers)
+        assert adm_res.status_code == 201
+        adm_data = adm_res.json()
+        adm_id = adm_data["id"]
+        assert adm_data["status"] == "ACTIVE"
+        assert float(adm_data["balance_due"]) == 3000.0
+
+        # Check student profile totals
+        st_profile_before = await client.get(f"/api/students/{student_id}", headers=headers)
+        assert float(st_profile_before.json()["total_balance_due"]) == 3000.0
+
+        # 4. Revoke this specific batch purchase (e.g. student takes back this batch with partial refund of 500)
+        revoke_res = await client.post(f"/api/admissions/{adm_id}/revoke", json={
+            "reason": "Student taking back this batch due to school timetable clash",
+            "refund_amount": 500.0,
+            "refund_mode": "CASH"
+        }, headers=headers)
+        assert revoke_res.status_code == 200
+        revoked_adm = revoke_res.json()
+        assert revoked_adm["status"] == "REVOKED"
+        assert revoked_adm["revocation_reason"] == "Student taking back this batch due to school timetable clash"
+        assert float(revoked_adm["balance_due"]) == 0.0
+        assert float(revoked_adm["amount_paid"]) == 500.0
+
+        # Check student profile totals now - revoked batch is excluded from active due!
+        st_profile_after = await client.get(f"/api/students/{student_id}", headers=headers)
+        assert float(st_profile_after.json()["total_balance_due"]) == 0.0
+
+        # 5. Restore the batch purchase
+        restore_res = await client.post(f"/api/admissions/{adm_id}/restore", headers=headers)
+        assert restore_res.status_code == 200
+        restored_adm = restore_res.json()
+        assert restored_adm["status"] == "ACTIVE"
+        assert restored_adm["revocation_reason"] is None
+        assert float(restored_adm["balance_due"]) == 3500.0  # 4000 total - 500 retained paid = 3500 due

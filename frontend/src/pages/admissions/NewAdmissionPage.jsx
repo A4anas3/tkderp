@@ -359,7 +359,7 @@ export default function NewAdmissionPage() {
       };
 
       const res = await admissionApi.create(payload);
-      success(`Admission confirmed: ${res.admission_number}`);
+      success(`Purchase confirmed: ${res.purchase_transaction_id || res.admission_number}`);
 
       // If enquiry was associated, convert it
       if (paramEnquiryId) {
@@ -372,7 +372,7 @@ export default function NewAdmissionPage() {
 
       setCompletedAdmission(res);
     } catch (err) {
-      error(err.message || 'Failed to complete admission');
+      error(err.message || 'Failed to complete purchase');
     } finally {
       setSubmitting(false);
     }
@@ -390,9 +390,9 @@ export default function NewAdmissionPage() {
             <ArrowLeft className="w-4 h-4" />
           </button>
           <div>
-            <h1 className="text-xl font-bold text-black tracking-tight">New Student Admission</h1>
+            <h1 className="text-xl font-bold text-black tracking-tight">New Course Purchase</h1>
             <p className="text-xs text-slate-500">
-              Multiple batch & subject enrollment under a single admission invoice
+              Multiple batch & subject enrollment under a unified purchase invoice
             </p>
           </div>
         </div>
@@ -406,7 +406,7 @@ export default function NewAdmissionPage() {
         {/* Step 1: Student & Date Card */}
         <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs space-y-3">
           <h2 className="text-xs font-bold uppercase tracking-wider text-black border-b border-slate-100 pb-2">
-            1. Select Student & Admission Date
+            1. Select Student & Purchase Date
           </h2>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
@@ -423,7 +423,7 @@ export default function NewAdmissionPage() {
             </div>
 
             <Input
-              label="Admission Date"
+              label="Purchase Date"
               type="date"
               value={admissionDate}
               onChange={(e) => setAdmissionDate(e.target.value)}
@@ -437,14 +437,14 @@ export default function NewAdmissionPage() {
               <div className="flex items-center justify-between font-bold text-indigo-950">
                 <span>Active Student Enrollments (Adding Another Course / Batch)</span>
                 <span className="bg-white border border-indigo-200 px-2 py-0.5 rounded text-[11px] text-indigo-700">
-                  {existingAdmissions.length} Existing Admissions
+                  {existingAdmissions.length} Existing Purchases
                 </span>
               </div>
               <div className="divide-y divide-indigo-100 max-h-36 overflow-y-auto">
                 {existingAdmissions.map((adm) => (
                   <div key={adm.id} className="py-1 flex items-center justify-between text-[11px]">
                     <div>
-                      <span className="font-mono font-bold text-black">{adm.admission_number}</span>
+                      <span className="font-mono font-bold text-black">{adm.purchase_transaction_id || adm.admission_number}</span>
                       <span className="text-slate-600 ml-2">({adm.admission_date})</span>
                       <span className="text-slate-500 ml-2">
                         {(adm.items || []).map((i) => i.item_name_snapshot).join(', ')}
@@ -466,10 +466,10 @@ export default function NewAdmissionPage() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2">
             <div>
               <h2 className="text-xs font-bold uppercase tracking-wider text-black">
-                2. Enrolled Batches, Subjects & Individual Discounts
+                2. Select Courses, Batches, Subjects & Discounts
               </h2>
               <p className="text-[11px] text-slate-500">
-                A student can purchase multiple batches and subjects in one admission
+                A student can purchase multiple batches and subjects under one unified transaction
               </p>
             </div>
 
@@ -816,7 +816,7 @@ export default function NewAdmissionPage() {
                 onChange={(e) => setRecordInitialPayment(e.target.checked)}
                 className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
               />
-              <span>Collect Initial Payment At Admission</span>
+              <span>Collect Initial Payment At Purchase</span>
             </label>
             <Badge size="xs" variant={recordInitialPayment ? 'success' : 'neutral'}>
               {recordInitialPayment ? 'Manual Collection' : 'Unpaid Entry'}
@@ -874,7 +874,7 @@ export default function NewAdmissionPage() {
         {/* Additional Notes */}
         <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs">
           <Input
-            label="Internal Admission Notes (Optional)"
+            label="Internal Purchase Notes (Optional)"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="e.g. Batch starts next Monday / Guardian attended"
@@ -897,7 +897,7 @@ export default function NewAdmissionPage() {
             loading={submitting}
             icon={CheckCircle2}
           >
-            Confirm & Complete Admission
+            Confirm & Complete Purchase
           </Button>
         </div>
       </form>

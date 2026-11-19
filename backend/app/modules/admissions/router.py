@@ -1,4 +1,5 @@
 import uuid
+import json
 from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
 from typing import Optional
@@ -10,10 +11,10 @@ from sqlalchemy.orm import selectinload
 from app.database.session import get_db
 from app.core.dependencies import require_staff, require_cashier_or_admin, require_admin
 from app.database.models import (
-    Admission, AdmissionItem, Student, Payment, PaymentAllocation, GreenCardProduct, User, BatchSubject
+    Admission, AdmissionItem, Student, Payment, PaymentAllocation, GreenCardProduct, User, BatchSubject, Refund, AuditLog
 )
 from app.modules.admissions.schemas import (
-    AdmissionCreate, AdmissionResponse, AdmissionCalculatePreviewRequest, AdmissionItemResponse
+    AdmissionCreate, AdmissionResponse, AdmissionCalculatePreviewRequest, AdmissionItemResponse, AdmissionRevokeRequest
 )
 from app.common.calculations import (
     calculate_admission_financials, allocate_payment_proportionally
@@ -288,4 +289,136 @@ async def cancel_admission(
 
     admission.status = "CANCELLED"
     await db.commit()
+    return admission
+
+@router.post("/{admission_id}/revoke", response_model=AdmissionResponse)
+async def revoke_batch_purchase(
+    admission_id: uuid.UUID,
+    payload: AdmissionRevokeRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_cashier_or_admin)
+):
+    query = (
+        select(Admission)
+        .options(selectinload(Admission.items), selectinload(Admission.student))
+        .where(Admission.id == admission_id)
+    )
+    res = await db.execute(query)
+    admission = res.scalar_one_or_none()
+    if not admission:
+        raise HTTPException(status_code=404, detail="Course purchase / admission not found")
+
+    # 1. Process optional refund if requested
+    refund_record = None
+    if payload.refund_amount and payload.refund_amount > Decimal("0.00"):
+        if payload.refund_amount > admission.amount_paid:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Refund amount ₹{payload.refund_amount} cannot exceed total amount paid ₹{admission.amount_paid}"
+            )
+        year_str = datetime.now().strftime("%Y")
+        ref_cnt_res = await db.execute(select(func.count(Refund.id)))
+        seq = ref_cnt_res.scalar_one() + 1
+        ref_no = f"REF{year_str}{seq:04d}"
+
+        refund_record = Refund(
+            refund_number=ref_no,
+            admission_id=admission.id,
+            payment_id=None,
+            student_id=admission.student_id,
+            amount=payload.refund_amount,
+            refund_mode=payload.refund_mode,
+            reason=f"Batch/Course revoked: {payload.reason.strip()}",
+            refund_date=datetime.now(timezone.utc),
+            processed_by=current_user.id,
+            processor_name_snapshot=current_user.full_name,
+            notes="Automated refund upon batch revocation"
+        )
+        db.add(refund_record)
+        admission.amount_paid -= payload.refund_amount
+
+    # 2. Revoke the batch purchase
+    admission.status = "REVOKED"
+    admission.revocation_reason = payload.reason.strip()
+    admission.revoked_at = datetime.now(timezone.utc)
+    admission.revoked_by = current_user.id
+    admission.balance_due = Decimal("0.00")  # Void pending due for dropped batch
+    
+    if admission.amount_paid <= Decimal("0.00"):
+        admission.payment_status = "VOID"
+    else:
+        admission.payment_status = "PARTIALLY_REFUNDED"
+
+    # 3. If green card attached, revoke access
+    has_gc = any(itm.item_type == "GREEN_CARD" for itm in admission.items)
+    if has_gc and admission.student:
+        admission.student.has_green_card = False
+
+    # 4. Audit Log
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="BATCH_PURCHASE_REVOKED",
+        entity_type="ADMISSION",
+        entity_id=admission.id,
+        details=json.dumps({
+            "purchase_transaction_id": admission.admission_number,
+            "student_name": admission.student_name_snapshot,
+            "reason": payload.reason.strip(),
+            "refunded": float(payload.refund_amount or 0),
+            "refund_voucher": refund_record.refund_number if refund_record else None
+        })
+    )
+    db.add(audit)
+    await db.commit()
+    await db.refresh(admission)
+    return admission
+
+@router.post("/{admission_id}/restore", response_model=AdmissionResponse)
+async def restore_batch_purchase(
+    admission_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_cashier_or_admin)
+):
+    query = (
+        select(Admission)
+        .options(selectinload(Admission.items), selectinload(Admission.student))
+        .where(Admission.id == admission_id)
+    )
+    res = await db.execute(query)
+    admission = res.scalar_one_or_none()
+    if not admission:
+        raise HTTPException(status_code=404, detail="Course purchase / admission not found")
+
+    old_reason = admission.revocation_reason
+    admission.status = "ACTIVE"
+    admission.revocation_reason = None
+    admission.revoked_at = None
+    admission.revoked_by = None
+    admission.balance_due = max(Decimal("0.00"), admission.total_payable - admission.amount_paid)
+
+    if admission.balance_due == Decimal("0.00"):
+        admission.payment_status = "PAID"
+    elif admission.amount_paid > Decimal("0.00"):
+        admission.payment_status = "PARTIALLY_PAID"
+    else:
+        admission.payment_status = "UNPAID"
+
+    has_gc = any(itm.item_type == "GREEN_CARD" for itm in admission.items)
+    if has_gc and admission.student:
+        admission.student.has_green_card = True
+
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="BATCH_PURCHASE_RESTORED",
+        entity_type="ADMISSION",
+        entity_id=admission.id,
+        details=json.dumps({
+            "purchase_transaction_id": admission.admission_number,
+            "student_name": admission.student_name_snapshot,
+            "previous_revocation_reason": old_reason
+        })
+    )
+    db.add(audit)
+    await db.commit()
+    await db.refresh(admission)
     return admission

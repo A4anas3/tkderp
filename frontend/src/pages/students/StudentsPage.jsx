@@ -43,13 +43,13 @@ export default function StudentsPage() {
 
   const columns = [
     {
-      header: 'Student / Admission No',
+      header: 'Student Code / Purchase ID',
       render: (s) => (
         <div>
           <span className="font-mono font-bold text-indigo-700 block">{s.student_code}</span>
           {s.latest_admission_number && (
             <span className="font-mono text-[10px] text-emerald-800 font-semibold bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200 inline-block mt-0.5">
-              Adm: {s.latest_admission_number}
+              Txn: {s.latest_admission_number}
             </span>
           )}
         </div>
