@@ -59,8 +59,11 @@ export default function RefundReceiptModal({ isOpen, onClose, refund }) {
               <p className="font-mono text-[11px] text-slate-600">{refund.student_reg_no}</p>
             </div>
             <div className="text-right">
-              <p className="text-slate-500">Purchase Transaction ID:</p>
-              <p className="font-mono font-bold text-black">{refund.purchase_transaction_id || refund.admission_number}</p>
+              <p className="text-slate-500">Purchase Transaction / Course:</p>
+              <p className="font-mono font-bold text-black">{refund.purchase_transaction_id || refund.admission_number || '—'}</p>
+              {refund.course_name && (
+                <p className="text-[11px] font-semibold text-indigo-900 mt-0.5">{refund.course_name}</p>
+              )}
             </div>
           </div>
 

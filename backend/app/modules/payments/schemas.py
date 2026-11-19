@@ -37,6 +37,7 @@ class RefundResponse(BaseModel):
     student_id: uuid.UUID
     student_name: Optional[str] = None
     admission_number: Optional[str] = None
+    course_name: Optional[str] = None
     amount: Decimal
     refund_mode: str
     reason: str
@@ -58,6 +59,7 @@ class RefundReceiptResponse(BaseModel):
     student_reg_no: str
     student_mobile: Optional[str] = None
     admission_number: str
+    course_name: Optional[str] = None
     admission_total_payable: Decimal
     net_amount_paid_after_refund: Decimal
     remaining_balance_due: Decimal
@@ -78,6 +80,7 @@ class PaymentResponse(BaseModel):
     student_id: uuid.UUID
     student_name: Optional[str] = None
     admission_number: Optional[str] = None
+    course_name: Optional[str] = None
     amount: Decimal
     payment_mode: str
     transaction_reference: Optional[str] = None

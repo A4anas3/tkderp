@@ -37,7 +37,7 @@ async def list_payments(
         select(Payment)
         .options(
             selectinload(Payment.allocations),
-            selectinload(Payment.admission),
+            selectinload(Payment.admission).selectinload(Admission.items),
             selectinload(Payment.student)
         )
     )
@@ -83,6 +83,9 @@ async def list_payments(
             )
             for a in p.allocations
         ]
+        c_str = None
+        if p.admission and p.admission.items:
+            c_str = ", ".join(i.item_name_snapshot for i in p.admission.items)
         response_items.append(
             PaymentResponse(
                 id=p.id,
@@ -91,6 +94,7 @@ async def list_payments(
                 student_id=p.student_id,
                 student_name=p.student.full_name if p.student else None,
                 admission_number=p.admission.admission_number if p.admission else None,
+                course_name=c_str,
                 amount=p.amount,
                 payment_mode=p.payment_mode,
                 transaction_reference=p.transaction_reference,
@@ -521,7 +525,7 @@ async def list_refunds(
     query = (
         select(Refund)
         .options(
-            selectinload(Refund.admission),
+            selectinload(Refund.admission).selectinload(Admission.items),
             selectinload(Refund.student)
         )
     )
@@ -558,25 +562,30 @@ async def list_refunds(
     query = query.order_by(desc(Refund.refund_date)).offset(offset).limit(page_size)
     refunds = (await db.execute(query)).scalars().all()
 
-    items = [
-        RefundResponse(
-            id=r.id,
-            refund_number=r.refund_number,
-            admission_id=r.admission_id,
-            payment_id=r.payment_id,
-            student_id=r.student_id,
-            student_name=r.student.full_name if r.student else None,
-            admission_number=r.admission.admission_number if r.admission else None,
-            amount=r.amount,
-            refund_mode=r.refund_mode,
-            reason=r.reason,
-            refund_date=r.refund_date,
-            processed_by=r.processed_by,
-            processor_name_snapshot=r.processor_name_snapshot,
-            notes=r.notes
+    items = []
+    for r in refunds:
+        c_str = None
+        if r.admission and r.admission.items:
+            c_str = ", ".join(i.item_name_snapshot for i in r.admission.items)
+        items.append(
+            RefundResponse(
+                id=r.id,
+                refund_number=r.refund_number,
+                admission_id=r.admission_id,
+                payment_id=r.payment_id,
+                student_id=r.student_id,
+                student_name=r.student.full_name if r.student else None,
+                admission_number=r.admission.admission_number if r.admission else None,
+                course_name=c_str,
+                amount=r.amount,
+                refund_mode=r.refund_mode,
+                reason=r.reason,
+                refund_date=r.refund_date,
+                processed_by=r.processed_by,
+                processor_name_snapshot=r.processor_name_snapshot,
+                notes=r.notes
+            )
         )
-        for r in refunds
-    ]
     return PageResponse.create(items=items, total=total, params=PaginationParams(page=page, page_size=page_size))
 
 @router.get("/refunds/{refund_id}/receipt", response_model=RefundReceiptResponse)
@@ -588,7 +597,7 @@ async def get_refund_receipt(
     query = (
         select(Refund)
         .options(
-            selectinload(Refund.admission),
+            selectinload(Refund.admission).selectinload(Admission.items),
             selectinload(Refund.student)
         )
         .where(Refund.id == refund_id)
@@ -597,6 +606,10 @@ async def get_refund_receipt(
     r = res.scalar_one_or_none()
     if not r:
         raise HTTPException(status_code=404, detail="Refund record not found")
+
+    c_str = None
+    if r.admission and r.admission.items:
+        c_str = ", ".join(i.item_name_snapshot for i in r.admission.items)
 
     return RefundReceiptResponse(
         refund_number=r.refund_number,
@@ -609,6 +622,7 @@ async def get_refund_receipt(
         student_reg_no=r.student.registration_no,
         student_mobile=r.student.mobile,
         admission_number=r.admission.admission_number,
+        course_name=c_str,
         admission_total_payable=r.admission.total_payable,
         net_amount_paid_after_refund=r.admission.amount_paid,
         remaining_balance_due=r.admission.balance_due,

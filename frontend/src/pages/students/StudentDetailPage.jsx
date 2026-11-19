@@ -18,6 +18,13 @@ import {
   AlertTriangle,
   Camera,
   RefreshCw,
+  Receipt,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  ArrowDownLeft,
+  ArrowUpRight,
+  TrendingDown,
 } from 'lucide-react';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
@@ -35,6 +42,72 @@ import RefundReceiptModal from '../../components/receipts/RefundReceiptModal';
 import RevokeStudentModal from '../../components/modals/RevokeStudentModal';
 import RevokeBatchModal from '../../components/modals/RevokeBatchModal';
 
+function getValidityStatus(adm) {
+  if (adm.status === 'REVOKED') {
+    return {
+      status: 'REVOKED',
+      badgeVariant: 'danger',
+      label: 'Revoked',
+      subtext: adm.revoked_at ? `Revoked on ${new Date(adm.revoked_at).toLocaleDateString('en-IN')}` : 'Revoked',
+      isExpired: false,
+      isExpiringSoon: false,
+      canRenew: false,
+    };
+  }
+
+  if (!adm.valid_to) {
+    return {
+      status: 'ACTIVE',
+      badgeVariant: 'success',
+      label: 'Active',
+      subtext: 'Open validity',
+      isExpired: false,
+      isExpiringSoon: false,
+      canRenew: true,
+    };
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const end = new Date(adm.valid_to);
+  end.setHours(0, 0, 0, 0);
+
+  const diffTime = end.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) {
+    return {
+      status: 'EXPIRED',
+      badgeVariant: 'danger',
+      label: 'Expired',
+      subtext: `Expired ${Math.abs(diffDays)}d ago (${adm.valid_to})`,
+      isExpired: true,
+      isExpiringSoon: false,
+      canRenew: true,
+    };
+  } else if (diffDays <= 7) {
+    return {
+      status: 'EXPIRING_SOON',
+      badgeVariant: 'warning',
+      label: 'Expiring Soon',
+      subtext: `Expires in ${diffDays}d (${adm.valid_to})`,
+      isExpired: false,
+      isExpiringSoon: true,
+      canRenew: true,
+    };
+  } else {
+    return {
+      status: 'ACTIVE',
+      badgeVariant: 'success',
+      label: 'Active',
+      subtext: `${diffDays}d remaining (${adm.valid_to})`,
+      isExpired: false,
+      isExpiringSoon: false,
+      canRenew: true,
+    };
+  }
+}
+
 export default function StudentDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -42,6 +115,7 @@ export default function StudentDetailPage() {
   const { isAdmin } = useAuth();
   const [student, setStudent] = useState(null);
   const [admissions, setAdmissions] = useState([]);
+  const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
@@ -64,12 +138,75 @@ export default function StudentDetailPage() {
   const fetchStudentData = async () => {
     setLoading(true);
     try {
-      const [stRes, admRes] = await Promise.all([
+      const [stRes, admRes, payRes, refRes] = await Promise.all([
         studentApi.get(id),
         admissionApi.list({ student_id: id, page_size: 50 }),
+        paymentApi.list({ student_id: id, page_size: 100 }),
+        paymentApi.listRefunds({ student_id: id, page_size: 100 }),
       ]);
       setStudent(stRes);
       setAdmissions(admRes.items || []);
+
+      const payTxns = (payRes.items || []).map((p) => {
+        const matchedAdm = (admRes.items || []).find((a) => a.id === p.admission_id);
+        const courseName =
+          p.course_name ||
+          matchedAdm?.items?.map((i) => i.item_name_snapshot).join(', ') ||
+          '';
+        const admNo =
+          p.admission_number ||
+          matchedAdm?.purchase_transaction_id ||
+          matchedAdm?.admission_number;
+        return {
+          id: p.id,
+          type: 'PAYMENT',
+          number: p.payment_number,
+          date: p.payment_date,
+          amount: Number(p.amount),
+          mode: p.payment_mode,
+          ref: p.transaction_reference,
+          notes: p.notes,
+          collector: p.collector_name_snapshot,
+          admission_id: p.admission_id,
+          admission_number: admNo,
+          course_name: courseName,
+          fee_period: p.fee_period,
+          raw: p,
+        };
+      });
+
+      const refTxns = (refRes.items || []).map((r) => {
+        const matchedAdm = (admRes.items || []).find((a) => a.id === r.admission_id);
+        const courseName =
+          r.course_name ||
+          matchedAdm?.items?.map((i) => i.item_name_snapshot).join(', ') ||
+          '';
+        const admNo =
+          r.admission_number ||
+          matchedAdm?.purchase_transaction_id ||
+          matchedAdm?.admission_number;
+        return {
+          id: r.id,
+          type: 'REFUND',
+          number: r.refund_number,
+          date: r.refund_date,
+          amount: -Number(r.amount),
+          mode: r.refund_mode,
+          ref: null,
+          notes: r.reason,
+          collector: r.processor_name_snapshot,
+          admission_id: r.admission_id,
+          admission_number: admNo,
+          course_name: courseName,
+          fee_period: null,
+          raw: r,
+        };
+      });
+
+      const allTxns = [...payTxns, ...refTxns].sort(
+        (a, b) => new Date(b.date) - new Date(a.date)
+      );
+      setTransactions(allTxns);
     } catch (err) {
       error(err.message || 'Failed to load student profile');
     } finally {
@@ -80,6 +217,24 @@ export default function StudentDetailPage() {
   useEffect(() => {
     fetchStudentData();
   }, [id]);
+
+  const handleViewReceipt = async (txn) => {
+    if (txn.type === 'PAYMENT') {
+      try {
+        const rcpt = await paymentApi.getReceipt(txn.id);
+        setReceiptToShow(rcpt);
+      } catch (e) {
+        error(e.message || 'Failed to fetch payment receipt');
+      }
+    } else {
+      try {
+        const rcpt = await paymentApi.getRefundReceipt(txn.id);
+        setRefundReceiptToShow(rcpt);
+      } catch (e) {
+        error(e.message || 'Failed to fetch refund receipt');
+      }
+    }
+  };
 
   const handleRestore = async () => {
     setRestoring(true);
@@ -278,23 +433,31 @@ export default function StudentDetailPage() {
       </div>
 
       {/* Financial Overview Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className={`grid grid-cols-2 ${Number(student.total_refunded) > 0 ? 'sm:grid-cols-5' : 'sm:grid-cols-4'} gap-3`}>
         <div className="bg-white rounded-lg border border-slate-200 p-3 shadow-xs">
           <span className="text-[11px] font-semibold text-slate-500 uppercase">
             Total Purchases
           </span>
-          <div className="text-xl font-bold text-black mt-0.5">{student.admissions_count}</div>
-          <span className="text-[10px] text-slate-500">Course purchases made</span>
+          <div className="text-xl font-bold text-black mt-0.5">{student.admissions_count || 0}</div>
+          <div className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5 font-medium">
+            <span className="text-emerald-700">{student.active_admissions_count || 0} Active</span>
+            {Number(student.revoked_admissions_count) > 0 && (
+              <>
+                <span>•</span>
+                <span className="text-rose-600">{student.revoked_admissions_count} Revoked</span>
+              </>
+            )}
+          </div>
         </div>
 
         <div className="bg-white rounded-lg border border-slate-200 p-3 shadow-xs">
           <span className="text-[11px] font-semibold text-slate-500 uppercase">
-            Total Billed Fees
+            Active Billed Fees
           </span>
           <div className="text-xl font-bold text-black mt-0.5">
             ₹{Number(student.total_billed).toFixed(2)}
           </div>
-          <span className="text-[10px] text-slate-500">Gross payable amount</span>
+          <span className="text-[10px] text-slate-500">Active courses fee</span>
         </div>
 
         <div className="bg-white rounded-lg border border-emerald-200 border-l-4 border-l-emerald-600 p-3 shadow-xs">
@@ -304,17 +467,35 @@ export default function StudentDetailPage() {
           <div className="text-xl font-bold text-emerald-800 mt-0.5">
             ₹{Number(student.total_paid).toFixed(2)}
           </div>
-          <span className="text-[10px] text-emerald-700">Receipts collected</span>
+          <span className="text-[10px] text-emerald-700 block truncate">
+            {Number(student.total_refunded) > 0
+              ? `Gross collected (Net: ₹${Number(student.net_paid !== undefined ? student.net_paid : student.total_paid - student.total_refunded).toFixed(2)})`
+              : 'Total receipts collected'}
+          </span>
         </div>
 
-        <div className="bg-white rounded-lg border border-rose-200 border-l-4 border-l-rose-500 p-3 shadow-xs">
-          <span className="text-[11px] font-semibold text-rose-800 uppercase">
+        {Number(student.total_refunded) > 0 && (
+          <div className="bg-white rounded-lg border border-rose-200 border-l-4 border-l-rose-500 p-3 shadow-xs">
+            <span className="text-[11px] font-semibold text-rose-800 uppercase">
+              Total Refunded
+            </span>
+            <div className="text-xl font-bold text-rose-800 mt-0.5">
+              ₹{Number(student.total_refunded).toFixed(2)}
+            </div>
+            <span className="text-[10px] text-rose-700">Returned to student</span>
+          </div>
+        )}
+
+        <div className={`bg-white rounded-lg border ${Number(student.total_balance_due) > 0 ? 'border-rose-300 border-l-4 border-l-rose-600' : 'border-slate-200 border-l-4 border-l-slate-400'} p-3 shadow-xs`}>
+          <span className={`text-[11px] font-semibold uppercase ${Number(student.total_balance_due) > 0 ? 'text-rose-900' : 'text-slate-500'}`}>
             Current Balance Due
           </span>
-          <div className="text-xl font-bold text-rose-800 mt-0.5">
+          <div className={`text-xl font-bold mt-0.5 ${Number(student.total_balance_due) > 0 ? 'text-rose-700' : 'text-black'}`}>
             ₹{Number(student.total_balance_due).toFixed(2)}
           </div>
-          <span className="text-[10px] text-rose-700">Pending payment</span>
+          <span className={`text-[10px] ${Number(student.total_balance_due) > 0 ? 'text-rose-600 font-semibold' : 'text-slate-500'}`}>
+            {Number(student.total_balance_due) > 0 ? 'Pending payment • Due' : 'All active fees cleared ✓'}
+          </span>
         </div>
       </div>
 
@@ -400,7 +581,7 @@ export default function StudentDetailPage() {
           <div>
             <h2 className="text-sm font-bold text-black">Course Purchases & Batch Enrollments</h2>
             <p className="text-xs text-slate-500">
-              History of all course purchases, subjects with classroom halls & faculty snapshots, and payments
+              History of all course purchases, validity coverage (active vs expiring/expired), and payments
             </p>
           </div>
 
@@ -432,20 +613,21 @@ export default function StudentDetailPage() {
               <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
                 <tr>
                   <th className="p-2">Purchase Transaction ID</th>
-                  <th className="p-2">Date</th>
+                  <th className="p-2">Date & Validity</th>
                   <th className="p-2">Enrolled Items (Faculty & Hall)</th>
                   <th className="p-2 text-right">Total Payable</th>
                   <th className="p-2 text-right">Paid</th>
                   <th className="p-2 text-right text-rose-700">Due</th>
-                  <th className="p-2 text-center">Status</th>
+                  <th className="p-2 text-center">Payment & Batch Status</th>
                   <th className="p-2 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {admissions.map((adm) => {
                   const isBatchRevoked = adm.status === 'REVOKED';
+                  const validity = getValidityStatus(adm);
                   return (
-                    <tr key={adm.id} className={`hover:bg-slate-50 ${isBatchRevoked ? 'bg-rose-50/40 opacity-80' : ''}`}>
+                    <tr key={adm.id} className={`hover:bg-slate-50 ${isBatchRevoked ? 'bg-rose-50/40 opacity-85' : ''}`}>
                       <td className="p-2 font-mono font-bold text-black">
                         <div>{adm.purchase_transaction_id || adm.admission_number}</div>
                         {isBatchRevoked && (
@@ -456,10 +638,24 @@ export default function StudentDetailPage() {
                       </td>
                       <td className="p-2 text-slate-600">
                         <span className="font-semibold text-black block">{adm.admission_date}</span>
-                        {adm.valid_from && adm.valid_to && (
-                          <span className="text-[10px] text-indigo-800 bg-indigo-50 border border-indigo-200 px-1 py-0.2 rounded font-mono inline-block mt-0.5">
-                            {adm.valid_from} &rarr; {adm.valid_to}
-                          </span>
+                        {adm.valid_from && adm.valid_to ? (
+                          <div className="mt-1 space-y-0.5">
+                            <span className="text-[10px] text-slate-700 font-mono block">
+                              {adm.valid_from} &rarr; {adm.valid_to}
+                            </span>
+                            <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.2 rounded border ${
+                              validity.badgeVariant === 'success'
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                : validity.badgeVariant === 'warning'
+                                ? 'bg-amber-50 text-amber-800 border-amber-300'
+                                : 'bg-rose-50 text-rose-800 border-rose-200'
+                            }`}>
+                              {validity.badgeVariant === 'warning' && <Clock className="w-2.5 h-2.5" />}
+                              {validity.subtext}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-[10px] text-slate-500 font-mono">Standard Validity</span>
                         )}
                       </td>
                       <td className="p-2">
@@ -515,22 +711,33 @@ export default function StudentDetailPage() {
                             )}
                           </div>
                         ) : (
-                          <Badge
-                            size="xs"
-                            variant={
-                              adm.payment_status === 'PAID'
-                                ? 'success'
-                                : adm.payment_status === 'PARTIALLY_PAID'
-                                ? 'warning'
-                                : 'danger'
-                            }
-                          >
-                            {adm.payment_status}
-                          </Badge>
+                          <div className="space-y-1">
+                            <Badge
+                              size="xs"
+                              variant={
+                                adm.payment_status === 'PAID'
+                                  ? 'success'
+                                  : adm.payment_status === 'PARTIALLY_PAID'
+                                  ? 'warning'
+                                  : 'danger'
+                              }
+                            >
+                              {adm.payment_status === 'PARTIALLY_PAID' ? 'PARTIAL PAID' : adm.payment_status}
+                            </Badge>
+                            {validity.isExpired ? (
+                              <Badge size="xs" variant="danger">
+                                EXPIRED
+                              </Badge>
+                            ) : validity.isExpiringSoon ? (
+                              <Badge size="xs" variant="warning">
+                                EXPIRING
+                              </Badge>
+                            ) : null}
+                          </div>
                         )}
                       </td>
                       <td className="p-2 text-right">
-                        <div className="flex items-center justify-end gap-1">
+                        <div className="flex flex-wrap items-center justify-end gap-1">
                           <Button
                             size="xs"
                             variant="secondary"
@@ -540,11 +747,27 @@ export default function StudentDetailPage() {
                             Slip
                           </Button>
 
-                          {/* Next Month Batch Fee Renewal */}
+                          {/* Collect Due Fee (2nd Payment) if pending */}
+                          {Number(adm.balance_due) > 0 && !isBatchRevoked && !isRevoked && (
+                            <Button
+                              size="xs"
+                              variant="success"
+                              icon={CreditCard}
+                              onClick={() => {
+                                setTargetAdmissionId(adm.id);
+                                setPayModalOpen(true);
+                              }}
+                              title="Collect outstanding balance (2nd Payment)"
+                            >
+                              Pay Due (₹{Number(adm.balance_due).toFixed(0)})
+                            </Button>
+                          )}
+
+                          {/* Renew / Next Cycle button */}
                           {!isBatchRevoked && !isRevoked && (
                             <Button
                               size="xs"
-                              variant="primary"
+                              variant={validity.isExpired ? 'danger' : validity.isExpiringSoon ? 'warning' : 'primary'}
                               onClick={() =>
                                 navigate(
                                   `/admissions/new?student_id=${student.id}&name=${encodeURIComponent(
@@ -552,25 +775,40 @@ export default function StudentDetailPage() {
                                   )}&renew=1`
                                 )
                               }
-                              title="Pay next month fee cycle"
+                              title="Pay next month fee cycle / renew batch"
                             >
-                              + Next Month
+                              {validity.isExpired ? 'Renew Batch' : '+ Next Month'}
                             </Button>
                           )}
 
-                          {/* If Revoked: Offer Restore Batch (Admin Only) */}
+                          {/* If Revoked: Offer Refund (if paid) and Restore Batch */}
                           {isBatchRevoked ? (
-                            isAdmin && (
-                              <Button
-                                size="xs"
-                                variant="primary"
-                                icon={RotateCcw}
-                                loading={restoringBatchId === adm.id}
-                                onClick={() => handleRestoreBatch(adm)}
-                              >
-                                Restore
-                              </Button>
-                            )
+                            <>
+                              {isAdmin && Number(adm.amount_paid) > 0 && (
+                                <Button
+                                  size="xs"
+                                  variant="danger"
+                                  onClick={() => {
+                                    setSelectedAdmissionForRefund(adm);
+                                    setRefundModalOpen(true);
+                                  }}
+                                  title="Issue refund on revoked batch"
+                                >
+                                  Refund
+                                </Button>
+                              )}
+                              {isAdmin && (
+                                <Button
+                                  size="xs"
+                                  variant="primary"
+                                  icon={RotateCcw}
+                                  loading={restoringBatchId === adm.id}
+                                  onClick={() => handleRestoreBatch(adm)}
+                                >
+                                  Restore
+                                </Button>
+                              )}
+                            </>
                           ) : (
                             <>
                               {/* Revoke Batch Button (Admin Only) */}
@@ -600,23 +838,157 @@ export default function StudentDetailPage() {
                                   Refund
                                 </Button>
                               )}
-
-                              {/* Pay Due Button (Cashier & Admin) */}
-                              {Number(adm.balance_due) > 0 && !isRevoked && (
-                                <Button
-                                  size="xs"
-                                  variant="success"
-                                  onClick={() => {
-                                    setTargetAdmissionId(adm.id);
-                                    setPayModalOpen(true);
-                                  }}
-                                >
-                                  Pay
-                                </Button>
-                              )}
                             </>
                           )}
                         </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      {/* Financial Transactions & Receipts Ledger */}
+      <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs space-y-3">
+        <div className="pb-3 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <div className="flex items-center gap-2">
+              <Receipt className="w-4 h-4 text-indigo-600" />
+              <h2 className="text-sm font-bold text-black">
+                Financial Transactions & Receipts Ledger
+              </h2>
+            </div>
+            <p className="text-xs text-slate-500">
+              Audit trail of all receipts collected (initial payment, 2nd payments / due settlement) and refund vouchers with official slips
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="font-mono bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded font-bold">
+              Total Receipts: ₹{transactions.filter((t) => t.type === 'PAYMENT').reduce((acc, t) => acc + t.amount, 0).toFixed(2)}
+            </span>
+            {transactions.some((t) => t.type === 'REFUND') && (
+              <span className="font-mono bg-rose-50 text-rose-800 border border-rose-200 px-2 py-0.5 rounded font-bold">
+                Total Refunded: ₹{Math.abs(transactions.filter((t) => t.type === 'REFUND').reduce((acc, t) => acc + t.amount, 0)).toFixed(2)}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          {transactions.length === 0 ? (
+            <div className="py-8 text-center text-xs text-slate-500">
+              No payment transactions or refund vouchers recorded for this student yet.
+            </div>
+          ) : (
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+                <tr>
+                  <th className="p-2">Receipt / Voucher #</th>
+                  <th className="p-2">Date & Time</th>
+                  <th className="p-2">Type & Purpose</th>
+                  <th className="p-2">Course Ref</th>
+                  <th className="p-2">Payment Mode</th>
+                  <th className="p-2">Handled By</th>
+                  <th className="p-2 text-right">Amount</th>
+                  <th className="p-2 text-right">Slip</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {transactions.map((txn) => {
+                  const isRefund = txn.type === 'REFUND';
+                  return (
+                    <tr
+                      key={txn.id}
+                      className={`hover:bg-slate-50 ${isRefund ? 'bg-rose-50/30' : ''}`}
+                    >
+                      <td className="p-2 font-mono font-bold">
+                        <span className="flex items-center gap-1.5">
+                          {isRefund ? (
+                            <ArrowDownLeft className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                          ) : (
+                            <ArrowUpRight className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          )}
+                          <span className={isRefund ? 'text-rose-700' : 'text-indigo-900'}>
+                            {txn.number}
+                          </span>
+                        </span>
+                      </td>
+                      <td className="p-2 text-slate-600">
+                        {txn.date
+                          ? new Date(txn.date).toLocaleString('en-IN', {
+                              dateStyle: 'medium',
+                              timeStyle: 'short',
+                            })
+                          : '—'}
+                      </td>
+                      <td className="p-2">
+                        {isRefund ? (
+                          <span className="inline-block px-1.5 py-0.5 rounded text-[11px] font-semibold bg-rose-100 text-rose-800">
+                            Refund Voucher
+                          </span>
+                        ) : (
+                          <span className="inline-block px-1.5 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-800">
+                            Fee Payment
+                          </span>
+                        )}
+                        {txn.notes && (
+                          <span className="block text-[10px] text-slate-500 italic truncate max-w-[200px]">
+                            {txn.notes}
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-2">
+                        {txn.admission_number ? (
+                          <div>
+                            <span className="font-mono font-bold text-indigo-700 block">
+                              {txn.admission_number}
+                            </span>
+                            {txn.course_name && (
+                              <span
+                                className="text-[11px] text-slate-600 block line-clamp-1 max-w-[200px]"
+                                title={txn.course_name}
+                              >
+                                {txn.course_name}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 font-mono">—</span>
+                        )}
+                      </td>
+                      <td className="p-2 font-semibold text-slate-800">
+                        <span className="bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-[11px]">
+                          {txn.mode}
+                        </span>
+                        {txn.ref && (
+                          <span className="block text-[10px] text-slate-500 font-mono">
+                            Ref: {txn.ref}
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-2 text-slate-600">
+                        {txn.collector || 'Admin'}
+                      </td>
+                      <td className="p-2 text-right font-mono font-bold text-sm">
+                        {isRefund ? (
+                          <span className="text-rose-700">-₹{Math.abs(txn.amount).toFixed(2)}</span>
+                        ) : (
+                          <span className="text-emerald-700">+₹{txn.amount.toFixed(2)}</span>
+                        )}
+                      </td>
+                      <td className="p-2 text-right">
+                        <Button
+                          size="xs"
+                          variant="secondary"
+                          icon={Printer}
+                          onClick={() => handleViewReceipt(txn)}
+                        >
+                          Print Slip
+                        </Button>
                       </td>
                     </tr>
                   );
@@ -670,8 +1042,21 @@ export default function StudentDetailPage() {
           setSelectedAdmissionForBatchRevoke(null);
         }}
         admission={selectedAdmissionForBatchRevoke}
-        onSuccess={() => {
-          fetchStudentData();
+        onSuccess={async (res, hasRefund) => {
+          await fetchStudentData();
+          if (hasRefund && selectedAdmissionForBatchRevoke) {
+            try {
+              const refList = await paymentApi.listRefunds({
+                admission_id: selectedAdmissionForBatchRevoke.id,
+                page_size: 1,
+              });
+              if (refList.items?.length > 0) {
+                setRefundReceiptToShow(refList.items[0]);
+              }
+            } catch (e) {
+              console.error(e);
+            }
+          }
         }}
       />
 

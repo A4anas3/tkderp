@@ -10,7 +10,7 @@ from app.database.session import get_db
 from app.core.dependencies import require_staff, require_admin, require_cashier_or_admin
 from app.database.models import (
     Student, Batch, Teacher, Enquiry, Admission, Payment, Expense, SalaryRecord,
-    AdmissionItem, User
+    AdmissionItem, User, Subject
 )
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboards"])
@@ -222,8 +222,47 @@ async def get_teacher_dashboard(
     b_res = await db.execute(batch_query)
     batches = b_res.scalars().all()
 
+    # Subjects taught directly
+    subject_query = select(Subject)
+    if teacher_id:
+        subject_query = subject_query.where(Subject.teacher_id == teacher_id)
+    subject_query = subject_query.order_by(Subject.status.asc(), Subject.name.asc())
+    s_res = await db.execute(subject_query)
+    subjects = s_res.scalars().all()
+
     batch_list = []
     total_students_set = set()
+
+    for s in subjects:
+        enr_stmt = (
+            select(AdmissionItem.admission_id, Admission.student_id, Admission.student_name_snapshot, Student.mobile, Student.student_code)
+            .join(Admission, AdmissionItem.admission_id == Admission.id)
+            .join(Student, Admission.student_id == Student.id)
+            .where(AdmissionItem.subject_id == s.id, Admission.status == "ACTIVE")
+        )
+        enr_res = await db.execute(enr_stmt)
+        students_rows = enr_res.all()
+
+        roster = []
+        for row in students_rows:
+            total_students_set.add(row[1])
+            roster.append({
+                "student_id": str(row[1]),
+                "student_name": row[2],
+                "mobile": row[3],
+                "registration_no": row[4]
+            })
+
+        batch_list.append({
+            "batch_id": str(s.id),
+            "batch_code": s.subject_code,
+            "name": s.name,
+            "hall_number": s.hall_number or "Main Hall",
+            "schedule": s.schedule or "Regular",
+            "status": s.status,
+            "student_count": len(roster),
+            "students": roster
+        })
 
     for b in batches:
         # Enrolled students for this batch

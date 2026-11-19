@@ -97,13 +97,19 @@ async def seed_data():
         session.add_all([teacher1, teacher2, teacher3])
         await session.flush()
 
-        # 3. Subjects
+        # 3. Subjects (Subject-wise structure with assigned teacher, hall number, and schedule)
         sub_math = Subject(
             id=uuid.UUID("33333333-3333-3333-3333-333333333301"),
             subject_code="SUB_MATH",
             name="Mathematics",
             description="Core & Advanced Mathematics",
             default_fee=Decimal("1000.00"),
+            teacher_id=teacher1.id,
+            teacher_name_snapshot=teacher1.name,
+            hall_number="Hall 13",
+            schedule="Mon-Fri 09:00 AM - 10:30 AM",
+            class_category="Class 9-10",
+            default_discount_percentage=Decimal("10.00"),
             status="ACTIVE"
         )
         sub_sci = Subject(
@@ -112,6 +118,12 @@ async def seed_data():
             name="Science",
             description="General Science & Physics/Chem fundamentals",
             default_fee=Decimal("1200.00"),
+            teacher_id=teacher1.id,
+            teacher_name_snapshot=teacher1.name,
+            hall_number="Hall 101",
+            schedule="Mon-Fri 10:45 AM - 12:15 PM",
+            class_category="Class 9-10",
+            default_discount_percentage=Decimal("10.00"),
             status="ACTIVE"
         )
         sub_phy = Subject(
@@ -120,6 +132,12 @@ async def seed_data():
             name="Physics",
             description="Higher Secondary & Competitive Physics",
             default_fee=Decimal("1500.00"),
+            teacher_id=teacher2.id,
+            teacher_name_snapshot=teacher2.name,
+            hall_number="Hall 102",
+            schedule="Mon-Fri 01:00 PM - 02:30 PM",
+            class_category="Class 11-12",
+            default_discount_percentage=Decimal("10.00"),
             status="ACTIVE"
         )
         sub_chem = Subject(
@@ -128,6 +146,12 @@ async def seed_data():
             name="Chemistry",
             description="Organic, Inorganic & Physical Chemistry",
             default_fee=Decimal("1200.00"),
+            teacher_id=teacher2.id,
+            teacher_name_snapshot=teacher2.name,
+            hall_number="Hall 103",
+            schedule="Mon-Fri 02:45 PM - 04:15 PM",
+            class_category="Class 11-12",
+            default_discount_percentage=Decimal("10.00"),
             status="ACTIVE"
         )
         sub_eng = Subject(
@@ -136,6 +160,12 @@ async def seed_data():
             name="English",
             description="Grammar, Vocabulary & Comprehension",
             default_fee=Decimal("800.00"),
+            teacher_id=teacher3.id,
+            teacher_name_snapshot=teacher3.name,
+            hall_number="Hall 104",
+            schedule="Mon-Fri 04:30 PM - 06:00 PM",
+            class_category="General",
+            default_discount_percentage=Decimal("10.00"),
             status="ACTIVE"
         )
         session.add_all([sub_math, sub_sci, sub_phy, sub_chem, sub_eng])

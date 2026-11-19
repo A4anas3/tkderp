@@ -48,5 +48,9 @@ class StudentResponse(StudentBase):
 class StudentDetailResponse(StudentResponse):
     total_billed: Decimal = Decimal("0.00")
     total_paid: Decimal = Decimal("0.00")
+    total_refunded: Decimal = Decimal("0.00")
+    net_paid: Decimal = Decimal("0.00")
     total_balance_due: Decimal = Decimal("0.00")
     admissions_count: int = 0
+    active_admissions_count: int = 0
+    revoked_admissions_count: int = 0

@@ -66,13 +66,8 @@ export default function Sidebar({ isOpen, onClose }) {
           icon: Users,
         },
         {
-          to: '/batches',
-          label: 'Batches',
-          icon: CalendarDays,
-        },
-        {
           to: '/subjects',
-          label: 'Subjects',
+          label: 'Subjects & Classes',
           icon: BookOpen,
         },
         {

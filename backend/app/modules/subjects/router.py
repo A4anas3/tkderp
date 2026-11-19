@@ -6,7 +6,7 @@ from sqlalchemy import select, func, or_
 
 from app.database.session import get_db
 from app.core.dependencies import require_staff, require_admin
-from app.database.models import Subject, User
+from app.database.models import Subject, User, Teacher
 from app.modules.subjects.schemas import SubjectCreate, SubjectUpdate, SubjectResponse
 from app.common.pagination import PaginationParams, PageResponse
 
@@ -28,7 +28,10 @@ async def list_subjects(
         search_pattern = f"%{search.strip()}%"
         filter_clause = or_(
             Subject.name.ilike(search_pattern),
-            Subject.subject_code.ilike(search_pattern)
+            Subject.subject_code.ilike(search_pattern),
+            Subject.class_category.ilike(search_pattern),
+            Subject.teacher_name_snapshot.ilike(search_pattern),
+            Subject.hall_number.ilike(search_pattern)
         )
         query = query.where(filter_clause)
         count_query = count_query.where(filter_clause)
@@ -70,11 +73,24 @@ async def create_subject(
         cnt_res = await db.execute(select(func.count(Subject.id)))
         code = f"SUB{(cnt_res.scalar_one() + 1):03d}"
 
+    teacher_name = payload.teacher_name_snapshot
+    if payload.teacher_id:
+        t_res = await db.execute(select(Teacher).where(Teacher.id == payload.teacher_id))
+        t = t_res.scalar_one_or_none()
+        if t:
+            teacher_name = t.name
+
     subject = Subject(
         subject_code=code,
         name=payload.name,
         description=payload.description,
         default_fee=payload.default_fee,
+        teacher_id=payload.teacher_id,
+        teacher_name_snapshot=teacher_name,
+        hall_number=payload.hall_number or "Main Hall",
+        schedule=payload.schedule,
+        class_category=payload.class_category or "General",
+        default_discount_percentage=payload.default_discount_percentage if payload.default_discount_percentage is not None else Decimal("10.00"),
         status=payload.status
     )
     db.add(subject)
@@ -107,6 +123,15 @@ async def update_subject(
         raise HTTPException(status_code=404, detail="Subject not found")
 
     update_data = payload.model_dump(exclude_unset=True)
+    if "teacher_id" in update_data:
+        if update_data["teacher_id"]:
+            t_res = await db.execute(select(Teacher).where(Teacher.id == update_data["teacher_id"]))
+            t = t_res.scalar_one_or_none()
+            if t:
+                subject.teacher_name_snapshot = t.name
+        else:
+            subject.teacher_name_snapshot = None
+
     for field, val in update_data.items():
         setattr(subject, field, val)
 

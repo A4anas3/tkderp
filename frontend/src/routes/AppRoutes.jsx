@@ -126,11 +126,7 @@ export default function AppRoutes() {
         />
         <Route
           path="batches"
-          element={
-            <ProtectedRoute allowedRoles={['ADMIN']}>
-              <BatchesPage />
-            </ProtectedRoute>
-          }
+          element={<Navigate to="/subjects" replace />}
         />
         <Route
           path="subjects"

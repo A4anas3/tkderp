@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field, ConfigDict
 import uuid
 
 class AdmissionItemCreate(BaseModel):
-    item_type: str = Field(default="BATCH_SUBJECT", pattern="^(BATCH_SUBJECT|GREEN_CARD)$")
+    item_type: str = Field(default="SUBJECT", pattern="^(SUBJECT|BATCH_SUBJECT|GREEN_CARD)$")
     batch_id: Optional[uuid.UUID] = None
     subject_id: Optional[uuid.UUID] = None
     green_card_id: Optional[uuid.UUID] = None

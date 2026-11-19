@@ -15,6 +15,7 @@ from app.database.session import get_db
 from app.modules.users.models import User
 from app.modules.students.models import Student
 from app.modules.admissions.models import Admission, AdmissionItem
+from app.modules.payments.models import Payment, Refund
 from app.modules.audit.models import AuditLog
 from app.modules.students.schemas import (
     StudentCreate, StudentUpdate, StudentRevokeRequest,
@@ -129,21 +130,47 @@ async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db),
         raise HTTPException(status_code=404, detail="Student not found")
 
     # Financial totals for student
-    adm_stmt = select(
-        func.count(Admission.id),
-        func.coalesce(func.sum(Admission.total_payable), Decimal("0.00")),
-        func.coalesce(func.sum(Admission.amount_paid), Decimal("0.00")),
-        func.coalesce(func.sum(Admission.balance_due), Decimal("0.00"))
-    ).where(Admission.student_id == student_id, Admission.status == "ACTIVE")
-    
-    row = (await db.execute(adm_stmt)).first()
-    adm_count, billed, paid, due = row if row else (0, Decimal("0.00"), Decimal("0.00"), Decimal("0.00"))
+    total_adm_count = (await db.execute(
+        select(func.count(Admission.id)).where(Admission.student_id == student_id)
+    )).scalar() or 0
+
+    active_adm_count = (await db.execute(
+        select(func.count(Admission.id)).where(Admission.student_id == student_id, Admission.status == "ACTIVE")
+    )).scalar() or 0
+
+    revoked_adm_count = (await db.execute(
+        select(func.count(Admission.id)).where(Admission.student_id == student_id, Admission.status == "REVOKED")
+    )).scalar() or 0
+
+    active_row = (await db.execute(
+        select(
+            func.coalesce(func.sum(Admission.total_payable), Decimal("0.00")),
+            func.coalesce(func.sum(Admission.balance_due), Decimal("0.00"))
+        ).where(Admission.student_id == student_id, Admission.status == "ACTIVE")
+    )).first()
+    active_billed, active_due = active_row if active_row else (Decimal("0.00"), Decimal("0.00"))
+
+    total_paid = (await db.execute(
+        select(func.coalesce(func.sum(Payment.amount), Decimal("0.00")))
+        .where(Payment.student_id == student_id)
+    )).scalar() or Decimal("0.00")
+
+    total_refunded = (await db.execute(
+        select(func.coalesce(func.sum(Refund.amount), Decimal("0.00")))
+        .where(Refund.student_id == student_id)
+    )).scalar() or Decimal("0.00")
+
+    net_paid = total_paid - total_refunded
 
     res = StudentDetailResponse.model_validate(student)
-    res.admissions_count = adm_count
-    res.total_billed = billed
-    res.total_paid = paid
-    res.total_balance_due = due
+    res.admissions_count = total_adm_count
+    res.active_admissions_count = active_adm_count
+    res.revoked_admissions_count = revoked_adm_count
+    res.total_billed = active_billed
+    res.total_paid = total_paid
+    res.total_refunded = total_refunded
+    res.net_paid = net_paid
+    res.total_balance_due = active_due
     return res
 
 @router.post("", response_model=StudentResponse, status_code=status.HTTP_201_CREATED)

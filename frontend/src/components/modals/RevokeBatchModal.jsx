@@ -73,7 +73,7 @@ export default function RevokeBatchModal({
 
       onClose();
       if (onSuccess) {
-        onSuccess(res);
+        onSuccess(res, refundVal > 0);
       }
     } catch (err) {
       error(err.message || 'Failed to revoke batch purchase');

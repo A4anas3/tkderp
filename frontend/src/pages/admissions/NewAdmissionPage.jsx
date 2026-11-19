@@ -20,6 +20,7 @@ import Badge from '../../components/common/Badge';
 import StudentSearchSelect from '../../components/common/StudentSearchSelect';
 import {
   studentApi,
+  subjectApi,
   batchApi,
   greenCardApi,
   admissionApi,
@@ -43,7 +44,7 @@ export default function NewAdmissionPage() {
 
   // Form State
   const [students, setStudents] = useState([]);
-  const [batches, setBatches] = useState([]);
+  const [subjects, setSubjects] = useState([]);
   const [greenCards, setGreenCards] = useState([]);
   const [loadingRefs, setLoadingRefs] = useState(true);
 
@@ -56,6 +57,7 @@ export default function NewAdmissionPage() {
     d.setDate(d.getDate() + 30);
     return d.toISOString().split('T')[0];
   });
+  const [billingMonths, setBillingMonths] = useState(1);
   const [lastBatchPeriodInfo, setLastBatchPeriodInfo] = useState(null);
   const [notes, setNotes] = useState('');
 
@@ -83,19 +85,75 @@ export default function NewAdmissionPage() {
   const [isQuickStudentOpen, setIsQuickStudentOpen] = useState(false);
   const [completedAdmission, setCompletedAdmission] = useState(null);
 
-  // Load References (students, batches, green cards)
+  const calculateEndDateFromMonths = (startDateStr, monthsCount) => {
+    if (!startDateStr) return '';
+    const d = new Date(startDateStr);
+    const totalDays = Math.max(1, parseInt(monthsCount, 10) || 1) * 30;
+    d.setDate(d.getDate() + totalDays);
+    return d.toISOString().split('T')[0];
+  };
+
+  const handleBillingMonthsChange = (newMonths) => {
+    const m = Math.max(1, parseInt(newMonths, 10) || 1);
+    setBillingMonths(m);
+
+    const hasGc = items.some((i) => i.item_type === 'GREEN_CARD');
+    if (hasGc) {
+      const d = new Date(validFrom);
+      d.setDate(d.getDate() + 365);
+      setValidTo(d.toISOString().split('T')[0]);
+    } else {
+      setValidTo(calculateEndDateFromMonths(validFrom, m));
+    }
+
+    setItems((prev) =>
+      prev.map((itm) => {
+        if (itm.item_type === 'SUBJECT') {
+          const baseFee = itm.base_monthly_fee !== undefined ? itm.base_monthly_fee : Number(itm.original_price);
+          return {
+            ...itm,
+            base_monthly_fee: baseFee,
+            months: m,
+            original_price: baseFee * m,
+          };
+        }
+        return itm;
+      })
+    );
+  };
+
+  const handleItemMonthsChange = (tempId, newMonths) => {
+    const m = Math.max(1, parseInt(newMonths, 10) || 1);
+    setItems((prev) =>
+      prev.map((itm) => {
+        if (itm.tempId === tempId && itm.item_type === 'SUBJECT') {
+          const baseFee = itm.base_monthly_fee !== undefined ? itm.base_monthly_fee : Number(itm.original_price);
+          return {
+            ...itm,
+            base_monthly_fee: baseFee,
+            months: m,
+            original_price: baseFee * m,
+          };
+        }
+        return itm;
+      })
+    );
+  };
+
+  // Load References (students, subjects, green cards)
   const loadReferences = useCallback(async () => {
     setLoadingRefs(true);
     try {
-      const [stuRes, bRes, gcRes] = await Promise.all([
+      const [stuRes, subRes, gcRes] = await Promise.all([
         studentApi.list({ page: 1, page_size: 100 }),
-        batchApi.getAll(),
+        subjectApi.getAll(),
         greenCardApi.list(),
       ]);
 
       const loadedStudents = stuRes.items || [];
+      const loadedSubjects = subRes || [];
       setStudents(loadedStudents);
-      setBatches(bRes || []);
+      setSubjects(loadedSubjects);
       setGreenCards(gcRes || []);
 
       // If came from enquiry and student is not yet registered
@@ -124,23 +182,29 @@ export default function NewAdmissionPage() {
             discount_value: 0,
           },
         ]);
-      } else if (items.length === 0 && bRes.length > 0 && bRes[0].subjects?.length > 0) {
-        // Pre-add the first subject of first batch for user convenience
-        const firstBatch = bRes[0];
-        const firstSub = firstBatch.subjects[0];
+      } else if (items.length === 0 && loadedSubjects.length > 0) {
+        // Pre-add the first active subject for user convenience
+        const firstSub = loadedSubjects[0];
+        const defaultDisc = firstSub.default_discount_percentage !== undefined && firstSub.default_discount_percentage !== null
+          ? Number(firstSub.default_discount_percentage)
+          : 10;
+        const initialMonths = 1;
+        const baseFee = Number(firstSub.default_fee);
         setItems([
           {
             tempId: 'item-1',
-            item_type: 'BATCH_SUBJECT',
-            batch_id: firstBatch.id,
-            subject_id: firstSub.subject_id,
-            item_name_snapshot: `${firstBatch.name} — ${firstSub.subject_name}`,
-            original_price: Number(firstSub.fee),
-            teacher_id: firstSub.teacher_id || firstBatch.teacher_id || null,
-            teacher_name_snapshot: firstSub.teacher_name_snapshot || firstBatch.teacher_name_snapshot || null,
-            hall_number_snapshot: firstSub.hall_number || firstBatch.hall_number || null,
-            discount_type: 'NONE',
-            discount_value: 0,
+            item_type: 'SUBJECT',
+            batch_id: null,
+            subject_id: firstSub.id,
+            item_name_snapshot: firstSub.name,
+            base_monthly_fee: baseFee,
+            months: initialMonths,
+            original_price: baseFee * initialMonths,
+            teacher_id: firstSub.teacher_id || null,
+            teacher_name_snapshot: firstSub.teacher_name_snapshot || null,
+            hall_number_snapshot: firstSub.hall_number || 'Main Hall',
+            discount_type: defaultDisc > 0 ? 'PERCENTAGE' : 'NONE',
+            discount_value: defaultDisc > 0 ? String(defaultDisc) : '10',
           },
         ]);
       }
@@ -174,13 +238,11 @@ export default function NewAdmissionPage() {
         if (periodRes && periodRes.has_previous) {
           setLastBatchPeriodInfo(periodRes);
           setValidFrom(periodRes.suggested_start_date);
-          setValidTo(periodRes.suggested_end_date);
+          setValidTo(calculateEndDateFromMonths(periodRes.suggested_start_date, billingMonths));
         } else {
           setLastBatchPeriodInfo(null);
           setValidFrom(admissionDate);
-          const d = new Date(admissionDate);
-          d.setDate(d.getDate() + 30);
-          setValidTo(d.toISOString().split('T')[0]);
+          setValidTo(calculateEndDateFromMonths(admissionDate, billingMonths));
         }
       } catch (e) {
         console.error('Failed to load student existing admissions or period info:', e);
@@ -192,9 +254,14 @@ export default function NewAdmissionPage() {
   const handleValidFromChange = (newFrom) => {
     setValidFrom(newFrom);
     if (newFrom) {
-      const d = new Date(newFrom);
-      d.setDate(d.getDate() + 30);
-      setValidTo(d.toISOString().split('T')[0]);
+      const hasGc = items.some((i) => i.item_type === 'GREEN_CARD');
+      if (hasGc) {
+        const d = new Date(newFrom);
+        d.setDate(d.getDate() + 365);
+        setValidTo(d.toISOString().split('T')[0]);
+      } else {
+        setValidTo(calculateEndDateFromMonths(newFrom, billingMonths));
+      }
     }
   };
 
@@ -237,25 +304,31 @@ export default function NewAdmissionPage() {
   }, [items, overallDiscountType, overallDiscountValue, gstEnabled, gstRate]);
 
   // Add Item Helpers
-  const handleAddBatchSubject = () => {
-    if (batches.length === 0 || !batches[0].subjects || batches[0].subjects.length === 0) {
-      error('No batches with assigned subjects found.');
+  const handleAddSubject = () => {
+    if (subjects.length === 0) {
+      error('No active subjects found.');
       return;
     }
-    const b = batches[0];
-    const s = b.subjects[0];
+    const s = subjects[0];
+    const defaultDisc = s.default_discount_percentage !== undefined && s.default_discount_percentage !== null
+      ? Number(s.default_discount_percentage)
+      : 10;
+    const baseFee = Number(s.default_fee);
+    const m = billingMonths || 1;
     const newItem = {
       tempId: `item-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-      item_type: 'BATCH_SUBJECT',
-      batch_id: b.id,
-      subject_id: s.subject_id,
-      item_name_snapshot: `${b.name} — ${s.subject_name}`,
-      original_price: Number(s.fee),
-      teacher_id: s.teacher_id || b.teacher_id || null,
-      teacher_name_snapshot: s.teacher_name_snapshot || b.teacher_name_snapshot || null,
-      hall_number_snapshot: s.hall_number || b.hall_number || null,
-      discount_type: 'NONE',
-      discount_value: 0,
+      item_type: 'SUBJECT',
+      batch_id: null,
+      subject_id: s.id,
+      item_name_snapshot: s.name,
+      base_monthly_fee: baseFee,
+      months: m,
+      original_price: baseFee * m,
+      teacher_id: s.teacher_id || null,
+      teacher_name_snapshot: s.teacher_name_snapshot || null,
+      hall_number_snapshot: s.hall_number || 'Main Hall',
+      discount_type: defaultDisc > 0 ? 'PERCENTAGE' : 'NONE',
+      discount_value: defaultDisc > 0 ? String(defaultDisc) : '10',
     };
     setItems((prev) => [...prev, newItem]);
   };
@@ -266,6 +339,17 @@ export default function NewAdmissionPage() {
       return;
     }
     const gc = greenCards.find((c) => c.is_active) || greenCards[0];
+    const validityDays = gc.validity_days || 365;
+
+    // Calculate 1 full year (365 days) from validFrom
+    const fromDate = validFrom ? new Date(validFrom) : new Date();
+    const toDate = new Date(fromDate);
+    toDate.setDate(toDate.getDate() + validityDays);
+    const toStr = toDate.toISOString().split('T')[0];
+
+    // Automatically expand the overall coverage to 1 full year for Annual Pass!
+    setValidTo(toStr);
+
     const newItem = {
       tempId: `gc-${Date.now()}`,
       item_type: 'GREEN_CARD',
@@ -276,7 +360,9 @@ export default function NewAdmissionPage() {
       teacher_name_snapshot: null,
       hall_number_snapshot: null,
       discount_type: 'NONE',
-      discount_value: 0,
+      discount_value: '0',
+      valid_from: validFrom,
+      valid_to: toStr,
     };
     setItems((prev) => [...prev, newItem]);
   };
@@ -285,43 +371,32 @@ export default function NewAdmissionPage() {
     setItems((prev) => prev.filter((i) => i.tempId !== tempId));
   };
 
-  const handleBatchChangeForItem = (tempId, newBatchId) => {
-    const b = batches.find((x) => x.id === newBatchId);
-    if (!b || !b.subjects || b.subjects.length === 0) return;
-    const s = b.subjects[0];
-
-    setItems((prev) =>
-      prev.map((itm) =>
-        itm.tempId === tempId
-          ? {
-              ...itm,
-              batch_id: b.id,
-              subject_id: s.subject_id,
-              item_name_snapshot: `${b.name} — ${s.subject_name}`,
-              original_price: Number(s.fee),
-              teacher_id: s.teacher_id || b.teacher_id || null,
-              teacher_name_snapshot: s.teacher_name_snapshot || b.teacher_name_snapshot || null,
-              hall_number_snapshot: s.hall_number || b.hall_number || null,
-            }
-          : itm
-      )
-    );
-  };
-
   const handleSubjectChangeForItem = (tempId, newSubjId) => {
+    const s = subjects.find((x) => x.id === newSubjId);
+    if (!s) return;
+
     setItems((prev) =>
       prev.map((itm) => {
         if (itm.tempId === tempId) {
-          const b = batches.find((x) => x.id === itm.batch_id);
-          const s = b?.subjects?.find((sub) => sub.subject_id === newSubjId);
+          const defaultDisc = s.default_discount_percentage !== undefined && s.default_discount_percentage !== null
+            ? Number(s.default_discount_percentage)
+            : 10;
+          const baseFee = Number(s.default_fee);
+          const m = itm.months || billingMonths || 1;
           return {
             ...itm,
-            subject_id: newSubjId,
-            item_name_snapshot: `${b?.name || 'Batch'} — ${s?.subject_name || 'Subject'}`,
-            original_price: s ? Number(s.fee) : itm.original_price,
-            teacher_id: s?.teacher_id || b?.teacher_id || null,
-            teacher_name_snapshot: s?.teacher_name_snapshot || b?.teacher_name_snapshot || null,
-            hall_number_snapshot: s?.hall_number || b?.hall_number || null,
+            subject_id: s.id,
+            item_name_snapshot: s.name,
+            base_monthly_fee: baseFee,
+            months: m,
+            original_price: baseFee * m,
+            teacher_id: s.teacher_id || null,
+            teacher_name_snapshot: s.teacher_name_snapshot || null,
+            hall_number_snapshot: s.hall_number || 'Main Hall',
+            discount_type: itm.discount_type === 'NONE' && defaultDisc > 0 ? 'PERCENTAGE' : itm.discount_type,
+            discount_value: itm.discount_type === 'PERCENTAGE' && (!itm.discount_value || itm.discount_value === '0' || itm.discount_value === 0)
+              ? String(defaultDisc)
+              : itm.discount_value,
           };
         }
         return itm;
@@ -329,16 +404,44 @@ export default function NewAdmissionPage() {
     );
   };
 
+  const handleOverallDiscountTypeChange = (type) => {
+    setOverallDiscountType(type);
+    if (type === 'PERCENTAGE') {
+      setOverallDiscountValue(overallDiscountValue === '0' || !overallDiscountValue ? '10' : overallDiscountValue);
+    } else if (type === 'FIXED') {
+      setOverallDiscountValue(overallDiscountValue === '0' || !overallDiscountValue ? '200' : overallDiscountValue);
+    } else {
+      setOverallDiscountValue('0');
+    }
+  };
+
   const handleItemDiscountTypeChange = (tempId, type) => {
     setItems((prev) =>
-      prev.map((itm) => (itm.tempId === tempId ? { ...itm, discount_type: type } : itm))
+      prev.map((itm) => {
+        if (itm.tempId === tempId) {
+          let val = itm.discount_value;
+          if (type === 'PERCENTAGE') {
+            const subj = subjects.find((s) => s.id === itm.subject_id);
+            const defaultDisc = subj?.default_discount_percentage !== undefined && subj?.default_discount_percentage !== null
+              ? Number(subj.default_discount_percentage)
+              : 10;
+            val = defaultDisc > 0 ? String(defaultDisc) : '10';
+          } else if (type === 'FIXED') {
+            val = (!val || val === '0' || val === 0 || val === '10') ? '100' : String(val);
+          } else {
+            val = '0';
+          }
+          return { ...itm, discount_type: type, discount_value: val };
+        }
+        return itm;
+      })
     );
   };
 
   const handleItemDiscountValueChange = (tempId, val) => {
     setItems((prev) =>
       prev.map((itm) =>
-        itm.tempId === tempId ? { ...itm, discount_value: parseFloat(val) || 0 } : itm
+        itm.tempId === tempId ? { ...itm, discount_value: val } : itm
       )
     );
   };
@@ -350,27 +453,57 @@ export default function NewAdmissionPage() {
       return;
     }
     if (items.length === 0) {
-      error('Please add at least one batch or subject to the admission');
+      error('Please add at least one subject to the purchase');
       return;
     }
 
     setSubmitting(true);
     try {
-      const itemsPayload = items.map((itm) => ({
-        item_type: itm.item_type,
-        batch_id: itm.batch_id || null,
-        subject_id: itm.subject_id || null,
-        green_card_id: itm.green_card_id || null,
-        teacher_id: itm.teacher_id || null,
-        teacher_name_snapshot: itm.teacher_name_snapshot || null,
-        hall_number_snapshot: itm.hall_number_snapshot || null,
-        item_name_snapshot: itm.item_name_snapshot,
-        original_price: parseFloat(itm.original_price) || 0,
-        discount_type: itm.discount_type,
-        discount_value: parseFloat(itm.discount_value) || 0,
-        valid_from: itm.valid_from || validFrom,
-        valid_to: itm.valid_to || validTo,
-      }));
+      const hasGc = items.some((i) => i.item_type === 'GREEN_CARD');
+      let overallValidTo = validTo;
+      if (hasGc) {
+        const d = new Date(validFrom);
+        d.setDate(d.getDate() + 365);
+        overallValidTo = d.toISOString().split('T')[0];
+      }
+
+      const itemsPayload = items.map((itm) => {
+        const itmMonths = itm.months || billingMonths || 1;
+        let itmFrom = itm.valid_from || validFrom;
+        let itmTo = itm.valid_to || overallValidTo;
+        if (itm.item_type === 'GREEN_CARD') {
+          const d = new Date(itmFrom);
+          d.setDate(d.getDate() + 365);
+          itmTo = d.toISOString().split('T')[0];
+        } else {
+          itmTo = calculateEndDateFromMonths(itmFrom, itmMonths);
+        }
+
+        const baseFee = itm.base_monthly_fee !== undefined
+          ? itm.base_monthly_fee
+          : (parseFloat(itm.original_price) / itmMonths);
+
+        const cleanSubjectName = (itm.item_name_snapshot || '').split(' (')[0].trim();
+        const formattedSnapshotName = itm.item_type === 'SUBJECT'
+          ? `${cleanSubjectName} (${itmMonths} Mo @ ₹${baseFee.toFixed(0)}/mo)`
+          : itm.item_name_snapshot;
+
+        return {
+          item_type: itm.item_type,
+          batch_id: itm.batch_id || null,
+          subject_id: itm.subject_id || null,
+          green_card_id: itm.green_card_id || null,
+          teacher_id: itm.teacher_id || null,
+          teacher_name_snapshot: itm.teacher_name_snapshot || null,
+          hall_number_snapshot: itm.hall_number_snapshot || null,
+          item_name_snapshot: formattedSnapshotName,
+          original_price: parseFloat(itm.original_price) || 0,
+          discount_type: itm.discount_type,
+          discount_value: parseFloat(itm.discount_value) || 0,
+          valid_from: itmFrom,
+          valid_to: itmTo,
+        };
+      });
 
       let initialPaymentPayload = null;
       if (recordInitialPayment && parseFloat(initialPayAmount) > 0) {
@@ -386,7 +519,7 @@ export default function NewAdmissionPage() {
         student_id: studentId,
         admission_date: admissionDate,
         valid_from: validFrom,
-        valid_to: validTo,
+        valid_to: overallValidTo,
         items: itemsPayload,
         overall_discount_type: overallDiscountType,
         overall_discount_value: parseFloat(overallDiscountValue) || 0,
@@ -430,7 +563,7 @@ export default function NewAdmissionPage() {
           <div>
             <h1 className="text-xl font-bold text-black tracking-tight">New Course Purchase</h1>
             <p className="text-xs text-slate-500">
-              Multiple batch & subject enrollment under a unified purchase invoice
+              Combine multiple subjects under a unified purchase invoice with customized discounts & payments
             </p>
           </div>
         </div>
@@ -469,16 +602,16 @@ export default function NewAdmissionPage() {
             />
           </div>
 
-          {/* Date to Date Fee Period (When to When) Selection */}
-          <div className="pt-2 border-t border-slate-100 space-y-2">
+          {/* Fee Period & Billing Duration (Whole Months — No Partial Month) */}
+          <div className="pt-2 border-t border-slate-100 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
               <div>
                 <label className="text-xs font-bold text-black flex items-center gap-1.5">
                   <CalendarDays className="w-4 h-4 text-indigo-600" />
-                  Fee Period / Coverage Dates (When to When)
+                  Fee Period & Billing Duration (Strictly Whole Months — No Partial Month)
                 </label>
                 <p className="text-[11px] text-slate-500">
-                  Select coverage period for this batch purchase (defaulted to next month or day after last batch end)
+                  Coaching fee standard: Subject catalog fees are per 30 days. Bill in whole integer months (1, 2, 3, 6, 12).
                 </p>
               </div>
 
@@ -493,12 +626,78 @@ export default function NewAdmissionPage() {
               <div className="bg-amber-50/70 border border-amber-200 rounded-md p-2 text-xs text-amber-900 flex items-center gap-2">
                 <CalendarDays className="w-4 h-4 text-amber-600 shrink-0" />
                 <span>
-                  Previous batch ended on <strong>{lastBatchPeriodInfo.last_end_date}</strong>. By default, next fee cycle starts on <strong>{lastBatchPeriodInfo.suggested_start_date}</strong>. You can modify the start date below.
+                  Previous batch ended on <strong>{lastBatchPeriodInfo.last_end_date}</strong>. Next fee cycle starts on <strong>{lastBatchPeriodInfo.suggested_start_date}</strong>.
                 </span>
               </div>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Quick Month Preset Buttons */}
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-slate-700">
+                  Select Subscription Duration:
+                </span>
+                <span className="text-[11px] text-indigo-700 font-bold">
+                  {billingMonths} Month{billingMonths > 1 ? 's' : ''} ({billingMonths * 30} Days Coverage)
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {[
+                  { m: 1, label: '1 Month', days: '30d' },
+                  { m: 2, label: '2 Months', days: '60d' },
+                  { m: 3, label: '3 Months (Quarter)', days: '90d' },
+                  { m: 6, label: '6 Months (Half-Yr)', days: '180d' },
+                  { m: 12, label: '12 Months (Full Yr)', days: '360d' },
+                ].map((preset) => {
+                  const isSelected = billingMonths === preset.m;
+                  return (
+                    <button
+                      key={preset.m}
+                      type="button"
+                      onClick={() => handleBillingMonthsChange(preset.m)}
+                      className={`px-3 py-1.5 rounded-md text-xs font-semibold transition flex items-center gap-1.5 border ${
+                        isSelected
+                          ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs'
+                          : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100 hover:border-slate-400'
+                      }`}
+                    >
+                      <span>{preset.label}</span>
+                      <span
+                        className={`text-[10px] px-1 py-0.2 rounded font-mono ${
+                          isSelected ? 'bg-indigo-700 text-indigo-100' : 'bg-slate-100 text-slate-500'
+                        }`}
+                      >
+                        {preset.days}
+                      </span>
+                    </button>
+                  );
+                })}
+
+                {/* Custom Month Stepper */}
+                <div className="flex items-center gap-1.5 ml-auto">
+                  <span className="text-xs text-slate-600 font-medium">Custom:</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="36"
+                    step="1"
+                    value={billingMonths}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      if (!isNaN(val) && val >= 1) {
+                        handleBillingMonthsChange(val);
+                      }
+                    }}
+                    className="w-16 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-center font-bold text-black font-mono focus:outline-none focus:border-indigo-600"
+                  />
+                  <span className="text-xs text-slate-500">months</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Date Range Inputs */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
               <Input
                 label="Coverage Start Date (From Date)"
                 type="date"
@@ -506,13 +705,17 @@ export default function NewAdmissionPage() {
                 onChange={(e) => handleValidFromChange(e.target.value)}
                 required
               />
-              <Input
-                label="Coverage End Date (To Date)"
-                type="date"
-                value={validTo}
-                onChange={(e) => setValidTo(e.target.value)}
-                required
-              />
+              <div>
+                <label className="block text-xs font-semibold text-black mb-1">
+                  Coverage End Date (Auto-calculated: +{billingMonths * 30} days)
+                </label>
+                <div className="w-full rounded border border-slate-300 bg-slate-100 font-mono font-bold text-black px-3 py-2 text-xs flex items-center justify-between">
+                  <span>{validTo}</span>
+                  <span className="text-[10px] bg-indigo-100 text-indigo-800 px-1.5 py-0.5 rounded font-sans font-semibold">
+                    {billingMonths} mo • {billingMonths * 30}d
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -546,15 +749,15 @@ export default function NewAdmissionPage() {
           )}
         </div>
 
-        {/* Step 2: Enrolled Batches, Subjects & Individual Discounts */}
+        {/* Step 2: Enrolled Subjects & Individual Discounts */}
         <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2">
             <div>
               <h2 className="text-xs font-bold uppercase tracking-wider text-black">
-                2. Select Courses, Batches, Subjects & Discounts
+                2. Select Subjects & Combine at Purchase
               </h2>
               <p className="text-[11px] text-slate-500">
-                A student can purchase multiple batches and subjects under one unified transaction
+                Select and combine multiple subjects under one unified admission & payment transaction
               </p>
             </div>
 
@@ -563,9 +766,9 @@ export default function NewAdmissionPage() {
                 size="xs"
                 variant="primary"
                 icon={Plus}
-                onClick={handleAddBatchSubject}
+                onClick={handleAddSubject}
               >
-                Add Batch Subject
+                Add Subject
               </Button>
               <Button
                 size="xs"
@@ -580,15 +783,14 @@ export default function NewAdmissionPage() {
 
           {items.length === 0 ? (
             <div className="p-8 border-2 border-dashed border-slate-200 rounded-lg text-center space-y-2">
-              <p className="text-xs text-slate-500">No batches or subjects selected yet.</p>
-              <Button size="xs" variant="primary" onClick={handleAddBatchSubject}>
+              <p className="text-xs text-slate-500">No subjects selected yet.</p>
+              <Button size="xs" variant="primary" onClick={handleAddSubject}>
                 Add First Subject
               </Button>
             </div>
           ) : (
             <div className="space-y-3">
               {items.map((itm, index) => {
-                const currentBatch = batches.find((b) => b.id === itm.batch_id);
                 return (
                   <div
                     key={itm.tempId}
@@ -602,7 +804,7 @@ export default function NewAdmissionPage() {
                         {itm.item_type === 'GREEN_CARD' ? (
                           <Badge variant="purple">Green Card All-Access Pass</Badge>
                         ) : (
-                          <span>Batch Subject Course</span>
+                          <span>Subject Course</span>
                         )}
                       </span>
 
@@ -616,86 +818,108 @@ export default function NewAdmissionPage() {
                       </button>
                     </div>
 
-                    {itm.item_type === 'BATCH_SUBJECT' ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
-                        <div className="sm:col-span-2">
+                    {itm.item_type !== 'GREEN_CARD' ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
+                        {/* Select Subject */}
+                        <div className="sm:col-span-6">
                           <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">
-                            Batch
-                          </label>
-                          <select
-                            value={itm.batch_id || ''}
-                            onChange={(e) => handleBatchChangeForItem(itm.tempId, e.target.value)}
-                            className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-black focus:outline-none focus:border-indigo-600"
-                          >
-                            {batches.map((b) => (
-                              <option key={b.id} value={b.id}>
-                                {b.name} ({b.teacher_name_snapshot || 'Faculty'})
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">
-                            Subject
+                            Select Subject
                           </label>
                           <select
                             value={itm.subject_id || ''}
                             onChange={(e) => handleSubjectChangeForItem(itm.tempId, e.target.value)}
-                            className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-black focus:outline-none focus:border-indigo-600"
+                            className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-black focus:outline-none focus:border-indigo-600 font-medium"
                           >
-                            {(currentBatch?.subjects || []).map((s) => (
-                              <option key={s.subject_id} value={s.subject_id}>
-                                {s.subject_name} (₹{Number(s.fee).toFixed(0)})
+                            {subjects.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.name} — ₹{Number(s.default_fee).toFixed(0)}/mo {s.teacher_name_snapshot ? `(${s.teacher_name_snapshot})` : ''} {s.schedule ? `• [${s.schedule}]` : ''}
                               </option>
                             ))}
                           </select>
                         </div>
 
-                        <div>
+                        {/* Whole Months Duration for this item */}
+                        <div className="sm:col-span-3">
                           <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">
-                            Price (₹)
+                            Duration (Whole Months)
                           </label>
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="number"
+                              min="1"
+                              max="36"
+                              step="1"
+                              value={itm.months || billingMonths || 1}
+                              onChange={(e) => handleItemMonthsChange(itm.tempId, e.target.value)}
+                              className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-center font-bold text-black font-mono focus:outline-none focus:border-indigo-600"
+                            />
+                            <span className="text-[11px] text-slate-600 font-medium">mo</span>
+                          </div>
+                        </div>
+
+                        {/* Calculated Price */}
+                        <div className="sm:col-span-3">
+                          <div className="flex items-center justify-between">
+                            <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">
+                              Calculated Fee (₹)
+                            </label>
+                            <span className="text-[10px] text-indigo-700 font-mono">
+                              ₹{(itm.base_monthly_fee !== undefined ? itm.base_monthly_fee : (Number(itm.original_price) / (itm.months || 1))).toFixed(0)}/mo
+                            </span>
+                          </div>
                           <input
                             type="number"
                             readOnly
                             value={itm.original_price}
-                            className="w-full rounded border border-slate-300 bg-slate-100 font-mono font-bold text-black px-2 py-1 text-xs"
+                            className="w-full rounded border border-slate-300 bg-slate-100 font-mono font-bold text-black px-2 py-1.5 text-xs text-right"
                           />
                         </div>
 
-                        {/* Snapshot badge preview */}
-                        <div className="sm:col-span-4 flex flex-wrap items-center gap-2 text-[11px] text-slate-700 bg-white border border-slate-200 rounded px-2.5 py-1 font-medium">
-                          <span>Faculty: <strong className="text-indigo-900">{itm.teacher_name_snapshot || currentBatch?.teacher_name_snapshot || 'Coordinator'}</strong></span>
+                        {/* Snapshot badge preview & dates */}
+                        <div className="sm:col-span-12 flex flex-wrap items-center gap-2 text-[11px] text-slate-700 bg-white border border-slate-200 rounded px-2.5 py-1 font-medium">
+                          <span>Faculty: <strong className="text-indigo-900">{itm.teacher_name_snapshot || 'General Faculty'}</strong></span>
                           <span>•</span>
-                          <span>Classroom: <strong className="text-black">{itm.hall_number_snapshot || currentBatch?.hall_number || 'Main Hall'}</strong></span>
+                          <span>Classroom: <strong className="text-black">{itm.hall_number_snapshot || 'Main Hall'}</strong></span>
+                          {(() => {
+                            const matched = subjects.find((s) => s.id === itm.subject_id);
+                            return matched?.schedule ? (
+                              <>
+                                <span>•</span>
+                                <span>Schedule: <strong className="text-indigo-700">{matched.schedule}</strong></span>
+                              </>
+                            ) : null;
+                          })()}
+                          <span className="ml-auto font-mono text-emerald-800 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                            Valid: {validFrom} &rarr; {calculateEndDateFromMonths(validFrom, itm.months || billingMonths || 1)} ({(itm.months || billingMonths || 1) * 30} days)
+                          </span>
                         </div>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 items-end">
                         <div className="sm:col-span-3">
                           <span className="font-bold text-black text-sm">{itm.item_name_snapshot}</span>
                           <span className="text-[11px] text-slate-500 block">
-                            Includes all current and upcoming eligible active batches for 365 days
+                            Includes all current and upcoming eligible active classes & subjects for 1 full year (365 days)
                           </span>
                         </div>
                         <div>
                           <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">
-                            Price (₹)
+                            Annual Fee (₹)
                           </label>
                           <input
                             type="number"
                             readOnly
                             value={itm.original_price}
-                            className="w-full rounded border border-slate-300 bg-slate-100 font-mono font-bold text-black px-2 py-1 text-xs"
+                            className="w-full rounded border border-slate-300 bg-slate-100 font-mono font-bold text-black px-2 py-1.5 text-xs text-right"
                           />
                         </div>
 
                         {/* Snapshot badge preview */}
-                        <div className="sm:col-span-4 flex flex-wrap items-center gap-2 text-[11px] text-slate-700 bg-white border border-slate-200 rounded px-2.5 py-1 font-medium">
-                          <span>Faculty: <strong className="text-indigo-900">{itm.teacher_name_snapshot || currentBatch?.teacher_name_snapshot || 'Coordinator'}</strong></span>
-                          <span>•</span>
-                          <span>Classroom: <strong className="text-black">{itm.hall_number_snapshot || currentBatch?.hall_number || 'Main Hall'}</strong></span>
+                        <div className="sm:col-span-4 flex flex-wrap items-center justify-between text-[11px] text-slate-700 bg-white border border-slate-200 rounded px-2.5 py-1 font-medium">
+                          <span>Access: <strong className="text-purple-900">All Subjects & Faculty</strong></span>
+                          <span className="font-mono text-purple-800 bg-purple-50 px-1.5 py-0.2 rounded border border-purple-200">
+                            Valid: {validFrom} &rarr; {validTo} (365 days / 1 Year)
+                          </span>
                         </div>
                       </div>
                     )}
@@ -722,11 +946,16 @@ export default function NewAdmissionPage() {
                             type="number"
                             step="0.01"
                             min="0"
-                            placeholder={itm.discount_type === 'PERCENTAGE' ? 'Discount %' : 'Discount ₹'}
-                            value={itm.discount_value}
+                            placeholder={itm.discount_type === 'PERCENTAGE' ? 'Discount % (e.g. 10)' : 'Discount ₹'}
+                            value={itm.discount_value === 0 || itm.discount_value === '0' ? '' : itm.discount_value}
                             onChange={(e) =>
                               handleItemDiscountValueChange(itm.tempId, e.target.value)
                             }
+                            onFocus={(e) => {
+                              if (e.target.value === '0') {
+                                handleItemDiscountValueChange(itm.tempId, '');
+                              }
+                            }}
                             className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-black font-mono focus:outline-none focus:border-indigo-600"
                           />
                         </div>
@@ -754,7 +983,7 @@ export default function NewAdmissionPage() {
               <div className="grid grid-cols-2 gap-2">
                 <select
                   value={overallDiscountType}
-                  onChange={(e) => setOverallDiscountType(e.target.value)}
+                  onChange={(e) => handleOverallDiscountTypeChange(e.target.value)}
                   className="rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-black focus:outline-none focus:border-indigo-600"
                 >
                   <option value="NONE">No Overall Discount</option>
@@ -767,9 +996,14 @@ export default function NewAdmissionPage() {
                   step="0.01"
                   min="0"
                   disabled={overallDiscountType === 'NONE'}
-                  value={overallDiscountValue}
+                  value={overallDiscountValue === '0' || overallDiscountValue === 0 ? '' : overallDiscountValue}
                   onChange={(e) => setOverallDiscountValue(e.target.value)}
-                  placeholder="Discount value"
+                  onFocus={(e) => {
+                    if (e.target.value === '0') {
+                      setOverallDiscountValue('');
+                    }
+                  }}
+                  placeholder={overallDiscountType === 'PERCENTAGE' ? 'Discount % (e.g. 10)' : 'Discount ₹'}
                   className="rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-black font-mono focus:outline-none focus:border-indigo-600 disabled:bg-slate-100"
                 />
               </div>
