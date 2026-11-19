@@ -41,9 +41,18 @@ export default function StudentsPage() {
 
   const columns = [
     {
-      header: 'Student ID',
-      accessor: 'student_code',
-      className: 'font-mono font-bold text-indigo-700 w-28',
+      header: 'Student / Admission No',
+      render: (s) => (
+        <div>
+          <span className="font-mono font-bold text-indigo-700 block">{s.student_code}</span>
+          {s.latest_admission_number && (
+            <span className="font-mono text-[10px] text-emerald-800 font-semibold bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200 inline-block mt-0.5">
+              Adm: {s.latest_admission_number}
+            </span>
+          )}
+        </div>
+      ),
+      className: 'w-36',
     },
     {
       header: 'Student Name',
@@ -144,7 +153,7 @@ export default function StudentsPage() {
         }}
         onRefresh={loadStudents}
         loading={loading}
-        searchPlaceholder="Search by student name, code, or phone number..."
+        searchPlaceholder="Search by student name, mobile no, student code, or admission no..."
         emptyMessage="No students registered yet."
       />
 

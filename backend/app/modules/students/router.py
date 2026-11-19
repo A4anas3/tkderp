@@ -26,11 +26,17 @@ async def list_students(
     count_query = select(func.count(Student.id))
 
     if search:
+        clean_search = search.strip()
+        search_pattern = f"%{clean_search}%"
+        # Subquery to match student by admission number
+        adm_subquery = select(Admission.student_id).where(Admission.admission_number.ilike(search_pattern))
+
         search_filter = or_(
-            Student.name.ilike(f"%{search}%"),
-            Student.student_code.ilike(f"%{search}%"),
-            Student.mobile.ilike(f"%{search}%"),
-            Student.father_name.ilike(f"%{search}%")
+            Student.name.ilike(search_pattern),
+            Student.student_code.ilike(search_pattern),
+            Student.mobile.ilike(search_pattern),
+            Student.father_name.ilike(search_pattern),
+            Student.id.in_(adm_subquery)
         )
         query = query.where(search_filter)
         count_query = count_query.where(search_filter)
@@ -45,8 +51,28 @@ async def list_students(
     query = query.order_by(Student.registration_date.desc(), Student.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
     items = (await db.execute(query)).scalars().all()
 
+    # Map latest admission number for display in student search dropdown
+    student_ids = [s.id for s in items]
+    adm_map = {}
+    if student_ids:
+        adm_stmt = (
+            select(Admission.student_id, Admission.admission_number)
+            .where(Admission.student_id.in_(student_ids))
+            .order_by(Admission.created_at.desc())
+        )
+        adm_res = await db.execute(adm_stmt)
+        for s_id, adm_no in adm_res.all():
+            if s_id not in adm_map:
+                adm_map[s_id] = adm_no
+
+    response_items = []
+    for s in items:
+        resp = StudentResponse.model_validate(s)
+        resp.latest_admission_number = adm_map.get(s.id)
+        response_items.append(resp)
+
     return PageResponse(
-        items=[StudentResponse.model_validate(s) for s in items],
+        items=response_items,
         total=total,
         page=page,
         page_size=page_size,

@@ -35,6 +35,7 @@ class StudentUpdate(BaseModel):
 class StudentResponse(StudentBase):
     id: uuid.UUID
     student_code: str
+    latest_admission_number: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

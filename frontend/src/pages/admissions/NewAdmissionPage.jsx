@@ -16,6 +16,7 @@ import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
+import StudentSearchSelect from '../../components/common/StudentSearchSelect';
 import {
   studentApi,
   batchApi,
@@ -375,32 +376,14 @@ export default function NewAdmissionPage() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
             <div className="sm:col-span-2">
               <label className="block text-xs font-semibold text-black mb-1">
-                Student <span className="text-rose-600">*</span>
+                Registered Student <span className="text-rose-600">*</span>
               </label>
-              <div className="flex gap-2">
-                <select
-                  value={studentId}
-                  onChange={(e) => setStudentId(e.target.value)}
-                  className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs sm:text-sm text-black focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 shadow-sm"
-                  required
-                >
-                  <option value="">Select registered student...</option>
-                  {students.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} ({s.student_code}) {s.mobile ? `— Mob: ${s.mobile}` : ''}
-                    </option>
-                  ))}
-                </select>
-
-                <Button
-                  variant="secondary"
-                  icon={UserPlus}
-                  onClick={() => setIsQuickStudentOpen(true)}
-                  title="Quick Register New Student"
-                >
-                  New
-                </Button>
-              </div>
+              <StudentSearchSelect
+                value={studentId}
+                onChange={(id) => setStudentId(id)}
+                onOpenQuickRegister={() => setIsQuickStudentOpen(true)}
+                required
+              />
             </div>
 
             <Input
