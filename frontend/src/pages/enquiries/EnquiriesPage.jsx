@@ -10,6 +10,9 @@ import {
   Calendar,
   Filter,
   ExternalLink,
+  Edit2,
+  BookOpen,
+  Sparkles,
 } from 'lucide-react';
 import DataTable from '../../components/common/DataTable';
 import Modal from '../../components/common/Modal';
@@ -18,7 +21,7 @@ import Select from '../../components/common/Select';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
 import EnquiryDetailModal from '../../components/modals/EnquiryDetailModal';
-import { enquiryApi } from '../../services/allApis';
+import { enquiryApi, subjectApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 
 export default function EnquiriesPage() {
@@ -39,6 +42,22 @@ export default function EnquiriesPage() {
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [detailEnquiry, setDetailEnquiry] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Available subjects for dropdown
+  const [availableSubjects, setAvailableSubjects] = useState([]);
+
+  // Quick Change / Update Interested Course Modal
+  const [courseUpdateModalOpen, setCourseUpdateModalOpen] = useState(false);
+  const [selectedCourseEnquiry, setSelectedCourseEnquiry] = useState(null);
+  const [courseFormData, setCourseFormData] = useState({
+    interested_subject: '',
+    purpose: '',
+    demo_start_date: '',
+    demo_duration_days: 3,
+    status: 'ACTIVE_DEMO',
+    notes: '',
+  });
+  const [courseUpdating, setCourseUpdating] = useState(false);
   const [formData, setFormData] = useState({
     student_name: '',
     mobile: '',
@@ -86,6 +105,10 @@ export default function EnquiriesPage() {
 
   useEffect(() => {
     loadDeadlines();
+    subjectApi
+      .getAll()
+      .then((subs) => setAvailableSubjects(subs || []))
+      .catch(console.warn);
   }, []);
 
   const handleCreateEnquiry = async (e) => {
@@ -103,7 +126,7 @@ export default function EnquiriesPage() {
         purpose: formData.purpose.trim() || null,
         interested_subject: formData.interested_subject.trim() || null,
         demo_start_date: formData.demo_start_date || null,
-        demo_duration_days: parseInt(formData.demo_duration_days) || 0,
+        demo_duration_days: parseInt(formData.demo_duration_days, 10) || 0,
         status: formData.status,
         notes: formData.notes.trim() || null,
       };
@@ -130,13 +153,56 @@ export default function EnquiriesPage() {
     }
   };
 
-  const handleConvertToAdmission = (enq) => {
+  const handleOpenCourseUpdate = (enq, ev) => {
+    if (ev) ev.stopPropagation();
+    setSelectedCourseEnquiry(enq);
+    setCourseFormData({
+      interested_subject: enq.interested_subject || '',
+      purpose: enq.purpose || '',
+      demo_start_date: enq.demo_start_date || '',
+      demo_duration_days: enq.demo_duration_days || 3,
+      status: enq.status || 'ACTIVE_DEMO',
+      notes: enq.notes || '',
+    });
+    setCourseUpdateModalOpen(true);
+  };
+
+  const handleSaveCourseUpdate = async (e) => {
+    e.preventDefault();
+    if (!courseFormData.interested_subject.trim()) {
+      error('Interested course / subject is required');
+      return;
+    }
+
+    setCourseUpdating(true);
+    try {
+      await enquiryApi.update(selectedCourseEnquiry.id, {
+        interested_subject: courseFormData.interested_subject.trim(),
+        purpose: courseFormData.purpose.trim() || null,
+        demo_start_date: courseFormData.demo_start_date || null,
+        demo_duration_days: parseInt(courseFormData.demo_duration_days, 10) || 3,
+        status: courseFormData.status,
+        notes: courseFormData.notes ? courseFormData.notes.trim() : null,
+      });
+      success(`Updated interested course for ${selectedCourseEnquiry.student_name}`);
+      setCourseUpdateModalOpen(false);
+      loadEnquiries();
+      loadDeadlines();
+    } catch (err) {
+      error(err.message || 'Failed to update interested subject');
+    } finally {
+      setCourseUpdating(false);
+    }
+  };
+
+  const handleConvertToAdmission = (enq, ev) => {
+    if (ev) ev.stopPropagation();
     navigate(
       `/admissions/new?enquiry_id=${enq.id}&name=${encodeURIComponent(
         enq.student_name
       )}&mobile=${encodeURIComponent(enq.mobile || '')}&subject=${encodeURIComponent(
         enq.interested_subject || ''
-      )}`
+      )}&purpose=${encodeURIComponent(enq.purpose || '')}&auto_register=1`
     );
   };
 
@@ -154,8 +220,24 @@ export default function EnquiriesPage() {
     },
     {
       header: 'Interested Course / Subject',
-      accessor: 'interested_subject',
       className: 'text-xs font-medium text-slate-800',
+      render: (e) => (
+        <div className="flex items-center justify-between gap-1 group">
+          <div>
+            <div className="font-bold text-black flex items-center gap-1.5">
+              <span>{e.interested_subject}</span>
+            </div>
+            <div className="text-[11px] text-slate-500 font-medium">{e.purpose || 'Coaching Trial'}</div>
+          </div>
+          <button
+            onClick={(ev) => handleOpenCourseUpdate(e, ev)}
+            title="Change / Update Interested Subject & Trial Details"
+            className="p-1 rounded text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 border border-transparent hover:border-indigo-200 transition cursor-pointer shrink-0"
+          >
+            <Edit2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      ),
     },
     {
       header: 'Contact Phone',
@@ -321,10 +403,20 @@ export default function EnquiriesPage() {
                         {isOverdue ? 'Expired' : isToday ? 'Ends Today' : 'Active'}
                       </Badge>
                     </div>
-                    <p className="text-[11px] text-slate-600 mt-0.5">
-                      Subject: <strong className="text-black">{d.interested_subject || 'General'}</strong>
-                    </p>
-                    <p className="text-[11px] text-slate-500">
+                    <div className="flex items-center justify-between mt-1">
+                      <p className="text-[11px] text-slate-600">
+                        Subject: <strong className="text-black">{d.interested_subject || 'General'}</strong>
+                      </p>
+                      <button
+                        onClick={(ev) => handleOpenCourseUpdate(d, ev)}
+                        className="text-[10px] font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded border border-indigo-200 inline-flex items-center gap-0.5 cursor-pointer ml-1"
+                        title="Change / Update Interested Subject"
+                      >
+                        <Edit2 className="w-2.5 h-2.5" />
+                        <span>Change</span>
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
                       Deadline: <strong className="font-mono text-black">{d.demo_deadline}</strong>
                     </p>
                   </div>
@@ -489,6 +581,150 @@ export default function EnquiriesPage() {
         enquiry={detailEnquiry}
         onConvertToAdmission={(e) => handleConvertToAdmission(e)}
       />
+
+      {/* Quick Change / Update Interested Course Modal */}
+      <Modal
+        isOpen={courseUpdateModalOpen}
+        onClose={() => setCourseUpdateModalOpen(false)}
+        title="Update Interested Course & Trial Schedule"
+        subtitle={`Student: ${selectedCourseEnquiry?.student_name || ''} • ${selectedCourseEnquiry?.mobile || ''}`}
+        maxWidth="max-w-md"
+      >
+        <form onSubmit={handleSaveCourseUpdate} className="space-y-3 text-xs">
+          {/* Quick select helper from institute catalog */}
+          {availableSubjects.length > 0 && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Select from Institute Subjects
+              </label>
+              <select
+                onChange={(e) => {
+                  if (e.target.value) {
+                    setCourseFormData((prev) => ({
+                      ...prev,
+                      interested_subject: e.target.value,
+                    }));
+                  }
+                }}
+                defaultValue=""
+                className="w-full text-xs p-2 bg-slate-50 border border-slate-300 rounded-lg text-black font-medium"
+              >
+                <option value="">-- Choose from subjects catalog --</option>
+                {availableSubjects.map((sub) => (
+                  <option key={sub.id} value={sub.name}>
+                    {sub.name} ({sub.subject_code})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <Input
+            label="Interested Course / Subject Name"
+            required
+            value={courseFormData.interested_subject}
+            onChange={(e) =>
+              setCourseFormData({ ...courseFormData, interested_subject: e.target.value })
+            }
+            placeholder="e.g. Mathematics, Physics, Class 10 Foundation"
+          />
+
+          <Input
+            label="Target Purpose / Class"
+            value={courseFormData.purpose}
+            onChange={(e) =>
+              setCourseFormData({ ...courseFormData, purpose: e.target.value })
+            }
+            placeholder="e.g. Class 10 Board prep / JEE Foundation"
+          />
+
+          <div className="grid grid-cols-2 gap-2">
+            <Input
+              label="Demo Start Date"
+              type="date"
+              value={courseFormData.demo_start_date}
+              onChange={(e) =>
+                setCourseFormData({ ...courseFormData, demo_start_date: e.target.value })
+              }
+            />
+            <Input
+              label="Duration (Days)"
+              type="number"
+              min="1"
+              max="30"
+              value={courseFormData.demo_duration_days}
+              onChange={(e) =>
+                setCourseFormData({ ...courseFormData, demo_duration_days: e.target.value })
+              }
+            />
+          </div>
+
+          <Select
+            label="Enquiry Trial Status"
+            value={courseFormData.status}
+            onChange={(e) =>
+              setCourseFormData({ ...courseFormData, status: e.target.value })
+            }
+            options={[
+              { value: 'ACTIVE_DEMO', label: 'Active Demo (Attending trial)' },
+              { value: 'PENDING', label: 'Pending Demo (Walk-in only)' },
+              { value: 'CONVERTED', label: 'Converted to Admission' },
+              { value: 'EXPIRED', label: 'Expired / Lapsed Demo' },
+              { value: 'NOT_INTERESTED', label: 'Not Interested' },
+            ]}
+          />
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Counselor Follow-up Notes
+            </label>
+            <textarea
+              rows={2}
+              value={courseFormData.notes}
+              onChange={(e) =>
+                setCourseFormData({ ...courseFormData, notes: e.target.value })
+              }
+              placeholder="e.g. Student requested to switch to Physics batch..."
+              className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg text-black focus:ring-1 focus:ring-indigo-500 font-medium"
+            />
+          </div>
+
+          <div className="pt-2 flex items-center justify-between border-t border-slate-100">
+            <Button
+              type="button"
+              variant="secondary"
+              size="xs"
+              onClick={() => {
+                setCourseUpdateModalOpen(false);
+                handleConvertToAdmission(selectedCourseEnquiry);
+              }}
+              title="Proceed to register student and bill admission"
+            >
+              Admit Student ↗
+            </Button>
+
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="xs"
+                onClick={() => setCourseUpdateModalOpen(false)}
+                disabled={courseUpdating}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                size="xs"
+                loading={courseUpdating}
+              >
+                Save Changes
+              </Button>
+            </div>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

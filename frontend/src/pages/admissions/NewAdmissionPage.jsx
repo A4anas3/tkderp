@@ -41,7 +41,10 @@ export default function NewAdmissionPage() {
   const paramEnquiryId = searchParams.get('enquiry_id');
   const paramName = searchParams.get('name');
   const paramMobile = searchParams.get('mobile');
-  const paramItemType = searchParams.get('item_type');
+  const paramSubject = searchParams.get('subject');
+  const paramPurpose = searchParams.get('purpose');
+  const paramFather = searchParams.get('father_name');
+  const paramAutoRegister = searchParams.get('auto_register');
 
   // Form State
   const [students, setStudents] = useState([]);
@@ -84,6 +87,7 @@ export default function NewAdmissionPage() {
 
   // Modals
   const [isQuickStudentOpen, setIsQuickStudentOpen] = useState(false);
+  const [quickStudentInitialData, setQuickStudentInitialData] = useState(null);
   const [completedAdmission, setCompletedAdmission] = useState(null);
 
   const calculateEndDateFromMonths = (startDateStr, monthsCount) => {
@@ -164,6 +168,15 @@ export default function NewAdmissionPage() {
         );
         if (found) {
           setStudentId(found.id);
+        } else {
+          // Student not registered yet: prepare reusable details and open Quick Student Registration!
+          setQuickStudentInitialData({
+            name: paramName,
+            mobile: paramMobile || '',
+            father_name: paramFather || '',
+            notes: `Admitted from Enquiry #${paramEnquiryId} (${paramPurpose || 'Student Admission'})`,
+          });
+          setIsQuickStudentOpen(true);
         }
       }
 
@@ -182,8 +195,18 @@ export default function NewAdmissionPage() {
           },
         ]);
       } else if (items.length === 0 && loadedSubjects.length > 0) {
-        // Pre-add the first active subject for user convenience
-        const firstSub = loadedSubjects[0];
+        // Match subject from enquiry if specified
+        let matchedSub = null;
+        if (paramSubject) {
+          const sSearch = paramSubject.toLowerCase();
+          matchedSub = loadedSubjects.find(
+            (sub) =>
+              sub.name.toLowerCase().includes(sSearch) ||
+              sSearch.includes(sub.name.toLowerCase()) ||
+              (sub.subject_code && sSearch.includes(sub.subject_code.toLowerCase()))
+          );
+        }
+        const firstSub = matchedSub || loadedSubjects[0];
         const defaultDisc = firstSub.default_discount_percentage !== undefined && firstSub.default_discount_percentage !== null
           ? Number(firstSub.default_discount_percentage)
           : 10;
@@ -212,7 +235,7 @@ export default function NewAdmissionPage() {
     } finally {
       setLoadingRefs(false);
     }
-  }, [paramStudentId, paramEnquiryId, paramName, paramMobile, paramItemType]);
+  }, [paramStudentId, paramEnquiryId, paramName, paramMobile, paramItemType, paramSubject, paramFather, paramPurpose, paramAutoRegister]);
 
   useEffect(() => {
     loadReferences();
@@ -571,6 +594,45 @@ export default function NewAdmissionPage() {
           <Badge variant="warning">Converting from Enquiry / Demo</Badge>
         )}
       </div>
+
+      {/* Enquiry Conversion Reusable Banner */}
+      {paramEnquiryId && (
+        <div className="p-3.5 bg-indigo-50 border border-indigo-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-indigo-100 text-indigo-700 shrink-0">
+              <UserPlus className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-indigo-950 uppercase tracking-wider">
+                Converting Enquiry for: <span className="text-black font-black text-sm">{paramName || 'Enquiry Student'}</span>
+              </div>
+              <div className="text-[11px] text-indigo-800 font-medium mt-0.5">
+                {paramMobile ? `📞 ${paramMobile} • ` : ''}
+                {paramSubject ? `Interested in: ${paramSubject} • ` : ''}
+                {studentId ? 'Registered student profile linked' : 'Student not registered yet. Details pre-filled for quick registration.'}
+              </div>
+            </div>
+          </div>
+          {!studentId && (
+            <Button
+              size="xs"
+              variant="primary"
+              icon={UserPlus}
+              onClick={() => {
+                setQuickStudentInitialData({
+                  name: paramName || '',
+                  mobile: paramMobile || '',
+                  father_name: paramFather || '',
+                  notes: `Admitted from Enquiry #${paramEnquiryId} (${paramPurpose || 'Student Admission'})`,
+                });
+                setIsQuickStudentOpen(true);
+              }}
+            >
+              Open New Registration
+            </Button>
+          )}
+        </div>
+      )}
 
       <form onSubmit={handleSubmitAdmission} className="space-y-4">
         {/* Step 1: Student & Date Card */}
@@ -1220,13 +1282,22 @@ export default function NewAdmissionPage() {
         </div>
       </form>
 
-      {/* Quick Student Modal */}
+      {/* Quick Student Modal with Reusable Enquiry Details */}
       <QuickStudentModal
         isOpen={isQuickStudentOpen}
         onClose={() => setIsQuickStudentOpen(false)}
+        initialData={quickStudentInitialData}
         onSuccess={(newStu) => {
           setStudents((prev) => [newStu, ...prev]);
           setStudentId(newStu.id);
+          setIsQuickStudentOpen(false);
+          if (paramEnquiryId) {
+            enquiryApi.update(paramEnquiryId, {
+              status: 'CONVERTED',
+              converted_student_id: newStu.id,
+            }).catch(console.warn);
+          }
+          success(`Student ${newStu.name} registered and selected for admission!`);
         }}
       />
 

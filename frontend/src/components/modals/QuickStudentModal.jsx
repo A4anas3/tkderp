@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Camera, Upload, CheckCircle2, X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Camera, Upload, CheckCircle2, X, Sparkles } from 'lucide-react';
 import Modal from '../common/Modal';
 import Input from '../common/Input';
 import Button from '../common/Button';
@@ -8,7 +8,7 @@ import { studentApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 import { compressImage } from '../../utils/imageCompressor';
 
-export default function QuickStudentModal({ isOpen, onClose, onSuccess }) {
+export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialData = null }) {
   const { success, error } = useToast();
   const [loading, setLoading] = useState(false);
   const [compressing, setCompressing] = useState(false);
@@ -24,6 +24,22 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess }) {
     dob: '',
     notes: '',
   });
+
+  useEffect(() => {
+    if (isOpen) {
+      setFormData({
+        name: initialData?.name || '',
+        mobile: initialData?.mobile || '',
+        father_name: initialData?.father_name || '',
+        email: initialData?.email || '',
+        address: initialData?.address || '',
+        dob: initialData?.dob || '',
+        notes: initialData?.notes || '',
+      });
+      setPhotoFile(null);
+      setPhotoPreview(initialData?.photo_url || null);
+    }
+  }, [isOpen, initialData]);
 
   const handleChange = (e) => {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -113,6 +129,12 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess }) {
       maxWidth="max-w-md"
     >
       <form onSubmit={handleSubmit} className="space-y-3">
+        {initialData?.name && (
+          <div className="p-2.5 bg-indigo-50 border border-indigo-200 rounded-lg flex items-center gap-2 text-xs text-indigo-900 font-semibold">
+            <Sparkles className="w-4 h-4 text-indigo-600 shrink-0" />
+            <span>Pre-filled with reusable details from student enquiry</span>
+          </div>
+        )}
         {/* Profile Image Upload Box */}
         <div className="flex items-center gap-3 p-2.5 bg-slate-50 border border-slate-200 rounded-lg">
           <Avatar src={photoPreview} name={formData.name || 'Student'} size="lg" />

@@ -279,9 +279,9 @@ async def convert_enquiry_to_student(
     await db.commit()
 
     return {
-        "message": f"Successfully converted enquiry to student {student.registration_no}",
+        "message": f"Successfully converted enquiry to student {student.student_code}",
         "student_id": str(student.id),
-        "registration_no": student.registration_no,
-        "full_name": student.full_name,
+        "student_code": student.student_code,
+        "name": student.name,
         "status": "CONVERTED"
     }

@@ -93,6 +93,9 @@ export default function EnquiryDetailPage() {
       mobile: enquiry.mobile || '',
       father_name: enquiry.father_name || '',
       school_college: enquiry.school_college || '',
+      subject: enquiry.interested_subject || '',
+      purpose: enquiry.purpose || '',
+      auto_register: '1',
     });
     navigate(`/admissions/new?${params.toString()}`);
   };
@@ -289,8 +292,17 @@ export default function EnquiryDetailPage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
           <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
-            <span className="text-[11px] text-slate-500 block font-medium">Interested Subject / Domain</span>
-            <span className="font-bold text-black text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-slate-500 block font-medium">Interested Subject / Domain</span>
+              <button
+                onClick={() => setEditModalOpen(true)}
+                className="text-[10px] font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded border border-indigo-200 inline-flex items-center gap-0.5 cursor-pointer"
+              >
+                <Edit2 className="w-2.5 h-2.5" />
+                <span>Change</span>
+              </button>
+            </div>
+            <span className="font-bold text-black text-sm mt-0.5 block">
               {enquiry.interested_subject || 'All Academic Subjects'}
             </span>
           </div>
