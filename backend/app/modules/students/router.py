@@ -220,6 +220,7 @@ async def update_student(
     if req.photo_url is not None: student.photo_url = req.photo_url
     if req.address is not None: student.address = req.address
     if req.dob is not None: student.dob = req.dob
+    if req.registration_date is not None: student.registration_date = req.registration_date
     if req.status is not None: student.status = req.status
     if req.notes is not None: student.notes = req.notes
 

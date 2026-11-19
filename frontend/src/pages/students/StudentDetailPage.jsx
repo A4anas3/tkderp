@@ -25,6 +25,7 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   TrendingDown,
+  Edit2,
 } from 'lucide-react';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
@@ -41,6 +42,7 @@ import IssueRefundModal from '../../components/modals/IssueRefundModal';
 import RefundReceiptModal from '../../components/receipts/RefundReceiptModal';
 import RevokeStudentModal from '../../components/modals/RevokeStudentModal';
 import RevokeBatchModal from '../../components/modals/RevokeBatchModal';
+import EditStudentModal from '../../components/modals/EditStudentModal';
 
 function getValidityStatus(adm) {
   if (adm.status === 'REVOKED') {
@@ -131,6 +133,7 @@ export default function StudentDetailPage() {
   const [selectedAdmissionForBatchRevoke, setSelectedAdmissionForBatchRevoke] = useState(null);
   const [refundModalOpen, setRefundModalOpen] = useState(false);
   const [selectedAdmissionForRefund, setSelectedAdmissionForRefund] = useState(null);
+  const [editModalOpen, setEditModalOpen] = useState(false);
   const [refundReceiptToShow, setRefundReceiptToShow] = useState(null);
   const [restoring, setRestoring] = useState(false);
   const [restoringBatchId, setRestoringBatchId] = useState(null);
@@ -380,6 +383,17 @@ export default function StudentDetailPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Edit Student Profile Button */}
+          <Button
+            size="xs"
+            variant="secondary"
+            icon={Edit2}
+            onClick={() => setEditModalOpen(true)}
+            title="Edit Student Information"
+          >
+            Edit Profile
+          </Button>
+
           {/* Revoke / Restore Button (Admin Only) */}
           {isAdmin && (
             isRevoked ? (
@@ -1079,6 +1093,16 @@ export default function StudentDetailPage() {
         isOpen={!!refundReceiptToShow}
         onClose={() => setRefundReceiptToShow(null)}
         refund={refundReceiptToShow}
+      />
+
+      {/* Edit Student Profile Modal */}
+      <EditStudentModal
+        isOpen={editModalOpen}
+        onClose={() => setEditModalOpen(false)}
+        student={student}
+        onSuccess={() => {
+          fetchStudentData();
+        }}
       />
     </div>
   );

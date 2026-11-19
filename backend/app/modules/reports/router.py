@@ -11,7 +11,7 @@ from app.database.session import get_db
 from app.core.dependencies import require_staff, require_admin
 from app.database.models import (
     Admission, AdmissionItem, Subject, Batch, Teacher, PaymentAllocation, Payment,
-    Expense, SalaryRecord, Refund, User
+    Expense, SalaryRecord, Refund, User, Student
 )
 
 router = APIRouter(prefix="/api/reports", tags=["Reports & Analytics"])
@@ -38,6 +38,78 @@ def _resolve_date_range(
     return from_date, to_date
 
 
+def _evaluate_student_cycle(
+    valid_from: Optional[date],
+    valid_to: Optional[date],
+    admission_date: date,
+    balance_due: Decimal,
+    net_price: Decimal,
+    amount_collected: Decimal
+) -> Dict[str, Any]:
+    """
+    Evaluates rolling date-to-date coaching cycle parameters, remaining days,
+    anchor billing day of month, renewal due date, and cycle status.
+    """
+    today = date.today()
+    c_start = valid_from or admission_date
+    c_end = valid_to or (c_start + timedelta(days=30))
+    next_due = c_end + timedelta(days=1)
+    days_remaining = (c_end - today).days
+    billing_day = c_start.day
+
+    if balance_due > Decimal("0.00") and today > c_end:
+        cycle_status = "OVERDUE"
+        status_label = "Payment Overdue"
+        badge_variant = "danger"
+        status_subtext = f"Cycle ended {c_end.strftime('%d %b %Y')} · Overdue by {(today - c_end).days}d"
+    elif today > c_end:
+        cycle_status = "RENEWAL_DUE"
+        status_label = "Renewal Due"
+        badge_variant = "warning"
+        status_subtext = f"Cycle ended {c_end.strftime('%d %b %Y')} · Next renewal due"
+    elif today < c_start:
+        cycle_status = "UPCOMING"
+        status_label = "Upcoming"
+        badge_variant = "neutral"
+        status_subtext = f"Starts on {c_start.strftime('%d %b %Y')}"
+    elif days_remaining <= 5:
+        cycle_status = "DUE_SOON"
+        status_label = "Expiring Soon"
+        badge_variant = "warning"
+        status_subtext = f"{days_remaining}d remaining · Renewal on {next_due.strftime('%d %b')}"
+    else:
+        cycle_status = "ACTIVE"
+        status_label = "Active"
+        badge_variant = "success"
+        status_subtext = f"{days_remaining}d remaining in cycle"
+
+    if balance_due <= Decimal("0.00") and net_price > Decimal("0.00"):
+        payment_status = "PAID"
+    elif amount_collected > Decimal("0.00"):
+        payment_status = "PARTIAL"
+    else:
+        payment_status = "UNPAID"
+
+    return {
+        "valid_from": str(c_start),
+        "valid_to": str(c_end),
+        "billing_day": billing_day,
+        "cycle_label": f"{c_start.strftime('%d %b %Y')} → {c_end.strftime('%d %b %Y')}",
+        "billing_cycle_anchor": f"Day {billing_day} of month",
+        "next_due_date": str(next_due),
+        "days_remaining": days_remaining,
+        "cycle_status": cycle_status,
+        "status_label": status_label,
+        "badge_variant": badge_variant,
+        "status_subtext": status_subtext,
+        "payment_status": payment_status,
+        "net_price": float(net_price),
+        "amount_collected": float(amount_collected),
+        "balance_due": float(balance_due)
+    }
+
+
+
 @router.get("/subject-revenue")
 async def get_subject_revenue_report(
     from_date: Optional[date] = Query(None, description="Start date (YYYY-MM-DD)"),
@@ -49,9 +121,19 @@ async def get_subject_revenue_report(
 ):
     """
     Returns revenue breakdown by subject with date-to-date and month-wise filtering:
-    Total booked net price, total collected via allocations, balance due, and student enrollments.
+    Total booked net price, total collected via allocations, balance due, and enrolled student breakdown
+    with rolling date-to-date billing cycles and cycle renewal statuses.
     """
     f_date, t_date = _resolve_date_range(from_date, to_date, month, year)
+
+    start_col = func.coalesce(AdmissionItem.valid_from, Admission.valid_from, Admission.admission_date)
+    end_col = func.coalesce(AdmissionItem.valid_to, Admission.valid_to, Admission.admission_date + 30)
+
+    date_conds = []
+    if f_date:
+        date_conds.append(end_col >= f_date)
+    if t_date:
+        date_conds.append(start_col <= t_date)
 
     subjects_res = await db.execute(select(Subject).order_by(Subject.name.asc()))
     subjects = subjects_res.scalars().all()
@@ -61,6 +143,12 @@ async def get_subject_revenue_report(
     total_collected_all = Decimal("0.00")
 
     for s in subjects:
+        where_filter = [
+            AdmissionItem.subject_id == s.id,
+            Admission.status != "CANCELLED",
+            *date_conds
+        ]
+
         stmt = (
             select(
                 func.coalesce(func.sum(AdmissionItem.original_price), Decimal("0.00")),
@@ -70,19 +158,48 @@ async def get_subject_revenue_report(
                 func.coalesce(func.count(AdmissionItem.id), 0)
             )
             .join(Admission, AdmissionItem.admission_id == Admission.id)
-            .where(AdmissionItem.subject_id == s.id)
+            .where(and_(*where_filter))
         )
-        if f_date:
-            stmt = stmt.where(Admission.admission_date >= f_date)
-        if t_date:
-            stmt = stmt.where(Admission.admission_date <= t_date)
-
         res = await db.execute(stmt)
         orig_price, total_disc, booked, collected, student_count = res.one()
 
         balance = booked - collected
         total_revenue_all += booked
         total_collected_all += collected
+
+        # Fetch enrolled students for this subject in the active period
+        stu_stmt = (
+            select(AdmissionItem, Admission, Student, Batch)
+            .join(Admission, AdmissionItem.admission_id == Admission.id)
+            .join(Student, Admission.student_id == Student.id)
+            .outerjoin(Batch, AdmissionItem.batch_id == Batch.id)
+            .where(and_(*where_filter))
+            .order_by(start_col.desc(), Student.name.asc())
+        )
+        stu_rows = (await db.execute(stu_stmt)).all()
+        subject_students = []
+        for itm, adm, stu, bch in stu_rows:
+            c_info = _evaluate_student_cycle(
+                itm.valid_from, itm.valid_to, adm.admission_date,
+                itm.balance_due, itm.net_price, itm.amount_collected
+            )
+            subject_students.append({
+                "item_id": str(itm.id),
+                "admission_id": str(adm.id),
+                "admission_number": adm.admission_number,
+                "admission_date": str(adm.admission_date),
+                "student_id": str(stu.id),
+                "student_code": stu.student_code,
+                "student_name": stu.name,
+                "mobile": stu.mobile or "",
+                "father_name": stu.father_name or "",
+                "photo_url": stu.photo_url,
+                "batch_id": str(bch.id) if bch else None,
+                "batch_name": bch.name if bch else (itm.item_name_snapshot or "Direct Subject"),
+                "teacher_name": itm.teacher_name_snapshot or (bch.teacher_name_snapshot if bch else (s.teacher_name_snapshot if hasattr(s, 'teacher_name_snapshot') else "Faculty")),
+                "hall_number": itm.hall_number_snapshot or (bch.hall_number if bch else (s.hall_number if s.hall_number else "Main")),
+                **c_info
+            })
 
         report.append({
             "subject_id": str(s.id),
@@ -94,10 +211,17 @@ async def get_subject_revenue_report(
             "total_discounts": float(total_disc),
             "total_booked": float(booked),
             "total_collected": float(collected),
-            "balance_due": float(balance)
+            "balance_due": float(balance),
+            "students": subject_students
         })
 
     # Also handle Green Card / All Access items separately
+    gc_filter = [
+        AdmissionItem.item_type == "GREEN_CARD",
+        Admission.status != "CANCELLED",
+        *date_conds
+    ]
+
     gc_stmt = (
         select(
             func.coalesce(func.sum(AdmissionItem.net_price), Decimal("0.00")),
@@ -105,18 +229,46 @@ async def get_subject_revenue_report(
             func.coalesce(func.count(AdmissionItem.id), 0)
         )
         .join(Admission, AdmissionItem.admission_id == Admission.id)
-        .where(AdmissionItem.item_type == "GREEN_CARD")
+        .where(and_(*gc_filter))
     )
-    if f_date:
-        gc_stmt = gc_stmt.where(Admission.admission_date >= f_date)
-    if t_date:
-        gc_stmt = gc_stmt.where(Admission.admission_date <= t_date)
-
     gc_res = await db.execute(gc_stmt)
     gc_booked, gc_collected, gc_count = gc_res.one()
     if gc_count > 0:
         total_revenue_all += gc_booked
         total_collected_all += gc_collected
+
+        gc_stu_stmt = (
+            select(AdmissionItem, Admission, Student)
+            .join(Admission, AdmissionItem.admission_id == Admission.id)
+            .join(Student, Admission.student_id == Student.id)
+            .where(and_(*gc_filter))
+            .order_by(start_col.desc(), Student.name.asc())
+        )
+        gc_stu_rows = (await db.execute(gc_stu_stmt)).all()
+        gc_students = []
+        for itm, adm, stu in gc_stu_rows:
+            c_info = _evaluate_student_cycle(
+                itm.valid_from, itm.valid_to, adm.admission_date,
+                itm.balance_due, itm.net_price, itm.amount_collected
+            )
+            gc_students.append({
+                "item_id": str(itm.id),
+                "admission_id": str(adm.id),
+                "admission_number": adm.admission_number,
+                "admission_date": str(adm.admission_date),
+                "student_id": str(stu.id),
+                "student_code": stu.student_code,
+                "student_name": stu.name,
+                "mobile": stu.mobile or "",
+                "father_name": stu.father_name or "",
+                "photo_url": stu.photo_url,
+                "batch_id": None,
+                "batch_name": "All-Access Pass (Green Card)",
+                "teacher_name": "All Faculty",
+                "hall_number": "All Halls",
+                **c_info
+            })
+
         report.append({
             "subject_id": "green-card-all-access",
             "subject_code": "GREEN-CARD",
@@ -127,7 +279,8 @@ async def get_subject_revenue_report(
             "total_discounts": 0.0,
             "total_booked": float(gc_booked),
             "total_collected": float(gc_collected),
-            "balance_due": float(gc_booked - gc_collected)
+            "balance_due": float(gc_booked - gc_collected),
+            "students": gc_students
         })
 
     return {
@@ -156,9 +309,18 @@ async def get_batch_revenue_report(
     current_user: User = Depends(require_admin)
 ):
     """
-    Returns revenue breakdown by batch with date-to-date and month-wise filtering.
+    Returns revenue breakdown by batch with date-to-date and month-wise filtering and student roster.
     """
     f_date, t_date = _resolve_date_range(from_date, to_date, month, year)
+
+    start_col = func.coalesce(AdmissionItem.valid_from, Admission.valid_from, Admission.admission_date)
+    end_col = func.coalesce(AdmissionItem.valid_to, Admission.valid_to, Admission.admission_date + 30)
+
+    date_conds = []
+    if f_date:
+        date_conds.append(end_col >= f_date)
+    if t_date:
+        date_conds.append(start_col <= t_date)
 
     batches_res = await db.execute(select(Batch).order_by(Batch.name.asc()))
     batches = batches_res.scalars().all()
@@ -168,6 +330,12 @@ async def get_batch_revenue_report(
     total_collected_all = Decimal("0.00")
 
     for b in batches:
+        where_filter = [
+            AdmissionItem.batch_id == b.id,
+            Admission.status != "CANCELLED",
+            *date_conds
+        ]
+
         stmt = (
             select(
                 func.coalesce(func.sum(AdmissionItem.net_price), Decimal("0.00")),
@@ -175,18 +343,46 @@ async def get_batch_revenue_report(
                 func.coalesce(func.count(AdmissionItem.id), 0)
             )
             .join(Admission, AdmissionItem.admission_id == Admission.id)
-            .where(AdmissionItem.batch_id == b.id)
+            .where(and_(*where_filter))
         )
-        if f_date:
-            stmt = stmt.where(Admission.admission_date >= f_date)
-        if t_date:
-            stmt = stmt.where(Admission.admission_date <= t_date)
-
         res = await db.execute(stmt)
         booked, collected, count = res.one()
 
         total_booked_all += booked
         total_collected_all += collected
+
+        # Fetch enrolled students
+        stu_stmt = (
+            select(AdmissionItem, Admission, Student)
+            .join(Admission, AdmissionItem.admission_id == Admission.id)
+            .join(Student, Admission.student_id == Student.id)
+            .where(and_(*where_filter))
+            .order_by(start_col.desc(), Student.name.asc())
+        )
+        stu_rows = (await db.execute(stu_stmt)).all()
+        batch_students = []
+        for itm, adm, stu in stu_rows:
+            c_info = _evaluate_student_cycle(
+                itm.valid_from, itm.valid_to, adm.admission_date,
+                itm.balance_due, itm.net_price, itm.amount_collected
+            )
+            batch_students.append({
+                "item_id": str(itm.id),
+                "admission_id": str(adm.id),
+                "admission_number": adm.admission_number,
+                "admission_date": str(adm.admission_date),
+                "student_id": str(stu.id),
+                "student_code": stu.student_code,
+                "student_name": stu.name,
+                "mobile": stu.mobile or "",
+                "father_name": stu.father_name or "",
+                "photo_url": stu.photo_url,
+                "batch_id": str(b.id),
+                "batch_name": b.name,
+                "teacher_name": b.teacher_name_snapshot or "Faculty",
+                "hall_number": b.hall_number or "Main",
+                **c_info
+            })
 
         report.append({
             "batch_id": str(b.id),
@@ -198,10 +394,12 @@ async def get_batch_revenue_report(
             "total_booked": float(booked),
             "total_collected": float(collected),
             "balance_due": float(booked - collected),
-            "status": b.status
+            "status": b.status,
+            "students": batch_students
         })
 
     return report
+
 
 @router.get("/teacher-revenue")
 async def get_teacher_revenue_report(
@@ -213,9 +411,19 @@ async def get_teacher_revenue_report(
     current_user: User = Depends(require_admin)
 ):
     """
-    Teacher-wise associated subject and batch revenue report with date filtering.
+    Teacher-wise associated subject and batch revenue report with date filtering
+    and complete student roster with rolling date-to-date billing cycles.
     """
     f_date, t_date = _resolve_date_range(from_date, to_date, month, year)
+
+    start_col = func.coalesce(AdmissionItem.valid_from, Admission.valid_from, Admission.admission_date)
+    end_col = func.coalesce(AdmissionItem.valid_to, Admission.valid_to, Admission.admission_date + 30)
+
+    date_conds = []
+    if f_date:
+        date_conds.append(end_col >= f_date)
+    if t_date:
+        date_conds.append(start_col <= t_date)
 
     teachers_res = await db.execute(select(Teacher).order_by(Teacher.name.asc()))
     teachers = teachers_res.scalars().all()
@@ -224,11 +432,21 @@ async def get_teacher_revenue_report(
     for t in teachers:
         b_res = await db.execute(select(Batch.id).where(Batch.teacher_id == t.id))
         b_ids = [b for b, in b_res.all()]
+        s_res = await db.execute(select(Subject.id).where(Subject.teacher_id == t.id))
+        s_ids = [s for s, in s_res.all()]
 
-        # Match either AdmissionItem.teacher_id == t.id OR AdmissionItem.batch_id in batches of this teacher
+        # Match either AdmissionItem.teacher_id == t.id OR AdmissionItem.batch_id in batches OR AdmissionItem.subject_id in subjects
         where_cond = [AdmissionItem.teacher_id == t.id]
         if b_ids:
             where_cond.append(AdmissionItem.batch_id.in_(b_ids))
+        if s_ids:
+            where_cond.append(AdmissionItem.subject_id.in_(s_ids))
+
+        teacher_filter = [
+            or_(*where_cond),
+            Admission.status != "CANCELLED",
+            *date_conds
+        ]
 
         stmt = (
             select(
@@ -237,15 +455,47 @@ async def get_teacher_revenue_report(
                 func.coalesce(func.count(AdmissionItem.id), 0)
             )
             .join(Admission, AdmissionItem.admission_id == Admission.id)
-            .where(or_(*where_cond))
+            .where(and_(*teacher_filter))
         )
-        if f_date:
-            stmt = stmt.where(Admission.admission_date >= f_date)
-        if t_date:
-            stmt = stmt.where(Admission.admission_date <= t_date)
-
         res = await db.execute(stmt)
         booked, collected, count = res.one()
+
+        # Fetch enrolled students under this teacher
+        t_stu_stmt = (
+            select(AdmissionItem, Admission, Student, Batch, Subject)
+            .join(Admission, AdmissionItem.admission_id == Admission.id)
+            .join(Student, Admission.student_id == Student.id)
+            .outerjoin(Batch, AdmissionItem.batch_id == Batch.id)
+            .outerjoin(Subject, AdmissionItem.subject_id == Subject.id)
+            .where(and_(*teacher_filter))
+            .order_by(start_col.desc(), Student.name.asc())
+        )
+        t_stu_rows = (await db.execute(t_stu_stmt)).all()
+        t_students = []
+        for itm, adm, stu, bch, sub in t_stu_rows:
+            c_info = _evaluate_student_cycle(
+                itm.valid_from, itm.valid_to, adm.admission_date,
+                itm.balance_due, itm.net_price, itm.amount_collected
+            )
+            t_students.append({
+                "item_id": str(itm.id),
+                "admission_id": str(adm.id),
+                "admission_number": adm.admission_number,
+                "admission_date": str(adm.admission_date),
+                "student_id": str(stu.id),
+                "student_code": stu.student_code,
+                "student_name": stu.name,
+                "mobile": stu.mobile or "",
+                "father_name": stu.father_name or "",
+                "photo_url": stu.photo_url,
+                "subject_id": str(sub.id) if sub else (str(itm.subject_id) if itm.subject_id else None),
+                "subject_name": sub.name if sub else (itm.item_name_snapshot or "Subject"),
+                "subject_code": sub.subject_code if sub else "",
+                "batch_id": str(bch.id) if bch else None,
+                "batch_name": bch.name if bch else "Direct Subject",
+                "hall_number": itm.hall_number_snapshot or (bch.hall_number if bch else (sub.hall_number if sub and sub.hall_number else "Main")),
+                **c_info
+            })
 
         report.append({
             "teacher_id": str(t.id),
@@ -256,7 +506,8 @@ async def get_teacher_revenue_report(
             "enrolled_count": count,
             "total_booked": float(booked),
             "total_collected": float(collected),
-            "balance_due": float(booked - collected)
+            "balance_due": float(booked - collected),
+            "students": t_students
         })
 
     return report

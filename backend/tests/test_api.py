@@ -936,3 +936,117 @@ async def test_comprehensive_backend_role_checks():
         res = await client.get("/api/dashboard/admin", headers=a_headers)
         assert res.status_code == 200
 
+
+@pytest.mark.asyncio
+async def test_student_edit_and_rolling_cycle_rosters():
+    """
+    Tests:
+    1. Student information editing (Name, Mobile, Father Name, Notes, Registration Date).
+    2. Subject revenue report returns students with date-to-date rolling cycle details and cycle status.
+    3. Teacher revenue report returns students with date-to-date rolling cycle details.
+    """
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # Admin login
+        login_res = await client.post("/api/auth/login", json={"username": "ADM001", "password": "Admin@1234"})
+        token = login_res.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # 1. Create a test student
+        unique_suffix = str(uuid.uuid4())[:6]
+        create_res = await client.post("/api/students", json={
+            "name": f"Rolling Cycle Student {unique_suffix}",
+            "mobile": f"98{str(uuid.uuid4().int)[:8]}",
+            "father_name": "Test Father",
+            "email": f"rolling_{unique_suffix}@example.com",
+            "address": "123 Test Street",
+            "dob": "2008-05-15",
+            "registration_date": "2026-11-14",
+            "notes": "Initial enrollment notes"
+        }, headers=headers)
+        assert create_res.status_code == 201
+        student = create_res.json()
+        student_id = student["id"]
+
+        # 2. Edit Student Information including registration_date
+        update_res = await client.put(f"/api/students/{student_id}", json={
+            "name": f"Updated Cycle Student {unique_suffix}",
+            "father_name": "Updated Father",
+            "mobile": "9812345678",
+            "email": f"updated_{unique_suffix}@example.com",
+            "address": "456 Updated Address",
+            "dob": "2008-05-15",
+            "registration_date": "2026-11-14",
+            "notes": "Updated notes"
+        }, headers=headers)
+        assert update_res.status_code == 200
+        updated = update_res.json()
+        assert updated["name"] == f"Updated Cycle Student {unique_suffix}"
+        assert updated["father_name"] == "Updated Father"
+        assert updated["registration_date"] == "2026-11-14"
+
+        # 3. Create Subject & Teacher & Admission with custom rolling cycle dates (14 Nov to 13 Dec)
+        t_res = await client.post("/api/teachers", json={
+            "name": f"Prof. Verma {unique_suffix}",
+            "mobile": f"97{str(uuid.uuid4().int)[:8]}",
+            "specialization": "Physics"
+        }, headers=headers)
+        teacher_id = t_res.json()["id"]
+
+        s_res = await client.post("/api/subjects", json={
+            "name": f"Rolling Physics {unique_suffix}",
+            "subject_code": f"RPHY_{unique_suffix}".upper(),
+            "default_fee": 3000.0,
+            "teacher_id": teacher_id,
+            "hall_number": "Hall 105"
+        }, headers=headers)
+        subject_id = s_res.json()["id"]
+
+        # Create admission with cycle 14 Nov 2026 -> 13 Dec 2026
+        adm_res = await client.post("/api/admissions", json={
+            "student_id": student_id,
+            "admission_date": "2026-11-14",
+            "valid_from": "2026-11-14",
+            "valid_to": "2026-12-13",
+            "items": [{
+                "item_type": "BATCH_SUBJECT",
+                "subject_id": subject_id,
+                "teacher_id": teacher_id,
+                "item_name_snapshot": f"Rolling Physics {unique_suffix}",
+                "original_price": 3000.0,
+                "valid_from": "2026-11-14",
+                "valid_to": "2026-12-13"
+            }]
+        }, headers=headers)
+        assert adm_res.status_code == 201
+
+        # 4. Check Subject Revenue Report
+        sub_rep_res = await client.get("/api/reports/subject-revenue", headers=headers)
+        assert sub_rep_res.status_code == 200
+        sub_rep = sub_rep_res.json()
+        found_sub = next((s for s in sub_rep["items"] if s["subject_id"] == subject_id), None)
+        assert found_sub is not None
+        assert found_sub["enrolled_count"] >= 1
+        assert len(found_sub["students"]) >= 1
+        stu_entry = next((s for s in found_sub["students"] if s["student_id"] == student_id), None)
+        assert stu_entry is not None
+        assert stu_entry["billing_day"] == 14
+        assert stu_entry["valid_from"] == "2026-11-14"
+        assert stu_entry["valid_to"] == "2026-12-13"
+        assert "14 Nov 2026" in stu_entry["cycle_label"]
+        assert stu_entry["cycle_status"] in ["ACTIVE", "DUE_SOON", "OVERDUE", "UPCOMING", "RENEWAL_DUE"]
+
+        # 5. Check Teacher Revenue Report
+        tch_rep_res = await client.get("/api/reports/teacher-revenue", headers=headers)
+        assert tch_rep_res.status_code == 200
+        tch_rep = tch_rep_res.json()
+        found_tch = next((t for t in tch_rep if t["teacher_id"] == teacher_id), None)
+        assert found_tch is not None
+        assert found_tch["enrolled_count"] >= 1
+        assert len(found_tch["students"]) >= 1
+        t_stu_entry = next((s for s in found_tch["students"] if s["student_id"] == student_id), None)
+        assert t_stu_entry is not None
+        assert t_stu_entry["billing_day"] == 14
+        assert t_stu_entry["valid_from"] == "2026-11-14"
+        assert t_stu_entry["valid_to"] == "2026-12-13"
+
+

@@ -29,6 +29,7 @@ class StudentUpdate(BaseModel):
     photo_url: Optional[str] = None
     address: Optional[str] = None
     dob: Optional[date] = None
+    registration_date: Optional[date] = None
     status: Optional[str] = Field(default=None, pattern="^(ACTIVE|INACTIVE|REVOKED)$")
     notes: Optional[str] = None
 

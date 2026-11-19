@@ -13,12 +13,14 @@ import {
   CreditCard,
   Plus,
   Calendar,
+  Edit2,
 } from 'lucide-react';
 import DataTable from '../../components/common/DataTable';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
 import Avatar from '../../components/common/Avatar';
 import QuickStudentModal from '../../components/modals/QuickStudentModal';
+import EditStudentModal from '../../components/modals/EditStudentModal';
 import { studentApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 
@@ -33,6 +35,8 @@ export default function StudentsPage() {
   const [viewMode, setViewMode] = useState('table'); // 'table' | 'kanban'
   const [loading, setLoading] = useState(true);
   const [addModalOpen, setAddModalOpen] = useState(false);
+  const [editingStudent, setEditingStudent] = useState(null);
+  const [editModalOpen, setEditModalOpen] = useState(false);
 
   const loadStudents = useCallback(async () => {
     setLoading(true);
@@ -142,16 +146,31 @@ export default function StudentsPage() {
     },
     {
       header: 'Action',
-      className: 'text-right w-24',
+      className: 'text-right w-36',
       render: (s) => (
-        <Button
-          size="xs"
-          variant="secondary"
-          icon={Eye}
-          onClick={() => navigate(`/students/${s.id}`)}
-        >
-          Profile
-        </Button>
+        <div className="flex items-center justify-end gap-1">
+          <Button
+            size="xs"
+            variant="secondary"
+            icon={Edit2}
+            onClick={() => {
+              setEditingStudent(s);
+              setEditModalOpen(true);
+            }}
+            title="Edit Student Information"
+          >
+            Edit
+          </Button>
+          <Button
+            size="xs"
+            variant="secondary"
+            icon={Eye}
+            onClick={() => navigate(`/students/${s.id}`)}
+            title="View Student Profile"
+          >
+            Profile
+          </Button>
+        </div>
       ),
     },
   ];
@@ -356,6 +375,18 @@ export default function StudentsPage() {
                       <Button
                         size="xs"
                         variant="secondary"
+                        icon={Edit2}
+                        onClick={() => {
+                          setEditingStudent(s);
+                          setEditModalOpen(true);
+                        }}
+                        title="Edit Student Information"
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="secondary"
                         className="flex-1 justify-center"
                         icon={Eye}
                         onClick={() => navigate(`/students/${s.id}`)}
@@ -418,6 +449,19 @@ export default function StudentsPage() {
       <QuickStudentModal
         isOpen={addModalOpen}
         onClose={() => setAddModalOpen(false)}
+        onSuccess={() => {
+          loadStudents();
+        }}
+      />
+
+      {/* Edit Student Modal */}
+      <EditStudentModal
+        isOpen={editModalOpen}
+        onClose={() => {
+          setEditModalOpen(false);
+          setEditingStudent(null);
+        }}
+        student={editingStudent}
         onSuccess={() => {
           loadStudents();
         }}
