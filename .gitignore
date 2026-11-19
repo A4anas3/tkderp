@@ -9,6 +9,8 @@ backend/.pytest_cache/
 *.log
 backend/uploads/*
 !backend/uploads/.gitkeep
+uploads/*
+!uploads/.gitkeep
 
 # Node & Frontend
 frontend/node_modules/
