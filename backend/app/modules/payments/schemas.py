@@ -1,6 +1,6 @@
 from decimal import Decimal
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, date
 from pydantic import BaseModel, Field, ConfigDict
 import uuid
 
@@ -10,6 +10,9 @@ class PaymentCreate(BaseModel):
     payment_mode: str = Field(default="CASH", pattern="^(CASH|UPI|BANK_TRANSFER|CARD|OTHER)$")
     transaction_reference: Optional[str] = None
     notes: Optional[str] = None
+    valid_from: Optional[date] = None
+    valid_to: Optional[date] = None
+    fee_period: Optional[str] = None
 
 class PaymentUpdate(BaseModel):
     amount: Optional[Decimal] = Field(default=None, gt=0)
@@ -82,6 +85,9 @@ class PaymentResponse(BaseModel):
     collected_by: Optional[uuid.UUID] = None
     collector_name_snapshot: str
     notes: Optional[str] = None
+    valid_from: Optional[date] = None
+    valid_to: Optional[date] = None
+    fee_period: Optional[str] = None
     allocations: List[PaymentAllocationResponse] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
@@ -100,4 +106,7 @@ class PaymentReceiptResponse(BaseModel):
     total_admission_payable: Decimal
     total_amount_paid_so_far: Decimal
     remaining_balance_due: Decimal
+    valid_from: Optional[date] = None
+    valid_to: Optional[date] = None
+    fee_period: Optional[str] = None
     allocations: List[dict] = Field(default_factory=list)

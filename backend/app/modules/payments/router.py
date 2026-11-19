@@ -98,6 +98,9 @@ async def list_payments(
                 collected_by=p.collected_by,
                 collector_name_snapshot=p.collector_name_snapshot,
                 notes=p.notes,
+                valid_from=p.valid_from,
+                valid_to=p.valid_to,
+                fee_period=p.fee_period,
                 allocations=alloc_resps
             )
         )
@@ -134,6 +137,12 @@ async def record_payment(
     seq = p_cnt_res.scalar_one() + 1
     pay_no = f"PAY{year_str}{seq:04d}"
 
+    pay_from = payload.valid_from or admission.valid_from
+    pay_to = payload.valid_to or admission.valid_to
+    fee_period_str = payload.fee_period
+    if not fee_period_str and pay_from and pay_to:
+        fee_period_str = f"{pay_from} to {pay_to}"
+
     payment = Payment(
         payment_number=pay_no,
         admission_id=admission.id,
@@ -144,7 +153,10 @@ async def record_payment(
         payment_date=datetime.now(timezone.utc),
         collected_by=current_user.id,
         collector_name_snapshot=current_user.full_name,
-        notes=payload.notes
+        notes=payload.notes,
+        valid_from=pay_from,
+        valid_to=pay_to,
+        fee_period=fee_period_str
     )
     db.add(payment)
     await db.flush()
@@ -206,6 +218,9 @@ async def record_payment(
         collected_by=payment.collected_by,
         collector_name_snapshot=payment.collector_name_snapshot,
         notes=payment.notes,
+        valid_from=payment.valid_from,
+        valid_to=payment.valid_to,
+        fee_period=payment.fee_period,
         allocations=alloc_resps
     )
 
@@ -252,6 +267,9 @@ async def get_payment_receipt(
         total_admission_payable=p.admission.total_payable,
         total_amount_paid_so_far=p.admission.amount_paid,
         remaining_balance_due=p.admission.balance_due,
+        valid_from=p.valid_from,
+        valid_to=p.valid_to,
+        fee_period=p.fee_period,
         allocations=alloc_data
     )
 

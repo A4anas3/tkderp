@@ -1,8 +1,8 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from decimal import Decimal
 from typing import Optional, List
-from sqlalchemy import String, DateTime, Numeric, Text, ForeignKey
+from sqlalchemy import String, DateTime, Date, Numeric, Text, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base import BaseModel
@@ -22,6 +22,11 @@ class Payment(BaseModel):
     collected_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     collector_name_snapshot: Mapped[str] = mapped_column(String(150), nullable=False)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Date-to-date fee period coverage
+    valid_from: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    valid_to: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    fee_period: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
 
     allocations: Mapped[List["PaymentAllocation"]] = relationship("PaymentAllocation", back_populates="payment", cascade="all, delete-orphan", lazy="selectin")
     admission: Mapped["app.modules.admissions.models.Admission"] = relationship("app.modules.admissions.models.Admission", lazy="joined")

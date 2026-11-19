@@ -85,6 +85,16 @@ export default function PaymentReceiptModal({ isOpen, onClose, receipt }) {
             </div>
           </div>
 
+          {/* Fee Coverage Period (When to When) */}
+          {(receipt.fee_period || (receipt.valid_from && receipt.valid_to)) && (
+            <div className="bg-indigo-50/70 border border-indigo-200 rounded p-2.5 flex justify-between items-center text-xs">
+              <span className="text-indigo-900 font-semibold">Fee Coverage Period (When to When):</span>
+              <span className="font-mono font-bold text-indigo-950">
+                {receipt.fee_period || `${receipt.valid_from} to ${receipt.valid_to}`}
+              </span>
+            </div>
+          )}
+
           {/* Allocation Breakdown Table if exists */}
           {receipt.allocations && receipt.allocations.length > 0 && (
             <div className="space-y-1">
@@ -115,7 +125,7 @@ export default function PaymentReceiptModal({ isOpen, onClose, receipt }) {
           {/* Financial Summary */}
           <div className="border border-slate-300 rounded p-3 space-y-1.5 text-xs bg-slate-50/70">
             <div className="flex justify-between">
-              <span className="text-slate-600">Total Admission Fee:</span>
+              <span className="text-slate-600">Total Course Purchase Fee:</span>
               <span className="font-mono text-black font-semibold">
                 ₹{Number(receipt.total_admission_payable).toFixed(2)}
               </span>
