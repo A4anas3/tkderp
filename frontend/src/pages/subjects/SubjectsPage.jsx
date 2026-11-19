@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Edit2, BookOpen, Users, MapPin, Clock, School, Calendar } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Plus, Edit2, BookOpen, Users, MapPin, Clock, School, Calendar, ExternalLink } from 'lucide-react';
 import DataTable from '../../components/common/DataTable';
 import Modal from '../../components/common/Modal';
 import Input from '../../components/common/Input';
@@ -129,6 +130,7 @@ function buildScheduleString(schedState) {
 }
 
 export default function SubjectsPage() {
+  const navigate = useNavigate();
   const { success, error } = useToast();
   const [subjects, setSubjects] = useState([]);
   const [teachers, setTeachers] = useState([]);
@@ -390,16 +392,27 @@ export default function SubjectsPage() {
     },
     {
       header: 'Actions',
-      className: 'text-right w-20',
+      className: 'text-right w-44',
       render: (s) => (
-        <Button
-          size="xs"
-          variant="secondary"
-          icon={Edit2}
-          onClick={() => handleOpenEdit(s)}
-        >
-          Edit
-        </Button>
+        <div className="flex items-center justify-end gap-1">
+          <Button
+            size="xs"
+            variant="secondary"
+            icon={ExternalLink}
+            onClick={() => navigate(`/subjects/${s.id}`)}
+            title="Open Dedicated Subject Roster Page"
+          >
+            Detail ↗
+          </Button>
+          <Button
+            size="xs"
+            variant="secondary"
+            icon={Edit2}
+            onClick={() => handleOpenEdit(s)}
+          >
+            Edit
+          </Button>
+        </div>
       ),
     },
   ];
@@ -433,6 +446,7 @@ export default function SubjectsPage() {
         }}
         onRefresh={loadSubjects}
         loading={loading}
+        onRowClick={(s) => navigate(`/subjects/${s.id}`)}
         searchPlaceholder="Search by subject, code, class, faculty or hall..."
         emptyMessage="No subjects found."
       />

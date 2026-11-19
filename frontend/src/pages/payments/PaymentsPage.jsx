@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Plus,
   CreditCard,
@@ -9,6 +10,7 @@ import {
   RotateCcw,
   AlertTriangle,
   History,
+  ExternalLink,
 } from 'lucide-react';
 import DataTable from '../../components/common/DataTable';
 import Button from '../../components/common/Button';
@@ -24,6 +26,7 @@ import RefundReceiptModal from '../../components/receipts/RefundReceiptModal';
 import PaymentDetailModal from '../../components/modals/PaymentDetailModal';
 
 export default function PaymentsPage() {
+  const navigate = useNavigate();
   const { error } = useToast();
   const { isAdmin } = useAuth();
   const [activeTab, setActiveTab] = useState('payments'); // 'payments' | 'refunds'
@@ -200,9 +203,19 @@ export default function PaymentsPage() {
     },
     {
       header: 'Actions',
-      className: 'text-right w-44',
+      className: 'text-right w-52',
       render: (p) => (
         <div className="flex items-center justify-end gap-1">
+          <Button
+            size="xs"
+            variant="secondary"
+            icon={ExternalLink}
+            onClick={() => navigate(`/payments/${p.id}`)}
+            title="Open Dedicated Payment Page"
+          >
+            Detail ↗
+          </Button>
+
           <Button
             size="xs"
             variant="secondary"
@@ -370,7 +383,7 @@ export default function PaymentsPage() {
           }}
           onRefresh={loadPayments}
           loading={loadingPayments}
-          onRowClick={(p) => setDetailPayment(p)}
+          onRowClick={(p) => navigate(`/payments/${p.id}`)}
           searchPlaceholder="Search by student name, receipt number, or reference..."
           emptyMessage="No fee payments recorded."
         />

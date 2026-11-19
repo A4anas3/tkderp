@@ -9,6 +9,7 @@ import {
   UserCheck,
   Calendar,
   Filter,
+  ExternalLink,
 } from 'lucide-react';
 import DataTable from '../../components/common/DataTable';
 import Modal from '../../components/common/Modal';
@@ -228,21 +229,34 @@ export default function EnquiriesPage() {
     },
     {
       header: 'Action',
-      className: 'text-right w-36',
-      render: (e) =>
-        e.status !== 'CONVERTED' ? (
+      className: 'text-right w-44',
+      render: (e) => (
+        <div className="flex items-center justify-end gap-1">
           <Button
             size="xs"
-            variant="primary"
-            onClick={() => handleConvertToAdmission(e)}
+            variant="secondary"
+            icon={ExternalLink}
+            onClick={() => navigate(`/enquiries/${e.id}`)}
+            title="Open Dedicated Enquiry Page"
           >
-            Admit Student
+            Detail ↗
           </Button>
-        ) : (
-          <Badge size="xs" variant="success">
-            Enrolled
-          </Badge>
-        ),
+
+          {e.status !== 'CONVERTED' ? (
+            <Button
+              size="xs"
+              variant="primary"
+              onClick={() => handleConvertToAdmission(e)}
+            >
+              Admit
+            </Button>
+          ) : (
+            <Badge size="xs" variant="success">
+              Enrolled
+            </Badge>
+          )}
+        </div>
+      ),
     },
   ];
 
@@ -376,7 +390,7 @@ export default function EnquiriesPage() {
         }}
         onRefresh={loadEnquiries}
         loading={loading}
-        onRowClick={(e) => setDetailEnquiry(e)}
+        onRowClick={(e) => navigate(`/enquiries/${e.id}`)}
         searchPlaceholder="Search enquiry by student name or mobile..."
         emptyMessage="No enquiry records found for this filter."
       />

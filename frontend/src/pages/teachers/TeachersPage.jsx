@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Edit2, UserCheck, UserX, Phone, Mail, Award, BookOpen } from 'lucide-react';
+import { Plus, Edit2, UserCheck, UserX, Phone, Mail, Award, BookOpen, ExternalLink } from 'lucide-react';
 import DataTable from '../../components/common/DataTable';
 import Modal from '../../components/common/Modal';
 import Input from '../../components/common/Input';
@@ -167,16 +167,27 @@ export default function TeachersPage() {
     },
     {
       header: 'Actions',
-      className: 'text-right w-20',
+      className: 'text-right w-44',
       render: (t) => (
-        <Button
-          size="xs"
-          variant="secondary"
-          icon={Edit2}
-          onClick={() => handleOpenEdit(t)}
-        >
-          Edit
-        </Button>
+        <div className="flex items-center justify-end gap-1">
+          <Button
+            size="xs"
+            variant="secondary"
+            icon={ExternalLink}
+            onClick={() => navigate(`/teachers/${t.id}`)}
+            title="Open Dedicated Faculty Roster Page"
+          >
+            Detail ↗
+          </Button>
+          <Button
+            size="xs"
+            variant="secondary"
+            icon={Edit2}
+            onClick={() => handleOpenEdit(t)}
+          >
+            Edit
+          </Button>
+        </div>
       ),
     },
   ];
@@ -210,7 +221,7 @@ export default function TeachersPage() {
         }}
         onRefresh={loadTeachers}
         loading={loading}
-        onRowClick={(t) => setDetailTeacher(t)}
+        onRowClick={(t) => navigate(`/teachers/${t.id}`)}
         searchPlaceholder="Search teacher by name or mobile..."
         emptyMessage="No faculty records found."
       />

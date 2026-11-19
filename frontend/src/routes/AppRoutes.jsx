@@ -7,15 +7,21 @@ import AppLayout from '../components/layout/AppLayout';
 import LoginPage from '../pages/auth/LoginPage';
 import DashboardSwitcher from '../pages/dashboard/DashboardSwitcher';
 import TeachersPage from '../pages/teachers/TeachersPage';
+import TeacherDetailPage from '../pages/teachers/TeacherDetailPage';
 import StudentsPage from '../pages/students/StudentsPage';
 import StudentDetailPage from '../pages/students/StudentDetailPage';
 import EnquiriesPage from '../pages/enquiries/EnquiriesPage';
+import EnquiryDetailPage from '../pages/enquiries/EnquiryDetailPage';
 import SubjectsPage from '../pages/subjects/SubjectsPage';
+import SubjectDetailPage from '../pages/subjects/SubjectDetailPage';
 import BatchesPage from '../pages/batches/BatchesPage';
+import BatchDetailPage from '../pages/batches/BatchDetailPage';
 import GreenCardPage from '../pages/greencard/GreenCardPage';
 import AdmissionsPage from '../pages/admissions/AdmissionsPage';
 import NewAdmissionPage from '../pages/admissions/NewAdmissionPage';
+import AdmissionDetailPage from '../pages/admissions/AdmissionDetailPage';
 import PaymentsPage from '../pages/payments/PaymentsPage';
+import PaymentDetailPage from '../pages/payments/PaymentDetailPage';
 import ExpensesPage from '../pages/expenses/ExpensesPage';
 import SubjectRevenuePage from '../pages/reports/SubjectRevenuePage';
 import CashFlowPage from '../pages/reports/CashFlowPage';
@@ -61,7 +67,7 @@ export default function AppRoutes() {
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardSwitcher />} />
 
-        {/* Admissions & Payments (Admin & Cashier) */}
+        {/* Admissions & Course Purchases (Admin & Cashier) */}
         <Route
           path="admissions"
           element={
@@ -79,10 +85,28 @@ export default function AppRoutes() {
           }
         />
         <Route
+          path="admissions/:id"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER']}>
+              <AdmissionDetailPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Payments Ledger (Admin & Cashier) */}
+        <Route
           path="payments"
           element={
             <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER']}>
               <PaymentsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="payments/:id"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER']}>
+              <PaymentDetailPage />
             </ProtectedRoute>
           }
         />
@@ -114,20 +138,34 @@ export default function AppRoutes() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="enquiries/:id"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER']}>
+              <EnquiryDetailPage />
+            </ProtectedRoute>
+          }
+        />
 
-        {/* Admin Only Operations */}
+        {/* Faculty & Teachers */}
         <Route
           path="teachers"
           element={
-            <ProtectedRoute allowedRoles={['ADMIN']}>
+            <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER']}>
               <TeachersPage />
             </ProtectedRoute>
           }
         />
         <Route
-          path="batches"
-          element={<Navigate to="/subjects" replace />}
+          path="teachers/:id"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER', 'TEACHER']}>
+              <TeacherDetailPage />
+            </ProtectedRoute>
+          }
         />
+
+        {/* Subjects & Batches */}
         <Route
           path="subjects"
           element={
@@ -136,6 +174,45 @@ export default function AppRoutes() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="subjects/:id"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN']}>
+              <SubjectDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="reports/subject/:id"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN']}>
+              <SubjectDetailPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="batches"
+          element={<Navigate to="/subjects" replace />}
+        />
+        <Route
+          path="batches/:id"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN']}>
+              <BatchDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="reports/batch/:id"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN']}>
+              <BatchDetailPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Other Operations */}
         <Route
           path="green-card"
           element={

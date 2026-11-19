@@ -1,0 +1,523 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import {
+  ArrowLeft,
+  Printer,
+  CreditCard,
+  User,
+  Calendar,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  Clock,
+  ExternalLink,
+  BookOpen,
+  Award,
+  RefreshCw,
+  Phone,
+  ShieldAlert,
+  RotateCcw
+} from 'lucide-react';
+import Button from '../../components/common/Button';
+import Badge from '../../components/common/Badge';
+import { admissionApi } from '../../services/allApis';
+import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
+import AdmissionReceiptModal from '../../components/receipts/AdmissionReceiptModal';
+import QuickPaymentModal from '../../components/modals/QuickPaymentModal';
+import PaymentReceiptModal from '../../components/receipts/PaymentReceiptModal';
+import { formatIndianDate, formatCycleLabel, evaluateCycleStatus } from '../../utils/dateCycleUtils';
+
+export default function AdmissionDetailPage() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { success, error } = useToast();
+  const { isAdmin } = useAuth();
+
+  const [admission, setAdmission] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  // Modals for actions
+  const [slipModalOpen, setSlipModalOpen] = useState(false);
+  const [payModalOpen, setPayModalOpen] = useState(false);
+  const [paymentReceiptToShow, setPaymentReceiptToShow] = useState(null);
+  const [revoking, setRevoking] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+
+  const loadAdmission = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await admissionApi.get(id);
+      setAdmission(data);
+    } catch (err) {
+      error(err.message || 'Failed to load admission details');
+    } finally {
+      setLoading(false);
+    }
+  }, [id, error]);
+
+  useEffect(() => {
+    loadAdmission();
+  }, [loadAdmission]);
+
+  const handleRevoke = async () => {
+    const reason = window.prompt('Enter reason for revoking this course purchase (e.g. Student dropped out, fee dispute):');
+    if (!reason || !reason.trim()) return;
+
+    setRevoking(true);
+    try {
+      await admissionApi.revoke(id, { reason: reason.trim() });
+      success('Course purchase has been revoked.');
+      loadAdmission();
+    } catch (err) {
+      error(err.message || 'Failed to revoke course purchase');
+    } finally {
+      setRevoking(false);
+    }
+  };
+
+  const handleRestore = async () => {
+    if (!window.confirm('Restore this course purchase and reactivate student access?')) return;
+
+    setRestoring(true);
+    try {
+      await admissionApi.restore(id);
+      success('Course purchase has been restored to Active status.');
+      loadAdmission();
+    } catch (err) {
+      error(err.message || 'Failed to restore course purchase');
+    } finally {
+      setRestoring(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="p-6 max-w-5xl mx-auto">
+        <div className="flex items-center gap-2 text-xs text-slate-500 mb-4">
+          <ArrowLeft className="w-4 h-4 animate-spin text-indigo-600" />
+          <span>Loading course purchase details...</span>
+        </div>
+        <div className="bg-white rounded-xl p-8 border border-slate-200 animate-pulse space-y-4">
+          <div className="h-6 bg-slate-200 rounded w-1/3"></div>
+          <div className="h-12 bg-slate-100 rounded"></div>
+          <div className="h-32 bg-slate-100 rounded"></div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!admission) {
+    return (
+      <div className="p-6 max-w-5xl mx-auto space-y-4">
+        <Button variant="secondary" icon={ArrowLeft} onClick={() => navigate('/admissions')}>
+          Back to Course Purchases
+        </Button>
+        <div className="bg-white p-8 rounded-xl border border-slate-200 text-center">
+          <p className="text-sm font-semibold text-rose-700">Admission / Purchase record not found.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const isActive = admission.status === 'ACTIVE';
+  const isRevoked = admission.status === 'REVOKED';
+  const isCancelled = admission.status === 'CANCELLED';
+
+  const validFrom = admission.valid_from || admission.admission_date;
+  const validTo = admission.valid_to;
+  const cycleInfo = evaluateCycleStatus(validTo, admission.balance_due);
+
+  return (
+    <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-5">
+      {/* Top Navigation & Breadcrumb */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/admissions')}
+            className="p-2 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 transition-colors shadow-2xs cursor-pointer"
+            title="Back to Course Purchases"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg sm:text-xl font-black text-black">
+                Course Purchase & Enrollment
+              </h1>
+              <span className="font-mono text-xs px-2 py-0.5 bg-slate-100 text-slate-800 rounded font-bold border border-slate-200">
+                {admission.admission_number}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 font-mono">
+              Transaction ID: {admission.purchase_transaction_id || admission.admission_number} • Enrolled on {formatIndianDate(admission.admission_date)}
+            </p>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="secondary"
+            icon={Printer}
+            onClick={() => setSlipModalOpen(true)}
+            size="sm"
+          >
+            Print Official Slip
+          </Button>
+
+          {admission.balance_due > 0 && isActive && (
+            <Button
+              variant="success"
+              icon={CreditCard}
+              onClick={() => setPayModalOpen(true)}
+              size="sm"
+            >
+              Collect Fee (₹{admission.balance_due.toLocaleString('en-IN')})
+            </Button>
+          )}
+
+          {isAdmin && isActive && (
+            <Button
+              variant="danger"
+              icon={ShieldAlert}
+              onClick={handleRevoke}
+              loading={revoking}
+              size="sm"
+            >
+              Revoke Purchase
+            </Button>
+          )}
+
+          {isAdmin && isRevoked && (
+            <Button
+              variant="primary"
+              icon={RotateCcw}
+              onClick={handleRestore}
+              loading={restoring}
+              size="sm"
+            >
+              Restore to Active
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Prominent Active vs Not Active Status Banner */}
+      <div
+        className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs ${
+          isActive
+            ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
+            : isRevoked
+            ? 'bg-rose-50 border-rose-300 text-rose-950'
+            : 'bg-slate-100 border-slate-300 text-slate-800'
+        }`}
+      >
+        <div className="flex items-center gap-3">
+          {isActive ? (
+            <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0" />
+          ) : (
+            <XCircle className="w-6 h-6 text-rose-600 shrink-0" />
+          )}
+          <div>
+            <div className="text-xs font-black uppercase tracking-wider">
+              Enrollment Status: {isActive ? 'ACTIVE COURSE PURCHASE' : isRevoked ? 'NOT ACTIVE (REVOKED)' : 'NOT ACTIVE (CANCELLED)'}
+            </div>
+            <div className="text-xs text-slate-700 font-medium mt-0.5">
+              {isActive
+                ? 'Student has active batch admission and valid class attendance rights'
+                : admission.revocation_reason
+                ? `Access Revoked: ${admission.revocation_reason}`
+                : 'Enrollment has been deactivated or cancelled'}
+            </div>
+          </div>
+        </div>
+        <Badge
+          variant={isActive ? 'success' : 'danger'}
+          size="md"
+          className="uppercase font-bold tracking-wider self-start sm:self-auto"
+        >
+          {admission.status}
+        </Badge>
+      </div>
+
+      {/* Student Quick Bio Card */}
+      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="w-12 h-12 rounded-full bg-indigo-100 text-indigo-700 font-black flex items-center justify-center text-sm border border-indigo-200 shrink-0">
+            {admission.student_name_snapshot ? admission.student_name_snapshot.slice(0, 2).toUpperCase() : 'ST'}
+          </div>
+          <div>
+            <h2 className="font-bold text-black text-base">
+              {admission.student_name_snapshot}
+            </h2>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 mt-0.5">
+              <span className="font-mono font-semibold">Adm No: {admission.admission_number}</span>
+              <span>•</span>
+              <span>Enrolled: {formatIndianDate(admission.admission_date)}</span>
+              {admission.student_id && (
+                <>
+                  <span>•</span>
+                  <span className="font-mono text-slate-500">ID: {String(admission.student_id).slice(0, 8)}...</span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {admission.student_id && (
+          <Link
+            to={`/students/${admission.student_id}`}
+            className="px-3 py-1.5 text-xs font-bold bg-slate-50 hover:bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg shadow-2xs flex items-center gap-1.5 self-start sm:self-auto transition-colors"
+          >
+            <User className="w-3.5 h-3.5" />
+            <span>Open Student Profile</span>
+            <ExternalLink className="w-3 h-3 text-indigo-400" />
+          </Link>
+        )}
+      </div>
+
+      {/* Rolling Date-to-Date Fee Cycle Card */}
+      <div className="bg-indigo-50/60 p-4 rounded-xl border border-indigo-200 space-y-3 shadow-2xs">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-xs font-bold text-indigo-950 uppercase tracking-wider">
+            <Calendar className="w-4 h-4 text-indigo-700" />
+            <span>Rolling Date-to-Date Monthly Fee Cycle</span>
+          </div>
+          <Badge variant={cycleInfo.variant} size="xs">
+            {cycleInfo.label}
+          </Badge>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+          <div className="bg-white p-3 rounded-lg border border-indigo-100 shadow-2xs">
+            <span className="text-[11px] text-slate-500 block font-medium">Cycle Period Window</span>
+            <span className="font-mono font-bold text-black text-sm">
+              {formatCycleLabel(validFrom, validTo)}
+            </span>
+            <div className="text-[10px] text-slate-500 mt-0.5">
+              {admission.valid_from ? formatIndianDate(admission.valid_from) : '—'} to {admission.valid_to ? formatIndianDate(admission.valid_to) : '—'}
+            </div>
+          </div>
+          <div className="bg-white p-3 rounded-lg border border-indigo-100 shadow-2xs">
+            <span className="text-[11px] text-slate-500 block font-medium">Individual Billing Anchor</span>
+            <span className="font-bold text-indigo-900 text-sm">
+              Day {validFrom ? parseInt(validFrom.split('-')[2], 10) : '—'} of month
+            </span>
+            <div className="text-[10px] text-slate-500 mt-0.5">
+              Cycle rolls on enrollment date
+            </div>
+          </div>
+          <div className="bg-white p-3 rounded-lg border border-indigo-100 shadow-2xs">
+            <span className="text-[11px] text-slate-500 block font-medium">Renewal Due Status</span>
+            <span className="font-bold text-black text-sm">
+              {cycleInfo.label}
+            </span>
+            <div className="text-[10px] text-slate-600 mt-0.5 font-medium">
+              {cycleInfo.subtext}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Itemized Purchased Courses / Batches */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
+        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+          <h3 className="font-bold text-black text-sm flex items-center gap-2">
+            <BookOpen className="w-4 h-4 text-indigo-600" />
+            <span>Enrolled Subjects & Assigned Batches</span>
+          </h3>
+          <span className="text-xs text-slate-500 font-medium">
+            {admission.items?.length || 0} enrolled course(s)
+          </span>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
+              <tr>
+                <th className="p-3">Course / Batch</th>
+                <th className="p-3">Faculty & Hall</th>
+                <th className="p-3">Rolling Cycle Window</th>
+                <th className="p-3 text-right">Fee Rate</th>
+                <th className="p-3 text-right">Discount</th>
+                <th className="p-3 text-right font-bold text-black">Net Billed</th>
+                <th className="p-3 text-right text-emerald-800">Collected</th>
+                <th className="p-3 text-right text-rose-700">Due</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {admission.items?.map((itm, idx) => (
+                <tr key={idx} className="hover:bg-slate-50/60">
+                  <td className="p-3">
+                    <div className="font-bold text-black">{itm.batch_name_snapshot || 'Course Enrollment'}</div>
+                    <div className="text-[11px] text-slate-500 font-mono">
+                      {itm.subject_code ? `Code: ${itm.subject_code}` : ''}
+                    </div>
+                  </td>
+                  <td className="p-3 text-slate-700">
+                    <div className="font-semibold text-black">{itm.teacher_name_snapshot || 'Faculty'}</div>
+                    <div className="text-[11px] text-slate-500">{itm.hall_number ? `Hall: ${itm.hall_number}` : 'Main Campus'}</div>
+                  </td>
+                  <td className="p-3">
+                    <div className="font-mono font-bold text-black text-[11px]">
+                      {formatCycleLabel(itm.valid_from || validFrom, itm.valid_to || validTo)}
+                    </div>
+                    <div className="text-[10px] text-indigo-700 font-medium">
+                      Monthly Cycle
+                    </div>
+                  </td>
+                  <td className="p-3 text-right font-mono text-slate-700 font-semibold">
+                    ₹{itm.original_fee.toFixed(2)}
+                  </td>
+                  <td className="p-3 text-right font-mono text-rose-600 font-medium">
+                    {itm.discount_amount > 0 ? `-₹${itm.discount_amount.toFixed(2)}` : '₹0.00'}
+                  </td>
+                  <td className="p-3 text-right font-mono font-bold text-black">
+                    ₹{itm.net_price.toFixed(2)}
+                  </td>
+                  <td className="p-3 text-right font-mono font-bold text-emerald-800">
+                    ₹{itm.amount_collected.toFixed(2)}
+                  </td>
+                  <td className="p-3 text-right font-mono font-bold text-rose-700">
+                    ₹{itm.balance_due.toFixed(2)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Financial KPI Summary Bar */}
+        <div className="p-4 bg-slate-50 border-t border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+          <div>
+            <span className="text-slate-500 block text-[11px]">Total Net Payable</span>
+            <span className="font-mono font-black text-black text-base">
+              ₹{admission.total_payable.toFixed(2)}
+            </span>
+          </div>
+          <div>
+            <span className="text-slate-500 block text-[11px]">Total Realized Cash</span>
+            <span className="font-mono font-black text-emerald-800 text-base">
+              ₹{admission.amount_paid.toFixed(2)}
+            </span>
+          </div>
+          <div>
+            <span className="text-slate-500 block text-[11px]">Outstanding Due</span>
+            <span className="font-mono font-black text-rose-700 text-base">
+              ₹{admission.balance_due.toFixed(2)}
+            </span>
+          </div>
+          <div>
+            <span className="text-slate-500 block text-[11px]">Payment Status</span>
+            <Badge
+              variant={
+                admission.payment_status === 'PAID'
+                  ? 'success'
+                  : admission.payment_status === 'PARTIAL'
+                  ? 'warning'
+                  : 'danger'
+              }
+              size="sm"
+              className="mt-1 font-bold"
+            >
+              {admission.payment_status}
+            </Badge>
+          </div>
+        </div>
+      </div>
+
+      {/* Recorded Payment Transactions */}
+      {admission.payments && admission.payments.length > 0 && (
+        <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
+          <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+            <h3 className="font-bold text-black text-sm flex items-center gap-2">
+              <CreditCard className="w-4 h-4 text-emerald-600" />
+              <span>Payment Receipts Recorded Against this Purchase</span>
+            </h3>
+            <span className="text-xs text-slate-500 font-medium">
+              {admission.payments.length} transaction(s)
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
+                <tr>
+                  <th className="p-3">Receipt Number</th>
+                  <th className="p-3">Payment Date</th>
+                  <th className="p-3">Mode</th>
+                  <th className="p-3 text-right">Amount Paid</th>
+                  <th className="p-3">Cashier</th>
+                  <th className="p-3 text-center">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {admission.payments.map((p, idx) => (
+                  <tr
+                    key={idx}
+                    onClick={() => navigate(`/payments/${p.id}`)}
+                    className="hover:bg-indigo-50/40 cursor-pointer transition-colors"
+                    title="Click to view payment detail page"
+                  >
+                    <td className="p-3 font-mono font-bold text-indigo-700 hover:underline">
+                      {p.receipt_number || p.id}
+                    </td>
+                    <td className="p-3 font-mono text-black">
+                      {formatIndianDate(p.payment_date)}
+                    </td>
+                    <td className="p-3">
+                      <Badge variant="neutral" size="xs">
+                        {p.payment_mode}
+                      </Badge>
+                    </td>
+                    <td className="p-3 text-right font-mono font-black text-emerald-800">
+                      ₹{p.amount.toFixed(2)}
+                    </td>
+                    <td className="p-3 text-slate-700 font-medium">
+                      {p.cashier_name_snapshot || 'Cashier'}
+                    </td>
+                    <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
+                      <Link
+                        to={`/payments/${p.id}`}
+                        className="px-2 py-1 text-[11px] bg-slate-100 hover:bg-slate-200 text-black font-semibold rounded border border-slate-300 inline-flex items-center gap-1"
+                      >
+                        <ExternalLink className="w-3 h-3 text-slate-600" />
+                        <span>Receipt</span>
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Slip Modal */}
+      <AdmissionReceiptModal
+        isOpen={slipModalOpen}
+        onClose={() => setSlipModalOpen(false)}
+        admission={admission}
+      />
+
+      {/* Quick Payment Modal */}
+      <QuickPaymentModal
+        isOpen={payModalOpen}
+        onClose={() => setPayModalOpen(false)}
+        initialAdmissionId={admission.id}
+        onPaymentSuccess={(receipt) => {
+          setPaymentReceiptToShow(receipt);
+          loadAdmission();
+        }}
+      />
+
+      {/* Payment Receipt Modal */}
+      <PaymentReceiptModal
+        isOpen={!!paymentReceiptToShow}
+        onClose={() => setPaymentReceiptToShow(null)}
+        receipt={paymentReceiptToShow}
+      />
+    </div>
+  );
+}

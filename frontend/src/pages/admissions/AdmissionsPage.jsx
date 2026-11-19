@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, CreditCard, Printer, Eye, Ban } from 'lucide-react';
+import { Plus, CreditCard, Printer, Eye, Ban, ExternalLink } from 'lucide-react';
 import DataTable from '../../components/common/DataTable';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
@@ -174,9 +174,19 @@ export default function AdmissionsPage() {
     },
     {
       header: 'Actions',
-      className: 'text-right w-40',
+      className: 'text-right w-48',
       render: (a) => (
         <div className="flex items-center justify-end gap-1">
+          <Button
+            size="xs"
+            variant="secondary"
+            icon={ExternalLink}
+            onClick={() => navigate(`/admissions/${a.id}`)}
+            title="Open Full Course Purchase Page"
+          >
+            Detail ↗
+          </Button>
+
           <Button
             size="xs"
             variant="secondary"
@@ -267,7 +277,7 @@ export default function AdmissionsPage() {
         }}
         onRefresh={loadAdmissions}
         loading={loading}
-        onRowClick={(row) => setDetailModalAdmission(row)}
+        onRowClick={(row) => navigate(`/admissions/${row.id}`)}
         searchPlaceholder="Search by purchase transaction ID or student name..."
         emptyMessage="No course purchases found."
       />
