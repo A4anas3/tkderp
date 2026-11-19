@@ -28,5 +28,7 @@ frontend/.env
 !backend/.env.example
 !frontend/.env.example
 
-# System
+# System & Secrets
 .DS_Store
+.secret
+*.secret
