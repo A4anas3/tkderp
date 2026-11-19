@@ -20,7 +20,13 @@ frontend/npm-debug.log*
 
 # Environment
 backend/.env
+frontend/.env
 .env
+*.env.local
+*.env.*.local
+!.env.example
+!backend/.env.example
+!frontend/.env.example
 
 # System
 .DS_Store
