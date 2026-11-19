@@ -29,11 +29,14 @@ api.interceptors.response.use(
         window.location.href = '/login';
       }
     }
-    const message =
+    let message =
       error.response?.data?.detail ||
-      (typeof error.response?.data === 'string' ? error.response.data : null) ||
       error.message ||
       'An unexpected error occurred';
+    if (!error.response?.data?.detail && typeof error.response?.data === 'string') {
+      const cleanText = error.response.data.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      if (cleanText) message = cleanText;
+    }
     return Promise.reject(new Error(message));
   }
 );
