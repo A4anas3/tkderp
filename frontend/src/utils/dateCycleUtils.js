@@ -122,3 +122,16 @@ export function evaluateCycleStatus(endDateStr, balanceDue = 0, isCancelledOrRev
     };
   }
 }
+
+export function formatValidityDuration(days) {
+  const d = parseInt(days, 10);
+  if (!d || isNaN(d)) return '—';
+  if (d === 365) return '365 Days (1 Year)';
+  if (d > 0 && d % 365 === 0) return `${d} Days (${d / 365} Years)`;
+  if (d === 180) return '180 Days (6 Months)';
+  if (d === 90) return '90 Days (3 Months)';
+  if (d === 60) return '60 Days (2 Months)';
+  if (d === 30) return '30 Days (1 Month)';
+  if (d > 0 && d % 30 === 0) return `${d} Days (${d / 30} Months)`;
+  return `${d} Days`;
+}

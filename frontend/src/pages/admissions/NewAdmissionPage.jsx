@@ -30,7 +30,7 @@ import {
 import { useToast } from '../../context/ToastContext';
 import QuickStudentModal from '../../components/modals/QuickStudentModal';
 import AdmissionReceiptModal from '../../components/receipts/AdmissionReceiptModal';
-import { computeRollingCycle } from '../../utils/dateCycleUtils';
+import { computeRollingCycle, formatValidityDuration } from '../../utils/dateCycleUtils';
 import { cleanMobileInput } from '../../utils/phoneUtils';
 
 export default function NewAdmissionPage() {
@@ -468,14 +468,16 @@ export default function NewAdmissionPage() {
     const gc = greenCards.find((c) => c.is_active) || greenCards[0];
     const validityDays = gc.validity_days || 365;
 
-    // Calculate 1 full year (365 days) from validFrom
+    // Calculate dynamic validity from validFrom
     const fromDate = validFrom ? new Date(validFrom) : new Date();
     const toDate = new Date(fromDate);
     toDate.setDate(toDate.getDate() + validityDays);
     const toStr = toDate.toISOString().split('T')[0];
 
-    // Automatically expand the overall coverage to 1 full year for Annual Pass!
-    setValidTo(toStr);
+    // Automatically expand the overall coverage to include pass validity
+    if (!validTo || toStr > validTo) {
+      setValidTo(toStr);
+    }
 
     const newItem = {
       tempId: `gc-${Date.now()}`,
@@ -483,6 +485,7 @@ export default function NewAdmissionPage() {
       green_card_id: gc.id,
       item_name_snapshot: gc.name,
       original_price: Number(gc.price),
+      validity_days: validityDays,
       teacher_id: null,
       teacher_name_snapshot: null,
       hall_number_snapshot: null,
@@ -492,6 +495,33 @@ export default function NewAdmissionPage() {
       valid_to: toStr,
     };
     setItems((prev) => [...prev, newItem]);
+  };
+
+  const handleGreenCardChangeForItem = (tempId, newGcId) => {
+    const gc = greenCards.find((c) => c.id === newGcId);
+    if (!gc) return;
+    const validityDays = gc.validity_days || 365;
+
+    setItems((prev) =>
+      prev.map((itm) => {
+        if (itm.tempId === tempId) {
+          const fromDate = itm.valid_from ? new Date(itm.valid_from) : (validFrom ? new Date(validFrom) : new Date());
+          const toDate = new Date(fromDate);
+          toDate.setDate(toDate.getDate() + validityDays);
+          const toStr = toDate.toISOString().split('T')[0];
+
+          return {
+            ...itm,
+            green_card_id: gc.id,
+            item_name_snapshot: gc.name,
+            original_price: Number(gc.price),
+            validity_days: validityDays,
+            valid_to: toStr,
+          };
+        }
+        return itm;
+      })
+    );
   };
 
   const handleRemoveItem = (tempId) => {
@@ -1180,16 +1210,35 @@ export default function NewAdmissionPage() {
                         </div>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 items-end">
-                        <div className="sm:col-span-3">
-                          <span className="font-bold text-black text-sm">{itm.item_name_snapshot}</span>
-                          <span className="text-[11px] text-slate-500 block">
-                            Includes all current and upcoming eligible active classes & subjects for 1 full year (365 days)
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
+                        {/* Select Green Card Tier */}
+                        <div className="sm:col-span-8">
+                          <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">
+                            Select Green Card Pass Tier
+                          </label>
+                          <select
+                            value={itm.green_card_id || ''}
+                            onChange={(e) => handleGreenCardChangeForItem(itm.tempId, e.target.value)}
+                            className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-black focus:outline-none focus:border-indigo-600 font-medium"
+                          >
+                            {greenCards.map((gc) => (
+                              <option key={gc.id} value={gc.id}>
+                                {gc.name} — ₹{Number(gc.price).toFixed(0)} ({formatValidityDuration(gc.validity_days)})
+                              </option>
+                            ))}
+                          </select>
+                          <span className="text-[11px] text-slate-500 mt-1 block">
+                            {(() => {
+                              const selectedGc = greenCards.find((c) => c.id === itm.green_card_id);
+                              return selectedGc?.description || 'Universal access to all eligible active coaching classes and batches';
+                            })()}
                           </span>
                         </div>
-                        <div>
+
+                        {/* Fee */}
+                        <div className="sm:col-span-4">
                           <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">
-                            Annual Fee (₹)
+                            Membership Fee (₹)
                           </label>
                           <input
                             type="number"
@@ -1200,10 +1249,10 @@ export default function NewAdmissionPage() {
                         </div>
 
                         {/* Snapshot badge preview */}
-                        <div className="sm:col-span-4 flex flex-wrap items-center justify-between text-[11px] text-slate-700 bg-white border border-slate-200 rounded px-2.5 py-1 font-medium">
-                          <span>Access: <strong className="text-purple-900">All Subjects & Faculty</strong></span>
-                          <span className="font-mono text-purple-800 bg-purple-50 px-1.5 py-0.2 rounded border border-purple-200">
-                            Valid: {validFrom} &rarr; {validTo} (365 days / 1 Year)
+                        <div className="sm:col-span-12 flex flex-wrap items-center justify-between text-[11px] text-slate-700 bg-white border border-slate-200 rounded p-2 font-medium">
+                          <span>Access: <strong className="text-purple-900">All Subjects & Faculty Batches</strong></span>
+                          <span className="font-mono text-purple-800 bg-purple-50 px-2 py-0.5 rounded border border-purple-200 font-bold">
+                            Valid: {itm.valid_from || validFrom} &rarr; {itm.valid_to || validTo} ({formatValidityDuration(itm.validity_days || 365)})
                           </span>
                         </div>
                       </div>

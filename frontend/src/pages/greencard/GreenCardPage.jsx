@@ -6,6 +6,7 @@ import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
 import { greenCardApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
+import { formatValidityDuration } from '../../utils/dateCycleUtils';
 
 export default function GreenCardPage() {
   const { success, error } = useToast();
@@ -160,7 +161,7 @@ export default function GreenCardPage() {
 
                   <div className="flex justify-between items-center">
                     <span className="text-slate-500">Validity Duration:</span>
-                    <span className="font-bold text-black">{c.validity_days} Days (1 Year)</span>
+                    <span className="font-bold text-black">{formatValidityDuration(c.validity_days)}</span>
                   </div>
 
                   <div className="flex justify-between items-center">
@@ -212,14 +213,38 @@ export default function GreenCardPage() {
               onChange={(e) => setFormData({ ...formData, price: e.target.value })}
               required
             />
-            <Input
-              label="Validity Duration (Days)"
-              type="number"
-              min="1"
-              value={formData.validity_days}
-              onChange={(e) => setFormData({ ...formData, validity_days: e.target.value })}
-              required
-            />
+            <div>
+              <Input
+                label="Validity Duration (Days)"
+                type="number"
+                min="1"
+                value={formData.validity_days}
+                onChange={(e) => setFormData({ ...formData, validity_days: e.target.value })}
+                helperText={formatValidityDuration(formData.validity_days)}
+                required
+              />
+              <div className="flex flex-wrap gap-1 mt-1.5">
+                {[
+                  { d: 30, label: '1 Mo' },
+                  { d: 90, label: '3 Mo' },
+                  { d: 180, label: '6 Mo' },
+                  { d: 365, label: '1 Yr' },
+                ].map((preset) => (
+                  <button
+                    key={preset.d}
+                    type="button"
+                    onClick={() => setFormData({ ...formData, validity_days: preset.d })}
+                    className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${
+                      Number(formData.validity_days) === preset.d
+                        ? 'bg-purple-600 text-white border-purple-700'
+                        : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                    }`}
+                  >
+                    {preset.label} ({preset.d}d)
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
           <Input

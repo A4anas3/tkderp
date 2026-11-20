@@ -213,11 +213,7 @@ async def create_admission(
 
         itm_from = raw.valid_from or adm_valid_from
         if raw.item_type == "GREEN_CARD":
-            # Green Card pass is 1 Year (365 days)
-            if raw.valid_to and (raw.valid_to - itm_from).days > 60:
-                itm_to = raw.valid_to
-            else:
-                itm_to = itm_from + timedelta(days=gc_validity_days)
+            itm_to = raw.valid_to or (itm_from + timedelta(days=gc_validity_days))
         else:
             itm_to = raw.valid_to or compute_rolling_cycle_end(itm_from, 1)[0]
 
@@ -250,7 +246,7 @@ async def create_admission(
     if has_gc:
         student.has_green_card = True
         student.green_card_expiry = max(student.green_card_expiry or date.min, adm_valid_from + timedelta(days=gc_validity_days))
-        if (admission.valid_to - adm_valid_from).days < gc_validity_days:
+        if admission.valid_to is None or admission.valid_to < (adm_valid_from + timedelta(days=gc_validity_days)):
             admission.valid_to = adm_valid_from + timedelta(days=gc_validity_days)
 
     # Process Initial Payment if provided
