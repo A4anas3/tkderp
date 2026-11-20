@@ -15,7 +15,7 @@ from app.database.models import (
 )
 from app.modules.admissions.schemas import (
     AdmissionCreate, AdmissionResponse, AdmissionCalculatePreviewRequest, AdmissionItemResponse, AdmissionRevokeRequest,
-    AdmissionSlipsResponse, SlipItemResponse
+    AdmissionSlipsResponse, SlipItemResponse, AdmissionValidityUpdate, AdmissionLifecycleAction
 )
 from app.common.calculations import (
     calculate_admission_financials, allocate_payment_proportionally, compute_rolling_cycle_end
@@ -80,6 +80,9 @@ async def list_admissions(
         if payment_status in ("REVOKED", "CANCELLED"):
             query = query.where(Admission.status.in_(["REVOKED", "CANCELLED"]))
             count_query = count_query.where(Admission.status.in_(["REVOKED", "CANCELLED"]))
+        elif payment_status in ("SUSPENDED", "DISCONTINUED", "ACTIVE"):
+            query = query.where(Admission.status == payment_status)
+            count_query = count_query.where(Admission.status == payment_status)
         else:
             query = query.where(Admission.payment_status == payment_status)
             count_query = count_query.where(Admission.payment_status == payment_status)
@@ -734,6 +737,171 @@ async def restore_batch_purchase(
             "purchase_transaction_id": admission.admission_number,
             "student_name": admission.student_name_snapshot,
             "previous_revocation_reason": old_reason
+        })
+    )
+    db.add(audit)
+    await db.commit()
+    await db.refresh(admission)
+    return admission
+
+
+@router.patch("/{admission_id}/validity", response_model=AdmissionResponse)
+async def update_admission_validity(
+    admission_id: uuid.UUID,
+    payload: AdmissionValidityUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    query = (
+        select(Admission)
+        .options(selectinload(Admission.items), selectinload(Admission.student))
+        .where(Admission.id == admission_id)
+    )
+    res = await db.execute(query)
+    admission = res.scalar_one_or_none()
+    if not admission:
+        raise HTTPException(status_code=404, detail="Admission not found")
+
+    old_from = str(admission.valid_from) if admission.valid_from else None
+    old_to = str(admission.valid_to) if admission.valid_to else None
+
+    if payload.valid_from is not None:
+        admission.valid_from = payload.valid_from
+        for itm in admission.items:
+            itm.valid_from = payload.valid_from
+
+    if payload.valid_to is not None:
+        admission.valid_to = payload.valid_to
+        for itm in admission.items:
+            itm.valid_to = payload.valid_to
+
+    if payload.notes:
+        admission.notes = f"{admission.notes or ''} • [Validity Adjusted: {payload.notes}]".strip()
+
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="ADMISSION_VALIDITY_UPDATED",
+        entity_type="ADMISSION",
+        entity_id=admission.id,
+        details=json.dumps({
+            "purchase_transaction_id": admission.admission_number,
+            "old_valid_from": old_from,
+            "new_valid_from": str(admission.valid_from),
+            "old_valid_to": old_to,
+            "new_valid_to": str(admission.valid_to),
+            "reason": payload.notes
+        })
+    )
+    db.add(audit)
+    await db.commit()
+    await db.refresh(admission)
+    return admission
+
+
+@router.post("/{admission_id}/suspend", response_model=AdmissionResponse)
+async def suspend_admission(
+    admission_id: uuid.UUID,
+    payload: AdmissionLifecycleAction,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    query = (
+        select(Admission)
+        .options(selectinload(Admission.items), selectinload(Admission.student))
+        .where(Admission.id == admission_id)
+    )
+    res = await db.execute(query)
+    admission = res.scalar_one_or_none()
+    if not admission:
+        raise HTTPException(status_code=404, detail="Admission not found")
+
+    admission.status = "SUSPENDED"
+    admission.revocation_reason = f"Suspended: {payload.reason}" if payload.reason else "Suspended by Administrator"
+    admission.revoked_at = datetime.now(timezone.utc)
+    admission.revoked_by = current_user.id
+
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="ADMISSION_SUSPENDED",
+        entity_type="ADMISSION",
+        entity_id=admission.id,
+        details=json.dumps({
+            "purchase_transaction_id": admission.admission_number,
+            "reason": payload.reason
+        })
+    )
+    db.add(audit)
+    await db.commit()
+    await db.refresh(admission)
+    return admission
+
+
+@router.post("/{admission_id}/resume", response_model=AdmissionResponse)
+async def resume_admission(
+    admission_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    query = (
+        select(Admission)
+        .options(selectinload(Admission.items), selectinload(Admission.student))
+        .where(Admission.id == admission_id)
+    )
+    res = await db.execute(query)
+    admission = res.scalar_one_or_none()
+    if not admission:
+        raise HTTPException(status_code=404, detail="Admission not found")
+
+    admission.status = "ACTIVE"
+    admission.revocation_reason = None
+    admission.revoked_at = None
+    admission.revoked_by = None
+
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="ADMISSION_RESUMED",
+        entity_type="ADMISSION",
+        entity_id=admission.id,
+        details=json.dumps({
+            "purchase_transaction_id": admission.admission_number
+        })
+    )
+    db.add(audit)
+    await db.commit()
+    await db.refresh(admission)
+    return admission
+
+
+@router.post("/{admission_id}/discontinue", response_model=AdmissionResponse)
+async def discontinue_admission(
+    admission_id: uuid.UUID,
+    payload: AdmissionLifecycleAction,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    query = (
+        select(Admission)
+        .options(selectinload(Admission.items), selectinload(Admission.student))
+        .where(Admission.id == admission_id)
+    )
+    res = await db.execute(query)
+    admission = res.scalar_one_or_none()
+    if not admission:
+        raise HTTPException(status_code=404, detail="Admission not found")
+
+    admission.status = "DISCONTINUED"
+    admission.revocation_reason = f"Discontinued: {payload.reason}" if payload.reason else "Discontinued by Student/Admin"
+    admission.revoked_at = datetime.now(timezone.utc)
+    admission.revoked_by = current_user.id
+
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="ADMISSION_DISCONTINUED",
+        entity_type="ADMISSION",
+        entity_id=admission.id,
+        details=json.dumps({
+            "purchase_transaction_id": admission.admission_number,
+            "reason": payload.reason
         })
     )
     db.add(audit)

@@ -78,13 +78,15 @@ async def list_students(
         norm_search = normalize_mobile(clean_search)
         # Subquery to match student by admission number
         adm_subquery = select(Admission.student_id).where(Admission.admission_number.ilike(search_pattern))
+        pay_subquery = select(Payment.student_id).where(Payment.payment_number.ilike(search_pattern))
 
         clauses = [
             Student.name.ilike(search_pattern),
             Student.student_code.ilike(search_pattern),
             Student.mobile.ilike(search_pattern),
             Student.father_name.ilike(search_pattern),
-            Student.id.in_(adm_subquery)
+            Student.id.in_(adm_subquery),
+            Student.id.in_(pay_subquery)
         ]
         if norm_search and norm_search != clean_search:
             clauses.append(Student.mobile.ilike(f"%{norm_search}%"))
@@ -93,9 +95,54 @@ async def list_students(
         query = query.where(search_filter)
         count_query = count_query.where(search_filter)
 
-    if status:
-        query = query.where(Student.status == status)
-        count_query = count_query.where(Student.status == status)
+    if status and status != "ALL":
+        today = date.today()
+        if status == "ACTIVE":
+            active_adm_sub = select(Admission.student_id).where(
+                and_(
+                    Admission.status == "ACTIVE",
+                    func.coalesce(Admission.valid_to, Admission.admission_date + 30) >= today
+                )
+            )
+            cond = and_(Student.status == "ACTIVE", Student.id.in_(active_adm_sub))
+            query = query.where(cond)
+            count_query = count_query.where(cond)
+        elif status == "UPCOMING":
+            upcoming_adm_sub = select(Admission.student_id).where(
+                and_(
+                    Admission.status == "ACTIVE",
+                    Admission.valid_from > today
+                )
+            )
+            query = query.where(Student.id.in_(upcoming_adm_sub))
+            count_query = count_query.where(Student.id.in_(upcoming_adm_sub))
+        elif status == "EXPIRED":
+            expired_adm_sub = select(Admission.student_id).where(
+                func.coalesce(Admission.valid_to, Admission.admission_date + 30) < today
+            )
+            active_adm_sub = select(Admission.student_id).where(
+                and_(
+                    Admission.status == "ACTIVE",
+                    func.coalesce(Admission.valid_to, Admission.admission_date + 30) >= today
+                )
+            )
+            cond = and_(Student.id.in_(expired_adm_sub), ~Student.id.in_(active_adm_sub))
+            query = query.where(cond)
+            count_query = count_query.where(cond)
+        elif status == "DISCONTINUED":
+            disc_adm_sub = select(Admission.student_id).where(
+                Admission.status.in_(["DISCONTINUED", "CANCELLED", "REVOKED"])
+            )
+            cond = or_(Student.status.in_(["REVOKED", "INACTIVE"]), Student.id.in_(disc_adm_sub))
+            query = query.where(cond)
+            count_query = count_query.where(cond)
+        elif status == "INACTIVE":
+            cond = Student.status.in_(["REVOKED", "INACTIVE"])
+            query = query.where(cond)
+            count_query = count_query.where(cond)
+        else:
+            query = query.where(Student.status == status)
+            count_query = count_query.where(Student.status == status)
 
     total = (await db.execute(count_query)).scalar() or 0
     total_pages = (total + page_size - 1) // page_size if total > 0 else 0

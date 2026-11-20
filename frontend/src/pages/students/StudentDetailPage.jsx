@@ -38,7 +38,7 @@ import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
 import StatCard from '../../components/common/StatCard';
 import Avatar from '../../components/common/Avatar';
-import { studentApi, admissionApi, paymentApi } from '../../services/allApis';
+import { studentApi, admissionApi, paymentApi, assessmentApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 import { compressImage } from '../../utils/imageCompressor';
 import { useAuth } from '../../context/AuthContext';
@@ -51,8 +51,36 @@ import RefundReceiptModal from '../../components/receipts/RefundReceiptModal';
 import RevokeStudentModal from '../../components/modals/RevokeStudentModal';
 import RevokeBatchModal from '../../components/modals/RevokeBatchModal';
 import EditStudentModal from '../../components/modals/EditStudentModal';
+import EditValidityModal from '../../components/modals/EditValidityModal';
+import SuspendDiscontinueModal from '../../components/modals/SuspendDiscontinueModal';
 
 function getValidityStatus(adm) {
+  if (adm.status === 'SUSPENDED') {
+    return {
+      status: 'SUSPENDED',
+      badgeVariant: 'warning',
+      label: 'Suspended',
+      subtext: adm.revocation_reason || 'Temporarily Suspended',
+      isExpired: false,
+      isExpiringSoon: false,
+      isSuspended: true,
+      canRenew: false,
+    };
+  }
+
+  if (adm.status === 'DISCONTINUED') {
+    return {
+      status: 'DISCONTINUED',
+      badgeVariant: 'neutral',
+      label: 'Discontinued',
+      subtext: adm.revocation_reason || 'Discontinued',
+      isExpired: false,
+      isExpiringSoon: false,
+      isDiscontinued: true,
+      canRenew: true,
+    };
+  }
+
   const isCancelledOrRevoked = adm.status === 'REVOKED' || adm.status === 'CANCELLED';
   if (isCancelledOrRevoked) {
     const formattedDate = adm.revoked_at ? new Date(adm.revoked_at).toLocaleDateString('en-IN') : null;
@@ -132,11 +160,23 @@ export default function StudentDetailPage() {
   const [loading, setLoading] = useState(true);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
+  // Tab State
+  const [activeMainTab, setActiveMainTab] = useState('ENROLLMENTS'); // 'ENROLLMENTS' | 'LEDGER' | 'ASSESSMENTS'
+  const [assessmentHistory, setAssessmentHistory] = useState([]);
+  const [loadingAssessments, setLoadingAssessments] = useState(false);
+
   // Modals
   const [payModalOpen, setPayModalOpen] = useState(false);
   const [targetAdmissionId, setTargetAdmissionId] = useState(null);
   const [receiptToShow, setReceiptToShow] = useState(null);
   const [admissionSlipToShow, setAdmissionSlipToShow] = useState(null);
+
+  // Lifecycle Modals (Edit Validity, Suspend, Discontinue)
+  const [selectedAdmissionForValidity, setSelectedAdmissionForValidity] = useState(null);
+  const [validityModalOpen, setValidityModalOpen] = useState(false);
+  const [selectedAdmissionForSuspend, setSelectedAdmissionForSuspend] = useState(null);
+  const [suspendModalOpen, setSuspendModalOpen] = useState(false);
+  const [suspendMode, setSuspendMode] = useState('SUSPEND');
 
   // Revocation & Refund Modals
   const [revokeModalOpen, setRevokeModalOpen] = useState(false);
@@ -242,6 +282,18 @@ export default function StudentDetailPage() {
     }
   };
 
+  const fetchAssessments = async () => {
+    setLoadingAssessments(true);
+    try {
+      const res = await assessmentApi.getStudentHistory(id);
+      setAssessmentHistory(res || []);
+    } catch (err) {
+      console.warn('Failed to load assessment history', err);
+    } finally {
+      setLoadingAssessments(false);
+    }
+  };
+
   const fetchStudentData = async () => {
     setLoading(true);
     try {
@@ -249,6 +301,7 @@ export default function StudentDetailPage() {
         fetchStudentProfile(),
         fetchAdmissionsData(admPage, admPageSize, admSearch, admStatusFilter),
         fetchTransactionsData(txnPage, txnPageSize, txnSearch, txnModeFilter, txnTypeFilter),
+        fetchAssessments(),
       ]);
     } finally {
       setLoading(false);
@@ -257,6 +310,7 @@ export default function StudentDetailPage() {
 
   useEffect(() => {
     fetchStudentProfile();
+    fetchAssessments();
   }, [id]);
 
   useEffect(() => {
@@ -311,6 +365,16 @@ export default function StudentDetailPage() {
     }
   };
 
+  const handleResumeBatch = async (adm) => {
+    try {
+      await admissionApi.resume(adm.id);
+      success(`Batch ${adm.purchase_transaction_id || adm.admission_number} resumed to ACTIVE`);
+      fetchStudentData();
+    } catch (err) {
+      error(err.message || 'Failed to resume batch');
+    }
+  };
+
   const handlePhotoUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -349,6 +413,17 @@ export default function StudentDetailPage() {
   }
 
   const isRevoked = student.status === 'REVOKED';
+
+  // Filter only currently active subjects (Section 9)
+  const activeAdmissions = admissions.filter((adm) => {
+    if (adm.status !== 'ACTIVE') return false;
+    const v = getValidityStatus(adm);
+    return !v.isExpired && !v.isCancelled && !v.isSuspended && !v.isDiscontinued;
+  });
+
+  const activeTotalFee = activeAdmissions.reduce((acc, a) => acc + Number(a.total_payable || 0), 0);
+  const activeTotalPaid = activeAdmissions.reduce((acc, a) => acc + Number(a.amount_paid || 0), 0);
+  const activeTotalDue = activeAdmissions.reduce((acc, a) => acc + Number(a.balance_due || 0), 0);
 
   return (
     <div className="space-y-4">
@@ -1451,6 +1526,29 @@ export default function StudentDetailPage() {
         onSuccess={() => {
           fetchStudentData();
         }}
+      />
+
+      {/* Edit Validity Dates Modal */}
+      <EditValidityModal
+        isOpen={validityModalOpen}
+        onClose={() => {
+          setValidityModalOpen(false);
+          setSelectedAdmissionForValidity(null);
+        }}
+        admission={selectedAdmissionForValidity}
+        onSuccess={() => fetchStudentData()}
+      />
+
+      {/* Suspend or Discontinue Modal */}
+      <SuspendDiscontinueModal
+        isOpen={suspendModalOpen}
+        onClose={() => {
+          setSuspendModalOpen(false);
+          setSelectedAdmissionForSuspend(null);
+        }}
+        admission={selectedAdmissionForSuspend}
+        mode={suspendMode}
+        onSuccess={() => fetchStudentData()}
       />
     </div>
   );

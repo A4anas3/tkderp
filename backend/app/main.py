@@ -18,6 +18,7 @@ from app.modules.payments.router import router as payments_router
 from app.modules.expenses.router import router as expenses_router
 from app.modules.reports.router import router as reports_router
 from app.modules.dashboard.router import router as dashboard_router
+from app.modules.assessments.router import router as assessments_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -62,6 +63,7 @@ app.include_router(payments_router)
 app.include_router(expenses_router)
 app.include_router(reports_router)
 app.include_router(dashboard_router)
+app.include_router(assessments_router)
 
 @app.get("/health", tags=["Health"])
 async def health_check():

@@ -243,6 +243,22 @@ export const admissionApi = {
     const res = await api.get(`/admissions/${id}/slips`);
     return res.data;
   },
+  updateValidity: async (id, data) => {
+    const res = await api.patch(`/admissions/${id}/validity`, data);
+    return res.data;
+  },
+  suspend: async (id, data) => {
+    const res = await api.post(`/admissions/${id}/suspend`, data);
+    return res.data;
+  },
+  resume: async (id) => {
+    const res = await api.post(`/admissions/${id}/resume`);
+    return res.data;
+  },
+  discontinue: async (id, data) => {
+    const res = await api.post(`/admissions/${id}/discontinue`, data);
+    return res.data;
+  },
 };
 
 export const paymentApi = {
@@ -349,3 +365,27 @@ export const userApi = {
     return res.data;
   },
 };
+
+export const assessmentApi = {
+  list: async (params) => {
+    const res = await api.get('/assessments', { params });
+    return res.data;
+  },
+  get: async (id) => {
+    const res = await api.get(`/assessments/${id}`);
+    return res.data;
+  },
+  create: async (data) => {
+    const res = await api.post('/assessments', data);
+    return res.data;
+  },
+  recordMarks: async (id, data) => {
+    const res = await api.post(`/assessments/${id}/marks`, data);
+    return res.data;
+  },
+  getStudentHistory: async (studentId) => {
+    const res = await api.get(`/assessments/students/${studentId}/history`);
+    return res.data;
+  },
+};
+
