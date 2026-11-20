@@ -63,6 +63,25 @@ async def list_teachers(
         total_pages=total_pages
     )
 
+@router.get("/by-mobile/{mobile}", response_model=Optional[TeacherResponse])
+async def get_teacher_by_mobile(
+    mobile: str,
+    db: AsyncSession = Depends(get_db),
+    user = Depends(require_staff)
+):
+    clean = mobile.strip()
+    if len(clean) > 10:
+        if clean.startswith("+91"):
+            clean = clean[3:]
+        elif clean.startswith("91") and len(clean) == 12:
+            clean = clean[2:]
+        elif clean.startswith("0") and len(clean) == 11:
+            clean = clean[1:]
+    teacher = (await db.execute(select(Teacher).where(Teacher.mobile == clean))).scalar_one_or_none()
+    if not teacher:
+        return None
+    return TeacherResponse.model_validate(teacher)
+
 @router.get("/{teacher_id}", response_model=TeacherResponse)
 async def get_teacher(teacher_id: uuid.UUID, db: AsyncSession = Depends(get_db), user = Depends(require_staff)):
     teacher = (await db.execute(select(Teacher).where(Teacher.id == teacher_id))).scalar_one_or_none()
@@ -76,6 +95,21 @@ async def create_teacher(
     db: AsyncSession = Depends(get_db),
     admin = Depends(require_admin)
 ):
+    clean_mob = req.mobile.strip()
+    existing_teacher = (await db.execute(select(Teacher).where(Teacher.mobile == clean_mob))).scalar_one_or_none()
+    if existing_teacher:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Faculty member already registered with mobile {clean_mob}: {existing_teacher.name} ({existing_teacher.teacher_code})"
+        )
+
+    if not req.name or not req.name.strip():
+        raise HTTPException(status_code=400, detail="Teacher name is required")
+    if req.qualification is not None and not req.qualification.strip():
+        raise HTTPException(status_code=400, detail="Qualification cannot be blank")
+    if req.specialization is not None and not req.specialization.strip():
+        raise HTTPException(status_code=400, detail="Specialization cannot be blank")
+
     # Auto-generate teacher code
     count = (await db.execute(select(func.count(Teacher.id)))).scalar() or 0
     code = f"TCH{count + 1:03d}"
@@ -83,10 +117,10 @@ async def create_teacher(
     new_teacher = Teacher(
         teacher_code=code,
         name=req.name.strip(),
-        mobile=req.mobile.strip(),
+        mobile=clean_mob,
         email=req.email.strip().lower() if req.email else None,
-        qualification=req.qualification,
-        specialization=req.specialization,
+        qualification=req.qualification.strip() if req.qualification else "Faculty Educator",
+        specialization=req.specialization.strip() if req.specialization else "General Faculty",
         photo_url=req.photo_url,
         joining_date=req.joining_date,
         status=req.status
@@ -107,11 +141,31 @@ async def update_teacher(
     if not teacher:
         raise HTTPException(status_code=404, detail="Teacher not found")
 
-    if req.name is not None: teacher.name = req.name.strip()
-    if req.mobile is not None: teacher.mobile = req.mobile.strip()
+    if req.mobile is not None:
+        clean_mob = req.mobile.strip()
+        existing_teacher = (await db.execute(
+            select(Teacher).where(Teacher.mobile == clean_mob, Teacher.id != teacher_id)
+        )).scalar_one_or_none()
+        if existing_teacher:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Another faculty member already registered with mobile {clean_mob}: {existing_teacher.name} ({existing_teacher.teacher_code})"
+            )
+        teacher.mobile = clean_mob
+
+    if req.name is not None:
+        if not req.name.strip():
+            raise HTTPException(status_code=400, detail="Teacher name cannot be blank")
+        teacher.name = req.name.strip()
     if req.email is not None: teacher.email = req.email.strip().lower() if req.email else None
-    if req.qualification is not None: teacher.qualification = req.qualification
-    if req.specialization is not None: teacher.specialization = req.specialization
+    if req.qualification is not None:
+        if not req.qualification.strip():
+            raise HTTPException(status_code=400, detail="Qualification cannot be blank")
+        teacher.qualification = req.qualification.strip()
+    if req.specialization is not None:
+        if not req.specialization.strip():
+            raise HTTPException(status_code=400, detail="Specialization cannot be blank")
+        teacher.specialization = req.specialization.strip()
     if req.photo_url is not None: teacher.photo_url = req.photo_url
     if req.joining_date is not None: teacher.joining_date = req.joining_date
     if req.status is not None: teacher.status = req.status

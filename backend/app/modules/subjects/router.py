@@ -1,4 +1,6 @@
 import uuid
+import random
+import re
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -58,20 +60,36 @@ async def get_all_active_subjects(
     result = await db.execute(select(Subject).where(Subject.status == "ACTIVE").order_by(Subject.name.asc()))
     return result.scalars().all()
 
+async def generate_unique_subject_code(name: str, db: AsyncSession) -> str:
+    """
+    Generate an internal unique subject code from the first 4 characters
+    of the subject name + random digits (e.g. MATH-4821 or CHEM-7193).
+    """
+    clean = re.sub(r"[^A-Za-z0-9]", "", name).upper()
+    prefix = clean[:4] if len(clean) >= 4 else (clean + "SUBJ")[:4]
+
+    for _ in range(100):
+        rand_num = random.randint(1000, 9999)
+        candidate = f"{prefix}-{rand_num}"
+        existing = await db.execute(select(Subject).where(Subject.subject_code == candidate))
+        if not existing.scalar_one_or_none():
+            return candidate
+
+    return f"{prefix}-{uuid.uuid4().hex[:6].upper()}"
+
 @router.post("", response_model=SubjectResponse, status_code=status.HTTP_201_CREATED)
 async def create_subject(
     payload: SubjectCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin)
 ):
-    if payload.subject_code:
-        existing = await db.execute(select(Subject).where(Subject.subject_code == payload.subject_code))
+    if payload.subject_code and payload.subject_code.strip():
+        code = payload.subject_code.strip().upper()
+        existing = await db.execute(select(Subject).where(Subject.subject_code == code))
         if existing.scalar_one_or_none():
             raise HTTPException(status_code=400, detail="Subject code already exists")
-        code = payload.subject_code
     else:
-        cnt_res = await db.execute(select(func.count(Subject.id)))
-        code = f"SUB{(cnt_res.scalar_one() + 1):03d}"
+        code = await generate_unique_subject_code(payload.name, db)
 
     teacher_name = payload.teacher_name_snapshot
     if payload.teacher_id:

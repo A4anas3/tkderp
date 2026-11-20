@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Edit2, BookOpen, Users, MapPin, Clock, School, Calendar, ExternalLink } from 'lucide-react';
+import { Plus, Edit2, BookOpen, Users, MapPin, Clock, School, Calendar, ExternalLink, RefreshCw } from 'lucide-react';
 import DataTable from '../../components/common/DataTable';
 import Modal from '../../components/common/Modal';
 import Input from '../../components/common/Input';
@@ -9,6 +9,14 @@ import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
 import { subjectApi, teacherApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
+
+export function generateSubjectCode(name) {
+  if (!name || !name.trim()) return '';
+  const clean = name.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  const prefix = clean.length >= 4 ? clean.slice(0, 4) : (clean + 'SUBJ').slice(0, 4);
+  const randNum = Math.floor(1000 + Math.random() * 9000);
+  return `${prefix}-${randNum}`;
+}
 
 const DAYS_OF_WEEK = [
   { value: 'Mon', label: 'Mon (Monday)' },
@@ -143,6 +151,7 @@ export default function SubjectsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingSubject, setEditingSubject] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [isCustomCode, setIsCustomCode] = useState(false);
   const [scheduleState, setScheduleState] = useState({
     startDay: 'Mon',
     endDay: 'Sat',
@@ -161,6 +170,29 @@ export default function SubjectsPage() {
     default_discount_percentage: '10.00',
     status: 'ACTIVE',
   });
+
+  const handleNameChange = (e) => {
+    const newName = e.target.value;
+    if (!editingSubject && !isCustomCode) {
+      const autoCode = generateSubjectCode(newName);
+      setFormData((prev) => ({ ...prev, name: newName, subject_code: autoCode }));
+    } else {
+      setFormData((prev) => ({ ...prev, name: newName }));
+    }
+  };
+
+  const handleCodeChange = (e) => {
+    setIsCustomCode(true);
+    setFormData((prev) => ({ ...prev, subject_code: e.target.value.toUpperCase() }));
+  };
+
+  const handleRegenerateCode = () => {
+    if (formData.name) {
+      const code = generateSubjectCode(formData.name);
+      setFormData((prev) => ({ ...prev, subject_code: code }));
+      setIsCustomCode(false);
+    }
+  };
 
   const handleDayChange = (key, val) => {
     const next = {
@@ -234,6 +266,7 @@ export default function SubjectsPage() {
 
   const handleOpenAdd = () => {
     setEditingSubject(null);
+    setIsCustomCode(false);
     const initialSchedule = {
       startDay: 'Mon',
       endDay: 'Sat',
@@ -258,6 +291,7 @@ export default function SubjectsPage() {
 
   const handleOpenEdit = (s) => {
     setEditingSubject(s);
+    setIsCustomCode(true);
     const parsedSched = parseSchedule(s.schedule || 'Mon-Sat 09:00 AM - 10:30 AM');
     setScheduleState(parsedSched);
     setFormData({
@@ -461,21 +495,43 @@ export default function SubjectsPage() {
       >
         <form onSubmit={handleSubmit} className="space-y-3.5">
           <Input
-            label="Subject Name"
+            label="Subject Name *"
             value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            onChange={handleNameChange}
             placeholder="e.g. Higher Mathematics"
             required
             autoFocus
           />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Input
-              label="Subject Code"
-              value={formData.subject_code}
-              onChange={(e) => setFormData({ ...formData, subject_code: e.target.value })}
-              placeholder="e.g. SUB_CHEM"
-            />
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-black">
+                  Subject Code {editingSubject ? '' : '(Auto-generated)'}
+                </label>
+                {!editingSubject && (
+                  <button
+                    type="button"
+                    onClick={handleRegenerateCode}
+                    className="text-[11px] text-indigo-600 hover:text-indigo-800 flex items-center gap-1 font-medium transition cursor-pointer"
+                    title="Regenerate random unique code"
+                  >
+                    <RefreshCw className="w-3 h-3" /> Regenerate
+                  </button>
+                )}
+              </div>
+              <Input
+                value={formData.subject_code}
+                onChange={handleCodeChange}
+                placeholder="Auto-generated (e.g. MATH-4821)"
+                disabled={!!editingSubject}
+                helperText={
+                  editingSubject
+                    ? 'Subject code cannot be changed once created.'
+                    : 'Auto-generated from first 4 characters of name + random number.'
+                }
+              />
+            </div>
 
             <Select
               label="Assigned Faculty / Teacher"

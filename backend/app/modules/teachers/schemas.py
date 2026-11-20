@@ -8,8 +8,8 @@ class TeacherBase(BaseModel):
     name: str = Field(..., min_length=2, max_length=150)
     mobile: str = Field(...)
     email: Optional[str] = None
-    qualification: Optional[str] = None
-    specialization: Optional[str] = None
+    qualification: Optional[str] = Field(default="Faculty Educator", min_length=1, max_length=150)
+    specialization: Optional[str] = Field(default="General Faculty", min_length=1, max_length=150)
     photo_url: Optional[str] = None
     joining_date: date = Field(default_factory=date.today)
     status: str = Field(default="ACTIVE", pattern="^(ACTIVE|INACTIVE)$")

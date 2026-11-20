@@ -35,6 +35,10 @@ export const teacherApi = {
     const res = await api.get(`/teachers/${id}`);
     return res.data;
   },
+  getByMobile: async (mobile) => {
+    const res = await api.get(`/teachers/by-mobile/${encodeURIComponent(mobile)}`);
+    return res.data;
+  },
   create: async (data) => {
     const res = await api.post('/teachers', data);
     return res.data;

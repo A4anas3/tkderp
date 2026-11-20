@@ -1336,6 +1336,29 @@ async def test_subject_lifecycle_and_renewal_flow():
         assert float(final_data["active_totals"]["total_paid"]) == 1500.00
         assert float(final_data["active_totals"]["total_due"]) == 1000.00
 
+@pytest.mark.asyncio
+async def test_auto_generated_subject_code():
+    """Verify subject code is automatically generated from first 4 characters of name + random digits."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        login_res = await client.post("/api/auth/login", json={"username": "ADM001", "password": "Admin@1234"})
+        headers = {"Authorization": f"Bearer {login_res.json()['access_token']}"}
+
+        # Create subject without subject_code
+        res = await client.post("/api/subjects", json={
+            "name": "Mathematics Advanced",
+            "default_fee": 1200.0
+        }, headers=headers)
+        assert res.status_code == 201
+        data = res.json()
+        assert "subject_code" in data
+        # First 4 characters of "Mathematics" is "MATH"
+        assert data["subject_code"].startswith("MATH-")
+        # Followed by 4 digits
+        code_parts = data["subject_code"].split("-")
+        assert len(code_parts) == 2
+        assert len(code_parts[1]) == 4
+        assert code_parts[1].isdigit()
+
 
 
 

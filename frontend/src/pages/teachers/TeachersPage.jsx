@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Edit2, UserCheck, UserX, Phone, Mail, Award, BookOpen, ExternalLink, Camera, X } from 'lucide-react';
+import { Plus, Edit2, UserCheck, UserX, Phone, Mail, Award, BookOpen, ExternalLink, Camera, X, AlertTriangle } from 'lucide-react';
 import DataTable from '../../components/common/DataTable';
 import Modal from '../../components/common/Modal';
 import Input from '../../components/common/Input';
@@ -35,6 +35,10 @@ export default function TeachersPage() {
   const [photoFile, setPhotoFile] = useState(null);
   const [photoSizeKb, setPhotoSizeKb] = useState(null);
 
+  // Mobile Uniqueness Check State
+  const [existingTeacherWithMobile, setExistingTeacherWithMobile] = useState(null);
+  const [checkingMobile, setCheckingMobile] = useState(false);
+
   const [formData, setFormData] = useState({
     name: '',
     mobile: '',
@@ -63,11 +67,42 @@ export default function TeachersPage() {
     loadTeachers();
   }, [loadTeachers]);
 
+  // Check mobile uniqueness whenever mobile reaches 10 digits
+  useEffect(() => {
+    const cleanMob = cleanMobileInput(formData.mobile);
+    if (cleanMob.length === 10) {
+      let isCurrent = true;
+      setCheckingMobile(true);
+      teacherApi
+        .getByMobile(cleanMob)
+        .then((existing) => {
+          if (!isCurrent) return;
+          if (existing && (!editingTeacher || existing.id !== editingTeacher.id)) {
+            setExistingTeacherWithMobile(existing);
+          } else {
+            setExistingTeacherWithMobile(null);
+          }
+        })
+        .catch(() => {
+          if (isCurrent) setExistingTeacherWithMobile(null);
+        })
+        .finally(() => {
+          if (isCurrent) setCheckingMobile(false);
+        });
+      return () => {
+        isCurrent = false;
+      };
+    } else {
+      setExistingTeacherWithMobile(null);
+    }
+  }, [formData.mobile, editingTeacher]);
+
   const handleOpenAdd = () => {
     setEditingTeacher(null);
     setPhotoPreview(null);
     setPhotoFile(null);
     setPhotoSizeKb(null);
+    setExistingTeacherWithMobile(null);
     setFormData({
       name: '',
       mobile: '',
@@ -86,12 +121,13 @@ export default function TeachersPage() {
     setPhotoPreview(t.photo_url || null);
     setPhotoFile(null);
     setPhotoSizeKb(null);
+    setExistingTeacherWithMobile(null);
     setFormData({
       name: t.name,
       mobile: t.mobile,
       email: t.email || '',
-      qualification: t.qualification,
-      specialization: t.specialization,
+      qualification: t.qualification || '',
+      specialization: t.specialization || '',
       photo_url: t.photo_url || null,
       joining_date: t.joining_date,
       status: t.status,
@@ -126,14 +162,34 @@ export default function TeachersPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.name.trim() || !formData.mobile.trim()) {
-      error('Teacher name and mobile number are required');
+    if (!formData.name.trim()) {
+      error('Teacher full name is required');
       return;
     }
 
     const cleanMob = cleanMobileInput(formData.mobile);
     if (!cleanMob || cleanMob.length !== 10) {
       error('Mobile number must be exactly 10 numeric digits');
+      return;
+    }
+
+    if (existingTeacherWithMobile) {
+      error(`Mobile number is already registered to ${existingTeacherWithMobile.name} (${existingTeacherWithMobile.teacher_code})`);
+      return;
+    }
+
+    if (!formData.qualification.trim()) {
+      error('Qualification is required (e.g. M.Sc. Mathematics, B.Ed.)');
+      return;
+    }
+
+    if (!formData.specialization.trim()) {
+      error('Specialization / Subject is required (e.g. Higher Secondary Mathematics)');
+      return;
+    }
+
+    if (!formData.joining_date) {
+      error('Joining date is required');
       return;
     }
 
@@ -357,7 +413,7 @@ export default function TeachersPage() {
           </div>
 
           <Input
-            label="Teacher Full Name"
+            label="Teacher Full Name *"
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             placeholder="e.g. K.K. Chauhan"
@@ -367,7 +423,7 @@ export default function TeachersPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
-              label="Mobile Number"
+              label="Mobile Number *"
               type="tel"
               inputMode="numeric"
               pattern="[0-9]*"
@@ -377,12 +433,16 @@ export default function TeachersPage() {
               placeholder="10-digit mobile"
               required
               error={
-                formData.mobile && formData.mobile.length < 10
+                existingTeacherWithMobile
+                  ? `Already registered to ${existingTeacherWithMobile.name} (${existingTeacherWithMobile.teacher_code})`
+                  : formData.mobile && formData.mobile.length < 10
                   ? `Must be 10 digits (${formData.mobile.length}/10)`
                   : null
               }
               helperText={
-                formData.mobile && formData.mobile.length === 10
+                existingTeacherWithMobile
+                  ? null
+                  : formData.mobile && formData.mobile.length === 10
                   ? '✓ Valid 10-digit mobile'
                   : '10-digit mobile number'
               }
@@ -396,16 +456,60 @@ export default function TeachersPage() {
             />
           </div>
 
+          {/* Existing Teacher Profile Card if Mobile Already Exists */}
+          {existingTeacherWithMobile && (
+            <div className="p-3 bg-amber-50 border border-amber-300 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-2xs">
+              <div className="flex items-center gap-2.5">
+                <Avatar
+                  src={existingTeacherWithMobile.photo_url}
+                  name={existingTeacherWithMobile.name}
+                  size="md"
+                  status={existingTeacherWithMobile.status}
+                />
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span className="font-bold text-amber-950">{existingTeacherWithMobile.name}</span>
+                    <span className="font-mono text-[10px] bg-amber-200/80 text-amber-900 px-1.5 py-0.2 rounded font-bold">
+                      {existingTeacherWithMobile.teacher_code}
+                    </span>
+                    <Badge size="xs" variant={existingTeacherWithMobile.status === 'ACTIVE' ? 'success' : 'neutral'}>
+                      {existingTeacherWithMobile.status}
+                    </Badge>
+                  </div>
+                  <p className="text-[11px] text-slate-700 font-medium mt-0.5">
+                    {existingTeacherWithMobile.specialization || 'Faculty'} • Mobile:{' '}
+                    <strong className="font-mono">{existingTeacherWithMobile.mobile}</strong>
+                  </p>
+                  <span className="text-[10px] text-amber-800 font-semibold block mt-0.5">
+                    ⚠️ A faculty member is already registered with this mobile number.
+                  </span>
+                </div>
+              </div>
+              <Button
+                type="button"
+                size="xs"
+                variant="secondary"
+                onClick={() => {
+                  setModalOpen(false);
+                  navigate(`/teachers/${existingTeacherWithMobile.id}`);
+                }}
+              >
+                View Profile ↗
+              </Button>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
-              label="Qualification"
+              label="Qualification *"
               value={formData.qualification}
               onChange={(e) => setFormData({ ...formData, qualification: e.target.value })}
               placeholder="e.g. M.Sc. Mathematics, B.Ed."
               required
             />
             <Input
-              label="Specialization / Subject"
+              label="Specialization / Subject *"
               value={formData.specialization}
               onChange={(e) => setFormData({ ...formData, specialization: e.target.value })}
               placeholder="e.g. Higher Secondary Mathematics"
@@ -415,7 +519,7 @@ export default function TeachersPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
-              label="Joining Date"
+              label="Joining Date *"
               type="date"
               value={formData.joining_date}
               onChange={(e) => setFormData({ ...formData, joining_date: e.target.value })}
@@ -436,18 +540,34 @@ export default function TeachersPage() {
             <Button variant="secondary" onClick={() => setModalOpen(false)} disabled={submitting}>
               Cancel
             </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              loading={submitting}
-              disabled={submitting || formData.mobile.length !== 10}
-            >
-              {formData.mobile.length !== 10
-                ? 'Enter 10-Digit Mobile'
-                : editingTeacher
-                ? 'Save Changes'
-                : 'Register Faculty'}
-            </Button>
+            {(() => {
+              const cleanMob = cleanMobileInput(formData.mobile);
+              const isFormValid =
+                formData.name.trim().length >= 2 &&
+                cleanMob.length === 10 &&
+                !existingTeacherWithMobile &&
+                formData.qualification.trim().length >= 2 &&
+                formData.specialization.trim().length >= 2 &&
+                Boolean(formData.joining_date);
+
+              let buttonLabel = editingTeacher ? 'Save Changes' : 'Register Faculty';
+              if (!formData.name.trim()) buttonLabel = 'Enter Teacher Name';
+              else if (cleanMob.length !== 10) buttonLabel = 'Enter 10-Digit Mobile';
+              else if (existingTeacherWithMobile) buttonLabel = 'Mobile Already Registered';
+              else if (!formData.qualification.trim()) buttonLabel = 'Enter Qualification';
+              else if (!formData.specialization.trim()) buttonLabel = 'Enter Specialization';
+
+              return (
+                <Button
+                  type="submit"
+                  variant="primary"
+                  loading={submitting}
+                  disabled={submitting || !isFormValid}
+                >
+                  {buttonLabel}
+                </Button>
+              );
+            })()}
           </div>
         </form>
       </Modal>
