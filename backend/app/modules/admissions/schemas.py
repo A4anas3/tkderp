@@ -41,6 +41,12 @@ class AdmissionItemResponse(BaseModel):
     valid_from: Optional[date] = None
     valid_to: Optional[date] = None
     status: str = "ACTIVE"
+    access_status: str = "ACTIVE"
+    previous_access_status: Optional[str] = None
+    revoke_type: Optional[str] = None
+    forfeited_amount: Decimal = Decimal("0.00")
+    written_off_amount: Decimal = Decimal("0.00")
+    keep_due: bool = False
     suspended_at: Optional[datetime] = None
     discontinued_at: Optional[datetime] = None
     lifecycle_reason: Optional[str] = None
@@ -73,10 +79,20 @@ class AdmissionCreate(BaseModel):
     valid_to: Optional[date] = None
     initial_payment: Optional[InitialPaymentData] = None
 
+class LineRefundAmount(BaseModel):
+    item_id: uuid.UUID
+    refund_amount: Decimal = Field(..., ge=0)
+
 class AdmissionRevokeRequest(BaseModel):
     reason: str = Field(..., min_length=3, max_length=500)
+    revoke_type: str = Field(default="DROPOUT_NO_REFUND", pattern="^(DROPOUT_NO_REFUND|DROPOUT_WITH_REFUND|ENTRY_MISTAKE)$")
+    scope: str = Field(default="WHOLE_SLIP", pattern="^(WHOLE_SLIP|SELECTED_ITEMS)$")
+    item_ids: Optional[List[uuid.UUID]] = None
+    effective_date: Optional[date] = None
+    pending_due_action: str = Field(default="WAIVE", pattern="^(KEEP_DUE|WAIVE)$")
     refund_amount: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0)
     refund_mode: str = Field(default="CASH", pattern="^(CASH|UPI|BANK_TRANSFER|OTHER)$")
+    line_refunds: Optional[List[LineRefundAmount]] = None
 
 class AdmissionResponse(BaseModel):
     id: uuid.UUID
@@ -103,6 +119,12 @@ class AdmissionResponse(BaseModel):
     balance_due: Decimal
     payment_status: str
     status: str
+    access_status: str = "ACTIVE"
+    previous_access_status: Optional[str] = None
+    document_status: str = "VALID"
+    revoke_type: Optional[str] = None
+    forfeited_amount: Decimal = Decimal("0.00")
+    written_off_amount: Decimal = Decimal("0.00")
     notes: Optional[str] = None
     valid_from: Optional[date] = None
     valid_to: Optional[date] = None

@@ -30,9 +30,12 @@ class PaymentUpdate(BaseModel):
 class RefundCreate(BaseModel):
     admission_id: uuid.UUID
     payment_id: Optional[uuid.UUID] = None
+    item_id: Optional[uuid.UUID] = None
     amount: Decimal = Field(..., gt=0)
     refund_mode: str = Field(default="CASH", pattern="^(CASH|UPI|BANK_TRANSFER|CARD|OTHER)$")
     reason: str = Field(..., min_length=3, max_length=500)
+    deduction_amount: Optional[Decimal] = Field(default=None, ge=0)
+    deduction_reason: Optional[str] = None
     notes: Optional[str] = None
     revoke_admission: bool = False
 
@@ -80,6 +83,8 @@ class PaymentAllocationResponse(BaseModel):
     admission_item_id: uuid.UUID
     item_name: Optional[str] = None
     allocated_amount: Decimal
+    kind: str = "PAYMENT"
+    reverses_allocation_id: Optional[uuid.UUID] = None
 
     model_config = ConfigDict(from_attributes=True)
 

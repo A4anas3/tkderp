@@ -11,7 +11,7 @@ from sqlalchemy.orm import selectinload
 from app.database.session import get_db
 from app.core.dependencies import require_staff, require_cashier_or_admin, require_admin
 from app.database.models import (
-    Payment, PaymentAllocation, Admission, AdmissionItem, Student, User, Refund, AuditLog
+    Payment, PaymentAllocation, Admission, AdmissionItem, Student, User, Refund, AuditLog, FinancialTransaction
 )
 from app.modules.payments.schemas import (
     PaymentCreate, PaymentUpdate, PaymentResponse, PaymentAllocationResponse, PaymentReceiptResponse,
@@ -21,6 +21,9 @@ from app.common.calculations import allocate_payment_proportionally
 from app.common.pagination import PaginationParams, PageResponse
 from app.common.numbering import next_number
 from app.common.idempotency import get_idempotency_record, save_idempotency_record, build_idempotent_response
+from app.modules.ledger.service import (
+    record_payment_service, edit_payment_service, process_refund_service, recompute_admission_totals
+)
 
 router = APIRouter(prefix="/api/payments", tags=["Payments"])
 
@@ -126,127 +129,77 @@ async def list_transactions(
     current_user: User = Depends(require_staff)
 ):
     """
-    Unified Financial Transactions Ledger (Payments + Refunds) with DB-level search and pagination.
+    Append-only Financial Transactions Ledger paginated directly in SQL on financial_transactions.
     """
-    include_payments = txn_type in (None, "ALL", "PAYMENT")
-    include_refunds = txn_type in (None, "ALL", "REFUND")
+    query = (
+        select(FinancialTransaction)
+        .options(
+            selectinload(FinancialTransaction.admission).selectinload(Admission.items),
+            selectinload(FinancialTransaction.student),
+            selectinload(FinancialTransaction.payment)
+        )
+    )
 
-    all_txns = []
-
-    # 1. Fetch Payments if requested
-    if include_payments:
-        p_query = (
-            select(Payment)
-            .options(
-                selectinload(Payment.admission).selectinload(Admission.items),
-                selectinload(Payment.student)
+    if student_id:
+        query = query.where(FinancialTransaction.student_id == student_id)
+    if admission_id:
+        query = query.where(FinancialTransaction.admission_id == admission_id)
+    if payment_mode and payment_mode != "ALL":
+        query = query.where(FinancialTransaction.mode == payment_mode)
+    if txn_type and txn_type != "ALL":
+        query = query.where(FinancialTransaction.txn_type == txn_type)
+    if search:
+        s_pat = f"%{search.strip()}%"
+        query = query.where(
+            or_(
+                FinancialTransaction.txn_number.ilike(s_pat),
+                FinancialTransaction.reference.ilike(s_pat),
+                FinancialTransaction.reason.ilike(s_pat),
+                FinancialTransaction.admission.has(Admission.admission_number.ilike(s_pat)),
+                FinancialTransaction.student.has(Student.name.ilike(s_pat))
             )
         )
-        if student_id:
-            p_query = p_query.where(Payment.student_id == student_id)
-        if admission_id:
-            p_query = p_query.where(Payment.admission_id == admission_id)
-        if payment_mode and payment_mode != "ALL":
-            p_query = p_query.where(Payment.payment_mode == payment_mode)
-        if search:
-            s_pat = f"%{search.strip()}%"
-            p_query = p_query.where(
-                or_(
-                    Payment.payment_number.ilike(s_pat),
-                    Payment.collector_name_snapshot.ilike(s_pat),
-                    Payment.transaction_reference.ilike(s_pat),
-                    Payment.notes.ilike(s_pat),
-                    Payment.admission.has(Admission.admission_number.ilike(s_pat)),
-                    Payment.student.has(Student.name.ilike(s_pat))
-                )
-            )
 
-        p_res = await db.execute(p_query.order_by(desc(Payment.payment_date)))
-        payments = p_res.scalars().all()
-        for p in payments:
-            c_str = None
-            if p.admission and p.admission.items:
-                c_str = ", ".join(i.item_name_snapshot for i in p.admission.items)
-            all_txns.append(
-                TransactionResponse(
-                    id=p.id,
-                    type="PAYMENT",
-                    number=p.payment_number,
-                    date=p.payment_date,
-                    amount=p.amount,
-                    mode=p.payment_mode,
-                    ref=p.transaction_reference,
-                    notes=p.notes,
-                    collector=p.collector_name_snapshot,
-                    admission_id=p.admission_id,
-                    admission_number=p.admission.admission_number if p.admission else None,
-                    course_name=c_str,
-                    fee_period=p.fee_period,
-                    payment_id=None
-                )
-            )
+    # Count total in SQL
+    count_query = select(func.count()).select_from(query.subquery())
+    total = (await db.execute(count_query)).scalar_one() or 0
 
-    # 2. Fetch Refunds if requested
-    if include_refunds:
-        r_query = (
-            select(Refund)
-            .options(
-                selectinload(Refund.admission).selectinload(Admission.items),
-                selectinload(Refund.student)
-            )
-        )
-        if student_id:
-            r_query = r_query.where(Refund.student_id == student_id)
-        if admission_id:
-            r_query = r_query.where(Refund.admission_id == admission_id)
-        if payment_mode and payment_mode != "ALL":
-            r_query = r_query.where(Refund.refund_mode == payment_mode)
-        if search:
-            s_pat = f"%{search.strip()}%"
-            r_query = r_query.where(
-                or_(
-                    Refund.refund_number.ilike(s_pat),
-                    Refund.processor_name_snapshot.ilike(s_pat),
-                    Refund.reason.ilike(s_pat),
-                    Refund.notes.ilike(s_pat),
-                    Refund.admission.has(Admission.admission_number.ilike(s_pat)),
-                    Refund.student.has(Student.name.ilike(s_pat))
-                )
-            )
-
-        r_res = await db.execute(r_query.order_by(desc(Refund.refund_date)))
-        refunds = r_res.scalars().all()
-        for r in refunds:
-            c_str = None
-            if r.admission and r.admission.items:
-                c_str = ", ".join(i.item_name_snapshot for i in r.admission.items)
-            all_txns.append(
-                TransactionResponse(
-                    id=r.id,
-                    type="REFUND",
-                    number=r.refund_number,
-                    date=r.refund_date,
-                    amount=-r.amount,
-                    mode=r.refund_mode,
-                    ref=None,
-                    notes=r.reason,
-                    collector=r.processor_name_snapshot,
-                    admission_id=r.admission_id,
-                    admission_number=r.admission.admission_number if r.admission else None,
-                    course_name=c_str,
-                    fee_period=None,
-                    payment_id=r.payment_id
-                )
-            )
-
-    # Sort combined transactions descending by date
-    all_txns.sort(key=lambda t: t.date, reverse=True)
-
-    total = len(all_txns)
+    # Paginate in SQL
     offset = (page - 1) * page_size
-    paginated_items = all_txns[offset : offset + page_size]
+    items_query = query.order_by(desc(FinancialTransaction.txn_at)).offset(offset).limit(page_size)
+    res = await db.execute(items_query)
+    txns = res.scalars().all()
 
-    return PageResponse.create(items=paginated_items, total=total, params=PaginationParams(page=page, page_size=page_size))
+    response_items = []
+    for t in txns:
+        c_str = None
+        if t.admission and t.admission.items:
+            c_str = ", ".join(i.item_name_snapshot for i in t.admission.items)
+
+        collector_name = None
+        if t.payment:
+            collector_name = t.payment.collector_name_snapshot
+
+        response_items.append(
+            TransactionResponse(
+                id=t.id,
+                type=t.txn_type,
+                number=t.txn_number,
+                date=t.txn_at,
+                amount=t.signed_amount,
+                mode=t.mode,
+                ref=t.reference,
+                notes=t.reason,
+                collector=collector_name,
+                admission_id=t.admission_id,
+                admission_number=t.admission.admission_number if t.admission else None,
+                course_name=c_str,
+                fee_period=t.payment.fee_period if t.payment else None,
+                payment_id=t.payment_id
+            )
+        )
+
+    return PageResponse.create(items=response_items, total=total, params=PaginationParams(page=page, page_size=page_size))
 
 @router.post("", response_model=PaymentResponse, status_code=status.HTTP_201_CREATED)
 async def record_payment(
@@ -276,96 +229,38 @@ async def record_payment(
         if cached:
             return build_idempotent_response(cached)
 
-    if admission.balance_due <= Decimal("0.00"):
-        raise HTTPException(status_code=400, detail="This admission is already fully paid")
-
-    if payload.amount > admission.balance_due:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Payment amount ₹{payload.amount} exceeds outstanding balance ₹{admission.balance_due}"
-        )
-
-    pay_no = await next_number(db, "PAY")
-
-    pay_from = payload.valid_from or admission.valid_from
-    pay_to = payload.valid_to or admission.valid_to
-    fee_period_str = payload.fee_period
-    if not fee_period_str and pay_from and pay_to:
-        fee_period_str = f"{pay_from} to {pay_to}"
-
-    payment = Payment(
-        payment_number=pay_no,
-        admission_id=admission.id,
-        student_id=admission.student_id,
+    payment, f_txn = await record_payment_service(
+        db=db,
+        admission=admission,
         amount=payload.amount,
         payment_mode=payload.payment_mode,
+        collected_by_user=current_user,
         transaction_reference=payload.transaction_reference,
-        payment_date=datetime.now(timezone.utc),
-        collected_by=current_user.id,
-        collector_name_snapshot=current_user.full_name,
         notes=payload.notes,
-        valid_from=pay_from,
-        valid_to=pay_to,
-        fee_period=fee_period_str
+        valid_from=payload.valid_from,
+        valid_to=payload.valid_to,
+        fee_period=payload.fee_period,
+        allocation_mode=payload.allocation_mode,
+        manual_allocations=payload.manual_allocations
     )
-    db.add(payment)
-    await db.flush()
-
-    # Allocate across admission items with remaining balance
-    unpaid_items = [
-        {"id": itm.id, "balance_due": itm.balance_due}
-        for itm in admission.items
-        if itm.balance_due > Decimal("0.00")
-    ]
-    try:
-        allocations = allocate_payment_proportionally(
-            payload.amount,
-            unpaid_items,
-            mode=payload.allocation_mode,
-            manual_allocations=payload.manual_allocations
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    pa_objs = []
-    for itm_id, alloc_amt in allocations:
-        pa = PaymentAllocation(
-            payment_id=payment.id,
-            admission_item_id=itm_id,
-            allocated_amount=alloc_amt
-        )
-        db.add(pa)
-        pa_objs.append(pa)
-        for ai in admission.items:
-            if ai.id == itm_id:
-                ai.amount_collected += alloc_amt
-                ai.balance_due -= alloc_amt
-
-    await db.flush()
 
     alloc_resps = [
         PaymentAllocationResponse(
             id=pa.id,
             admission_item_id=pa.admission_item_id,
-            allocated_amount=pa.allocated_amount
+            allocated_amount=pa.allocated_amount,
+            kind=pa.kind,
+            reverses_allocation_id=pa.reverses_allocation_id
         )
-        for pa in pa_objs
+        for pa in payment.allocations
     ]
-
-    # Update admission totals
-    admission.amount_paid += payload.amount
-    admission.balance_due = max(Decimal("0.00"), admission.total_payable - admission.amount_paid)
-    if admission.balance_due == Decimal("0.00"):
-        admission.payment_status = "PAID"
-    else:
-        admission.payment_status = "PARTIALLY_PAID"
 
     resp_obj = PaymentResponse(
         id=payment.id,
         payment_number=payment.payment_number,
         admission_id=payment.admission_id,
         student_id=payment.student_id,
-        student_name=admission.student.full_name,
+        student_name=admission.student.full_name if admission.student else None,
         admission_number=admission.admission_number,
         amount=payment.amount,
         payment_mode=payment.payment_mode,
@@ -390,7 +285,6 @@ async def record_payment(
         )
 
     await db.commit()
-
     return resp_obj
 
 @router.get("/{payment_id}/receipt", response_model=PaymentReceiptResponse)
@@ -471,99 +365,49 @@ async def update_payment(
         .with_for_update()
     )
     admission = adm_res.scalar_one()
-    old_amount = payment.amount
-    old_mode = payment.payment_mode
-    old_ref = payment.transaction_reference
 
-    amount_changed = payload.amount is not None and payload.amount != old_amount
+    if payload.amount is not None and payload.amount != payment.amount:
+        if not payload.edit_reason or not payload.edit_reason.strip():
+            raise HTTPException(status_code=400, detail="edit_reason is required when changing payment amount")
 
-    if amount_changed:
-        new_amount = payload.amount
-        other_paid = admission.amount_paid - old_amount
-        max_possible = admission.total_payable - other_paid
-        if new_amount > max_possible:
-            raise HTTPException(
-                status_code=400,
-                detail=f"New amount ₹{new_amount} exceeds maximum allowed payable ₹{max_possible}"
-            )
-
-        # Roll back old allocations on admission items
-        for pa in payment.allocations:
-            for ai in admission.items:
-                if ai.id == pa.admission_item_id:
-                    ai.amount_collected = max(Decimal("0.00"), ai.amount_collected - pa.allocated_amount)
-                    ai.balance_due = min(ai.net_price, ai.balance_due + pa.allocated_amount)
-
-        # Remove old allocations
-        await db.execute(delete(PaymentAllocation).where(PaymentAllocation.payment_id == payment.id))
-
-        # Reallocate new_amount across admission items with balance_due > 0
-        unpaid_items = [
-            {"id": itm.id, "balance_due": itm.balance_due}
-            for itm in admission.items
-            if itm.balance_due > Decimal("0.00")
-        ]
-        if not unpaid_items:
-            unpaid_items = [{"id": itm.id, "balance_due": itm.net_price} for itm in admission.items]
-
-        allocations = allocate_payment_proportionally(new_amount, unpaid_items)
-        for itm_id, alloc_amt in allocations:
-            pa = PaymentAllocation(
-                payment_id=payment.id,
-                admission_item_id=itm_id,
-                allocated_amount=alloc_amt
-            )
-            db.add(pa)
-            for ai in admission.items:
-                if ai.id == itm_id:
-                    ai.amount_collected += alloc_amt
-                    ai.balance_due = max(Decimal("0.00"), ai.net_price - ai.amount_collected)
-
-        payment.amount = new_amount
-        admission.amount_paid = other_paid + new_amount
-        admission.balance_due = max(Decimal("0.00"), admission.total_payable - admission.amount_paid)
-        if admission.balance_due == Decimal("0.00"):
-            admission.payment_status = "PAID"
-        elif admission.amount_paid > Decimal("0.00"):
-            admission.payment_status = "PARTIALLY_PAID"
-        else:
-            admission.payment_status = "UNPAID"
-
-    if payload.payment_mode is not None:
-        payment.payment_mode = payload.payment_mode
-    if payload.transaction_reference is not None:
-        payment.transaction_reference = payload.transaction_reference
-    if payload.notes is not None:
-        payment.notes = payload.notes
-
-    audit = AuditLog(
-        user_id=current_user.id,
-        action="PAYMENT_EDITED",
-        entity_type="PAYMENT",
-        entity_id=payment.id,
-        details=json.dumps({
-            "payment_number": payment.payment_number,
-            "admission_number": admission.admission_number,
-            "old_amount": float(old_amount),
-            "new_amount": float(payment.amount),
-            "old_mode": old_mode,
-            "new_mode": payment.payment_mode,
-            "edit_reason": payload.edit_reason
-        })
+    payment, rev_txn = await edit_payment_service(
+        db=db,
+        payment=payment,
+        admission=admission,
+        current_user=current_user,
+        edit_reason=payload.edit_reason or "Payment updated",
+        new_amount=payload.amount,
+        new_mode=payload.payment_mode,
+        new_ref=payload.transaction_reference,
+        new_notes=payload.notes
     )
-    db.add(audit)
+
     await db.commit()
 
-    res = await db.execute(query)
+    # Re-fetch payment and allocations fresh from DB
+    res = await db.execute(
+        select(Payment)
+        .options(selectinload(Payment.admission), selectinload(Payment.student))
+        .where(Payment.id == payment_id)
+    )
     updated_payment = res.scalar_one()
+
+    alloc_res = await db.execute(
+        select(PaymentAllocation)
+        .where(PaymentAllocation.payment_id == payment_id)
+        .order_by(PaymentAllocation.created_at)
+    )
+    allocations_list = alloc_res.scalars().all()
 
     alloc_resps = [
         PaymentAllocationResponse(
             id=a.id,
             admission_item_id=a.admission_item_id,
-            allocated_amount=a.allocated_amount
+            allocated_amount=a.allocated_amount,
+            kind=a.kind,
+            reverses_allocation_id=a.reverses_allocation_id
         )
-        for a in updated_payment.allocations
+        for a in allocations_list
     ]
     return PaymentResponse(
         id=updated_payment.id,
@@ -579,6 +423,9 @@ async def update_payment(
         collected_by=updated_payment.collected_by,
         collector_name_snapshot=updated_payment.collector_name_snapshot,
         notes=updated_payment.notes,
+        valid_from=updated_payment.valid_from,
+        valid_to=updated_payment.valid_to,
+        fee_period=updated_payment.fee_period,
         allocations=alloc_resps
     )
 
@@ -598,87 +445,41 @@ async def process_refund(
     if not admission:
         raise HTTPException(status_code=404, detail="Admission not found")
 
-    if admission.amount_paid <= Decimal("0.00"):
-        raise HTTPException(status_code=400, detail="Cannot issue refund. No fee has been paid for this admission.")
-
-    if payload.amount > admission.amount_paid:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Refund amount ₹{payload.amount} cannot exceed total amount paid ₹{admission.amount_paid}"
-        )
-
-    ref_no = await next_number(db, "REF")
-
-    refund = Refund(
-        refund_number=ref_no,
-        admission_id=admission.id,
-        payment_id=payload.payment_id,
-        student_id=admission.student_id,
+    refund, f_txn = await process_refund_service(
+        db=db,
+        admission=admission,
         amount=payload.amount,
         refund_mode=payload.refund_mode,
-        reason=payload.reason.strip(),
-        refund_date=datetime.now(timezone.utc),
-        processed_by=current_user.id,
-        processor_name_snapshot=current_user.full_name,
+        reason=payload.reason,
+        current_user=current_user,
+        payment_id=payload.payment_id,
+        target_item_id=payload.item_id,
+        deduction_amount=payload.deduction_amount,
+        deduction_reason=payload.deduction_reason,
         notes=payload.notes
     )
-    db.add(refund)
-
-    admission.amount_paid -= payload.amount
-    admission.balance_due = admission.total_payable - admission.amount_paid
-
-    if admission.amount_paid <= Decimal("0.00"):
-        admission.payment_status = "UNPAID"
-    else:
-        admission.payment_status = "PARTIALLY_PAID"
-
-    paid_items = [
-        {"id": itm.id, "balance_due": itm.amount_collected}
-        for itm in admission.items
-        if itm.amount_collected > Decimal("0.00")
-    ]
-    if paid_items:
-        reductions = allocate_payment_proportionally(payload.amount, paid_items)
-        for itm_id, red_amt in reductions:
-            for ai in admission.items:
-                if ai.id == itm_id:
-                    ai.amount_collected = max(Decimal("0.00"), ai.amount_collected - red_amt)
-                    ai.balance_due = min(ai.net_price, ai.net_price - ai.amount_collected)
 
     is_revoked = False
     if payload.revoke_admission:
+        admission.access_status = "REVOKED"
         admission.status = "REVOKED"
         admission.revocation_reason = f"Full refund issued: {payload.reason.strip()}"
         admission.revoked_at = datetime.now(timezone.utc)
         admission.revoked_by = current_user.id
-        admission.balance_due = Decimal("0.00")
         is_revoked = True
-
-        if admission.amount_paid <= Decimal("0.00"):
-            admission.payment_status = "VOID"
-        else:
-            admission.payment_status = "PARTIALLY_REFUNDED"
+        for itm in admission.items:
+            itm.access_status = "REVOKED"
+            itm.status = "DISCONTINUED"
+            itm.written_off_amount = itm.balance_due
+            itm.balance_due = Decimal("0.00")
+            itm.keep_due = False
 
         has_gc = any(itm.item_type == "GREEN_CARD" for itm in admission.items)
         if has_gc and admission.student:
             admission.student.has_green_card = False
 
-    audit = AuditLog(
-        user_id=current_user.id,
-        action="FEE_REFUNDED_AND_REVOKED" if is_revoked else "FEE_REFUNDED",
-        entity_type="REFUND",
-        entity_id=refund.id,
-        details=json.dumps({
-            "refund_number": ref_no,
-            "admission_number": admission.admission_number,
-            "student_name": admission.student.full_name,
-            "amount": float(payload.amount),
-            "refund_mode": payload.refund_mode,
-            "reason": payload.reason.strip(),
-            "admission_revoked": is_revoked
-        })
-    )
-    db.add(audit)
+        await recompute_admission_totals(admission, db)
+
     await db.commit()
     await db.refresh(refund)
 
@@ -688,7 +489,7 @@ async def process_refund(
         admission_id=refund.admission_id,
         payment_id=refund.payment_id,
         student_id=refund.student_id,
-        student_name=admission.student.full_name,
+        student_name=admission.student.full_name if admission.student else None,
         admission_number=admission.admission_number,
         amount=refund.amount,
         refund_mode=refund.refund_mode,

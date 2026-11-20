@@ -35,8 +35,14 @@ class Admission(BaseModel):
     amount_paid: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("0.00"))
     balance_due: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("0.00"))
     
-    payment_status: Mapped[str] = mapped_column(String(30), nullable=False, default="UNPAID", index=True) # UNPAID, PARTIALLY_PAID, PAID
+    payment_status: Mapped[str] = mapped_column(String(30), nullable=False, default="UNPAID", index=True) # UNPAID, PARTIALLY_PAID, PAID, PARTIALLY_REFUNDED, REFUNDED
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="ACTIVE") # ACTIVE, REVOKED, CANCELLED
+    access_status: Mapped[str] = mapped_column(String(30), nullable=False, default="ACTIVE", server_default="ACTIVE", index=True) # ACTIVE, SUSPENDED, EXPIRED, REVOKED
+    previous_access_status: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    document_status: Mapped[str] = mapped_column(String(30), nullable=False, default="VALID", server_default="VALID", index=True) # VALID, VOID
+    revoke_type: Mapped[Optional[str]] = mapped_column(String(30), nullable=True) # DROPOUT_NO_REFUND, DROPOUT_WITH_REFUND, ENTRY_MISTAKE
+    forfeited_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("0.00"), server_default="0.00")
+    written_off_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("0.00"), server_default="0.00")
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Date-to-date validity / fee period coverage (when to when)
@@ -104,6 +110,12 @@ class AdmissionItem(BaseModel):
 
     # Subject Lifecycle Status & Tracking
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="ACTIVE", index=True) # ACTIVE, SUSPENDED, DISCONTINUED, EXPIRED, COMPLETED
+    access_status: Mapped[str] = mapped_column(String(30), nullable=False, default="ACTIVE", server_default="ACTIVE", index=True) # ACTIVE, SUSPENDED, EXPIRED, REVOKED
+    previous_access_status: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    revoke_type: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    forfeited_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("0.00"), server_default="0.00")
+    written_off_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("0.00"), server_default="0.00")
+    keep_due: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     suspended_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     discontinued_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     lifecycle_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
