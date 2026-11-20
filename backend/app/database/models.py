@@ -2,7 +2,7 @@ from app.database.base import Base, BaseModel
 from app.modules.users.models import User
 from app.modules.teachers.models import Teacher
 from app.modules.students.models import Student
-from app.modules.enquiries.models import Enquiry
+from app.modules.enquiries.models import Enquiry, EnquiryDemoItem
 from app.modules.subjects.models import Subject
 from app.modules.batches.models import Batch, BatchSubject
 from app.modules.green_card.models import GreenCardProduct
@@ -18,6 +18,7 @@ __all__ = [
     "Teacher",
     "Student",
     "Enquiry",
+    "EnquiryDemoItem",
     "Subject",
     "Batch",
     "BatchSubject",

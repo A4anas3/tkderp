@@ -16,12 +16,17 @@ import {
   ThumbsUp,
   ThumbsDown,
   RotateCcw,
+  Printer,
+  Hash,
+  MapPin,
+  User,
 } from 'lucide-react';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
 import Modal from '../../components/common/Modal';
 import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
+import DemoPassModal from '../../components/modals/DemoPassModal';
 import { enquiryApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 import { formatIndianDate } from '../../utils/dateCycleUtils';
@@ -34,6 +39,7 @@ export default function EnquiryDetailPage() {
 
   const [enquiry, setEnquiry] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [passModalOpen, setPassModalOpen] = useState(false);
 
   // Edit Modal State
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -273,6 +279,16 @@ export default function EnquiryDetailPage() {
         <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="secondary"
+            icon={Printer}
+            onClick={() => setPassModalOpen(true)}
+            size="sm"
+            title="Print Official Trial Demo Pass / Slip"
+          >
+            Print Trial Pass
+          </Button>
+
+          <Button
+            variant="secondary"
             icon={Edit2}
             onClick={() => setEditModalOpen(true)}
             size="sm"
@@ -454,6 +470,83 @@ export default function EnquiryDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Subject Demos with Individual Reference Numbers */}
+      {enquiry.demo_items && enquiry.demo_items.length > 0 && (
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-2xs space-y-3">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h3 className="font-bold text-black text-sm flex items-center gap-2">
+              <Hash className="w-4 h-4 text-indigo-600" />
+              <span>Subject Demos & Tracking Codes ({enquiry.demo_items.length})</span>
+            </h3>
+            <Button
+              size="xs"
+              variant="secondary"
+              icon={Printer}
+              onClick={() => setPassModalOpen(true)}
+            >
+              Print Demo Slip
+            </Button>
+          </div>
+
+          <div className="divide-y divide-slate-100 border border-slate-200 rounded-lg overflow-hidden">
+            {enquiry.demo_items.map((item) => (
+              <div
+                key={item.id}
+                className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50 transition"
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-indigo-50 border border-indigo-200 text-indigo-900">
+                      {item.demo_reference_number}
+                    </span>
+                    <h4 className="font-bold text-black text-sm">
+                      {item.subject_name_snapshot || 'Subject Trial'}
+                    </h4>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600 mt-1">
+                    <span className="flex items-center gap-1">
+                      <User className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Faculty: <strong className="text-black">{item.teacher_name_snapshot || 'Assigned Faculty'}</strong></span>
+                    </span>
+                    <span>•</span>
+                    <span className="flex items-center gap-1">
+                      <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Room: <strong className="text-black">{item.hall_number_snapshot || 'Main Hall'}</strong></span>
+                    </span>
+                  </div>
+                </div>
+
+                <div className="sm:text-right shrink-0">
+                  <span className="font-mono text-xs font-bold text-black block">
+                    {formatIndianDate(item.demo_start_date)}
+                    {item.demo_end_date && ` → ${formatIndianDate(item.demo_end_date)}`}
+                  </span>
+                  <div className="flex items-center sm:justify-end gap-1.5 mt-1">
+                    <span className="text-[11px] text-slate-500 font-medium">
+                      Duration: {item.demo_duration_days || 3} Days
+                    </span>
+                    <Badge
+                      size="xs"
+                      variant={
+                        item.status === 'CONVERTED'
+                          ? 'success'
+                          : item.status === 'ATTENDED'
+                          ? 'warning'
+                          : item.status === 'ACTIVE'
+                          ? 'primary'
+                          : 'neutral'
+                      }
+                    >
+                      {item.status}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Trial Demo Dates Card */}
       <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-2xs space-y-3">
@@ -665,6 +758,12 @@ export default function EnquiryDetailPage() {
           </div>
         </form>
       </Modal>
+      {/* Demo Pass Modal */}
+      <DemoPassModal
+        isOpen={passModalOpen}
+        onClose={() => setPassModalOpen(false)}
+        enquiry={enquiry}
+      />
     </div>
   );
 }

@@ -107,6 +107,18 @@ export const enquiryApi = {
     const res = await api.get('/enquiries', { params });
     return res.data;
   },
+  listDemos: async (params) => {
+    const res = await api.get('/enquiries/demos', { params });
+    return res.data;
+  },
+  getAnalytics: async (params) => {
+    const res = await api.get('/enquiries/analytics', { params });
+    return res.data;
+  },
+  updateDemoStatus: async (demoItemId, data) => {
+    const res = await api.put(`/enquiries/demos/${demoItemId}/status`, data);
+    return res.data;
+  },
   getSummary: async () => {
     const res = await api.get('/enquiries/summary');
     return res.data;

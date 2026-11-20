@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from app.core.config import settings
 from app.core.security import get_password_hash
 from app.database.models import (
-    Base, User, Teacher, Student, Enquiry, Subject, Batch, BatchSubject,
+    Base, User, Teacher, Student, Enquiry, EnquiryDemoItem, Subject, Batch, BatchSubject,
     GreenCardProduct, Admission, AdmissionItem, Payment, PaymentAllocation,
     Refund, ExpenseCategory, Expense, SalaryRecord, AuditLog
 )
@@ -362,12 +362,14 @@ async def seed_data():
         await session.flush()
 
         # -------------------------------------------------------------
-        # 7. Enquiries (Realistic Pipeline & Demos)
+        # 7. Enquiries & Multi-Subject Demos
         # -------------------------------------------------------------
         enq1 = Enquiry(
             enquiry_code="ENQ2026001",
             student_name="Aryan Kumar",
             mobile="9871122334",
+            father_name="Ramesh Kumar",
+            school_college="DAV Public School",
             purpose="Class 10 Demo Trial",
             interested_subject="Mathematics & Science",
             demo_start_date=today - timedelta(days=1),
@@ -381,6 +383,8 @@ async def seed_data():
             enquiry_code="ENQ2026002",
             student_name="Sneha Rao",
             mobile="9871122335",
+            father_name="Venkat Rao",
+            school_college="Modern Academy",
             purpose="JEE Physics Demo",
             interested_subject="Physics (Target JEE/NEET 11-12)",
             demo_start_date=today - timedelta(days=2),
@@ -394,6 +398,8 @@ async def seed_data():
             enquiry_code="ENQ2026003",
             student_name="Divyansh Roy",
             mobile="9871122336",
+            father_name="Alok Roy",
+            school_college="St. Mary High School",
             purpose="Admission Enquiry",
             interested_subject="Mathematics (Class 9-10)",
             notes="Parent visited front desk; requested fee structure booklet. Follow-up scheduled for Saturday.",
@@ -404,12 +410,14 @@ async def seed_data():
             enquiry_code="ENQ2026004",
             student_name="Tanvi Aggarwal",
             mobile="9870011226",
-            purpose="English Spoken & Grammar",
-            interested_subject="English Grammar & Comprehension",
+            father_name="Mukesh Aggarwal",
+            school_college="DPS Noida",
+            purpose="English & Biology Demos",
+            interested_subject="English Grammar & Comprehension, Biology & Medical Target (NEET)",
             demo_start_date=today - timedelta(days=12),
             demo_duration_days=3,
             demo_deadline=today - timedelta(days=9),
-            notes="Demo attended in Hall 104; converted to confirmed admission.",
+            notes="Demo attended in Hall 104 and Hall 105; converted to confirmed admission.",
             status="CONVERTED",
             converted_student_id=stu6.id,
             created_by=cashier_user.id
@@ -418,16 +426,175 @@ async def seed_data():
             enquiry_code="ENQ2026005",
             student_name="Mohit Chauhan",
             mobile="9871122338",
+            father_name="Sunil Chauhan",
+            school_college="Kendriya Vidyalaya",
             purpose="Foundation Batch Trial",
             interested_subject="Science (Class 9-10)",
             demo_start_date=today - timedelta(days=15),
             demo_duration_days=3,
             demo_deadline=today - timedelta(days=12),
             notes="Demo period completed; student chose self-study this term.",
-            status="EXPIRED",
+            status="NOT_INTERESTED",
             created_by=cashier_user.id
         )
-        session.add_all([enq1, enq2, enq3, enq4, enq5])
+        enq6 = Enquiry(
+            enquiry_code="ENQ2026006",
+            student_name="Kavya Mishra",
+            mobile="9871122339",
+            father_name="Deepak Mishra",
+            school_college="Cambridge International",
+            purpose="JEE Target Multi-Subject Demo",
+            interested_subject="Physics (Target JEE/NEET 11-12), Chemistry (Target JEE/NEET 11-12)",
+            demo_start_date=today - timedelta(days=1),
+            demo_duration_days=3,
+            demo_deadline=today + timedelta(days=2),
+            notes="Dual demo class for Physics with Dr. Amit Sharma and Chemistry with Er. Rajesh Singhal.",
+            status="ACTIVE_DEMO",
+            created_by=cashier_user.id
+        )
+        session.add_all([enq1, enq2, enq3, enq4, enq5, enq6])
+        await session.flush()
+
+        # Child Demo Items with unique demo reference numbers
+        d_items = [
+            EnquiryDemoItem(
+                enquiry_id=enq1.id,
+                demo_reference_number="DEM-2026-0001",
+                subject_id=sub_math.id,
+                batch_id=batch1.id,
+                teacher_id=teacher1.id,
+                subject_name_snapshot=sub_math.name,
+                teacher_name_snapshot=teacher1.name,
+                hall_number_snapshot="Hall 13",
+                demo_start_date=today - timedelta(days=1),
+                demo_end_date=today + timedelta(days=2),
+                demo_duration_days=3,
+                status="SCHEDULED",
+                notes="Mathematics CBSE 10th Demo"
+            ),
+            EnquiryDemoItem(
+                enquiry_id=enq1.id,
+                demo_reference_number="DEM-2026-0002",
+                subject_id=sub_sci.id,
+                batch_id=batch1.id,
+                teacher_id=teacher1.id,
+                subject_name_snapshot=sub_sci.name,
+                teacher_name_snapshot=teacher1.name,
+                hall_number_snapshot="Hall 13",
+                demo_start_date=today - timedelta(days=1),
+                demo_end_date=today + timedelta(days=2),
+                demo_duration_days=3,
+                status="SCHEDULED",
+                notes="Science CBSE 10th Demo"
+            ),
+            EnquiryDemoItem(
+                enquiry_id=enq2.id,
+                demo_reference_number="DEM-2026-0003",
+                subject_id=sub_phy.id,
+                batch_id=batch2.id,
+                teacher_id=teacher2.id,
+                subject_name_snapshot=sub_phy.name,
+                teacher_name_snapshot=teacher2.name,
+                hall_number_snapshot="Hall 102",
+                demo_start_date=today - timedelta(days=2),
+                demo_end_date=today + timedelta(days=1),
+                demo_duration_days=3,
+                status="SCHEDULED",
+                notes="Target JEE/NEET Physics with Dr. Amit Sharma"
+            ),
+            EnquiryDemoItem(
+                enquiry_id=enq3.id,
+                demo_reference_number="DEM-2026-0004",
+                subject_id=sub_math.id,
+                batch_id=batch1.id,
+                teacher_id=teacher1.id,
+                subject_name_snapshot=sub_math.name,
+                teacher_name_snapshot=teacher1.name,
+                hall_number_snapshot="Hall 13",
+                demo_start_date=today + timedelta(days=1),
+                demo_end_date=today + timedelta(days=4),
+                demo_duration_days=3,
+                status="SCHEDULED",
+                notes="Scheduled for coming weekend"
+            ),
+            EnquiryDemoItem(
+                enquiry_id=enq4.id,
+                demo_reference_number="DEM-2026-0005",
+                subject_id=sub_eng.id,
+                batch_id=None,
+                teacher_id=teacher3.id,
+                subject_name_snapshot=sub_eng.name,
+                teacher_name_snapshot=teacher3.name,
+                hall_number_snapshot="Hall 104",
+                demo_start_date=today - timedelta(days=12),
+                demo_end_date=today - timedelta(days=9),
+                demo_duration_days=3,
+                status="CONVERTED",
+                notes="Admitted into course"
+            ),
+            EnquiryDemoItem(
+                enquiry_id=enq4.id,
+                demo_reference_number="DEM-2026-0006",
+                subject_id=sub_bio.id,
+                batch_id=batch3.id,
+                teacher_id=teacher2.id,
+                subject_name_snapshot=sub_bio.name,
+                teacher_name_snapshot=teacher2.name,
+                hall_number_snapshot="Hall 105",
+                demo_start_date=today - timedelta(days=12),
+                demo_end_date=today - timedelta(days=9),
+                demo_duration_days=3,
+                status="CONVERTED",
+                notes="Admitted into Biology NEET batch"
+            ),
+            EnquiryDemoItem(
+                enquiry_id=enq5.id,
+                demo_reference_number="DEM-2026-0007",
+                subject_id=sub_sci.id,
+                batch_id=batch1.id,
+                teacher_id=teacher1.id,
+                subject_name_snapshot=sub_sci.name,
+                teacher_name_snapshot=teacher1.name,
+                hall_number_snapshot="Hall 13",
+                demo_start_date=today - timedelta(days=15),
+                demo_end_date=today - timedelta(days=12),
+                demo_duration_days=3,
+                status="DROPPED",
+                drop_reason="Student chose self-study this term",
+                notes="Follow-up completed"
+            ),
+            EnquiryDemoItem(
+                enquiry_id=enq6.id,
+                demo_reference_number="DEM-2026-0008",
+                subject_id=sub_phy.id,
+                batch_id=batch2.id,
+                teacher_id=teacher2.id,
+                subject_name_snapshot=sub_phy.name,
+                teacher_name_snapshot=teacher2.name,
+                hall_number_snapshot="Hall 102",
+                demo_start_date=today - timedelta(days=1),
+                demo_end_date=today + timedelta(days=2),
+                demo_duration_days=3,
+                status="ATTENDED",
+                notes="Attended Physics session Day 1 with Dr. Amit Sharma"
+            ),
+            EnquiryDemoItem(
+                enquiry_id=enq6.id,
+                demo_reference_number="DEM-2026-0009",
+                subject_id=sub_chem.id,
+                batch_id=None,
+                teacher_id=teacher4.id,
+                subject_name_snapshot=sub_chem.name,
+                teacher_name_snapshot=teacher4.name,
+                hall_number_snapshot="Hall 103",
+                demo_start_date=today - timedelta(days=1),
+                demo_end_date=today + timedelta(days=2),
+                demo_duration_days=3,
+                status="ATTENDED",
+                notes="Attended Chemistry session Day 1 with Er. Rajesh Singhal"
+            )
+        ]
+        session.add_all(d_items)
         await session.flush()
 
         # -------------------------------------------------------------
