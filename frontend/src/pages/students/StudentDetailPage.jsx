@@ -170,6 +170,7 @@ export default function StudentDetailPage() {
   const [selectedAdmissionForSlips, setSelectedAdmissionForSlips] = useState(null);
 
   const fetchStudentProfile = async () => {
+    setLoading(true);
     try {
       const stRes = await studentApi.get(id);
       setStudent(stRes);
@@ -177,6 +178,8 @@ export default function StudentDetailPage() {
     } catch (err) {
       error(err.message || 'Failed to load student profile');
       return null;
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -322,8 +325,13 @@ export default function StudentDetailPage() {
     }
   };
 
-  if (loading) {
-    return <div className="p-8 text-center text-xs text-slate-500 animate-pulse">Loading Student Profile...</div>;
+  if (loading && !student) {
+    return (
+      <div className="p-12 text-center text-xs text-slate-500 space-y-2">
+        <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+        <p className="font-medium text-slate-600">Loading Student Profile...</p>
+      </div>
+    );
   }
 
   if (!student) {
