@@ -73,8 +73,9 @@ export default function AdminDashboard() {
             variant="primary"
             icon={Plus}
             onClick={() => navigate('/admissions/new')}
+            title="Purchase & Pay for Course Batches"
           >
-            New Admission
+            Course Paid
           </Button>
           <Button
             size="xs"
@@ -89,8 +90,9 @@ export default function AdminDashboard() {
             variant="secondary"
             icon={UserPlus}
             onClick={() => navigate('/students')}
+            title="Admit / Register New Student"
           >
-            Register Student
+            New Admission
           </Button>
         </div>
       </div>

@@ -35,8 +35,9 @@ export default function Topbar({ onToggleSidebar, onQuickStudent, onQuickPayment
             icon={Plus}
             onClick={() => navigate('/admissions/new')}
             className="sm:py-1.5 sm:px-2.5"
+            title="Purchase & Pay for Course Batches"
           >
-            <span className="hidden sm:inline">New</span> Admission
+            Course Paid
           </Button>
         )}
 
@@ -59,8 +60,9 @@ export default function Topbar({ onToggleSidebar, onQuickStudent, onQuickPayment
             icon={UserPlus}
             onClick={onQuickStudent}
             className="hidden md:inline-flex"
+            title="Admit / Register New Student"
           >
-            Quick Student
+            New Admission
           </Button>
         )}
 

@@ -64,8 +64,9 @@ export default function CashierDashboard() {
             variant="primary"
             icon={Plus}
             onClick={() => navigate('/admissions/new')}
+            title="Purchase & Pay for Course Batches"
           >
-            New Admission
+            Course Paid
           </Button>
           <Button
             size="xs"

@@ -185,8 +185,8 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Quick Student Registration"
-      subtitle="Register student record with profile photo compressed to < 20 KB"
+      title="New Student Admission"
+      subtitle="Admit student record with profile photo compressed to < 20 KB"
       maxWidth="max-w-md"
     >
       <form onSubmit={handleSubmit} className="space-y-3">
@@ -412,7 +412,7 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
               ? 'Mobile Already Registered'
               : formData.mobile && formData.mobile.length !== 10
               ? 'Enter 10-Digit Mobile'
-              : 'Register Student'}
+              : 'Confirm Admission'}
           </Button>
         </div>
       </form>

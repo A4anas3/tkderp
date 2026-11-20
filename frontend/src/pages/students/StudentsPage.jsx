@@ -231,7 +231,7 @@ export default function StudentsPage() {
           </select>
 
           <Button variant="primary" icon={UserPlus} onClick={() => setAddModalOpen(true)}>
-            Register Student
+            New Admission
           </Button>
         </div>
       </div>
