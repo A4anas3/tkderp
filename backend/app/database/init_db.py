@@ -358,7 +358,21 @@ async def seed_data():
             registration_date=today - timedelta(days=10),
             status="ACTIVE"
         )
-        session.add_all([stu1, stu2, stu3, stu4, stu5, stu6])
+        stu7 = Student(
+            id=uuid.UUID("66666666-6666-6666-6666-666666666607"),
+            student_code="STU2026007",
+            name="Aryan Sharma",
+            mobile="9811223344",
+            father_name="Suresh Sharma",
+            email="aryan.sharma@example.com",
+            address="Civil Lines, Near Subhash Chowk, Thakurdwara",
+            dob=date(2008, 6, 12),
+            registration_date=today,
+            status="ACTIVE",
+            has_green_card=True,
+            green_card_expiry=today + timedelta(days=365)
+        )
+        session.add_all([stu1, stu2, stu3, stu4, stu5, stu6, stu7])
         await session.flush()
 
         # -------------------------------------------------------------
@@ -658,7 +672,9 @@ async def seed_data():
                 overall_discount_share=itm["overall_discount_share"],
                 net_price=itm["net_price"],
                 amount_collected=itm["net_price"],
-                balance_due=Decimal("0.00")
+                balance_due=Decimal("0.00"),
+                valid_from=today - timedelta(days=45),
+                valid_to=today + timedelta(days=135)
             )
             session.add(adm_item)
             adm1_items.append(adm_item)
@@ -749,7 +765,9 @@ async def seed_data():
                 overall_discount_share=itm["overall_discount_share"],
                 net_price=itm["net_price"],
                 amount_collected=itm["net_price"],
-                balance_due=Decimal("0.00")
+                balance_due=Decimal("0.00"),
+                valid_from=today - timedelta(days=45),
+                valid_to=today + timedelta(days=135)
             )
             session.add(adm_item)
             adm2_items.append(adm_item)
@@ -820,7 +838,9 @@ async def seed_data():
             overall_discount_share=Decimal("0.00"),
             net_price=green_card.price,
             amount_collected=green_card.price,
-            balance_due=Decimal("0.00")
+            balance_due=Decimal("0.00"),
+            valid_from=today - timedelta(days=35),
+            valid_to=today + timedelta(days=330)
         )
         session.add(adm3_item)
         await session.flush()
@@ -892,7 +912,9 @@ async def seed_data():
             overall_discount_share=Decimal("0.00"),
             net_price=Decimal("800.00"),
             amount_collected=Decimal("800.00"),
-            balance_due=Decimal("0.00")
+            balance_due=Decimal("0.00"),
+            valid_from=today - timedelta(days=8),
+            valid_to=today + timedelta(days=172)
         )
         session.add(adm4_item)
         await session.flush()
@@ -966,7 +988,9 @@ async def seed_data():
             overall_discount_share=Decimal("0.00"),
             net_price=Decimal("1200.00"),
             amount_collected=Decimal("0.00"),
-            balance_due=Decimal("0.00")
+            balance_due=Decimal("0.00"),
+            valid_from=today - timedelta(days=20),
+            valid_to=today + timedelta(days=160)
         )
         session.add(adm5_item)
         await session.flush()
@@ -1297,6 +1321,149 @@ async def seed_data():
         session.add(pmt9)
         await session.flush()
         session.add(PaymentAllocation(payment_id=pmt9.id, admission_item_id=adm9_item.id, allocated_amount=Decimal("1300.00")))
+
+        # -------------------------------------------------------------
+        # 12f. Admission 10: Ananya Joshi (3-Month Mathematics - Multiplied Duration & Partial Payment Due)
+        # -------------------------------------------------------------
+        adm10 = Admission(
+            id=uuid.UUID("77777777-7777-7777-7777-777777777710"),
+            admission_number="ADM/2026/010",
+            student_id=stu4.id,
+            student_name_snapshot=stu4.name,
+            admission_date=today,
+            subtotal=Decimal("3000.00"),
+            individual_discount_total=Decimal("300.00"),
+            overall_discount_type="NONE",
+            overall_discount_value=Decimal("0.00"),
+            overall_discount_amount=Decimal("0.00"),
+            total_discount=Decimal("300.00"),
+            gst_enabled=False,
+            gst_rate=Decimal("18.00"),
+            taxable_base=Decimal("2700.00"),
+            gst_amount=Decimal("0.00"),
+            total_payable=Decimal("2700.00"),
+            amount_paid=Decimal("1500.00"),
+            balance_due=Decimal("1200.00"),
+            payment_status="PARTIAL_PAID",
+            status="ACTIVE",
+            notes="3-Month Mathematics enrollment (@ ₹1,000/mo) with 10% concession. Partial initial fee paid, balance due ₹1,200.",
+            valid_from=today,
+            valid_to=today + timedelta(days=90),
+            created_by=cashier_user.id
+        )
+        session.add(adm10)
+        await session.flush()
+
+        adm10_item = AdmissionItem(
+            admission_id=adm10.id,
+            item_type="SUBJECT",
+            subject_id=sub_math.id,
+            teacher_id=teacher1.id,
+            teacher_name_snapshot=teacher1.name,
+            hall_number_snapshot="Hall 13",
+            item_name_snapshot="Mathematics (3 Mo @ ₹1000/mo)",
+            original_price=Decimal("3000.00"),
+            discount_type="PERCENTAGE",
+            discount_value=Decimal("10.00"),
+            discount_amount=Decimal("300.00"),
+            overall_discount_share=Decimal("0.00"),
+            net_price=Decimal("2700.00"),
+            amount_collected=Decimal("1500.00"),
+            balance_due=Decimal("1200.00"),
+            valid_from=today,
+            valid_to=today + timedelta(days=90)
+        )
+        session.add(adm10_item)
+        await session.flush()
+
+        pmt10 = Payment(
+            payment_number="RCP/2026/010",
+            admission_id=adm10.id,
+            student_id=stu4.id,
+            amount=Decimal("1500.00"),
+            payment_mode="UPI",
+            transaction_reference="UPI/ANANYA/991201",
+            payment_date=now,
+            collected_by=cashier_user.id,
+            collector_name_snapshot=cashier_user.full_name,
+            notes="Initial installment for 3-Month Math Course. Remaining balance due: ₹1,200",
+            valid_from=today,
+            valid_to=today + timedelta(days=90),
+            fee_period="Nov 2026 - Feb 2027 (90 Days)"
+        )
+        session.add(pmt10)
+        await session.flush()
+        session.add(PaymentAllocation(payment_id=pmt10.id, admission_item_id=adm10_item.id, allocated_amount=Decimal("1500.00")))
+
+        # -------------------------------------------------------------
+        # 12g. Admission 11: Aryan Sharma (Green Card 1-Year All Access Annual Pass - 365 Days)
+        # -------------------------------------------------------------
+        adm11 = Admission(
+            id=uuid.UUID("77777777-7777-7777-7777-777777777711"),
+            admission_number="ADM/2026/011",
+            student_id=stu7.id,
+            student_name_snapshot=stu7.name,
+            admission_date=today,
+            subtotal=Decimal("15000.00"),
+            individual_discount_total=Decimal("0.00"),
+            overall_discount_type="NONE",
+            overall_discount_value=Decimal("0.00"),
+            overall_discount_amount=Decimal("0.00"),
+            total_discount=Decimal("0.00"),
+            gst_enabled=False,
+            gst_rate=Decimal("18.00"),
+            taxable_base=Decimal("15000.00"),
+            gst_amount=Decimal("0.00"),
+            total_payable=Decimal("15000.00"),
+            amount_paid=Decimal("15000.00"),
+            balance_due=Decimal("0.00"),
+            payment_status="PAID",
+            status="ACTIVE",
+            notes="Green Card Annual All-Access Pass (365 Days validity). Paid in full.",
+            valid_from=today,
+            valid_to=today + timedelta(days=365),
+            created_by=cashier_user.id
+        )
+        session.add(adm11)
+        await session.flush()
+
+        adm11_item = AdmissionItem(
+            admission_id=adm11.id,
+            item_type="GREEN_CARD",
+            green_card_id=green_card.id,
+            item_name_snapshot="Green Card - All Access Annual Pass",
+            original_price=Decimal("15000.00"),
+            discount_type="NONE",
+            discount_value=Decimal("0.00"),
+            discount_amount=Decimal("0.00"),
+            overall_discount_share=Decimal("0.00"),
+            net_price=Decimal("15000.00"),
+            amount_collected=Decimal("15000.00"),
+            balance_due=Decimal("0.00"),
+            valid_from=today,
+            valid_to=today + timedelta(days=365)
+        )
+        session.add(adm11_item)
+        await session.flush()
+
+        pmt11 = Payment(
+            payment_number="RCP/2026/011",
+            admission_id=adm11.id,
+            student_id=stu7.id,
+            amount=Decimal("15000.00"),
+            payment_mode="BANK_TRANSFER",
+            transaction_reference="NEFT-ARYAN-88401",
+            payment_date=now,
+            collected_by=cashier_user.id,
+            collector_name_snapshot=cashier_user.full_name,
+            notes="Annual pass fee received via Net Banking",
+            valid_from=today,
+            valid_to=today + timedelta(days=365),
+            fee_period="Full Academic Session (365 Days)"
+        )
+        session.add(pmt11)
+        await session.flush()
+        session.add(PaymentAllocation(payment_id=pmt11.id, admission_item_id=adm11_item.id, allocated_amount=Decimal("15000.00")))
 
         # -------------------------------------------------------------
         # 13. Expense Categories & Institute Expenses
