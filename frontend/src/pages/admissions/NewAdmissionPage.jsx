@@ -41,6 +41,7 @@ export default function NewAdmissionPage() {
   const paramEnquiryId = searchParams.get('enquiry_id');
   const paramName = searchParams.get('name');
   const paramMobile = searchParams.get('mobile');
+  const paramItemType = searchParams.get('item_type');
   const paramSubject = searchParams.get('subject');
   const paramPurpose = searchParams.get('purpose');
   const paramFather = searchParams.get('father_name');
