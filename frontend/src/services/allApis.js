@@ -215,11 +215,19 @@ export const admissionApi = {
     const res = await api.post(`/admissions/${id}/restore`);
     return res.data;
   },
+  getSlips: async (id) => {
+    const res = await api.get(`/admissions/${id}/slips`);
+    return res.data;
+  },
 };
 
 export const paymentApi = {
   list: async (params) => {
     const res = await api.get('/payments', { params });
+    return res.data;
+  },
+  listTransactions: async (params) => {
+    const res = await api.get('/payments/transactions', { params });
     return res.data;
   },
   create: async (payload) => {

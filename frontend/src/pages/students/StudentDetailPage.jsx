@@ -26,6 +26,13 @@ import {
   ArrowUpRight,
   TrendingDown,
   Edit2,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  X,
+  Filter,
 } from 'lucide-react';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
@@ -38,6 +45,7 @@ import { useAuth } from '../../context/AuthContext';
 import QuickPaymentModal from '../../components/modals/QuickPaymentModal';
 import PaymentReceiptModal from '../../components/receipts/PaymentReceiptModal';
 import AdmissionReceiptModal from '../../components/receipts/AdmissionReceiptModal';
+import AdmissionAllSlipsModal from '../../components/receipts/AdmissionAllSlipsModal';
 import IssueRefundModal from '../../components/modals/IssueRefundModal';
 import RefundReceiptModal from '../../components/receipts/RefundReceiptModal';
 import RevokeStudentModal from '../../components/modals/RevokeStudentModal';
@@ -138,88 +146,120 @@ export default function StudentDetailPage() {
   const [restoring, setRestoring] = useState(false);
   const [restoringBatchId, setRestoringBatchId] = useState(null);
 
+  // Admissions backend pagination & search
+  const [admPage, setAdmPage] = useState(1);
+  const [admPageSize, setAdmPageSize] = useState(5);
+  const [admSearch, setAdmSearch] = useState('');
+  const [admStatusFilter, setAdmStatusFilter] = useState('ALL');
+  const [admTotal, setAdmTotal] = useState(0);
+  const [admTotalPages, setAdmTotalPages] = useState(1);
+  const [admLoading, setAdmLoading] = useState(false);
+
+  // Financial Transactions backend pagination & search
+  const [txnPage, setTxnPage] = useState(1);
+  const [txnPageSize, setTxnPageSize] = useState(10);
+  const [txnSearch, setTxnSearch] = useState('');
+  const [txnModeFilter, setTxnModeFilter] = useState('ALL');
+  const [txnTypeFilter, setTxnTypeFilter] = useState('ALL');
+  const [txnTotal, setTxnTotal] = useState(0);
+  const [txnTotalPages, setTxnTotalPages] = useState(1);
+  const [txnsLoading, setTxnsLoading] = useState(false);
+
+  // All Slips Modal
+  const [allSlipsModalOpen, setAllSlipsModalOpen] = useState(false);
+  const [selectedAdmissionForSlips, setSelectedAdmissionForSlips] = useState(null);
+
+  const fetchStudentProfile = async () => {
+    try {
+      const stRes = await studentApi.get(id);
+      setStudent(stRes);
+      return stRes;
+    } catch (err) {
+      error(err.message || 'Failed to load student profile');
+      return null;
+    }
+  };
+
+  const fetchAdmissionsData = async (
+    page = admPage,
+    pageSize = admPageSize,
+    search = admSearch,
+    status = admStatusFilter
+  ) => {
+    setAdmLoading(true);
+    try {
+      const params = {
+        student_id: id,
+        page,
+        page_size: pageSize,
+      };
+      if (search?.trim()) params.search = search.trim();
+      if (status && status !== 'ALL') params.payment_status = status;
+
+      const res = await admissionApi.list(params);
+      setAdmissions(res.items || []);
+      setAdmTotal(res.total || 0);
+      setAdmTotalPages(res.total_pages || 1);
+    } catch (err) {
+      error(err.message || 'Failed to load course purchases');
+    } finally {
+      setAdmLoading(false);
+    }
+  };
+
+  const fetchTransactionsData = async (
+    page = txnPage,
+    pageSize = txnPageSize,
+    search = txnSearch,
+    mode = txnModeFilter,
+    type = txnTypeFilter
+  ) => {
+    setTxnsLoading(true);
+    try {
+      const params = {
+        student_id: id,
+        page,
+        page_size: pageSize,
+      };
+      if (search?.trim()) params.search = search.trim();
+      if (mode && mode !== 'ALL') params.payment_mode = mode;
+      if (type && type !== 'ALL') params.txn_type = type;
+
+      const res = await paymentApi.listTransactions(params);
+      setTransactions(res.items || []);
+      setTxnTotal(res.total || 0);
+      setTxnTotalPages(res.total_pages || 1);
+    } catch (err) {
+      error(err.message || 'Failed to load financial transactions ledger');
+    } finally {
+      setTxnsLoading(false);
+    }
+  };
+
   const fetchStudentData = async () => {
     setLoading(true);
     try {
-      const [stRes, admRes, payRes, refRes] = await Promise.all([
-        studentApi.get(id),
-        admissionApi.list({ student_id: id, page_size: 50 }),
-        paymentApi.list({ student_id: id, page_size: 100 }),
-        paymentApi.listRefunds({ student_id: id, page_size: 100 }),
+      await Promise.all([
+        fetchStudentProfile(),
+        fetchAdmissionsData(admPage, admPageSize, admSearch, admStatusFilter),
+        fetchTransactionsData(txnPage, txnPageSize, txnSearch, txnModeFilter, txnTypeFilter),
       ]);
-      setStudent(stRes);
-      setAdmissions(admRes.items || []);
-
-      const payTxns = (payRes.items || []).map((p) => {
-        const matchedAdm = (admRes.items || []).find((a) => a.id === p.admission_id);
-        const courseName =
-          p.course_name ||
-          matchedAdm?.items?.map((i) => i.item_name_snapshot).join(', ') ||
-          '';
-        const admNo =
-          p.admission_number ||
-          matchedAdm?.purchase_transaction_id ||
-          matchedAdm?.admission_number;
-        return {
-          id: p.id,
-          type: 'PAYMENT',
-          number: p.payment_number,
-          date: p.payment_date,
-          amount: Number(p.amount),
-          mode: p.payment_mode,
-          ref: p.transaction_reference,
-          notes: p.notes,
-          collector: p.collector_name_snapshot,
-          admission_id: p.admission_id,
-          admission_number: admNo,
-          course_name: courseName,
-          fee_period: p.fee_period,
-          raw: p,
-        };
-      });
-
-      const refTxns = (refRes.items || []).map((r) => {
-        const matchedAdm = (admRes.items || []).find((a) => a.id === r.admission_id);
-        const courseName =
-          r.course_name ||
-          matchedAdm?.items?.map((i) => i.item_name_snapshot).join(', ') ||
-          '';
-        const admNo =
-          r.admission_number ||
-          matchedAdm?.purchase_transaction_id ||
-          matchedAdm?.admission_number;
-        return {
-          id: r.id,
-          type: 'REFUND',
-          number: r.refund_number,
-          date: r.refund_date,
-          amount: -Number(r.amount),
-          mode: r.refund_mode,
-          ref: null,
-          notes: r.reason,
-          collector: r.processor_name_snapshot,
-          admission_id: r.admission_id,
-          admission_number: admNo,
-          course_name: courseName,
-          fee_period: null,
-          raw: r,
-        };
-      });
-
-      const allTxns = [...payTxns, ...refTxns].sort(
-        (a, b) => new Date(b.date) - new Date(a.date)
-      );
-      setTransactions(allTxns);
-    } catch (err) {
-      error(err.message || 'Failed to load student profile');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchStudentData();
+    fetchStudentProfile();
   }, [id]);
+
+  useEffect(() => {
+    fetchAdmissionsData(admPage, admPageSize, admSearch, admStatusFilter);
+  }, [id, admPage, admPageSize, admStatusFilter]);
+
+  useEffect(() => {
+    fetchTransactionsData(txnPage, txnPageSize, txnSearch, txnModeFilter, txnTypeFilter);
+  }, [id, txnPage, txnPageSize, txnModeFilter, txnTypeFilter]);
 
   const handleViewReceipt = async (txn) => {
     if (txn.type === 'PAYMENT') {
@@ -590,12 +630,12 @@ export default function StudentDetailPage() {
       </div>
 
       {/* Admissions / Purchases Taken List */}
-      <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs">
+      <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs space-y-3">
         <div className="pb-3 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <h2 className="text-sm font-bold text-black">Course Purchases & Batch Enrollments</h2>
             <p className="text-xs text-slate-500">
-              History of all course purchases, validity coverage (active vs expiring/expired), and payments
+              History of all course purchases, rolling fee cycle validity, and payment statuses
             </p>
           </div>
 
@@ -617,10 +657,68 @@ export default function StudentDetailPage() {
           )}
         </div>
 
-        <div className="mt-3 overflow-x-auto">
-          {admissions.length === 0 ? (
+        {/* Admissions Search & Filter Controls */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-1">
+          <div className="flex items-center gap-2 flex-1 max-w-md">
+            <div className="relative flex-1">
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search purchase #, course, or teacher..."
+                value={admSearch}
+                onChange={(e) => setAdmSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    setAdmPage(1);
+                    fetchAdmissionsData(1, admPageSize, admSearch, admStatusFilter);
+                  }
+                }}
+                className="w-full pl-8 pr-7 py-1 text-xs border border-slate-300 rounded-md bg-white text-black placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+              {admSearch && (
+                <button
+                  onClick={() => {
+                    setAdmSearch('');
+                    setAdmPage(1);
+                    fetchAdmissionsData(1, admPageSize, '', admStatusFilter);
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-black"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            <select
+              value={admStatusFilter}
+              onChange={(e) => {
+                setAdmStatusFilter(e.target.value);
+                setAdmPage(1);
+              }}
+              className="text-xs border border-slate-300 rounded-md px-2 py-1 bg-white text-black focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            >
+              <option value="ALL">All Statuses</option>
+              <option value="PAID">Fully Paid</option>
+              <option value="PARTIALLY_PAID">Partially Paid</option>
+              <option value="UNPAID">Unpaid</option>
+              <option value="REVOKED">Revoked</option>
+            </select>
+          </div>
+
+          <div className="text-xs text-slate-500">
+            Total Purchases: <strong className="text-black font-mono">{admTotal}</strong>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          {admLoading ? (
+            <div className="py-8 text-center text-xs text-slate-500 space-y-2">
+              <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+              <p>Loading course purchases...</p>
+            </div>
+          ) : admissions.length === 0 ? (
             <div className="py-8 text-center text-xs text-slate-500">
-              No course purchases recorded for this student yet.
+              No course purchases found matching your filter criteria.
             </div>
           ) : (
             <table className="w-full text-left text-xs">
@@ -752,13 +850,18 @@ export default function StudentDetailPage() {
                       </td>
                       <td className="p-2 text-right">
                         <div className="flex flex-wrap items-center justify-end gap-1">
+                          {/* All Slips (Multi-Slip Picker & Full Statement) */}
                           <Button
                             size="xs"
                             variant="secondary"
-                            icon={Printer}
-                            onClick={() => setAdmissionSlipToShow(adm)}
+                            icon={FileText}
+                            onClick={() => {
+                              setSelectedAdmissionForSlips(adm);
+                              setAllSlipsModalOpen(true);
+                            }}
+                            title="View all admission invoices, payment receipts and refund vouchers"
                           >
-                            Slip
+                            All Slips ▾
                           </Button>
 
                           {/* Collect Due Fee (2nd Payment) if pending */}
@@ -863,6 +966,70 @@ export default function StudentDetailPage() {
             </table>
           )}
         </div>
+
+        {/* Admissions Backend Pagination Controls */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-2 pt-3 border-t border-slate-200 text-xs">
+          <div className="flex items-center gap-2 text-slate-600">
+            <span>
+              Showing {admTotal === 0 ? 0 : (admPage - 1) * admPageSize + 1} to{' '}
+              {Math.min(admPage * admPageSize, admTotal)} of {admTotal} course purchases
+            </span>
+            <span className="text-slate-300">•</span>
+            <label className="flex items-center gap-1 text-slate-500 text-[11px]">
+              Per page:
+              <select
+                value={admPageSize}
+                onChange={(e) => {
+                  setAdmPageSize(Number(e.target.value));
+                  setAdmPage(1);
+                }}
+                className="border border-slate-200 rounded px-1.5 py-0.5 bg-white text-black font-semibold text-xs"
+              >
+                <option value={5}>5</option>
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setAdmPage(1)}
+              disabled={admPage <= 1 || admLoading}
+              className="p-1 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              title="First Page"
+            >
+              <ChevronsLeft className="w-3.5 h-3.5 text-slate-700" />
+            </button>
+            <button
+              onClick={() => setAdmPage((p) => Math.max(1, p - 1))}
+              disabled={admPage <= 1 || admLoading}
+              className="p-1 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Previous Page"
+            >
+              <ChevronLeft className="w-3.5 h-3.5 text-slate-700" />
+            </button>
+            <span className="px-2 font-bold text-black">
+              Page {admPage} of {Math.max(1, admTotalPages)}
+            </span>
+            <button
+              onClick={() => setAdmPage((p) => Math.min(admTotalPages, p + 1))}
+              disabled={admPage >= admTotalPages || admLoading}
+              className="p-1 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Next Page"
+            >
+              <ChevronRight className="w-3.5 h-3.5 text-slate-700" />
+            </button>
+            <button
+              onClick={() => setAdmPage(admTotalPages)}
+              disabled={admPage >= admTotalPages || admLoading}
+              className="p-1 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Last Page"
+            >
+              <ChevronsRight className="w-3.5 h-3.5 text-slate-700" />
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Financial Transactions & Receipts Ledger */}
@@ -892,10 +1059,96 @@ export default function StudentDetailPage() {
           </div>
         </div>
 
+        {/* Search and Filters for Financial Transactions Ledger */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 bg-slate-50/70 p-2.5 rounded-lg border border-slate-200">
+          <div className="flex items-center gap-2 flex-1 max-w-md">
+            <div className="relative flex-1">
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search receipts by #, note, mode, cashier, or ref..."
+                value={txnSearch}
+                onChange={(e) => setTxnSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    setTxnPage(1);
+                    fetchTransactionsData(1, txnPageSize, txnSearch, txnModeFilter, txnTypeFilter);
+                  }
+                }}
+                className="w-full pl-8 pr-7 py-1 text-xs border border-slate-300 rounded-md bg-white text-black placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+              {txnSearch && (
+                <button
+                  onClick={() => {
+                    setTxnSearch('');
+                    setTxnPage(1);
+                    fetchTransactionsData(1, txnPageSize, '', txnModeFilter, txnTypeFilter);
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-black"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <select
+              value={txnTypeFilter}
+              onChange={(e) => {
+                setTxnTypeFilter(e.target.value);
+                setTxnPage(1);
+              }}
+              className="text-xs border border-slate-300 rounded-md px-2 py-1 bg-white text-black focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            >
+              <option value="ALL">All Types</option>
+              <option value="PAYMENT">Fee Payments (+₹)</option>
+              <option value="REFUND">Refund Vouchers (-₹)</option>
+            </select>
+
+            <select
+              value={txnModeFilter}
+              onChange={(e) => {
+                setTxnModeFilter(e.target.value);
+                setTxnPage(1);
+              }}
+              className="text-xs border border-slate-300 rounded-md px-2 py-1 bg-white text-black focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            >
+              <option value="ALL">All Modes</option>
+              <option value="CASH">Cash</option>
+              <option value="UPI">UPI</option>
+              <option value="BANK_TRANSFER">Bank Transfer</option>
+              <option value="CARD">Card</option>
+              <option value="OTHER">Other</option>
+            </select>
+
+            {(txnSearch || txnTypeFilter !== 'ALL' || txnModeFilter !== 'ALL') && (
+              <Button
+                size="xs"
+                variant="secondary"
+                onClick={() => {
+                  setTxnSearch('');
+                  setTxnTypeFilter('ALL');
+                  setTxnModeFilter('ALL');
+                  setTxnPage(1);
+                  fetchTransactionsData(1, txnPageSize, '', 'ALL', 'ALL');
+                }}
+              >
+                Clear Filters
+              </Button>
+            )}
+          </div>
+        </div>
+
         <div className="overflow-x-auto">
-          {transactions.length === 0 ? (
+          {txnsLoading ? (
+            <div className="py-8 text-center text-xs text-slate-500 space-y-2">
+              <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+              <p>Loading financial transactions...</p>
+            </div>
+          ) : transactions.length === 0 ? (
             <div className="py-8 text-center text-xs text-slate-500">
-              No payment transactions or refund vouchers recorded for this student yet.
+              No payment transactions or refund vouchers found matching your filter criteria.
             </div>
           ) : (
             <table className="w-full text-left text-xs">
@@ -1011,7 +1264,82 @@ export default function StudentDetailPage() {
             </table>
           )}
         </div>
+
+        {/* Transactions Backend Pagination Controls */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-2 pt-3 border-t border-slate-200 text-xs">
+          <div className="flex items-center gap-2 text-slate-600">
+            <span>
+              Showing {txnTotal === 0 ? 0 : (txnPage - 1) * txnPageSize + 1} to{' '}
+              {Math.min(txnPage * txnPageSize, txnTotal)} of {txnTotal} transactions
+            </span>
+            <span className="text-slate-300">•</span>
+            <label className="flex items-center gap-1 text-slate-500 text-[11px]">
+              Per page:
+              <select
+                value={txnPageSize}
+                onChange={(e) => {
+                  setTxnPageSize(Number(e.target.value));
+                  setTxnPage(1);
+                }}
+                className="border border-slate-200 rounded px-1.5 py-0.5 bg-white text-black font-semibold text-xs"
+              >
+                <option value={5}>5</option>
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setTxnPage(1)}
+              disabled={txnPage <= 1 || txnsLoading}
+              className="p-1 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              title="First Page"
+            >
+              <ChevronsLeft className="w-3.5 h-3.5 text-slate-700" />
+            </button>
+            <button
+              onClick={() => setTxnPage((p) => Math.max(1, p - 1))}
+              disabled={txnPage <= 1 || txnsLoading}
+              className="p-1 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Previous Page"
+            >
+              <ChevronLeft className="w-3.5 h-3.5 text-slate-700" />
+            </button>
+            <span className="px-2 font-bold text-black">
+              Page {txnPage} of {Math.max(1, txnTotalPages)}
+            </span>
+            <button
+              onClick={() => setTxnPage((p) => Math.min(txnTotalPages, p + 1))}
+              disabled={txnPage >= txnTotalPages || txnsLoading}
+              className="p-1 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Next Page"
+            >
+              <ChevronRight className="w-3.5 h-3.5 text-slate-700" />
+            </button>
+            <button
+              onClick={() => setTxnPage(txnTotalPages)}
+              disabled={txnPage >= txnTotalPages || txnsLoading}
+              className="p-1 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Last Page"
+            >
+              <ChevronsRight className="w-3.5 h-3.5 text-slate-700" />
+            </button>
+          </div>
+        </div>
       </div>
+
+      {/* All Slips (Multi-Slip Picker & Comprehensive Statement Modal) */}
+      <AdmissionAllSlipsModal
+        isOpen={allSlipsModalOpen}
+        onClose={() => {
+          setAllSlipsModalOpen(false);
+          setSelectedAdmissionForSlips(null);
+        }}
+        admissionId={selectedAdmissionForSlips?.id}
+        admissionData={selectedAdmissionForSlips}
+      />
 
       {/* Collect Payment Modal */}
       <QuickPaymentModal

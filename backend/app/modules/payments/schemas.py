@@ -113,3 +113,21 @@ class PaymentReceiptResponse(BaseModel):
     valid_to: Optional[date] = None
     fee_period: Optional[str] = None
     allocations: List[dict] = Field(default_factory=list)
+
+class TransactionResponse(BaseModel):
+    id: uuid.UUID
+    type: str  # "PAYMENT" or "REFUND"
+    number: str
+    date: datetime
+    amount: Decimal
+    mode: str
+    ref: Optional[str] = None
+    notes: Optional[str] = None
+    collector: Optional[str] = None
+    admission_id: Optional[uuid.UUID] = None
+    admission_number: Optional[str] = None
+    course_name: Optional[str] = None
+    fee_period: Optional[str] = None
+    payment_id: Optional[uuid.UUID] = None
+
+    model_config = ConfigDict(from_attributes=True)

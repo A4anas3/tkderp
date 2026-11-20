@@ -106,3 +106,35 @@ class AdmissionCalculatePreviewRequest(BaseModel):
     overall_discount_value: Decimal = Decimal("0.00")
     gst_enabled: bool = False
     gst_rate: Decimal = Decimal("18.00")
+
+class SlipItemResponse(BaseModel):
+    id: uuid.UUID
+    slip_type: str  # "ADMISSION_INVOICE", "PAYMENT_RECEIPT", "REFUND_VOUCHER"
+    slip_number: str
+    date: datetime
+    title: str
+    amount: Decimal
+    mode: Optional[str] = None
+    ref: Optional[str] = None
+    collector_or_processor: Optional[str] = None
+    notes: Optional[str] = None
+    status_badge: str
+    data: dict
+
+class AdmissionSlipsResponse(BaseModel):
+    admission_id: uuid.UUID
+    admission_number: str
+    admission_date: date
+    student_id: uuid.UUID
+    student_name: str
+    student_reg_no: Optional[str] = None
+    student_mobile: Optional[str] = None
+    total_payable: Decimal
+    amount_paid: Decimal
+    balance_due: Decimal
+    payment_status: str
+    status: str
+    valid_from: Optional[date] = None
+    valid_to: Optional[date] = None
+    items: List[AdmissionItemResponse] = Field(default_factory=list)
+    slips: List[SlipItemResponse] = Field(default_factory=list)

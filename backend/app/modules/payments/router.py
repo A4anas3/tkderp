@@ -15,7 +15,7 @@ from app.database.models import (
 )
 from app.modules.payments.schemas import (
     PaymentCreate, PaymentUpdate, PaymentResponse, PaymentAllocationResponse, PaymentReceiptResponse,
-    RefundCreate, RefundResponse, RefundReceiptResponse
+    RefundCreate, RefundResponse, RefundReceiptResponse, TransactionResponse
 )
 from app.common.calculations import allocate_payment_proportionally
 from app.common.pagination import PaginationParams, PageResponse
@@ -110,6 +110,141 @@ async def list_payments(
         )
 
     return PageResponse.create(items=response_items, total=total, params=PaginationParams(page=page, page_size=page_size))
+
+@router.get("/transactions", response_model=PageResponse[TransactionResponse])
+async def list_transactions(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
+    search: Optional[str] = None,
+    student_id: Optional[uuid.UUID] = None,
+    admission_id: Optional[uuid.UUID] = None,
+    payment_mode: Optional[str] = None,
+    txn_type: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_staff)
+):
+    """
+    Unified Financial Transactions Ledger (Payments + Refunds) with DB-level search and pagination.
+    """
+    include_payments = txn_type in (None, "ALL", "PAYMENT")
+    include_refunds = txn_type in (None, "ALL", "REFUND")
+
+    all_txns = []
+
+    # 1. Fetch Payments if requested
+    if include_payments:
+        p_query = (
+            select(Payment)
+            .options(
+                selectinload(Payment.admission).selectinload(Admission.items),
+                selectinload(Payment.student)
+            )
+        )
+        if student_id:
+            p_query = p_query.where(Payment.student_id == student_id)
+        if admission_id:
+            p_query = p_query.where(Payment.admission_id == admission_id)
+        if payment_mode and payment_mode != "ALL":
+            p_query = p_query.where(Payment.payment_mode == payment_mode)
+        if search:
+            s_pat = f"%{search.strip()}%"
+            p_query = p_query.where(
+                or_(
+                    Payment.payment_number.ilike(s_pat),
+                    Payment.collector_name_snapshot.ilike(s_pat),
+                    Payment.transaction_reference.ilike(s_pat),
+                    Payment.notes.ilike(s_pat),
+                    Payment.admission.has(Admission.admission_number.ilike(s_pat)),
+                    Payment.student.has(Student.name.ilike(s_pat))
+                )
+            )
+
+        p_res = await db.execute(p_query.order_by(desc(Payment.payment_date)))
+        payments = p_res.scalars().all()
+        for p in payments:
+            c_str = None
+            if p.admission and p.admission.items:
+                c_str = ", ".join(i.item_name_snapshot for i in p.admission.items)
+            all_txns.append(
+                TransactionResponse(
+                    id=p.id,
+                    type="PAYMENT",
+                    number=p.payment_number,
+                    date=p.payment_date,
+                    amount=p.amount,
+                    mode=p.payment_mode,
+                    ref=p.transaction_reference,
+                    notes=p.notes,
+                    collector=p.collector_name_snapshot,
+                    admission_id=p.admission_id,
+                    admission_number=p.admission.admission_number if p.admission else None,
+                    course_name=c_str,
+                    fee_period=p.fee_period,
+                    payment_id=None
+                )
+            )
+
+    # 2. Fetch Refunds if requested
+    if include_refunds:
+        r_query = (
+            select(Refund)
+            .options(
+                selectinload(Refund.admission).selectinload(Admission.items),
+                selectinload(Refund.student)
+            )
+        )
+        if student_id:
+            r_query = r_query.where(Refund.student_id == student_id)
+        if admission_id:
+            r_query = r_query.where(Refund.admission_id == admission_id)
+        if payment_mode and payment_mode != "ALL":
+            r_query = r_query.where(Refund.refund_mode == payment_mode)
+        if search:
+            s_pat = f"%{search.strip()}%"
+            r_query = r_query.where(
+                or_(
+                    Refund.refund_number.ilike(s_pat),
+                    Refund.processor_name_snapshot.ilike(s_pat),
+                    Refund.reason.ilike(s_pat),
+                    Refund.notes.ilike(s_pat),
+                    Refund.admission.has(Admission.admission_number.ilike(s_pat)),
+                    Refund.student.has(Student.name.ilike(s_pat))
+                )
+            )
+
+        r_res = await db.execute(r_query.order_by(desc(Refund.refund_date)))
+        refunds = r_res.scalars().all()
+        for r in refunds:
+            c_str = None
+            if r.admission and r.admission.items:
+                c_str = ", ".join(i.item_name_snapshot for i in r.admission.items)
+            all_txns.append(
+                TransactionResponse(
+                    id=r.id,
+                    type="REFUND",
+                    number=r.refund_number,
+                    date=r.refund_date,
+                    amount=-r.amount,
+                    mode=r.refund_mode,
+                    ref=None,
+                    notes=r.reason,
+                    collector=r.processor_name_snapshot,
+                    admission_id=r.admission_id,
+                    admission_number=r.admission.admission_number if r.admission else None,
+                    course_name=c_str,
+                    fee_period=None,
+                    payment_id=r.payment_id
+                )
+            )
+
+    # Sort combined transactions descending by date
+    all_txns.sort(key=lambda t: t.date, reverse=True)
+
+    total = len(all_txns)
+    offset = (page - 1) * page_size
+    paginated_items = all_txns[offset : offset + page_size]
+
+    return PageResponse.create(items=paginated_items, total=total, params=PaginationParams(page=page, page_size=page_size))
 
 @router.post("", response_model=PaymentResponse, status_code=status.HTTP_201_CREATED)
 async def record_payment(

@@ -14,7 +14,8 @@ from app.database.models import (
     Admission, AdmissionItem, Student, Payment, PaymentAllocation, GreenCardProduct, User, BatchSubject, Refund, AuditLog
 )
 from app.modules.admissions.schemas import (
-    AdmissionCreate, AdmissionResponse, AdmissionCalculatePreviewRequest, AdmissionItemResponse, AdmissionRevokeRequest
+    AdmissionCreate, AdmissionResponse, AdmissionCalculatePreviewRequest, AdmissionItemResponse, AdmissionRevokeRequest,
+    AdmissionSlipsResponse, SlipItemResponse
 )
 from app.common.calculations import (
     calculate_admission_financials, allocate_payment_proportionally, compute_rolling_cycle_end
@@ -64,7 +65,9 @@ async def list_admissions(
         search_pattern = f"%{search.strip()}%"
         filter_clause = or_(
             Admission.admission_number.ilike(search_pattern),
-            Admission.student_name_snapshot.ilike(search_pattern)
+            Admission.student_name_snapshot.ilike(search_pattern),
+            Admission.items.any(AdmissionItem.item_name_snapshot.ilike(search_pattern)),
+            Admission.items.any(AdmissionItem.teacher_name_snapshot.ilike(search_pattern))
         )
         query = query.where(filter_clause)
         count_query = count_query.where(filter_clause)
@@ -73,7 +76,7 @@ async def list_admissions(
         query = query.where(Admission.student_id == student_id)
         count_query = count_query.where(Admission.student_id == student_id)
 
-    if payment_status:
+    if payment_status and payment_status != "ALL":
         query = query.where(Admission.payment_status == payment_status)
         count_query = count_query.where(Admission.payment_status == payment_status)
 
@@ -300,6 +303,219 @@ async def get_admission(
     if not admission:
         raise HTTPException(status_code=404, detail="Admission not found")
     return admission
+
+@router.get("/{admission_id}/slips", response_model=AdmissionSlipsResponse)
+async def get_admission_slips(
+    admission_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_staff)
+):
+    """
+    Returns all generated slips, payment receipts (1st, 2nd, installments),
+    and refund vouchers for a given course purchase / admission.
+    """
+    query = (
+        select(Admission)
+        .options(
+            selectinload(Admission.items),
+            selectinload(Admission.student)
+        )
+        .where(Admission.id == admission_id)
+    )
+    res = await db.execute(query)
+    admission = res.scalar_one_or_none()
+    if not admission:
+        raise HTTPException(status_code=404, detail="Course purchase / admission not found")
+
+    # Fetch all payments
+    p_query = (
+        select(Payment)
+        .options(
+            selectinload(Payment.allocations),
+            selectinload(Payment.student)
+        )
+        .where(Payment.admission_id == admission_id)
+        .order_by(Payment.payment_date.asc())
+    )
+    payments = (await db.execute(p_query)).scalars().all()
+
+    # Fetch all refunds
+    r_query = (
+        select(Refund)
+        .options(selectinload(Refund.student))
+        .where(Refund.admission_id == admission_id)
+        .order_by(Refund.refund_date.asc())
+    )
+    refunds = (await db.execute(r_query)).scalars().all()
+
+    slips: List[SlipItemResponse] = []
+
+    # 1. Course Enrollment / Admission Slip
+    adm_dict = {
+        "id": str(admission.id),
+        "admission_number": admission.admission_number,
+        "purchase_transaction_id": admission.admission_number,
+        "student_id": str(admission.student_id),
+        "student_name_snapshot": admission.student_name_snapshot,
+        "admission_date": admission.admission_date.isoformat(),
+        "subtotal": float(admission.subtotal),
+        "individual_discount_total": float(admission.individual_discount_total),
+        "overall_discount_type": admission.overall_discount_type,
+        "overall_discount_value": float(admission.overall_discount_value),
+        "overall_discount_amount": float(admission.overall_discount_amount),
+        "total_discount": float(admission.total_discount),
+        "gst_enabled": admission.gst_enabled,
+        "gst_rate": float(admission.gst_rate),
+        "taxable_base": float(admission.taxable_base),
+        "gst_amount": float(admission.gst_amount),
+        "total_payable": float(admission.total_payable),
+        "amount_paid": float(admission.amount_paid),
+        "balance_due": float(admission.balance_due),
+        "payment_status": admission.payment_status,
+        "status": admission.status,
+        "notes": admission.notes,
+        "valid_from": admission.valid_from.isoformat() if admission.valid_from else None,
+        "valid_to": admission.valid_to.isoformat() if admission.valid_to else None,
+        "items": [
+            {
+                "id": str(itm.id),
+                "item_type": itm.item_type,
+                "batch_id": str(itm.batch_id) if itm.batch_id else None,
+                "subject_id": str(itm.subject_id) if itm.subject_id else None,
+                "item_name_snapshot": itm.item_name_snapshot,
+                "teacher_name_snapshot": itm.teacher_name_snapshot,
+                "hall_number_snapshot": itm.hall_number_snapshot,
+                "original_price": float(itm.original_price),
+                "discount_amount": float(itm.discount_amount),
+                "overall_discount_share": float(itm.overall_discount_share),
+                "net_price": float(itm.net_price),
+                "amount_collected": float(itm.amount_collected),
+                "balance_due": float(itm.balance_due),
+                "valid_from": itm.valid_from.isoformat() if itm.valid_from else None,
+                "valid_to": itm.valid_to.isoformat() if itm.valid_to else None,
+            }
+            for itm in admission.items
+        ]
+    }
+    slips.append(
+        SlipItemResponse(
+            id=admission.id,
+            slip_type="ADMISSION_INVOICE",
+            slip_number=admission.admission_number,
+            date=datetime.combine(admission.admission_date, datetime.min.time()),
+            title="Course Purchase & Enrollment Invoice",
+            amount=admission.total_payable,
+            mode="INVOICE",
+            ref=admission.admission_number,
+            collector_or_processor=admission.student_name_snapshot,
+            notes=admission.notes,
+            status_badge=admission.payment_status,
+            data=adm_dict
+        )
+    )
+
+    # 2. Payments (1st partial, 2nd payment, balance clearing, etc.)
+    item_names_map = {itm.id: itm.item_name_snapshot for itm in admission.items}
+    for idx, p in enumerate(payments):
+        alloc_data = [
+            {
+                "item_name": item_names_map.get(a.admission_item_id, "Course Item"),
+                "allocated_amount": float(a.allocated_amount)
+            }
+            for a in p.allocations
+        ]
+        p_receipt_data = {
+            "payment_number": p.payment_number,
+            "payment_date": p.payment_date.isoformat(),
+            "amount": float(p.amount),
+            "payment_mode": p.payment_mode,
+            "transaction_reference": p.transaction_reference,
+            "collector_name": p.collector_name_snapshot,
+            "student_name": admission.student.full_name if admission.student else admission.student_name_snapshot,
+            "student_reg_no": admission.student.registration_no if admission.student else "—",
+            "student_mobile": admission.student.mobile if admission.student else None,
+            "admission_number": admission.admission_number,
+            "total_admission_payable": float(admission.total_payable),
+            "total_amount_paid_so_far": float(admission.amount_paid),
+            "remaining_balance_due": float(admission.balance_due),
+            "valid_from": p.valid_from.isoformat() if p.valid_from else (admission.valid_from.isoformat() if admission.valid_from else None),
+            "valid_to": p.valid_to.isoformat() if p.valid_to else (admission.valid_to.isoformat() if admission.valid_to else None),
+            "fee_period": p.fee_period,
+            "allocations": alloc_data
+        }
+        title_suffix = "Initial Payment" if idx == 0 and p.amount < admission.total_payable else "Due Balance Cleared" if p.amount >= admission.balance_due else "Installment Payment"
+        slips.append(
+            SlipItemResponse(
+                id=p.id,
+                slip_type="PAYMENT_RECEIPT",
+                slip_number=p.payment_number,
+                date=p.payment_date,
+                title=f"Payment Receipt #{idx + 1} ({title_suffix})",
+                amount=p.amount,
+                mode=p.payment_mode,
+                ref=p.transaction_reference,
+                collector_or_processor=p.collector_name_snapshot,
+                notes=p.notes,
+                status_badge="PAID",
+                data=p_receipt_data
+            )
+        )
+
+    # 3. Refunds / Revocation Vouchers
+    c_str = ", ".join(i.item_name_snapshot for i in admission.items)
+    for idx, r in enumerate(refunds):
+        r_receipt_data = {
+            "refund_number": r.refund_number,
+            "refund_date": r.refund_date.isoformat(),
+            "amount": float(r.amount),
+            "refund_mode": r.refund_mode,
+            "reason": r.reason,
+            "processor_name": r.processor_name_snapshot,
+            "student_name": admission.student.full_name if admission.student else admission.student_name_snapshot,
+            "student_reg_no": admission.student.registration_no if admission.student else "—",
+            "student_mobile": admission.student.mobile if admission.student else None,
+            "admission_number": admission.admission_number,
+            "course_name": c_str,
+            "admission_total_payable": float(admission.total_payable),
+            "net_amount_paid_after_refund": float(admission.amount_paid),
+            "remaining_balance_due": float(admission.balance_due),
+            "notes": r.notes
+        }
+        slips.append(
+            SlipItemResponse(
+                id=r.id,
+                slip_type="REFUND_VOUCHER",
+                slip_number=r.refund_number,
+                date=r.refund_date,
+                title="Fee Refund Voucher (Batch Revocation / Refund)",
+                amount=r.amount,
+                mode=r.refund_mode,
+                ref=None,
+                collector_or_processor=r.processor_name_snapshot,
+                notes=r.reason,
+                status_badge="REFUNDED",
+                data=r_receipt_data
+            )
+        )
+
+    return AdmissionSlipsResponse(
+        admission_id=admission.id,
+        admission_number=admission.admission_number,
+        admission_date=admission.admission_date,
+        student_id=admission.student_id,
+        student_name=admission.student.full_name if admission.student else admission.student_name_snapshot,
+        student_reg_no=admission.student.registration_no if admission.student else None,
+        student_mobile=admission.student.mobile if admission.student else None,
+        total_payable=admission.total_payable,
+        amount_paid=admission.amount_paid,
+        balance_due=admission.balance_due,
+        payment_status=admission.payment_status,
+        status=admission.status,
+        valid_from=admission.valid_from,
+        valid_to=admission.valid_to,
+        items=admission.items,
+        slips=slips
+    )
 
 @router.post("/{admission_id}/cancel", response_model=AdmissionResponse)
 async def cancel_admission(

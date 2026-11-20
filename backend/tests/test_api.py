@@ -264,6 +264,33 @@ async def test_multi_batch_admission_and_payment():
         assert receipt["student_name"] == "Pooja Gupta"
         assert float(receipt["remaining_balance_due"]) == 0.0
 
+        # 6. Verify All Slips endpoint for this admission (Multiple slips: invoice, partial payment, 2nd payment)
+        slips_res = await client.get(f"/api/admissions/{admission['id']}/slips", headers=headers)
+        assert slips_res.status_code == 200
+        slips_data = slips_res.json()
+        assert len(slips_data["slips"]) >= 3
+        slip_types = [s["slip_type"] for s in slips_data["slips"]]
+        assert "ADMISSION_INVOICE" in slip_types
+        assert slip_types.count("PAYMENT_RECEIPT") >= 2
+
+        # 7. Verify unified transactions ledger endpoint with search and pagination
+        txn_res = await client.get(
+            f"/api/payments/transactions?student_id={student['id']}&page=1&page_size=10",
+            headers=headers
+        )
+        assert txn_res.status_code == 200
+        txn_data = txn_res.json()
+        assert txn_data["total"] >= 2
+        assert len(txn_data["items"]) >= 2
+
+        # Verify search filter in transactions ledger
+        search_res = await client.get(
+            f"/api/payments/transactions?student_id={student['id']}&search=Final",
+            headers=headers
+        )
+        assert search_res.status_code == 200
+        assert search_res.json()["total"] == 1
+
 @pytest.mark.asyncio
 async def test_subject_revenue_report_and_cash_flow():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

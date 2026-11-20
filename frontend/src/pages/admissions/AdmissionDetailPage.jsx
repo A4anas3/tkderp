@@ -16,7 +16,8 @@ import {
   RefreshCw,
   Phone,
   ShieldAlert,
-  RotateCcw
+  RotateCcw,
+  FileText
 } from 'lucide-react';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
@@ -24,6 +25,7 @@ import { admissionApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
 import AdmissionReceiptModal from '../../components/receipts/AdmissionReceiptModal';
+import AdmissionAllSlipsModal from '../../components/receipts/AdmissionAllSlipsModal';
 import QuickPaymentModal from '../../components/modals/QuickPaymentModal';
 import PaymentReceiptModal from '../../components/receipts/PaymentReceiptModal';
 import { formatIndianDate, formatCycleLabel, evaluateCycleStatus } from '../../utils/dateCycleUtils';
@@ -39,6 +41,7 @@ export default function AdmissionDetailPage() {
 
   // Modals for actions
   const [slipModalOpen, setSlipModalOpen] = useState(false);
+  const [allSlipsModalOpen, setAllSlipsModalOpen] = useState(false);
   const [payModalOpen, setPayModalOpen] = useState(false);
   const [paymentReceiptToShow, setPaymentReceiptToShow] = useState(null);
   const [revoking, setRevoking] = useState(false);
@@ -159,11 +162,21 @@ export default function AdmissionDetailPage() {
         <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="secondary"
+            icon={FileText}
+            onClick={() => setAllSlipsModalOpen(true)}
+            size="sm"
+            title="View all enrollment invoices, partial payment receipts & refund vouchers"
+          >
+            All Slips & Receipts ▾
+          </Button>
+
+          <Button
+            variant="secondary"
             icon={Printer}
             onClick={() => setSlipModalOpen(true)}
             size="sm"
           >
-            Print Official Slip
+            Print Enrollment Slip
           </Button>
 
           {Number(admission.balance_due || 0) > 0 && isActive && (
@@ -493,6 +506,14 @@ export default function AdmissionDetailPage() {
           </div>
         </div>
       )}
+
+      {/* All Slips (Multi-Slip Picker & Comprehensive Statement Modal) */}
+      <AdmissionAllSlipsModal
+        isOpen={allSlipsModalOpen}
+        onClose={() => setAllSlipsModalOpen(false)}
+        admissionId={admission?.id}
+        admissionData={admission}
+      />
 
       {/* Slip Modal */}
       <AdmissionReceiptModal
