@@ -166,14 +166,14 @@ export default function AdmissionDetailPage() {
             Print Official Slip
           </Button>
 
-          {admission.balance_due > 0 && isActive && (
+          {Number(admission.balance_due || 0) > 0 && isActive && (
             <Button
               variant="success"
               icon={CreditCard}
               onClick={() => setPayModalOpen(true)}
               size="sm"
             >
-              Collect Fee (₹{admission.balance_due.toLocaleString('en-IN')})
+              Collect Fee (₹{Number(admission.balance_due || 0).toLocaleString('en-IN')})
             </Button>
           )}
 
@@ -350,14 +350,14 @@ export default function AdmissionDetailPage() {
               {admission.items?.map((itm, idx) => (
                 <tr key={idx} className="hover:bg-slate-50/60">
                   <td className="p-3">
-                    <div className="font-bold text-black">{itm.batch_name_snapshot || 'Course Enrollment'}</div>
+                    <div className="font-bold text-black">{itm.item_name_snapshot || itm.batch_name_snapshot || 'Course Enrollment'}</div>
                     <div className="text-[11px] text-slate-500 font-mono">
                       {itm.subject_code ? `Code: ${itm.subject_code}` : ''}
                     </div>
                   </td>
                   <td className="p-3 text-slate-700">
                     <div className="font-semibold text-black">{itm.teacher_name_snapshot || 'Faculty'}</div>
-                    <div className="text-[11px] text-slate-500">{itm.hall_number ? `Hall: ${itm.hall_number}` : 'Main Campus'}</div>
+                    <div className="text-[11px] text-slate-500">{itm.hall_number_snapshot || itm.hall_number ? `Hall: ${itm.hall_number_snapshot || itm.hall_number}` : 'Main Campus'}</div>
                   </td>
                   <td className="p-3">
                     <div className="font-mono font-bold text-black text-[11px]">
@@ -368,19 +368,19 @@ export default function AdmissionDetailPage() {
                     </div>
                   </td>
                   <td className="p-3 text-right font-mono text-slate-700 font-semibold">
-                    ₹{itm.original_fee.toFixed(2)}
+                    ₹{Number(itm.original_price ?? itm.original_fee ?? 0).toFixed(2)}
                   </td>
                   <td className="p-3 text-right font-mono text-rose-600 font-medium">
-                    {itm.discount_amount > 0 ? `-₹${itm.discount_amount.toFixed(2)}` : '₹0.00'}
+                    {Number(itm.discount_amount ?? 0) > 0 ? `-₹${Number(itm.discount_amount).toFixed(2)}` : '₹0.00'}
                   </td>
                   <td className="p-3 text-right font-mono font-bold text-black">
-                    ₹{itm.net_price.toFixed(2)}
+                    ₹{Number(itm.net_price ?? 0).toFixed(2)}
                   </td>
                   <td className="p-3 text-right font-mono font-bold text-emerald-800">
-                    ₹{itm.amount_collected.toFixed(2)}
+                    ₹{Number(itm.amount_collected ?? 0).toFixed(2)}
                   </td>
                   <td className="p-3 text-right font-mono font-bold text-rose-700">
-                    ₹{itm.balance_due.toFixed(2)}
+                    ₹{Number(itm.balance_due ?? 0).toFixed(2)}
                   </td>
                 </tr>
               ))}
@@ -393,19 +393,19 @@ export default function AdmissionDetailPage() {
           <div>
             <span className="text-slate-500 block text-[11px]">Total Net Payable</span>
             <span className="font-mono font-black text-black text-base">
-              ₹{admission.total_payable.toFixed(2)}
+              ₹{Number(admission.total_payable ?? 0).toFixed(2)}
             </span>
           </div>
           <div>
             <span className="text-slate-500 block text-[11px]">Total Realized Cash</span>
             <span className="font-mono font-black text-emerald-800 text-base">
-              ₹{admission.amount_paid.toFixed(2)}
+              ₹{Number(admission.amount_paid ?? 0).toFixed(2)}
             </span>
           </div>
           <div>
             <span className="text-slate-500 block text-[11px]">Outstanding Due</span>
             <span className="font-mono font-black text-rose-700 text-base">
-              ₹{admission.balance_due.toFixed(2)}
+              ₹{Number(admission.balance_due ?? 0).toFixed(2)}
             </span>
           </div>
           <div>
@@ -472,7 +472,7 @@ export default function AdmissionDetailPage() {
                       </Badge>
                     </td>
                     <td className="p-3 text-right font-mono font-black text-emerald-800">
-                      ₹{p.amount.toFixed(2)}
+                      ₹{Number(p.amount ?? 0).toFixed(2)}
                     </td>
                     <td className="p-3 text-slate-700 font-medium">
                       {p.cashier_name_snapshot || 'Cashier'}
