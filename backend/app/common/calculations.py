@@ -226,29 +226,127 @@ def calculate_admission_financials(
 
 def allocate_payment_proportionally(
     payment_amount: Decimal,
-    items_with_balance: List[Dict[str, Any]]
+    items_with_balance: List[Dict[str, Any]],
+    mode: str = "PROPORTIONAL",
+    manual_allocations: Optional[Any] = None
 ) -> List[Tuple[Any, Decimal]]:
     """
-    Allocates a payment across admission items based on their outstanding balance.
-    Returns a list of (item_id, allocated_amount).
+    Allocates payment across admission items based on their outstanding balance.
+    Guarantees:
+      - sum(allocations) == payment_amount EXACTLY (using largest-remainder method on paise).
+      - No allocation exceeds an item's balance.
+      - Raises ValueError if payment > total balance or payment < 0.
+    Supported modes:
+      - "PROPORTIONAL" (default): largest-remainder on paise proportional to balance.
+      - "SEQUENTIAL": allocates fully to first items in list order.
+      - "MANUAL": cashier provides manual allocation amounts per item.
+    Returns:
+      List of (item_id, allocated_amount).
     """
-    total_balance = sum((itm["balance_due"] for itm in items_with_balance), Decimal("0.00"))
-    if total_balance <= Decimal("0.00") or payment_amount <= Decimal("0.00"):
+    payment_amount = round_money(payment_amount)
+    if payment_amount < Decimal("0.00"):
+        raise ValueError("Payment amount cannot be negative")
+
+    if not items_with_balance:
+        if payment_amount > Decimal("0.00"):
+            raise ValueError(f"Payment amount ₹{payment_amount} exceeds total outstanding balance ₹0.00")
         return []
-    
-    allocations = []
-    amount_left = min(payment_amount, total_balance)
-    allocated_sum = Decimal("0.00")
-    
-    for i, itm in enumerate(items_with_balance):
-        if i == len(items_with_balance) - 1:
-            alloc_for_item = amount_left - allocated_sum
-        else:
-            share = itm["balance_due"] / total_balance
-            alloc_for_item = round_money(amount_left * share)
-            allocated_sum += alloc_for_item
-            
-        alloc_for_item = min(alloc_for_item, itm["balance_due"])
-        allocations.append((itm["id"], alloc_for_item))
-        
-    return allocations
+
+    # Extract balances in paise
+    items_paise = [
+        (itm["id"], int(round(itm["balance_due"] * 100)))
+        for itm in items_with_balance
+    ]
+    total_balance_paise = sum(p for _, p in items_paise)
+    pay_paise = int(round(payment_amount * 100))
+
+    if pay_paise > total_balance_paise:
+        raise ValueError(
+            f"Payment amount ₹{payment_amount} exceeds total outstanding balance ₹{Decimal(total_balance_paise) / Decimal(100):.2f}"
+        )
+
+    if pay_paise == 0:
+        return [(itm["id"], Decimal("0.00")) for itm in items_with_balance]
+
+    mode_norm = (mode or "PROPORTIONAL").upper()
+
+    if mode_norm == "MANUAL":
+        alloc_map = {}
+        if isinstance(manual_allocations, dict):
+            for k, v in manual_allocations.items():
+                alloc_map[str(k)] = round_money(Decimal(str(v)))
+        elif isinstance(manual_allocations, list):
+            for entry in manual_allocations:
+                if isinstance(entry, dict):
+                    itm_id = str(entry.get("admission_item_id") or entry.get("id"))
+                    alloc_map[itm_id] = round_money(Decimal(str(entry.get("allocated_amount") or entry.get("amount", 0))))
+                else:
+                    itm_id = str(getattr(entry, "admission_item_id", getattr(entry, "id", None)))
+                    amt = getattr(entry, "allocated_amount", getattr(entry, "amount", Decimal("0.00")))
+                    alloc_map[itm_id] = round_money(Decimal(str(amt)))
+
+        result = []
+        sum_manual_paise = 0
+        for itm_id, bal_p in items_paise:
+            amt = alloc_map.get(str(itm_id), Decimal("0.00"))
+            amt_p = int(round(amt * 100))
+            if amt_p < 0:
+                raise ValueError("Manual allocation cannot be negative")
+            if amt_p > bal_p:
+                raise ValueError(
+                    f"Manual allocation ₹{amt:.2f} exceeds item balance ₹{Decimal(bal_p)/Decimal(100):.2f}"
+                )
+            sum_manual_paise += amt_p
+            result.append((itm_id, amt))
+
+        if sum_manual_paise != pay_paise:
+            raise ValueError(
+                f"Sum of manual allocations (₹{Decimal(sum_manual_paise)/Decimal(100):.2f}) must equal payment amount (₹{payment_amount:.2f})"
+            )
+        return result
+
+    elif mode_norm == "SEQUENTIAL":
+        result = []
+        rem_paise = pay_paise
+        for itm_id, bal_p in items_paise:
+            take = min(rem_paise, bal_p)
+            result.append((itm_id, Decimal(take) / Decimal(100)))
+            rem_paise -= take
+        return result
+
+    else:
+        # PROPORTIONAL (Largest Remainder Method on Paise)
+        floor_paise_shares = []
+        remainders = []
+
+        for idx, (itm_id, bal_p) in enumerate(items_paise):
+            raw = (pay_paise * bal_p) / total_balance_paise
+            flr = int(raw)
+            flr = min(flr, bal_p)
+            floor_paise_shares.append(flr)
+            remainders.append((raw - flr, idx))
+
+        allocated_paise = list(floor_paise_shares)
+        distributed_paise = sum(allocated_paise)
+        leftover = pay_paise - distributed_paise
+
+        # Sort by remainder descending, then balance descending
+        remainders.sort(key=lambda x: (x[0], items_paise[x[1]][1]), reverse=True)
+
+        for _, idx in remainders:
+            if leftover <= 0:
+                break
+            if allocated_paise[idx] < items_paise[idx][1]:
+                allocated_paise[idx] += 1
+                leftover -= 1
+
+        if leftover > 0:
+            for idx, (_, bal_p) in enumerate(items_paise):
+                while leftover > 0 and allocated_paise[idx] < bal_p:
+                    allocated_paise[idx] += 1
+                    leftover -= 1
+
+        return [
+            (items_paise[i][0], Decimal(allocated_paise[i]) / Decimal(100))
+            for i in range(len(items_paise))
+        ]

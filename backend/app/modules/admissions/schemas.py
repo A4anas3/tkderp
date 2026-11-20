@@ -47,11 +47,18 @@ class AdmissionItemResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+class ManualAllocationItem(BaseModel):
+    admission_item_id: Optional[uuid.UUID] = None
+    item_id: Optional[uuid.UUID] = None
+    allocated_amount: Decimal = Field(..., ge=0)
+
 class InitialPaymentData(BaseModel):
     amount: Decimal = Field(..., gt=0)
     payment_mode: str = Field(default="CASH", pattern="^(CASH|UPI|BANK_TRANSFER|CARD|OTHER)$")
     transaction_reference: Optional[str] = None
     notes: Optional[str] = None
+    allocation_mode: str = Field(default="PROPORTIONAL", pattern="^(PROPORTIONAL|SEQUENTIAL|MANUAL)$")
+    manual_allocations: Optional[List[ManualAllocationItem]] = None
 
 class AdmissionCreate(BaseModel):
     student_id: uuid.UUID

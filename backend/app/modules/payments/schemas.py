@@ -4,6 +4,10 @@ from datetime import datetime, date
 from pydantic import BaseModel, Field, ConfigDict
 import uuid
 
+class ManualAllocationItem(BaseModel):
+    admission_item_id: uuid.UUID
+    allocated_amount: Decimal = Field(..., ge=0)
+
 class PaymentCreate(BaseModel):
     admission_id: uuid.UUID
     amount: Decimal = Field(..., gt=0)
@@ -13,6 +17,8 @@ class PaymentCreate(BaseModel):
     valid_from: Optional[date] = None
     valid_to: Optional[date] = None
     fee_period: Optional[str] = None
+    allocation_mode: str = Field(default="PROPORTIONAL", pattern="^(PROPORTIONAL|SEQUENTIAL|MANUAL)$")
+    manual_allocations: Optional[List[ManualAllocationItem]] = None
 
 class PaymentUpdate(BaseModel):
     amount: Optional[Decimal] = Field(default=None, gt=0)

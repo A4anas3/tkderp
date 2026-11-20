@@ -3,7 +3,7 @@ import json
 from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, desc
 from sqlalchemy.orm import selectinload
@@ -23,6 +23,8 @@ from app.common.calculations import (
     calculate_admission_financials, allocate_payment_proportionally, compute_rolling_cycle_end
 )
 from app.common.pagination import PaginationParams, PageResponse
+from app.common.numbering import next_number
+from app.common.idempotency import get_idempotency_record, save_idempotency_record, build_idempotent_response
 
 router = APIRouter(prefix="/api/admissions", tags=["Admissions"])
 
@@ -102,23 +104,23 @@ async def list_admissions(
 @router.post("", response_model=AdmissionResponse, status_code=status.HTTP_201_CREATED)
 async def create_admission(
     payload: AdmissionCreate,
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
+    if idempotency_key:
+        cached = await get_idempotency_record(db, idempotency_key, "POST /api/admissions")
+        if cached:
+            return build_idempotent_response(cached)
+
     # Verify student
     st_res = await db.execute(select(Student).where(Student.id == payload.student_id))
     student = st_res.scalar_one_or_none()
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
 
-    # Generate admission number (ADM-YYYY-XXXX format with uniqueness guarantee)
-    year_str = payload.admission_date.strftime("%Y")
-    cnt_res = await db.execute(select(func.count(Admission.id)))
-    seq = (cnt_res.scalar_one() or 0) + 1
-    adm_no = f"ADM-{year_str}-{seq:04d}"
-    while (await db.execute(select(Admission).where(Admission.admission_number == adm_no))).scalar_one_or_none():
-        seq += 1
-        adm_no = f"ADM-{year_str}-{seq:04d}"
+    # Generate sequential admission number atomically
+    adm_no = await next_number(db, "ADM")
 
     # Calculate item financials
     raw_items = [
@@ -251,10 +253,13 @@ async def create_admission(
 
     # Process Initial Payment if provided
     if payload.initial_payment and payload.initial_payment.amount > Decimal("0.00"):
-        pay_amount = min(payload.initial_payment.amount, admission.total_payable)
-        p_cnt_res = await db.execute(select(func.count(Payment.id)))
-        p_seq = p_cnt_res.scalar_one() + 1
-        pay_no = f"PAY{year_str}{p_seq:04d}"
+        if payload.initial_payment.amount > admission.total_payable:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Initial payment amount ₹{payload.initial_payment.amount} exceeds total payable ₹{admission.total_payable}"
+            )
+        pay_amount = payload.initial_payment.amount
+        pay_no = await next_number(db, "PAY")
 
         payment = Payment(
             payment_number=pay_no,
@@ -271,9 +276,17 @@ async def create_admission(
         db.add(payment)
         await db.flush()
 
-        # Proportional Allocation
+        # Allocation across items
         items_payload = [{"id": ai.id, "balance_due": ai.balance_due} for ai in db_items]
-        allocations = allocate_payment_proportionally(pay_amount, items_payload)
+        try:
+            allocations = allocate_payment_proportionally(
+                pay_amount,
+                items_payload,
+                mode=payload.initial_payment.allocation_mode,
+                manual_allocations=payload.initial_payment.manual_allocations
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
         
         for ai_id, alloc_amt in allocations:
             pa = PaymentAllocation(
@@ -297,7 +310,20 @@ async def create_admission(
 
     await db.commit()
 
-    return await get_admission(admission.id, db, current_user)
+    full_adm = await get_admission(admission.id, db, current_user)
+
+    if idempotency_key:
+        resp_data = AdmissionResponse.model_validate(full_adm).model_dump(mode="json")
+        await save_idempotency_record(
+            db,
+            idempotency_key,
+            "POST /api/admissions",
+            status.HTTP_201_CREATED,
+            resp_data
+        )
+        await db.commit()
+
+    return full_adm
 
 @router.get("/{admission_id}", response_model=AdmissionResponse)
 async def get_admission(
@@ -555,7 +581,12 @@ async def cancel_admission(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin)
 ):
-    query = select(Admission).options(selectinload(Admission.items), selectinload(Admission.student)).where(Admission.id == admission_id)
+    query = (
+        select(Admission)
+        .options(selectinload(Admission.items), selectinload(Admission.student))
+        .where(Admission.id == admission_id)
+        .with_for_update()
+    )
     res = await db.execute(query)
     admission = res.scalar_one_or_none()
     if not admission:
@@ -600,6 +631,7 @@ async def revoke_batch_purchase(
         select(Admission)
         .options(selectinload(Admission.items), selectinload(Admission.student))
         .where(Admission.id == admission_id)
+        .with_for_update()
     )
     res = await db.execute(query)
     admission = res.scalar_one_or_none()
@@ -614,10 +646,7 @@ async def revoke_batch_purchase(
                 status_code=400,
                 detail=f"Refund amount ₹{payload.refund_amount} cannot exceed total amount paid ₹{admission.amount_paid}"
             )
-        year_str = datetime.now().strftime("%Y")
-        ref_cnt_res = await db.execute(select(func.count(Refund.id)))
-        seq = ref_cnt_res.scalar_one() + 1
-        ref_no = f"REF{year_str}{seq:04d}"
+        ref_no = await next_number(db, "REF")
 
         refund_record = Refund(
             refund_number=ref_no,
@@ -695,6 +724,7 @@ async def restore_batch_purchase(
         select(Admission)
         .options(selectinload(Admission.items), selectinload(Admission.student))
         .where(Admission.id == admission_id)
+        .with_for_update()
     )
     res = await db.execute(query)
     admission = res.scalar_one_or_none()
@@ -1063,8 +1093,8 @@ async def renew_subject(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
-    # Verify student
-    st_res = await db.execute(select(Student).where(Student.id == payload.student_id))
+    # Verify and lock student row
+    st_res = await db.execute(select(Student).where(Student.id == payload.student_id).with_for_update())
     student = st_res.scalar_one_or_none()
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
@@ -1095,14 +1125,8 @@ async def renew_subject(
             if not h_no and batch.hall_number:
                 h_no = batch.hall_number
 
-    # Next sequential admission number (ADM-YYYY-XXXX format with uniqueness guarantee)
-    year_str = date.today().strftime("%Y")
-    cnt_res = await db.execute(select(func.count(Admission.id)))
-    seq = (cnt_res.scalar_one() or 0) + 1
-    adm_no = f"ADM-{year_str}-{seq:04d}"
-    while (await db.execute(select(Admission).where(Admission.admission_number == adm_no))).scalar_one_or_none():
-        seq += 1
-        adm_no = f"ADM-{year_str}-{seq:04d}"
+    # Next sequential admission number atomically
+    adm_no = await next_number(db, "ADM")
 
     # Calculate financials
     raw_item = {
@@ -1173,10 +1197,13 @@ async def renew_subject(
 
     # Process Initial Payment if provided
     if payload.initial_payment and payload.initial_payment.amount > Decimal("0.00"):
-        pay_amount = min(payload.initial_payment.amount, admission.total_payable)
-        p_cnt_res = await db.execute(select(func.count(Payment.id)))
-        p_seq = p_cnt_res.scalar_one() + 1
-        pay_no = f"PAY{year_str}{p_seq:04d}"
+        if payload.initial_payment.amount > admission.total_payable:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Initial payment amount ₹{payload.initial_payment.amount} exceeds total payable ₹{admission.total_payable}"
+            )
+        pay_amount = payload.initial_payment.amount
+        pay_no = await next_number(db, "PAY")
 
         payment = Payment(
             payment_number=pay_no,
@@ -1193,18 +1220,29 @@ async def renew_subject(
         db.add(payment)
         await db.flush()
 
-        pa = PaymentAllocation(
-            payment_id=payment.id,
-            admission_item_id=ai.id,
-            allocated_amount=pay_amount
-        )
-        db.add(pa)
+        items_payload = [{"id": ai.id, "balance_due": ai.balance_due}]
+        try:
+            allocations = allocate_payment_proportionally(
+                pay_amount,
+                items_payload,
+                mode=payload.initial_payment.allocation_mode,
+                manual_allocations=payload.initial_payment.manual_allocations
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
-        ai.amount_collected = pay_amount
-        ai.balance_due = ai.net_price - pay_amount
+        for ai_id, alloc_amt in allocations:
+            pa = PaymentAllocation(
+                payment_id=payment.id,
+                admission_item_id=ai_id,
+                allocated_amount=alloc_amt
+            )
+            db.add(pa)
+            ai.amount_collected += alloc_amt
+            ai.balance_due -= alloc_amt
 
         admission.amount_paid = pay_amount
-        admission.balance_due = admission.total_payable - pay_amount
+        admission.balance_due = max(Decimal("0.00"), admission.total_payable - pay_amount)
         if admission.balance_due == Decimal("0.00"):
             admission.payment_status = "PAID"
         elif admission.amount_paid > Decimal("0.00"):

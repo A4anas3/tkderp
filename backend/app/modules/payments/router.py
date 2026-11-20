@@ -3,7 +3,7 @@ import json
 from datetime import datetime, timezone, date
 from decimal import Decimal
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, desc, delete
 from sqlalchemy.orm import selectinload
@@ -19,6 +19,8 @@ from app.modules.payments.schemas import (
 )
 from app.common.calculations import allocate_payment_proportionally
 from app.common.pagination import PaginationParams, PageResponse
+from app.common.numbering import next_number
+from app.common.idempotency import get_idempotency_record, save_idempotency_record, build_idempotent_response
 
 router = APIRouter(prefix="/api/payments", tags=["Payments"])
 
@@ -249,18 +251,30 @@ async def list_transactions(
 @router.post("", response_model=PaymentResponse, status_code=status.HTTP_201_CREATED)
 async def record_payment(
     payload: PaymentCreate,
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
-    # Fetch admission
+    if idempotency_key:
+        cached = await get_idempotency_record(db, idempotency_key, "POST /api/payments")
+        if cached:
+            return build_idempotent_response(cached)
+
+    # Fetch admission with row-level lock
     adm_res = await db.execute(
         select(Admission)
         .options(selectinload(Admission.items), selectinload(Admission.student))
         .where(Admission.id == payload.admission_id)
+        .with_for_update()
     )
     admission = adm_res.scalar_one_or_none()
     if not admission:
         raise HTTPException(status_code=404, detail="Admission not found")
+
+    if idempotency_key:
+        cached = await get_idempotency_record(db, idempotency_key, "POST /api/payments")
+        if cached:
+            return build_idempotent_response(cached)
 
     if admission.balance_due <= Decimal("0.00"):
         raise HTTPException(status_code=400, detail="This admission is already fully paid")
@@ -271,10 +285,7 @@ async def record_payment(
             detail=f"Payment amount ₹{payload.amount} exceeds outstanding balance ₹{admission.balance_due}"
         )
 
-    year_str = datetime.now().strftime("%Y")
-    p_cnt_res = await db.execute(select(func.count(Payment.id)))
-    seq = p_cnt_res.scalar_one() + 1
-    pay_no = f"PAY{year_str}{seq:04d}"
+    pay_no = await next_number(db, "PAY")
 
     pay_from = payload.valid_from or admission.valid_from
     pay_to = payload.valid_to or admission.valid_to
@@ -300,13 +311,21 @@ async def record_payment(
     db.add(payment)
     await db.flush()
 
-    # Allocate proportionally across admission items with remaining balance
+    # Allocate across admission items with remaining balance
     unpaid_items = [
         {"id": itm.id, "balance_due": itm.balance_due}
         for itm in admission.items
         if itm.balance_due > Decimal("0.00")
     ]
-    allocations = allocate_payment_proportionally(payload.amount, unpaid_items)
+    try:
+        allocations = allocate_payment_proportionally(
+            payload.amount,
+            unpaid_items,
+            mode=payload.allocation_mode,
+            manual_allocations=payload.manual_allocations
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     pa_objs = []
     for itm_id, alloc_amt in allocations:
@@ -341,9 +360,7 @@ async def record_payment(
     else:
         admission.payment_status = "PARTIALLY_PAID"
 
-    await db.commit()
-
-    return PaymentResponse(
+    resp_obj = PaymentResponse(
         id=payment.id,
         payment_number=payment.payment_number,
         admission_id=payment.admission_id,
@@ -362,6 +379,19 @@ async def record_payment(
         fee_period=payment.fee_period,
         allocations=alloc_resps
     )
+
+    if idempotency_key:
+        await save_idempotency_record(
+            db,
+            idempotency_key,
+            "POST /api/payments",
+            status.HTTP_201_CREATED,
+            resp_obj.model_dump(mode="json")
+        )
+
+    await db.commit()
+
+    return resp_obj
 
 @router.get("/{payment_id}/receipt", response_model=PaymentReceiptResponse)
 async def get_payment_receipt(
@@ -434,7 +464,13 @@ async def update_payment(
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found")
 
-    admission = payment.admission
+    adm_res = await db.execute(
+        select(Admission)
+        .options(selectinload(Admission.items), selectinload(Admission.student))
+        .where(Admission.id == payment.admission_id)
+        .with_for_update()
+    )
+    admission = adm_res.scalar_one()
     old_amount = payment.amount
     old_mode = payment.payment_mode
     old_ref = payment.transaction_reference
@@ -556,6 +592,7 @@ async def process_refund(
         select(Admission)
         .options(selectinload(Admission.items), selectinload(Admission.student))
         .where(Admission.id == payload.admission_id)
+        .with_for_update()
     )
     admission = adm_res.scalar_one_or_none()
     if not admission:
@@ -570,10 +607,7 @@ async def process_refund(
             detail=f"Refund amount ₹{payload.amount} cannot exceed total amount paid ₹{admission.amount_paid}"
         )
 
-    year_str = datetime.now().strftime("%Y")
-    ref_cnt_res = await db.execute(select(func.count(Refund.id)))
-    seq = ref_cnt_res.scalar_one() + 1
-    ref_no = f"REF{year_str}{seq:04d}"
+    ref_no = await next_number(db, "REF")
 
     refund = Refund(
         refund_number=ref_no,

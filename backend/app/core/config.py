@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     FIREBASE_CREDENTIALS_PATH: str = ""
     FIREBASE_PROJECT_ID: str = ""
 
+    # Numbers & Financial Year
+    USE_FINANCIAL_YEAR: bool = False
+
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["*"]
     

@@ -11,6 +11,7 @@ from app.modules.payments.models import Payment, PaymentAllocation, Refund
 from app.modules.expenses.models import ExpenseCategory, Expense, SalaryRecord
 from app.modules.assessments.models import Assessment, StudentMark
 from app.modules.audit.models import AuditLog
+from app.common.models import NumberSequence, IdempotencyRecord
 
 __all__ = [
     "Base",
@@ -34,5 +35,7 @@ __all__ = [
     "SalaryRecord",
     "Assessment",
     "StudentMark",
-    "AuditLog"
+    "AuditLog",
+    "NumberSequence",
+    "IdempotencyRecord"
 ]

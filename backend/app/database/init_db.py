@@ -9,7 +9,8 @@ from app.core.security import get_password_hash
 from app.database.models import (
     Base, User, Teacher, Student, Enquiry, EnquiryDemoItem, Subject, Batch, BatchSubject,
     GreenCardProduct, Admission, AdmissionItem, Payment, PaymentAllocation,
-    Refund, ExpenseCategory, Expense, SalaryRecord, Assessment, StudentMark, AuditLog
+    Refund, ExpenseCategory, Expense, SalaryRecord, Assessment, StudentMark, AuditLog,
+    NumberSequence, IdempotencyRecord
 )
 from app.database.session import AsyncSessionLocal
 
@@ -911,6 +912,14 @@ async def seed_data():
             ip_address="127.0.0.1"
         )
         session.add(audit)
+
+        # -------------------------------------------------------------
+        # 13. Number Sequences
+        # -------------------------------------------------------------
+        seq_adm = NumberSequence(name="ADM", year=today.year, last_value=5)
+        seq_pay = NumberSequence(name="PAY", year=today.year, last_value=6)
+        seq_ref = NumberSequence(name="REF", year=today.year, last_value=0)
+        session.add_all([seq_adm, seq_pay, seq_ref])
 
         await session.commit()
         print("Clean database state successfully initialized with baseline master data, faculty, subjects, assessments, and verified test student entries!")
