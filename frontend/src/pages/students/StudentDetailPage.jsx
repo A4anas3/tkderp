@@ -1057,11 +1057,11 @@ export default function StudentDetailPage() {
 
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <span className="font-mono bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded font-bold">
-              Total Receipts: ₹{transactions.filter((t) => t.type === 'PAYMENT').reduce((acc, t) => acc + t.amount, 0).toFixed(2)}
+              Total Receipts: ₹{transactions.filter((t) => t.type === 'PAYMENT').reduce((acc, t) => acc + (Number(t.amount) || 0), 0).toFixed(2)}
             </span>
             {transactions.some((t) => t.type === 'REFUND') && (
               <span className="font-mono bg-rose-50 text-rose-800 border border-rose-200 px-2 py-0.5 rounded font-bold">
-                Total Refunded: ₹{Math.abs(transactions.filter((t) => t.type === 'REFUND').reduce((acc, t) => acc + t.amount, 0)).toFixed(2)}
+                Total Refunded: ₹{Math.abs(transactions.filter((t) => t.type === 'REFUND').reduce((acc, t) => acc + (Number(t.amount) || 0), 0)).toFixed(2)}
               </span>
             )}
           </div>
@@ -1250,9 +1250,9 @@ export default function StudentDetailPage() {
                       </td>
                       <td className="p-2 text-right font-mono font-bold text-sm">
                         {isRefund ? (
-                          <span className="text-rose-700">-₹{Math.abs(txn.amount).toFixed(2)}</span>
+                          <span className="text-rose-700">-₹{Math.abs(Number(txn.amount) || 0).toFixed(2)}</span>
                         ) : (
-                          <span className="text-emerald-700">+₹{txn.amount.toFixed(2)}</span>
+                          <span className="text-emerald-700">+₹{(Number(txn.amount) || 0).toFixed(2)}</span>
                         )}
                       </td>
                       <td className="p-2 text-right">
