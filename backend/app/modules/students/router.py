@@ -11,16 +11,7 @@ import io
 import re
 from PIL import Image
 
-def normalize_mobile(mobile: Optional[str]) -> Optional[str]:
-    if not mobile:
-        return None
-    digits = re.sub(r"\D", "", mobile)
-    if digits.startswith("91") and len(digits) == 12:
-        digits = digits[2:]
-    elif digits.startswith("0") and len(digits) == 11:
-        digits = digits[1:]
-    return digits or mobile.strip()
-
+from app.common.validators import normalize_mobile, validate_mobile_10_digits
 from app.core.config import settings
 from app.database.session import get_db
 from app.modules.users.models import User
@@ -148,21 +139,20 @@ async def check_student_by_mobile(
 ):
     clean_mob = mobile.strip()
     norm = normalize_mobile(clean_mob)
-    if not norm or len(norm) < 6:
-        return {"exists": False, "student": None}
+    if not norm or len(norm) != 10:
+        return {"exists": False, "valid": False, "message": "Mobile number must be exactly 10 numeric digits", "student": None}
 
     clauses = [
-        Student.mobile == clean_mob,
         Student.mobile == norm,
         Student.mobile == f"0{norm}",
         Student.mobile == f"+91{norm}",
-        Student.mobile.ilike(f"%{norm}%")
+        Student.mobile == clean_mob,
     ]
     stmt = select(Student).where(or_(*clauses)).order_by(Student.registration_date.desc(), Student.created_at.desc()).limit(1)
     student = (await db.execute(stmt)).scalars().first()
 
     if not student:
-        return {"exists": False, "student": None}
+        return {"exists": False, "valid": True, "student": None}
 
     # Fetch admissions for this student
     adm_stmt = (
@@ -176,6 +166,7 @@ async def check_student_by_mobile(
 
     return {
         "exists": True,
+        "valid": True,
         "student": {
             "id": str(student.id),
             "student_code": student.student_code,
@@ -249,27 +240,33 @@ async def create_student(
     db: AsyncSession = Depends(get_db),
     user = Depends(require_cashier_or_admin)
 ):
+    # Normalize and validate mobile number (10 digits numeric)
+    norm_mob = normalize_mobile(req.mobile) if req.mobile else None
+    if req.mobile:
+        if not norm_mob or len(norm_mob) != 10:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Mobile number must be exactly 10 numeric digits"
+            )
+        req.mobile = norm_mob
+
     # Check mobile number constraint when requested
-    if req.mobile and check_duplicate:
-        clean_mob = req.mobile.strip()
-        norm_mob = normalize_mobile(clean_mob)
-        if norm_mob and len(norm_mob) >= 8:
-            match_clauses = [
-                Student.mobile == clean_mob,
-                Student.mobile == norm_mob,
-                Student.mobile == f"0{norm_mob}",
-                Student.mobile == f"+91{norm_mob}",
-            ]
-            existing = (await db.execute(select(Student).where(or_(*match_clauses)).limit(1))).scalars().first()
-            if existing:
-                adm_exists = (await db.execute(
-                    select(Admission.admission_number).where(Admission.student_id == existing.id).limit(1)
-                )).scalar_one_or_none()
-                adm_text = f" with admission #{adm_exists}" if adm_exists else ""
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Student already registered{adm_text} with mobile {clean_mob}: {existing.name} ({existing.student_code}). Student ID: {existing.id}"
-                )
+    if norm_mob and check_duplicate:
+        match_clauses = [
+            Student.mobile == norm_mob,
+            Student.mobile == f"0{norm_mob}",
+            Student.mobile == f"+91{norm_mob}",
+        ]
+        existing = (await db.execute(select(Student).where(or_(*match_clauses)).limit(1))).scalars().first()
+        if existing:
+            adm_exists = (await db.execute(
+                select(Admission.admission_number).where(Admission.student_id == existing.id).limit(1)
+            )).scalar_one_or_none()
+            adm_text = f" with admission #{adm_exists}" if adm_exists else ""
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Student already registered{adm_text} with mobile {norm_mob}: {existing.name} ({existing.student_code}). Student ID: {existing.id}"
+            )
 
     # Auto-generate student code STU<Year><Count:04d>
     year = req.registration_date.year
@@ -279,7 +276,7 @@ async def create_student(
     new_student = Student(
         student_code=code,
         name=req.name.strip(),
-        mobile=req.mobile.strip() if req.mobile else None,
+        mobile=norm_mob,
         father_name=req.father_name.strip() if req.father_name else None,
         email=req.email.strip().lower() if req.email else None,
         photo_url=req.photo_url,
@@ -306,7 +303,17 @@ async def update_student(
         raise HTTPException(status_code=404, detail="Student not found")
 
     if req.name is not None: student.name = req.name.strip()
-    if req.mobile is not None: student.mobile = req.mobile.strip() if req.mobile else None
+    if req.mobile is not None:
+        if req.mobile:
+            norm_mob = normalize_mobile(req.mobile)
+            if not norm_mob or len(norm_mob) != 10:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Mobile number must be exactly 10 numeric digits"
+                )
+            student.mobile = norm_mob
+        else:
+            student.mobile = None
     if req.father_name is not None: student.father_name = req.father_name.strip() if req.father_name else None
     if req.email is not None: student.email = req.email.strip().lower() if req.email else None
     if req.photo_url is not None: student.photo_url = req.photo_url

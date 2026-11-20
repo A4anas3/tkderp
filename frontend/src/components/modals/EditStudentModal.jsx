@@ -7,6 +7,7 @@ import Avatar from '../common/Avatar';
 import { studentApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 import { compressImage } from '../../utils/imageCompressor';
+import { cleanMobileInput } from '../../utils/phoneUtils';
 
 export default function EditStudentModal({ isOpen, onClose, student, onSuccess }) {
   const { success, error } = useToast();
@@ -48,7 +49,13 @@ export default function EditStudentModal({ isOpen, onClose, student, onSuccess }
   }, [student, isOpen]);
 
   const handleChange = (e) => {
-    setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    const { name, value } = e.target;
+    if (name === 'mobile') {
+      const clean = cleanMobileInput(value);
+      setFormData((prev) => ({ ...prev, mobile: clean }));
+      return;
+    }
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handlePhotoSelect = async (e) => {
@@ -74,6 +81,14 @@ export default function EditStudentModal({ isOpen, onClose, student, onSuccess }
     if (!formData.name.trim()) {
       error('Student name is required');
       return;
+    }
+
+    if (formData.mobile) {
+      const clean = cleanMobileInput(formData.mobile);
+      if (clean.length !== 10 || !/^\d{10}$/.test(clean)) {
+        error('Mobile number must be exactly 10 numeric digits');
+        return;
+      }
     }
 
     setLoading(true);
@@ -179,13 +194,25 @@ export default function EditStudentModal({ isOpen, onClose, student, onSuccess }
           />
 
           <Input
-            label="Mobile Contact"
+            label="Mobile Contact (Optional)"
             name="mobile"
             type="tel"
+            inputMode="numeric"
+            pattern="[0-9]*"
             value={formData.mobile}
             onChange={handleChange}
             placeholder="10-digit mobile number"
             maxLength={10}
+            error={
+              formData.mobile && formData.mobile.length < 10
+                ? `Mobile number must be exactly 10 digits (${formData.mobile.length}/10)`
+                : null
+            }
+            helperText={
+              formData.mobile && formData.mobile.length === 10
+                ? '✓ Valid 10-digit mobile'
+                : 'Optional 10-digit contact number'
+            }
           />
 
           <Input
@@ -255,8 +282,14 @@ export default function EditStudentModal({ isOpen, onClose, student, onSuccess }
           <Button type="button" variant="secondary" onClick={onClose} disabled={loading}>
             Cancel
           </Button>
-          <Button type="submit" variant="primary" loading={loading} icon={Edit3}>
-            Save Changes
+          <Button
+            type="submit"
+            variant="primary"
+            loading={loading}
+            icon={Edit3}
+            disabled={loading || (Boolean(formData.mobile) && formData.mobile.length !== 10)}
+          >
+            {formData.mobile && formData.mobile.length !== 10 ? 'Enter 10-Digit Mobile' : 'Save Changes'}
           </Button>
         </div>
       </form>

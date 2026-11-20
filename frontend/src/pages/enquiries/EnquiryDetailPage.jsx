@@ -25,6 +25,7 @@ import Select from '../../components/common/Select';
 import { enquiryApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 import { formatIndianDate } from '../../utils/dateCycleUtils';
+import { cleanMobileInput } from '../../utils/phoneUtils';
 
 export default function EnquiryDetailPage() {
   const { id } = useParams();
@@ -82,9 +83,21 @@ export default function EnquiryDetailPage() {
 
   const handleUpdate = async (e) => {
     e.preventDefault();
+    if (editFormData.mobile) {
+      const clean = cleanMobileInput(editFormData.mobile);
+      if (clean.length !== 10 || !/^\d{10}$/.test(clean)) {
+        error('Mobile number must be exactly 10 numeric digits');
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
-      await enquiryApi.update(id, editFormData);
+      const payload = {
+        ...editFormData,
+        mobile: editFormData.mobile ? cleanMobileInput(editFormData.mobile) : null,
+      };
+      await enquiryApi.update(id, payload);
       success('Enquiry updated successfully');
       setEditModalOpen(false);
       loadEnquiry();
@@ -508,10 +521,24 @@ export default function EnquiryDetailPage() {
           />
 
           <Input
-            label="Mobile Number"
-            required
+            label="Mobile Number (Optional)"
+            type="tel"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={10}
             value={editFormData.mobile}
-            onChange={(e) => setEditFormData({ ...editFormData, mobile: e.target.value })}
+            onChange={(e) => setEditFormData({ ...editFormData, mobile: cleanMobileInput(e.target.value) })}
+            placeholder="10-digit mobile"
+            error={
+              editFormData.mobile && editFormData.mobile.length < 10
+                ? `Must be 10 digits (${editFormData.mobile.length}/10)`
+                : null
+            }
+            helperText={
+              editFormData.mobile && editFormData.mobile.length === 10
+                ? '✓ Valid 10-digit mobile'
+                : 'Optional 10-digit mobile'
+            }
           />
 
           <Select
@@ -565,8 +592,13 @@ export default function EnquiryDetailPage() {
             <Button variant="secondary" onClick={() => setEditModalOpen(false)} disabled={submitting}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary" loading={submitting}>
-              Save Changes
+            <Button
+              type="submit"
+              variant="primary"
+              loading={submitting}
+              disabled={submitting || (Boolean(editFormData.mobile) && editFormData.mobile.length !== 10)}
+            >
+              {editFormData.mobile && editFormData.mobile.length !== 10 ? 'Enter 10-Digit Mobile' : 'Save Changes'}
             </Button>
           </div>
         </form>

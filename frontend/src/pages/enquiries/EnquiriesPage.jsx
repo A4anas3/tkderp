@@ -30,6 +30,7 @@ import Badge from '../../components/common/Badge';
 import EnquiryDetailModal from '../../components/modals/EnquiryDetailModal';
 import { enquiryApi, subjectApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
+import { cleanMobileInput } from '../../utils/phoneUtils';
 
 export default function EnquiriesPage() {
   const navigate = useNavigate();
@@ -161,11 +162,20 @@ export default function EnquiriesPage() {
       return;
     }
 
+    if (formData.mobile) {
+      const clean = cleanMobileInput(formData.mobile);
+      if (clean.length !== 10 || !/^\d{10}$/.test(clean)) {
+        error('Contact mobile must be exactly 10 numeric digits');
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
+      const cleanMob = formData.mobile ? cleanMobileInput(formData.mobile) : null;
       const payload = {
         student_name: formData.student_name.trim(),
-        mobile: formData.mobile.trim() || null,
+        mobile: cleanMob || null,
         purpose: formData.purpose.trim() || null,
         interested_subject: formData.interested_subject.trim() || null,
         demo_start_date: formData.demo_start_date || null,
@@ -924,9 +934,22 @@ export default function EnquiriesPage() {
             <Input
               label="Contact Mobile (Optional)"
               type="tel"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={10}
               value={formData.mobile}
-              onChange={(e) => setFormData({ ...formData, mobile: e.target.value })}
+              onChange={(e) => setFormData({ ...formData, mobile: cleanMobileInput(e.target.value) })}
               placeholder="10-digit mobile"
+              error={
+                formData.mobile && formData.mobile.length < 10
+                  ? `Must be 10 digits (${formData.mobile.length}/10)`
+                  : null
+              }
+              helperText={
+                formData.mobile && formData.mobile.length === 10
+                  ? '✓ Valid 10-digit mobile'
+                  : 'Optional 10-digit mobile'
+              }
             />
             <Input
               label="Interested Subject / Class"
@@ -983,8 +1006,13 @@ export default function EnquiriesPage() {
             <Button variant="secondary" onClick={() => setAddModalOpen(false)} disabled={submitting}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary" loading={submitting}>
-              Record Enquiry
+            <Button
+              type="submit"
+              variant="primary"
+              loading={submitting}
+              disabled={submitting || (Boolean(formData.mobile) && formData.mobile.length !== 10)}
+            >
+              {formData.mobile && formData.mobile.length !== 10 ? 'Enter 10-Digit Mobile' : 'Record Enquiry'}
             </Button>
           </div>
         </form>

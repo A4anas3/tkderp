@@ -30,6 +30,7 @@ import { useToast } from '../../context/ToastContext';
 import QuickStudentModal from '../../components/modals/QuickStudentModal';
 import AdmissionReceiptModal from '../../components/receipts/AdmissionReceiptModal';
 import { computeRollingCycle } from '../../utils/dateCycleUtils';
+import { cleanMobileInput } from '../../utils/phoneUtils';
 
 export default function NewAdmissionPage() {
   const navigate = useNavigate();
@@ -165,9 +166,10 @@ export default function NewAdmissionPage() {
         let matchedStudent = null;
 
         // 1. Check if student already exists by mobile number (normalized)
-        if (paramMobile) {
+        const cleanParamMob = cleanMobileInput(paramMobile);
+        if (cleanParamMob && cleanParamMob.length === 10) {
           try {
-            const checkRes = await studentApi.checkMobile(paramMobile);
+            const checkRes = await studentApi.checkMobile(cleanParamMob);
             if (checkRes?.exists && checkRes?.student) {
               matchedStudent = checkRes.student;
             }
@@ -190,7 +192,7 @@ export default function NewAdmissionPage() {
           // Genuinely new student: open Quick Student Registration pre-filled
           setQuickStudentInitialData({
             name: paramName,
-            mobile: paramMobile || '',
+            mobile: cleanParamMob || '',
             father_name: paramFather || '',
             notes: `Admitted from Enquiry #${paramEnquiryId} (${paramPurpose || 'Student Admission'})`,
           });
@@ -639,7 +641,7 @@ export default function NewAdmissionPage() {
               onClick={() => {
                 setQuickStudentInitialData({
                   name: paramName || '',
-                  mobile: paramMobile || '',
+                  mobile: cleanMobileInput(paramMobile) || '',
                   father_name: paramFather || '',
                   notes: `Admitted from Enquiry #${paramEnquiryId} (${paramPurpose || 'Student Admission'})`,
                 });

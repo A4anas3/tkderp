@@ -10,6 +10,7 @@ import Badge from '../../components/common/Badge';
 import TeacherDetailModal from '../../components/modals/TeacherDetailModal';
 import { teacherApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
+import { cleanMobileInput } from '../../utils/phoneUtils';
 
 export default function TeachersPage() {
   const navigate = useNavigate();
@@ -87,11 +88,17 @@ export default function TeachersPage() {
       return;
     }
 
+    const cleanMob = cleanMobileInput(formData.mobile);
+    if (!cleanMob || cleanMob.length !== 10) {
+      error('Mobile number must be exactly 10 numeric digits');
+      return;
+    }
+
     setSubmitting(true);
     try {
       const payload = {
         name: formData.name.trim(),
-        mobile: formData.mobile.trim(),
+        mobile: cleanMob,
         email: formData.email.trim() || null,
         qualification: formData.qualification.trim(),
         specialization: formData.specialization.trim(),
@@ -248,10 +255,23 @@ export default function TeachersPage() {
             <Input
               label="Mobile Number"
               type="tel"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={10}
               value={formData.mobile}
-              onChange={(e) => setFormData({ ...formData, mobile: e.target.value })}
+              onChange={(e) => setFormData({ ...formData, mobile: cleanMobileInput(e.target.value) })}
               placeholder="10-digit mobile"
               required
+              error={
+                formData.mobile && formData.mobile.length < 10
+                  ? `Must be 10 digits (${formData.mobile.length}/10)`
+                  : null
+              }
+              helperText={
+                formData.mobile && formData.mobile.length === 10
+                  ? '✓ Valid 10-digit mobile'
+                  : '10-digit mobile number'
+              }
             />
             <Input
               label="Email (Optional)"
@@ -302,8 +322,17 @@ export default function TeachersPage() {
             <Button variant="secondary" onClick={() => setModalOpen(false)} disabled={submitting}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary" loading={submitting}>
-              {editingTeacher ? 'Save Changes' : 'Register Faculty'}
+            <Button
+              type="submit"
+              variant="primary"
+              loading={submitting}
+              disabled={submitting || formData.mobile.length !== 10}
+            >
+              {formData.mobile.length !== 10
+                ? 'Enter 10-Digit Mobile'
+                : editingTeacher
+                ? 'Save Changes'
+                : 'Register Faculty'}
             </Button>
           </div>
         </form>

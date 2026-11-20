@@ -28,6 +28,7 @@ import Select from '../../components/common/Select';
 import { teacherApi, reportApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 import { formatIndianDate, formatCycleLabel } from '../../utils/dateCycleUtils';
+import { cleanMobileInput } from '../../utils/phoneUtils';
 
 const PAGE_SIZE = 10;
 
@@ -100,9 +101,15 @@ export default function TeacherDetailPage() {
 
   const handleUpdate = async (e) => {
     e.preventDefault();
+    const cleanMob = cleanMobileInput(formData.mobile);
+    if (!cleanMob || cleanMob.length !== 10) {
+      error('Mobile number must be exactly 10 numeric digits');
+      return;
+    }
+
     setSubmitting(true);
     try {
-      await teacherApi.update(id, formData);
+      await teacherApi.update(id, { ...formData, mobile: cleanMob });
       success('Faculty profile updated successfully');
       setEditModalOpen(false);
       loadData();
@@ -517,9 +524,24 @@ export default function TeacherDetailPage() {
 
           <Input
             label="Mobile Number"
+            type="tel"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={10}
             required
             value={formData.mobile}
-            onChange={(e) => setFormData({ ...formData, mobile: e.target.value })}
+            onChange={(e) => setFormData({ ...formData, mobile: cleanMobileInput(e.target.value) })}
+            placeholder="10-digit mobile"
+            error={
+              formData.mobile && formData.mobile.length < 10
+                ? `Must be 10 digits (${formData.mobile.length}/10)`
+                : null
+            }
+            helperText={
+              formData.mobile && formData.mobile.length === 10
+                ? '✓ Valid 10-digit mobile'
+                : '10-digit mobile number'
+            }
           />
 
           <Input
@@ -564,8 +586,13 @@ export default function TeacherDetailPage() {
             <Button variant="secondary" onClick={() => setEditModalOpen(false)} disabled={submitting}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary" loading={submitting}>
-              Save Changes
+            <Button
+              type="submit"
+              variant="primary"
+              loading={submitting}
+              disabled={submitting || formData.mobile.length !== 10}
+            >
+              {formData.mobile.length !== 10 ? 'Enter 10-Digit Mobile' : 'Save Changes'}
             </Button>
           </div>
         </form>

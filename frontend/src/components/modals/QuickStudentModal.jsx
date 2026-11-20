@@ -7,6 +7,7 @@ import Avatar from '../common/Avatar';
 import { studentApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 import { compressImage } from '../../utils/imageCompressor';
+import { cleanMobileInput, isValid10DigitMobile } from '../../utils/phoneUtils';
 
 export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialData = null }) {
   const { success, error } = useToast();
@@ -44,23 +45,25 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
     }
   }, [isOpen, initialData]);
 
-  // Real-time mobile constraint verification
+  // Real-time mobile constraint verification (triggers when 10 digits entered)
   useEffect(() => {
     if (!isOpen) {
       setExistingStudent(null);
+      setCheckingMobile(false);
       return;
     }
 
-    const clean = formData.mobile ? formData.mobile.replace(/\D/g, '') : '';
-    if (clean.length < 8) {
+    const clean = cleanMobileInput(formData.mobile);
+    if (clean.length !== 10) {
       setExistingStudent(null);
+      setCheckingMobile(false);
       return;
     }
 
     const timer = setTimeout(async () => {
       setCheckingMobile(true);
       try {
-        const res = await studentApi.checkMobile(formData.mobile);
+        const res = await studentApi.checkMobile(clean);
         if (res?.exists && res?.student) {
           setExistingStudent(res.student);
         } else {
@@ -77,7 +80,13 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
   }, [formData.mobile, isOpen]);
 
   const handleChange = (e) => {
-    setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    const { name, value } = e.target;
+    if (name === 'mobile') {
+      const clean = cleanMobileInput(value);
+      setFormData((prev) => ({ ...prev, mobile: clean }));
+      return;
+    }
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handlePhotoSelect = async (e) => {
@@ -109,6 +118,15 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
     if (!formData.name.trim()) {
       error('Student name is required');
       return;
+    }
+
+    // Strictly validate 10 numeric digits if mobile is provided
+    if (formData.mobile) {
+      const clean = cleanMobileInput(formData.mobile);
+      if (clean.length !== 10 || !/^\d{10}$/.test(clean)) {
+        error('Mobile number must be exactly 10 numeric digits');
+        return;
+      }
     }
 
     if (existingStudent) {
@@ -231,9 +249,26 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
               label="Mobile Number (Optional)"
               name="mobile"
               type="tel"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={10}
               value={formData.mobile}
               onChange={handleChange}
               placeholder="10-digit mobile"
+              error={
+                formData.mobile && formData.mobile.length < 10
+                  ? `Must be exactly 10 numeric digits (${formData.mobile.length}/10)`
+                  : existingStudent
+                  ? 'Student already registered with this mobile number'
+                  : null
+              }
+              helperText={
+                !formData.mobile
+                  ? 'Optional 10-digit mobile number'
+                  : formData.mobile.length === 10 && !existingStudent && !checkingMobile
+                  ? '✓ Valid 10-digit mobile'
+                  : null
+              }
             />
             {checkingMobile && (
               <span className="text-[10px] text-slate-500 flex items-center gap-1 mt-1">
@@ -345,10 +380,20 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
             type="submit"
             variant="primary"
             loading={loading}
-            disabled={loading || !!existingStudent}
-            title={existingStudent ? 'Mobile number already registered' : 'Register new student'}
+            disabled={loading || !!existingStudent || (Boolean(formData.mobile) && formData.mobile.length !== 10)}
+            title={
+              existingStudent
+                ? 'Mobile number already registered'
+                : formData.mobile && formData.mobile.length !== 10
+                ? 'Mobile number must be 10 digits'
+                : 'Register new student'
+            }
           >
-            {existingStudent ? 'Mobile Already Registered' : 'Register Student'}
+            {existingStudent
+              ? 'Mobile Already Registered'
+              : formData.mobile && formData.mobile.length !== 10
+              ? 'Enter 10-Digit Mobile'
+              : 'Register Student'}
           </Button>
         </div>
       </form>

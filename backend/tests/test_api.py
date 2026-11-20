@@ -1088,4 +1088,85 @@ async def test_student_edit_and_rolling_cycle_rosters():
         assert t_stu_entry["valid_from"] == "2026-11-14"
         assert t_stu_entry["valid_to"] == "2026-12-13"
 
+@pytest.mark.asyncio
+async def test_10_digit_numeric_mobile_validation():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # Admin login
+        login_res = await client.post("/api/auth/login", json={"username": "ADM001", "password": "Admin@1234"})
+        token = login_res.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        unique_digits = str(uuid.uuid4().int)[:6]
+        # 1. Valid 10-digit mobile
+        res1 = await client.post("/api/students", json={
+            "name": "Mobile Ten Digit Student",
+            "mobile": f"9876{unique_digits}"
+        }, headers=headers)
+        assert res1.status_code == 201
+        assert res1.json()["mobile"] == f"9876{unique_digits}"
+
+        # 2. Leading 0 normalizes to 10 digits
+        res2 = await client.post("/api/students", json={
+            "name": "Mobile Zero Prefix Student",
+            "mobile": f"09875{unique_digits}"
+        }, headers=headers)
+        assert res2.status_code == 201
+        assert res2.json()["mobile"] == f"9875{unique_digits}"
+
+        # 3. Leading +91 normalizes to 10 digits
+        res3 = await client.post("/api/students", json={
+            "name": "Mobile Country Code Student",
+            "mobile": f"+919874{unique_digits}"
+        }, headers=headers)
+        assert res3.status_code == 201
+        assert res3.json()["mobile"] == f"9874{unique_digits}"
+
+        # 4. Invalid mobile (< 10 digits) fails
+        res_invalid_short = await client.post("/api/students", json={
+            "name": "Short Mobile Student",
+            "mobile": "98765"
+        }, headers=headers)
+        assert res_invalid_short.status_code in [400, 422]
+
+        # 5. Invalid mobile (alphanumeric / letters) fails
+        res_invalid_alpha = await client.post("/api/students", json={
+            "name": "Alpha Mobile Student",
+            "mobile": "98765ABCDE"
+        }, headers=headers)
+        assert res_invalid_alpha.status_code in [400, 422]
+
+        # 6. Invalid mobile (> 10 digits not prefixed by 0 or 91) fails
+        res_invalid_long = await client.post("/api/students", json={
+            "name": "Long Mobile Student",
+            "mobile": "1234567890123"
+        }, headers=headers)
+        assert res_invalid_long.status_code in [400, 422]
+
+        # 7. Check-mobile endpoint verifies 10-digit requirement
+        chk_short = await client.get("/api/students/check-mobile/12345", headers=headers)
+        assert chk_short.status_code == 200
+        assert chk_short.json()["valid"] is False
+
+        chk_valid = await client.get(f"/api/students/check-mobile/9876{unique_digits}", headers=headers)
+        assert chk_valid.status_code == 200
+        assert chk_valid.json()["valid"] is True
+        assert chk_valid.json()["exists"] is True
+
+        # 8. Enquiry invalid mobile fails
+        enq_invalid = await client.post("/api/enquiries", json={
+            "student_name": "Invalid Enq Student",
+            "mobile": "12345",
+            "interested_subject": "Math"
+        }, headers=headers)
+        assert enq_invalid.status_code in [400, 422]
+
+        # 9. Teacher invalid mobile fails
+        tch_invalid = await client.post("/api/teachers", json={
+            "name": "Invalid Phone Teacher",
+            "mobile": "9876",
+            "qualification": "B.Sc"
+        }, headers=headers)
+        assert tch_invalid.status_code in [400, 422]
+
+
 

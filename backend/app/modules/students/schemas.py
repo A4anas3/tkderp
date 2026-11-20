@@ -1,8 +1,9 @@
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from typing import Optional, List
 from datetime import date, datetime
 from decimal import Decimal
 import uuid
+from app.common.validators import validate_mobile_10_digits
 
 class StudentBase(BaseModel):
     name: str = Field(..., min_length=2, max_length=150)
@@ -18,6 +19,11 @@ class StudentBase(BaseModel):
     green_card_expiry: Optional[date] = None
     notes: Optional[str] = None
 
+    @field_validator("mobile", mode="before")
+    @classmethod
+    def validate_mobile(cls, v):
+        return validate_mobile_10_digits(v, required=False)
+
 class StudentCreate(StudentBase):
     pass
 
@@ -32,6 +38,11 @@ class StudentUpdate(BaseModel):
     registration_date: Optional[date] = None
     status: Optional[str] = Field(default=None, pattern="^(ACTIVE|INACTIVE|REVOKED)$")
     notes: Optional[str] = None
+
+    @field_validator("mobile", mode="before")
+    @classmethod
+    def validate_mobile(cls, v):
+        return validate_mobile_10_digits(v, required=False)
 
 class StudentRevokeRequest(BaseModel):
     reason: str = Field(..., min_length=3, max_length=500)
