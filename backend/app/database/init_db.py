@@ -610,7 +610,298 @@ async def seed_data():
         await session.flush()
 
         # -------------------------------------------------------------
-        # 10. Audit Log
+        # 10. Student 4: Priya Verma (Active Math + Expired Physics in History)
+        # -------------------------------------------------------------
+        student4 = Student(
+            id=uuid.UUID("77777777-7777-7777-7777-777777777704"),
+            student_code="STU-2026-0004",
+            name="Priya Verma",
+            mobile="9823456789",
+            father_name="Mukesh Verma",
+            email="priya.verma@example.com",
+            address="Station Road, Thakurdwara",
+            dob=date(2009, 3, 21),
+            registration_date=today - timedelta(days=60),
+            status="ACTIVE",
+            has_green_card=False
+        )
+        session.add(student4)
+        await session.flush()
+
+        # Admission 4A (Expired Physics cycle)
+        adm4a_from = today - timedelta(days=60)
+        adm4a_to = today - timedelta(days=30)
+        admission4a = Admission(
+            id=uuid.UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4"),
+            admission_number="ENR-2026-0004",
+            student_id=student4.id,
+            admission_date=adm4a_from,
+            valid_from=adm4a_from,
+            valid_to=adm4a_to,
+            subtotal=Decimal("1500.00"),
+            individual_discount_total=Decimal("0.00"),
+            overall_discount_type="NONE",
+            overall_discount_value=Decimal("0.00"),
+            overall_discount_amount=Decimal("0.00"),
+            total_discount=Decimal("0.00"),
+            taxable_base=Decimal("1500.00"),
+            gst_enabled=False,
+            gst_rate=Decimal("18.00"),
+            gst_amount=Decimal("0.00"),
+            total_payable=Decimal("1500.00"),
+            amount_paid=Decimal("1500.00"),
+            balance_due=Decimal("0.00"),
+            payment_status="PAID",
+            status="ACTIVE",
+            student_name_snapshot=student4.name,
+            notes="Physics term (completed & expired).",
+            created_by=cashier_user.id
+        )
+        session.add(admission4a)
+        await session.flush()
+
+        adm_item4a = AdmissionItem(
+            id=uuid.UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb4"),
+            admission_id=admission4a.id,
+            item_type="SUBJECT",
+            subject_id=sub_phy.id,
+            teacher_id=teacher2.id,
+            teacher_name_snapshot=teacher2.name,
+            hall_number_snapshot="Hall 102",
+            item_name_snapshot=sub_phy.name,
+            original_price=Decimal("1500.00"),
+            discount_type="NONE",
+            discount_value=Decimal("0.00"),
+            discount_amount=Decimal("0.00"),
+            overall_discount_share=Decimal("0.00"),
+            net_price=Decimal("1500.00"),
+            amount_collected=Decimal("1500.00"),
+            balance_due=Decimal("0.00"),
+            valid_from=adm4a_from,
+            valid_to=adm4a_to,
+            status="ACTIVE"
+        )
+        session.add(adm_item4a)
+        await session.flush()
+
+        payment4a = Payment(
+            id=uuid.UUID("cccccccc-cccc-cccc-cccc-ccccccccccc4"),
+            payment_number="RCT-2026-0004",
+            admission_id=admission4a.id,
+            student_id=student4.id,
+            amount=Decimal("1500.00"),
+            payment_mode="CASH",
+            transaction_reference="CASH-PRIYA-001",
+            payment_date=now - timedelta(days=60),
+            collected_by=cashier_user.id,
+            collector_name_snapshot=cashier_user.full_name,
+            valid_from=adm4a_from,
+            valid_to=adm4a_to,
+            fee_period=f"{adm4a_from} to {adm4a_to}",
+            notes="Physics term fee"
+        )
+        session.add(payment4a)
+        await session.flush()
+
+        alloc4a = PaymentAllocation(
+            id=uuid.UUID("dddddddd-dddd-dddd-dddd-ddddddddddd4"),
+            payment_id=payment4a.id,
+            admission_item_id=adm_item4a.id,
+            allocated_amount=Decimal("1500.00")
+        )
+        session.add(alloc4a)
+        await session.flush()
+
+        # Admission 4B (Currently Active Math cycle)
+        adm4b_from = today - timedelta(days=5)
+        adm4b_to = today + timedelta(days=25)
+        admission4b = Admission(
+            id=uuid.UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa5"),
+            admission_number="ADM-2026-0005",
+            student_id=student4.id,
+            admission_date=adm4b_from,
+            valid_from=adm4b_from,
+            valid_to=adm4b_to,
+            subtotal=Decimal("1000.00"),
+            individual_discount_total=Decimal("0.00"),
+            overall_discount_type="NONE",
+            overall_discount_value=Decimal("0.00"),
+            overall_discount_amount=Decimal("0.00"),
+            total_discount=Decimal("0.00"),
+            taxable_base=Decimal("1000.00"),
+            gst_enabled=False,
+            gst_rate=Decimal("18.00"),
+            gst_amount=Decimal("0.00"),
+            total_payable=Decimal("1000.00"),
+            amount_paid=Decimal("1000.00"),
+            balance_due=Decimal("0.00"),
+            payment_status="PAID",
+            status="ACTIVE",
+            student_name_snapshot=student4.name,
+            notes="Math enrollment active cycle.",
+            created_by=cashier_user.id
+        )
+        session.add(admission4b)
+        await session.flush()
+
+        adm_item4b = AdmissionItem(
+            id=uuid.UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb5"),
+            admission_id=admission4b.id,
+            item_type="SUBJECT",
+            subject_id=sub_math.id,
+            teacher_id=teacher1.id,
+            teacher_name_snapshot=teacher1.name,
+            hall_number_snapshot="Hall 13",
+            item_name_snapshot=sub_math.name,
+            original_price=Decimal("1000.00"),
+            discount_type="NONE",
+            discount_value=Decimal("0.00"),
+            discount_amount=Decimal("0.00"),
+            overall_discount_share=Decimal("0.00"),
+            net_price=Decimal("1000.00"),
+            amount_collected=Decimal("1000.00"),
+            balance_due=Decimal("0.00"),
+            valid_from=adm4b_from,
+            valid_to=adm4b_to,
+            status="ACTIVE"
+        )
+        session.add(adm_item4b)
+        await session.flush()
+
+        payment4b = Payment(
+            id=uuid.UUID("cccccccc-cccc-cccc-cccc-ccccccccccc5"),
+            payment_number="RCT-2026-0005",
+            admission_id=admission4b.id,
+            student_id=student4.id,
+            amount=Decimal("1000.00"),
+            payment_mode="UPI",
+            transaction_reference="UPI-PRIYA-002",
+            payment_date=now - timedelta(days=5),
+            collected_by=cashier_user.id,
+            collector_name_snapshot=cashier_user.full_name,
+            valid_from=adm4b_from,
+            valid_to=adm4b_to,
+            fee_period=f"{adm4b_from} to {adm4b_to}",
+            notes="Math course monthly fee"
+        )
+        session.add(payment4b)
+        await session.flush()
+
+        alloc4b = PaymentAllocation(
+            id=uuid.UUID("dddddddd-dddd-dddd-dddd-ddddddddddd5"),
+            payment_id=payment4b.id,
+            admission_item_id=adm_item4b.id,
+            allocated_amount=Decimal("1000.00")
+        )
+        session.add(alloc4b)
+        await session.flush()
+
+        # -------------------------------------------------------------
+        # 11. Student 5: Rohan Singh (Subject Temporarily Suspended)
+        # -------------------------------------------------------------
+        student5 = Student(
+            id=uuid.UUID("77777777-7777-7777-7777-777777777705"),
+            student_code="STU-2026-0005",
+            name="Rohan Singh",
+            mobile="9834567890",
+            father_name="Virendra Singh",
+            email="rohan.singh@example.com",
+            address="Moradabad Road, Thakurdwara",
+            dob=date(2010, 8, 19),
+            registration_date=today - timedelta(days=15),
+            status="ACTIVE",
+            has_green_card=False
+        )
+        session.add(student5)
+        await session.flush()
+
+        adm5_from = today - timedelta(days=15)
+        adm5_to = today + timedelta(days=15)
+        admission5 = Admission(
+            id=uuid.UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa6"),
+            admission_number="ENR-2026-0005",
+            student_id=student5.id,
+            admission_date=adm5_from,
+            valid_from=adm5_from,
+            valid_to=adm5_to,
+            subtotal=Decimal("1200.00"),
+            individual_discount_total=Decimal("0.00"),
+            overall_discount_type="NONE",
+            overall_discount_value=Decimal("0.00"),
+            overall_discount_amount=Decimal("0.00"),
+            total_discount=Decimal("0.00"),
+            taxable_base=Decimal("1200.00"),
+            gst_enabled=False,
+            gst_rate=Decimal("18.00"),
+            gst_amount=Decimal("0.00"),
+            total_payable=Decimal("1200.00"),
+            amount_paid=Decimal("1200.00"),
+            balance_due=Decimal("0.00"),
+            payment_status="PAID",
+            status="ACTIVE",
+            student_name_snapshot=student5.name,
+            notes="Science (Class 9-10). Temporarily suspended due to illness.",
+            created_by=cashier_user.id
+        )
+        session.add(admission5)
+        await session.flush()
+
+        adm_item5 = AdmissionItem(
+            id=uuid.UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb6"),
+            admission_id=admission5.id,
+            item_type="SUBJECT",
+            subject_id=sub_sci.id,
+            teacher_id=teacher1.id,
+            teacher_name_snapshot=teacher1.name,
+            hall_number_snapshot="Hall 13",
+            item_name_snapshot=sub_sci.name,
+            original_price=Decimal("1200.00"),
+            discount_type="NONE",
+            discount_value=Decimal("0.00"),
+            discount_amount=Decimal("0.00"),
+            overall_discount_share=Decimal("0.00"),
+            net_price=Decimal("1200.00"),
+            amount_collected=Decimal("1200.00"),
+            balance_due=Decimal("0.00"),
+            valid_from=adm5_from,
+            valid_to=adm5_to,
+            status="SUSPENDED",
+            suspended_at=now - timedelta(days=2),
+            lifecycle_reason="Student recovering from viral fever; resuming next week."
+        )
+        session.add(adm_item5)
+        await session.flush()
+
+        payment5 = Payment(
+            id=uuid.UUID("cccccccc-cccc-cccc-cccc-ccccccccccc6"),
+            payment_number="RCT-2026-0006",
+            admission_id=admission5.id,
+            student_id=student5.id,
+            amount=Decimal("1200.00"),
+            payment_mode="CASH",
+            transaction_reference="CASH-ROHAN-001",
+            payment_date=now - timedelta(days=15),
+            collected_by=cashier_user.id,
+            collector_name_snapshot=cashier_user.full_name,
+            valid_from=adm5_from,
+            valid_to=adm5_to,
+            fee_period=f"{adm5_from} to {adm5_to}",
+            notes="Science enrollment fee deposit"
+        )
+        session.add(payment5)
+        await session.flush()
+
+        alloc5 = PaymentAllocation(
+            id=uuid.UUID("dddddddd-dddd-dddd-dddd-ddddddddddd6"),
+            payment_id=payment5.id,
+            admission_item_id=adm_item5.id,
+            allocated_amount=Decimal("1200.00")
+        )
+        session.add(alloc5)
+        await session.flush()
+
+        # -------------------------------------------------------------
+        # 12. Audit Log
         # -------------------------------------------------------------
         audit = AuditLog(
             user_id=admin_user.id,
