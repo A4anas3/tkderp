@@ -181,13 +181,9 @@ export default function QuickPaymentModal({
       error('Please select a course purchase record');
       return;
     }
-    const payAmt = parseFloat(amount);
+    const payAmt = selectedAdmission ? Number(selectedAdmission.balance_due) : parseFloat(amount);
     if (isNaN(payAmt) || payAmt <= 0) {
-      error('Please enter a valid payment amount greater than zero');
-      return;
-    }
-    if (selectedAdmission && payAmt > Number(selectedAdmission.balance_due) + 0.01) {
-      error(`Amount cannot exceed remaining balance of ₹${Number(selectedAdmission.balance_due).toFixed(2)}`);
+      error('Please select an admission with an outstanding balance');
       return;
     }
 
@@ -225,8 +221,8 @@ export default function QuickPaymentModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Collect Fee Payment"
-      subtitle="Record installment or monthly fee collection with complete payment history and coverage period"
+      title="Collect Full Fee Payment"
+      subtitle="Record full outstanding fee settlement with complete payment history and coverage period"
       maxWidth="max-w-lg"
     >
       <form onSubmit={handleSubmit} className="space-y-3.5">
@@ -484,45 +480,26 @@ export default function QuickPaymentModal({
               )}
             </div>
 
-            {/* 4. Payment Collection Amount with Quick Preset Chips */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-black">
-                  Amount to Collect (₹) <span className="text-rose-600">*</span>
-                </label>
-                {selectedAdmission && (
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setAmount(Number(selectedAdmission.balance_due).toFixed(2))}
-                      className="text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded hover:bg-indigo-100 transition"
-                    >
-                      Full Due (₹{Number(selectedAdmission.balance_due).toFixed(0)})
-                    </button>
-                    {Number(selectedAdmission.balance_due) > 500 && (
-                      <button
-                        type="button"
-                        onClick={() => setAmount((Number(selectedAdmission.balance_due) / 2).toFixed(2))}
-                        className="text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded hover:bg-slate-200 transition"
-                      >
-                        Half (₹{(Number(selectedAdmission.balance_due) / 2).toFixed(0)})
-                      </button>
-                    )}
-                  </div>
-                )}
+            {/* 4. Full Payment Collection */}
+            <div className="space-y-2">
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold text-emerald-900 uppercase tracking-wider block">
+                    Full Outstanding Balance Due
+                  </span>
+                  <span className="text-xl font-black font-mono text-emerald-950">
+                    ₹{Number(selectedAdmission.balance_due).toFixed(2)}
+                  </span>
+                  <span className="text-[11px] text-emerald-800 font-medium block mt-0.5">
+                    Full settlement required • No partial payments permitted
+                  </span>
+                </div>
+                <Badge variant="success" size="md">
+                  FULL SETTLEMENT
+                </Badge>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="1"
-                  required
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder="Enter amount to collect"
-                />
-
                 <Select
                   label="Payment Mode"
                   value={paymentMode}
@@ -535,25 +512,24 @@ export default function QuickPaymentModal({
                     { value: 'OTHER', label: 'Other' },
                   ]}
                 />
+
+                {paymentMode !== 'CASH' ? (
+                  <Input
+                    label="Transaction / Reference Ref (Optional)"
+                    value={transactionRef}
+                    onChange={(e) => setTransactionRef(e.target.value)}
+                    placeholder="e.g. UPI Ref / UTR / Cheque No"
+                  />
+                ) : (
+                  <Input
+                    label="Payment Notes / Remarks (Optional)"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="e.g. Cash collected by cashier"
+                  />
+                )}
               </div>
             </div>
-
-            {/* Reference & Notes */}
-            {paymentMode !== 'CASH' && (
-              <Input
-                label="Transaction / Reference Ref (Optional)"
-                value={transactionRef}
-                onChange={(e) => setTransactionRef(e.target.value)}
-                placeholder="e.g. UPI Ref / UTR / Cheque No"
-              />
-            )}
-
-            <Input
-              label="Payment Notes / Remarks (Optional)"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="e.g. Installment 1 / Paid by guardian / November monthly fee"
-            />
 
             {/* Bottom Actions */}
             <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">

@@ -28,6 +28,8 @@ import AdmissionReceiptModal from '../../components/receipts/AdmissionReceiptMod
 import AdmissionAllSlipsModal from '../../components/receipts/AdmissionAllSlipsModal';
 import QuickPaymentModal from '../../components/modals/QuickPaymentModal';
 import PaymentReceiptModal from '../../components/receipts/PaymentReceiptModal';
+import IssueRefundModal from '../../components/modals/IssueRefundModal';
+import RefundReceiptModal from '../../components/receipts/RefundReceiptModal';
 import { formatIndianDate, formatCycleLabel, evaluateCycleStatus } from '../../utils/dateCycleUtils';
 
 export default function AdmissionDetailPage() {
@@ -44,6 +46,8 @@ export default function AdmissionDetailPage() {
   const [allSlipsModalOpen, setAllSlipsModalOpen] = useState(false);
   const [payModalOpen, setPayModalOpen] = useState(false);
   const [paymentReceiptToShow, setPaymentReceiptToShow] = useState(null);
+  const [refundModalOpen, setRefundModalOpen] = useState(false);
+  const [refundReceiptToShow, setRefundReceiptToShow] = useState(null);
   const [revoking, setRevoking] = useState(false);
   const [restoring, setRestoring] = useState(false);
 
@@ -64,18 +68,22 @@ export default function AdmissionDetailPage() {
   }, [loadAdmission]);
 
   const handleRevoke = async () => {
-    const reason = window.prompt('Enter reason for revoking this course purchase (e.g. Student dropped out, fee dispute):');
-    if (!reason || !reason.trim()) return;
+    if (admission && Number(admission.amount_paid || 0) > 0) {
+      setRefundModalOpen(true);
+    } else {
+      const reason = window.prompt('Enter reason for revoking this course purchase (e.g. Student dropped out):');
+      if (!reason || !reason.trim()) return;
 
-    setRevoking(true);
-    try {
-      await admissionApi.revoke(id, { reason: reason.trim() });
-      success('Course purchase has been revoked.');
-      loadAdmission();
-    } catch (err) {
-      error(err.message || 'Failed to revoke course purchase');
-    } finally {
-      setRevoking(false);
+      setRevoking(true);
+      try {
+        await admissionApi.revoke(id, { reason: reason.trim() });
+        success('Course purchase has been revoked.');
+        loadAdmission();
+      } catch (err) {
+        error(err.message || 'Failed to revoke course purchase');
+      } finally {
+        setRevoking(false);
+      }
     }
   };
 
@@ -198,7 +206,7 @@ export default function AdmissionDetailPage() {
               loading={revoking}
               size="sm"
             >
-              Revoke Purchase
+              {Number(admission.amount_paid || 0) > 0 ? 'Full Refund & Revoke' : 'Revoke Purchase'}
             </Button>
           )}
 
@@ -538,6 +546,25 @@ export default function AdmissionDetailPage() {
         isOpen={!!paymentReceiptToShow}
         onClose={() => setPaymentReceiptToShow(null)}
         receipt={paymentReceiptToShow}
+      />
+
+      {/* Issue Refund / Revoke Modal */}
+      <IssueRefundModal
+        isOpen={refundModalOpen}
+        onClose={() => setRefundModalOpen(false)}
+        admission={admission}
+        onSuccess={(receipt) => {
+          setRefundModalOpen(false);
+          setRefundReceiptToShow(receipt);
+          loadAdmission();
+        }}
+      />
+
+      {/* Refund Receipt Modal */}
+      <RefundReceiptModal
+        isOpen={!!refundReceiptToShow}
+        onClose={() => setRefundReceiptToShow(null)}
+        refund={refundReceiptToShow}
       />
     </div>
   );

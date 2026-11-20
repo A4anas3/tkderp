@@ -548,12 +548,12 @@ export default function NewAdmissionPage() {
       });
 
       let initialPaymentPayload = null;
-      if (recordInitialPayment && parseFloat(initialPayAmount) > 0) {
+      if (recordInitialPayment && calculation && calculation.total_payable > 0) {
         initialPaymentPayload = {
-          amount: parseFloat(initialPayAmount),
+          amount: calculation.total_payable,
           payment_mode: initialPayMode,
           transaction_reference: initialPayRef.trim() || null,
-          notes: initialPayNotes.trim() || null,
+          notes: initialPayNotes.trim() || 'Full course fee payment at admission',
         };
       }
 
@@ -1206,7 +1206,7 @@ export default function NewAdmissionPage() {
           </div>
         )}
 
-        {/* Step 5: Initial Payment Collection */}
+        {/* Step 5: Full Course Fee Payment Collection */}
         <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs space-y-3">
           <div className="flex items-center justify-between border-b border-slate-100 pb-2">
             <label className="flex items-center gap-2 cursor-pointer text-xs font-bold uppercase tracking-wider text-black">
@@ -1216,28 +1216,39 @@ export default function NewAdmissionPage() {
                 onChange={(e) => setRecordInitialPayment(e.target.checked)}
                 className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
               />
-              <span>Collect Initial Payment At Purchase</span>
+              <span>Collect Full Course Fee Payment At Purchase</span>
             </label>
             <Badge size="xs" variant={recordInitialPayment ? 'success' : 'neutral'}>
-              {recordInitialPayment ? 'Manual Collection' : 'Unpaid Entry'}
+              {recordInitialPayment ? 'Full Payment' : 'Unpaid Entry'}
             </Badge>
           </div>
 
           {recordInitialPayment && calculation && (
             <div className="space-y-3 pt-1">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Input
-                  label="Amount Received (₹)"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max={calculation.total_payable}
-                  value={initialPayAmount}
-                  onChange={(e) => setInitialPayAmount(e.target.value)}
-                  placeholder="e.g. 1000"
-                  required={recordInitialPayment}
-                />
+              {/* Full Payment Confirmed Box */}
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-emerald-900 block">
+                    Total Amount Received (Full Payment)
+                  </span>
+                  <span className="text-xl font-black font-mono text-emerald-950">
+                    ₹{calculation.total_payable.toFixed(2)}
+                  </span>
+                  <span className="text-[11px] text-emerald-800 font-medium block mt-0.5">
+                    No partial payments allowed • Full balance settled immediately
+                  </span>
+                </div>
+                <div className="text-right">
+                  <Badge variant="success" size="md">
+                    PAID IN FULL
+                  </Badge>
+                  <span className="block text-[10px] text-slate-500 font-mono mt-1">
+                    Balance Due: ₹0.00
+                  </span>
+                </div>
+              </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Select
                   label="Payment Mode"
                   value={initialPayMode}
@@ -1250,22 +1261,22 @@ export default function NewAdmissionPage() {
                     { value: 'OTHER', label: 'Other' },
                   ]}
                 />
-              </div>
 
-              {initialPayMode !== 'CASH' && (
-                <Input
-                  label="Transaction / Reference Ref (Optional)"
-                  value={initialPayRef}
-                  onChange={(e) => setInitialPayRef(e.target.value)}
-                  placeholder="e.g. UTR / UPI Ref"
-                />
-              )}
-
-              <div className="bg-slate-50 border border-slate-200 rounded p-2.5 flex items-center justify-between text-xs font-bold">
-                <span className="text-slate-700">Remaining Balance Due After This Payment:</span>
-                <span className="font-mono text-rose-700 text-sm">
-                  ₹{Math.max(0, calculation.total_payable - (parseFloat(initialPayAmount) || 0)).toFixed(2)}
-                </span>
+                {initialPayMode !== 'CASH' ? (
+                  <Input
+                    label="Transaction / Reference Ref (Optional)"
+                    value={initialPayRef}
+                    onChange={(e) => setInitialPayRef(e.target.value)}
+                    placeholder="e.g. UTR / UPI Ref"
+                  />
+                ) : (
+                  <Input
+                    label="Payment Notes (Optional)"
+                    value={initialPayNotes}
+                    onChange={(e) => setInitialPayNotes(e.target.value)}
+                    placeholder="e.g. Cash collected by cashier"
+                  />
+                )}
               </div>
             </div>
           )}

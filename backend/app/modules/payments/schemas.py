@@ -28,6 +28,7 @@ class RefundCreate(BaseModel):
     refund_mode: str = Field(default="CASH", pattern="^(CASH|UPI|BANK_TRANSFER|CARD|OTHER)$")
     reason: str = Field(..., min_length=3, max_length=500)
     notes: Optional[str] = None
+    revoke_admission: bool = False
 
 class RefundResponse(BaseModel):
     id: uuid.UUID
@@ -45,6 +46,8 @@ class RefundResponse(BaseModel):
     processed_by: Optional[uuid.UUID] = None
     processor_name_snapshot: str
     notes: Optional[str] = None
+    admission_status: Optional[str] = None
+    revoked: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

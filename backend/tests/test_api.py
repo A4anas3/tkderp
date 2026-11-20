@@ -664,6 +664,25 @@ async def test_refund_and_payment_edit_flow():
         assert list_refs.status_code == 200
         assert list_refs.json()["total"] >= 1
 
+        # 9. Issue full refund with revoke_admission=True
+        full_ref_res = await client.post("/api/payments/refund", json={
+            "admission_id": adm_id,
+            "amount": 2000.0,
+            "refund_mode": "CASH",
+            "reason": "Student dropped course permanently",
+            "revoke_admission": True
+        }, headers=headers)
+        assert full_ref_res.status_code == 201
+        full_ref_data = full_ref_res.json()
+        assert full_ref_data["revoked"] is True
+        assert full_ref_data["admission_status"] == "REVOKED"
+
+        # Verify admission status is revoked and balance due is 0
+        adm_check = await client.get(f"/api/admissions/{adm_id}", headers=headers)
+        assert adm_check.status_code == 200
+        assert adm_check.json()["status"] == "REVOKED"
+        assert float(adm_check.json()["balance_due"]) == 0.0
+
 
 @pytest.mark.asyncio
 async def test_date_range_reports():

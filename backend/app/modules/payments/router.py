@@ -611,9 +611,27 @@ async def process_refund(
                     ai.amount_collected = max(Decimal("0.00"), ai.amount_collected - red_amt)
                     ai.balance_due = min(ai.net_price, ai.net_price - ai.amount_collected)
 
+    is_revoked = False
+    if payload.revoke_admission:
+        admission.status = "REVOKED"
+        admission.revocation_reason = f"Full refund issued: {payload.reason.strip()}"
+        admission.revoked_at = datetime.now(timezone.utc)
+        admission.revoked_by = current_user.id
+        admission.balance_due = Decimal("0.00")
+        is_revoked = True
+
+        if admission.amount_paid <= Decimal("0.00"):
+            admission.payment_status = "VOID"
+        else:
+            admission.payment_status = "PARTIALLY_REFUNDED"
+
+        has_gc = any(itm.item_type == "GREEN_CARD" for itm in admission.items)
+        if has_gc and admission.student:
+            admission.student.has_green_card = False
+
     audit = AuditLog(
         user_id=current_user.id,
-        action="FEE_REFUNDED",
+        action="FEE_REFUNDED_AND_REVOKED" if is_revoked else "FEE_REFUNDED",
         entity_type="REFUND",
         entity_id=refund.id,
         details=json.dumps({
@@ -622,7 +640,8 @@ async def process_refund(
             "student_name": admission.student.full_name,
             "amount": float(payload.amount),
             "refund_mode": payload.refund_mode,
-            "reason": payload.reason.strip()
+            "reason": payload.reason.strip(),
+            "admission_revoked": is_revoked
         })
     )
     db.add(audit)
@@ -643,7 +662,9 @@ async def process_refund(
         refund_date=refund.refund_date,
         processed_by=refund.processed_by,
         processor_name_snapshot=refund.processor_name_snapshot,
-        notes=refund.notes
+        notes=refund.notes,
+        admission_status=admission.status,
+        revoked=is_revoked
     )
 
 @router.get("/refunds", response_model=PageResponse[RefundResponse])
