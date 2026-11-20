@@ -224,10 +224,12 @@ export default function StudentsPage() {
             }}
             className="rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-black focus:outline-none focus:border-indigo-600"
           >
-            <option value="">All Statuses</option>
-            <option value="ACTIVE">Active Students</option>
-            <option value="REVOKED">Revoked Students</option>
-            <option value="INACTIVE">Inactive Students</option>
+            <option value="">All Students</option>
+            <option value="ACTIVE">Active Students (Current Courses)</option>
+            <option value="UPCOMING">Upcoming Students (Future Starts)</option>
+            <option value="EXPIRED">Expired Students (Validity Lapsed)</option>
+            <option value="DISCONTINUED">Discontinued Students</option>
+            <option value="INACTIVE">Inactive / Revoked Students</option>
           </select>
 
           <Button variant="primary" icon={UserPlus} onClick={() => setAddModalOpen(true)}>

@@ -142,3 +142,12 @@ class AdmissionSlipsResponse(BaseModel):
     valid_to: Optional[date] = None
     items: List[AdmissionItemResponse] = Field(default_factory=list)
     slips: List[SlipItemResponse] = Field(default_factory=list)
+
+class AdmissionValidityUpdate(BaseModel):
+    valid_from: Optional[date] = None
+    valid_to: Optional[date] = None
+    notes: Optional[str] = None
+
+class AdmissionLifecycleAction(BaseModel):
+    reason: Optional[str] = None
+
