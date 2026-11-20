@@ -17,6 +17,7 @@ import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
+import Modal from '../../components/common/Modal';
 import StudentSearchSelect from '../../components/common/StudentSearchSelect';
 import {
   studentApi,
@@ -76,12 +77,14 @@ export default function NewAdmissionPage() {
   const [gstEnabled, setGstEnabled] = useState(false);
   const [gstRate, setGstRate] = useState('18.00');
 
-  // Initial Payment
-  const [recordInitialPayment, setRecordInitialPayment] = useState(true);
-  const [initialPayAmount, setInitialPayAmount] = useState('');
-  const [initialPayMode, setInitialPayMode] = useState('CASH');
-  const [initialPayRef, setInitialPayRef] = useState('');
-  const [initialPayNotes, setInitialPayNotes] = useState('');
+  // Payment Mode
+  const [paymentMode, setPaymentMode] = useState('CASH');
+  const [paymentRef, setPaymentRef] = useState('');
+  const [paymentNotes, setPaymentNotes] = useState('');
+
+  // Selected Student Object & Confirmation Modal
+  const [selectedStudentObj, setSelectedStudentObj] = useState(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   // Live Preview Result from backend
   const [calculation, setCalculation] = useState(null);
@@ -293,6 +296,15 @@ export default function NewAdmissionPage() {
     fetchStudentHistory();
   }, [studentId, admissionDate]);
 
+  // Track full student details for confirmation modal preview
+  useEffect(() => {
+    if (studentId) {
+      studentApi.get(studentId).then(setSelectedStudentObj).catch(console.warn);
+    } else {
+      setSelectedStudentObj(null);
+    }
+  }, [studentId]);
+
   const handleValidFromChange = (newFrom) => {
     setValidFrom(newFrom);
     if (newFrom) {
@@ -332,11 +344,6 @@ export default function NewAdmissionPage() {
 
         const res = await admissionApi.preview(payload);
         setCalculation(res);
-
-        // Auto-fill initial payment with total payable if payment enabled and initialPayAmount is empty
-        if (recordInitialPayment && !initialPayAmount) {
-          setInitialPayAmount(res.total_payable.toFixed(2));
-        }
       } catch (err) {
         console.error('Calculation preview failed:', err);
       }
@@ -488,7 +495,7 @@ export default function NewAdmissionPage() {
     );
   };
 
-  const handleSubmitAdmission = async (e) => {
+  const handleInitiateSubmit = (e) => {
     e.preventDefault();
     if (!studentId) {
       error('Please select or register a student first');
@@ -498,7 +505,14 @@ export default function NewAdmissionPage() {
       error('Please add at least one subject to the purchase');
       return;
     }
+    if (!calculation) {
+      error('Please wait for fee calculation to finish');
+      return;
+    }
+    setShowConfirmModal(true);
+  };
 
+  const handleFinalExecutePurchase = async () => {
     setSubmitting(true);
     try {
       const hasGc = items.some((i) => i.item_type === 'GREEN_CARD');
@@ -547,15 +561,12 @@ export default function NewAdmissionPage() {
         };
       });
 
-      let initialPaymentPayload = null;
-      if (recordInitialPayment && calculation && calculation.total_payable > 0) {
-        initialPaymentPayload = {
-          amount: calculation.total_payable,
-          payment_mode: initialPayMode,
-          transaction_reference: initialPayRef.trim() || null,
-          notes: initialPayNotes.trim() || 'Full course fee payment at admission',
-        };
-      }
+      const initialPaymentPayload = calculation && calculation.total_payable > 0 ? {
+        amount: calculation.total_payable,
+        payment_mode: paymentMode,
+        transaction_reference: paymentRef.trim() || null,
+        notes: paymentNotes.trim() || 'Full course fee payment at admission',
+      } : null;
 
       const payload = {
         student_id: studentId,
@@ -583,6 +594,7 @@ export default function NewAdmissionPage() {
         }
       }
 
+      setShowConfirmModal(false);
       setCompletedAdmission(res);
     } catch (err) {
       error(err.message || 'Failed to complete purchase');
@@ -654,7 +666,7 @@ export default function NewAdmissionPage() {
         </div>
       )}
 
-      <form onSubmit={handleSubmitAdmission} className="space-y-4">
+      <form onSubmit={handleInitiateSubmit} className="space-y-4">
         {/* Step 1: Student & Date Card */}
         <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs space-y-3">
           <h2 className="text-xs font-bold uppercase tracking-wider text-black border-b border-slate-100 pb-2">
@@ -1206,80 +1218,47 @@ export default function NewAdmissionPage() {
           </div>
         )}
 
-        {/* Step 5: Full Course Fee Payment Collection */}
+        {/* Step 5: Payment Mode Selection */}
         <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs space-y-3">
           <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-            <label className="flex items-center gap-2 cursor-pointer text-xs font-bold uppercase tracking-wider text-black">
-              <input
-                type="checkbox"
-                checked={recordInitialPayment}
-                onChange={(e) => setRecordInitialPayment(e.target.checked)}
-                className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-              />
-              <span>Collect Full Course Fee Payment At Purchase</span>
-            </label>
-            <Badge size="xs" variant={recordInitialPayment ? 'success' : 'neutral'}>
-              {recordInitialPayment ? 'Full Payment' : 'Unpaid Entry'}
+            <span className="text-xs font-bold uppercase tracking-wider text-black">
+              Payment Settlement Mode
+            </span>
+            <Badge size="xs" variant="success">
+              Full Payment
             </Badge>
           </div>
 
-          {recordInitialPayment && calculation && (
-            <div className="space-y-3 pt-1">
-              {/* Full Payment Confirmed Box */}
-              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] uppercase font-bold text-emerald-900 block">
-                    Total Amount Received (Full Payment)
-                  </span>
-                  <span className="text-xl font-black font-mono text-emerald-950">
-                    ₹{calculation.total_payable.toFixed(2)}
-                  </span>
-                  <span className="text-[11px] text-emerald-800 font-medium block mt-0.5">
-                    No partial payments allowed • Full balance settled immediately
-                  </span>
-                </div>
-                <div className="text-right">
-                  <Badge variant="success" size="md">
-                    PAID IN FULL
-                  </Badge>
-                  <span className="block text-[10px] text-slate-500 font-mono mt-1">
-                    Balance Due: ₹0.00
-                  </span>
-                </div>
-              </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Select
+              label="Payment Mode"
+              value={paymentMode}
+              onChange={(e) => setPaymentMode(e.target.value)}
+              options={[
+                { value: 'CASH', label: 'Cash' },
+                { value: 'UPI', label: 'UPI / QR' },
+                { value: 'BANK_TRANSFER', label: 'Bank Transfer' },
+                { value: 'CARD', label: 'Card' },
+                { value: 'OTHER', label: 'Other' },
+              ]}
+            />
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Select
-                  label="Payment Mode"
-                  value={initialPayMode}
-                  onChange={(e) => setInitialPayMode(e.target.value)}
-                  options={[
-                    { value: 'CASH', label: 'Cash' },
-                    { value: 'UPI', label: 'UPI / QR' },
-                    { value: 'BANK_TRANSFER', label: 'Bank Transfer' },
-                    { value: 'CARD', label: 'Card' },
-                    { value: 'OTHER', label: 'Other' },
-                  ]}
-                />
-
-                {initialPayMode !== 'CASH' ? (
-                  <Input
-                    label="Transaction / Reference Ref (Optional)"
-                    value={initialPayRef}
-                    onChange={(e) => setInitialPayRef(e.target.value)}
-                    placeholder="e.g. UTR / UPI Ref"
-                  />
-                ) : (
-                  <Input
-                    label="Payment Notes (Optional)"
-                    value={initialPayNotes}
-                    onChange={(e) => setInitialPayNotes(e.target.value)}
-                    placeholder="e.g. Cash collected by cashier"
-                  />
-                )}
-              </div>
-            </div>
-          )}
+            {paymentMode !== 'CASH' ? (
+              <Input
+                label="Transaction / Reference Ref (Optional)"
+                value={paymentRef}
+                onChange={(e) => setPaymentRef(e.target.value)}
+                placeholder="e.g. UTR / UPI Ref / Cheque No"
+              />
+            ) : (
+              <Input
+                label="Payment Notes (Optional)"
+                value={paymentNotes}
+                onChange={(e) => setPaymentNotes(e.target.value)}
+                placeholder="e.g. Cash collected by cashier"
+              />
+            )}
+          </div>
         </div>
 
         {/* Additional Notes */}
@@ -1312,6 +1291,124 @@ export default function NewAdmissionPage() {
           </Button>
         </div>
       </form>
+
+      {/* Course Purchase Confirmation Modal */}
+      <Modal
+        isOpen={showConfirmModal}
+        onClose={() => setShowConfirmModal(false)}
+        title="Confirm Course Purchase & Fee Settlement"
+        subtitle="Review enrollment details and fee settlement before issuing official invoice slip"
+        maxWidth="max-w-lg"
+      >
+        <div className="space-y-3.5 text-xs">
+          {/* Student Info Box */}
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-1">
+            <div className="flex justify-between items-center">
+              <span className="text-slate-500">Student Name:</span>
+              <strong className="text-black text-sm">{selectedStudentObj?.name || 'Selected Student'}</strong>
+            </div>
+            {selectedStudentObj?.student_code && (
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Registration / Roll No:</span>
+                <span className="font-mono font-bold text-black">{selectedStudentObj.student_code}</span>
+              </div>
+            )}
+            {selectedStudentObj?.mobile && (
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Mobile Contact:</span>
+                <span className="font-mono text-slate-800">{selectedStudentObj.mobile}</span>
+              </div>
+            )}
+            <div className="flex justify-between items-center">
+              <span className="text-slate-500">Admission Date:</span>
+              <span className="font-medium text-black">{admissionDate}</span>
+            </div>
+          </div>
+
+          {/* Enrolled Items List */}
+          <div>
+            <span className="text-[10px] uppercase font-bold text-slate-700 block mb-1 tracking-wider">
+              Enrolled Courses & Batches ({items.length})
+            </span>
+            <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+              {items.map((itm, i) => (
+                <div
+                  key={i}
+                  className="bg-white border border-slate-200 rounded p-2 flex justify-between items-center text-xs"
+                >
+                  <div>
+                    <span className="font-bold text-black block">{itm.item_name_snapshot}</span>
+                    <span className="text-[10px] text-slate-500">
+                      {itm.teacher_name_snapshot ? `Faculty: ${itm.teacher_name_snapshot} • ` : ''}
+                      Validity: {itm.valid_from || validFrom} to {itm.valid_to || validTo}
+                    </span>
+                  </div>
+                  <span className="font-mono font-bold text-black text-xs">
+                    ₹{Number(itm.original_price).toFixed(2)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Fee & Payment Breakdown Card */}
+          <div className="bg-emerald-50/70 border border-emerald-300 rounded-lg p-3 space-y-1.5">
+            <div className="flex justify-between text-slate-600">
+              <span>Course Fee Subtotal:</span>
+              <span className="font-mono font-semibold text-black">
+                ₹{calculation?.subtotal.toFixed(2)}
+              </span>
+            </div>
+            {calculation && Number(calculation.total_discount) > 0 && (
+              <div className="flex justify-between text-emerald-800 font-medium">
+                <span>Total Discounts Applied:</span>
+                <span className="font-mono">-₹{calculation.total_discount.toFixed(2)}</span>
+              </div>
+            )}
+            {calculation?.gst_enabled && (
+              <div className="flex justify-between text-slate-600">
+                <span>Inclusive GST ({calculation.gst_rate}%):</span>
+                <span className="font-mono text-black">₹{calculation.gst_amount.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="flex justify-between border-t border-emerald-200 pt-1.5 text-sm font-black text-emerald-950">
+              <span className="uppercase text-xs font-bold">Total Amount to be Paid:</span>
+              <span className="font-mono text-base font-black text-emerald-900">
+                ₹{calculation?.total_payable.toFixed(2)}
+              </span>
+            </div>
+            <div className="flex justify-between text-[11px] text-slate-700 border-t border-emerald-200 pt-1">
+              <span>Payment Mode:</span>
+              <span className="font-bold text-black uppercase">
+                {paymentMode} {paymentRef ? `(Ref: ${paymentRef})` : ''}
+              </span>
+            </div>
+            <div className="flex justify-between text-[11px] text-emerald-800 font-bold border-t border-emerald-200 pt-1">
+              <span>Settlement Status:</span>
+              <span>PAID IN FULL (₹0.00 Balance Due)</span>
+            </div>
+          </div>
+
+          {/* Confirmation Actions */}
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
+            <Button
+              variant="secondary"
+              onClick={() => setShowConfirmModal(false)}
+              disabled={submitting}
+            >
+              Cancel & Edit
+            </Button>
+            <Button
+              variant="primary"
+              loading={submitting}
+              icon={CheckCircle2}
+              onClick={handleFinalExecutePurchase}
+            >
+              Confirm Purchase & Issue Slip
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Quick Student Modal with Reusable Enquiry Details */}
       <QuickStudentModal
