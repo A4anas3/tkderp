@@ -598,7 +598,7 @@ export default function StudentDetailPage() {
                 )
               }
             >
-              + Purchase Another Course / Batch
+              Purchase Another Course / Batch
             </Button>
           )}
         </div>
@@ -786,7 +786,7 @@ export default function StudentDetailPage() {
                   )
                 }
               >
-                + Add / Enroll Subject
+                Add / Enroll Subject
               </Button>
             </div>
           )}
@@ -875,9 +875,11 @@ export default function StudentDetailPage() {
                         <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
                         <span>{item.subject_name}</span>
                       </div>
-                      <span className="text-[10px] text-slate-400 font-mono">
-                        Invoice #{item.admission_number}
-                      </span>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <span className="text-[10px] text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.2 rounded font-mono font-medium">
+                          Invoice #{item.admission_number}
+                        </span>
+                      </div>
                     </td>
                     <td className="py-2.5 px-3">
                       <div className="text-slate-800 font-medium">
@@ -1075,7 +1077,7 @@ export default function StudentDetailPage() {
                   )
                 }
               >
-                + Enroll Another Subject
+                Enroll Another Subject
               </Button>
             )}
           </div>
@@ -1201,7 +1203,7 @@ export default function StudentDetailPage() {
                 )
               }
             >
-              + New Admission / Invoice
+              New Admission / Invoice
             </Button>
           )}
         </div>

@@ -629,6 +629,7 @@ async def get_student_active_enrollment(
 
     today = date.today()
     active_green_card = None
+    seen_active_subjects = set()
     active_subjects = []
     historical_subjects = []
     historical_memberships = []
@@ -678,7 +679,9 @@ async def get_student_active_enrollment(
             else:
                 historical_memberships.append(item_dict)
         else:
-            if is_active:
+            subj_key = str(item.subject_id) if item.subject_id else item.item_name_snapshot.strip().lower()
+            if is_active and subj_key not in seen_active_subjects:
+                seen_active_subjects.add(subj_key)
                 active_subjects.append(item_dict)
                 active_fee_total += item.net_price
                 active_paid_total += item.amount_collected

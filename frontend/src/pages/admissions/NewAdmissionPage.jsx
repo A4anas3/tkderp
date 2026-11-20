@@ -57,6 +57,7 @@ export default function NewAdmissionPage() {
 
   const [studentId, setStudentId] = useState(paramStudentId || '');
   const [existingAdmissions, setExistingAdmissions] = useState([]);
+  const [activeEnrollment, setActiveEnrollment] = useState(null);
   const [admissionDate, setAdmissionDate] = useState(new Date().toISOString().split('T')[0]);
   const [validFrom, setValidFrom] = useState(new Date().toISOString().split('T')[0]);
   const [validTo, setValidTo] = useState(() => {
@@ -269,15 +270,18 @@ export default function NewAdmissionPage() {
     if (!studentId) {
       setExistingAdmissions([]);
       setLastBatchPeriodInfo(null);
+      setActiveEnrollment(null);
       return;
     }
     const fetchStudentHistory = async () => {
       try {
-        const [admRes, periodRes] = await Promise.all([
+        const [admRes, periodRes, activeRes] = await Promise.all([
           admissionApi.list({ student_id: studentId, page_size: 20 }),
           studentApi.getLastBatchPeriod(studentId),
+          studentApi.getActiveEnrollment(studentId).catch(() => null),
         ]);
         setExistingAdmissions(admRes.items || []);
+        setActiveEnrollment(activeRes || null);
 
         // Smart next batch period: defaults to next date after last batch end
         if (periodRes && periodRes.has_previous) {
@@ -295,6 +299,35 @@ export default function NewAdmissionPage() {
     };
     fetchStudentHistory();
   }, [studentId, admissionDate]);
+
+  // Sync items with active enrollment when student is selected or changes
+  useEffect(() => {
+    if (activeEnrollment?.active_subjects && items.length > 0) {
+      setItems((prev) =>
+        prev.map((itm) => {
+          if (itm.item_type === 'SUBJECT' && itm.subject_id) {
+            const activeMatch = activeEnrollment.active_subjects.find(
+              (as) => as.subject_id === itm.subject_id
+            );
+            if (activeMatch && activeMatch.valid_to) {
+              const nextStart = new Date(activeMatch.valid_to);
+              nextStart.setDate(nextStart.getDate() + 1);
+              const nextStartStr = nextStart.toISOString().split('T')[0];
+              const m = itm.months || billingMonths || 1;
+              return {
+                ...itm,
+                is_renewal: true,
+                prev_valid_to: activeMatch.valid_to,
+                valid_from: itm.is_renewal ? (itm.valid_from || nextStartStr) : nextStartStr,
+                valid_to: calculateEndDateFromMonths(itm.is_renewal ? (itm.valid_from || nextStartStr) : nextStartStr, m),
+              };
+            }
+          }
+          return itm;
+        })
+      );
+    }
+  }, [activeEnrollment]);
 
   // Track full student details for confirmation modal preview
   useEffect(() => {
@@ -352,18 +385,43 @@ export default function NewAdmissionPage() {
     return () => clearTimeout(timer);
   }, [items, overallDiscountType, overallDiscountValue, gstEnabled, gstRate]);
 
+  // Helper: check if subject is already active for selected student (Renewal detection)
+  const getSubjectRenewalInfo = (subjId, currentActiveEnrollment) => {
+    if (!currentActiveEnrollment?.active_subjects || !subjId) return null;
+    return currentActiveEnrollment.active_subjects.find(
+      (as) => as.subject_id === subjId
+    );
+  };
+
   // Add Item Helpers
   const handleAddSubject = () => {
     if (subjects.length === 0) {
       error('No active subjects found.');
       return;
     }
-    const s = subjects[0];
+    const alreadySelectedSubjectIds = items.filter((i) => i.item_type === 'SUBJECT').map((i) => i.subject_id);
+    const s = subjects.find((sub) => !alreadySelectedSubjectIds.includes(sub.id)) || subjects[0];
     const defaultDisc = s.default_discount_percentage !== undefined && s.default_discount_percentage !== null
       ? Number(s.default_discount_percentage)
       : 10;
     const baseFee = Number(s.default_fee);
     const m = billingMonths || 1;
+
+    // Check if this subject is currently active for this student
+    const activeMatch = getSubjectRenewalInfo(s.id, activeEnrollment);
+    let itemFrom = validFrom;
+    let isRenewal = false;
+    let prevValidTo = null;
+
+    if (activeMatch && activeMatch.valid_to) {
+      isRenewal = true;
+      prevValidTo = activeMatch.valid_to;
+      const nextStart = new Date(activeMatch.valid_to);
+      nextStart.setDate(nextStart.getDate() + 1);
+      itemFrom = nextStart.toISOString().split('T')[0];
+    }
+    const itemTo = calculateEndDateFromMonths(itemFrom, m);
+
     const newItem = {
       tempId: `item-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
       item_type: 'SUBJECT',
@@ -378,8 +436,28 @@ export default function NewAdmissionPage() {
       hall_number_snapshot: s.hall_number || 'Main Hall',
       discount_type: defaultDisc > 0 ? 'PERCENTAGE' : 'NONE',
       discount_value: defaultDisc > 0 ? String(defaultDisc) : '10',
+      valid_from: itemFrom,
+      valid_to: itemTo,
+      is_renewal: isRenewal,
+      prev_valid_to: prevValidTo,
     };
     setItems((prev) => [...prev, newItem]);
+  };
+
+  const handleItemValidFromChange = (tempId, newFrom) => {
+    setItems((prev) =>
+      prev.map((itm) => {
+        if (itm.tempId === tempId) {
+          const m = itm.months || billingMonths || 1;
+          return {
+            ...itm,
+            valid_from: newFrom,
+            valid_to: calculateEndDateFromMonths(newFrom, m),
+          };
+        }
+        return itm;
+      })
+    );
   };
 
   const handleAddGreenCard = () => {
@@ -432,6 +510,21 @@ export default function NewAdmissionPage() {
             : 10;
           const baseFee = Number(s.default_fee);
           const m = itm.months || billingMonths || 1;
+
+          const activeMatch = getSubjectRenewalInfo(s.id, activeEnrollment);
+          let itemFrom = validFrom;
+          let isRenewal = false;
+          let prevValidTo = null;
+
+          if (activeMatch && activeMatch.valid_to) {
+            isRenewal = true;
+            prevValidTo = activeMatch.valid_to;
+            const nextStart = new Date(activeMatch.valid_to);
+            nextStart.setDate(nextStart.getDate() + 1);
+            itemFrom = nextStart.toISOString().split('T')[0];
+          }
+          const itemTo = calculateEndDateFromMonths(itemFrom, m);
+
           return {
             ...itm,
             subject_id: s.id,
@@ -442,6 +535,10 @@ export default function NewAdmissionPage() {
             teacher_id: s.teacher_id || null,
             teacher_name_snapshot: s.teacher_name_snapshot || null,
             hall_number_snapshot: s.hall_number || 'Main Hall',
+            valid_from: itemFrom,
+            valid_to: itemTo,
+            is_renewal: isRenewal,
+            prev_valid_to: prevValidTo,
             discount_type: itm.discount_type === 'NONE' && defaultDisc > 0 ? 'PERCENTAGE' : itm.discount_type,
             discount_value: itm.discount_type === 'PERCENTAGE' && (!itm.discount_value || itm.discount_value === '0' || itm.discount_value === 0)
               ? String(defaultDisc)
@@ -539,9 +636,10 @@ export default function NewAdmissionPage() {
           ? itm.base_monthly_fee
           : (parseFloat(itm.original_price) / itmMonths);
 
-        const cleanSubjectName = (itm.item_name_snapshot || '').split(' (')[0].trim();
+        const cleanSubjectName = (itm.item_name_snapshot || '').split(' (')[0].replace(/^\[Renewal\]\s*/, '').trim();
+        const cyclePrefix = itm.is_renewal ? '[Renewal] ' : '';
         const formattedSnapshotName = itm.item_type === 'SUBJECT'
-          ? `${cleanSubjectName} (${itmMonths} Mo @ ₹${baseFee.toFixed(0)}/mo)`
+          ? `${cyclePrefix}${cleanSubjectName} (${itmMonths} Mo @ ₹${baseFee.toFixed(0)}/mo)`
           : itm.item_name_snapshot;
 
         return {
@@ -561,6 +659,11 @@ export default function NewAdmissionPage() {
         };
       });
 
+      const allItemFroms = itemsPayload.map((i) => i.valid_from).filter(Boolean);
+      const allItemTos = itemsPayload.map((i) => i.valid_to).filter(Boolean);
+      const finalOverallFrom = allItemFroms.length > 0 ? allItemFroms.reduce((a, b) => (a < b ? a : b)) : validFrom;
+      const finalOverallTo = allItemTos.length > 0 ? allItemTos.reduce((a, b) => (a > b ? a : b)) : overallValidTo;
+
       const initialPaymentPayload = calculation && calculation.total_payable > 0 ? {
         amount: calculation.total_payable,
         payment_mode: paymentMode,
@@ -571,8 +674,8 @@ export default function NewAdmissionPage() {
       const payload = {
         student_id: studentId,
         admission_date: admissionDate,
-        valid_from: validFrom,
-        valid_to: overallValidTo,
+        valid_from: finalOverallFrom,
+        valid_to: finalOverallTo,
         items: itemsPayload,
         overall_discount_type: overallDiscountType,
         overall_discount_value: parseFloat(overallDiscountValue) || 0,
@@ -812,32 +915,88 @@ export default function NewAdmissionPage() {
             </div>
           </div>
 
-          {/* Existing Enrollments Alert for Multi-Course Purchase */}
-          {existingAdmissions.length > 0 && (
-            <div className="mt-3 bg-indigo-50 border border-indigo-200 rounded-lg p-3 text-xs space-y-1.5">
+          {/* Active Enrollment & Course Continuity Overview */}
+          {activeEnrollment && (
+            <div className="mt-3 bg-gradient-to-r from-indigo-50/70 via-slate-50 to-purple-50/60 border border-indigo-200 rounded-lg p-3 text-xs space-y-2.5">
               <div className="flex items-center justify-between font-bold text-indigo-950">
-                <span>Active Student Enrollments (Adding Another Course / Batch)</span>
-                <span className="bg-white border border-indigo-200 px-2 py-0.5 rounded text-[11px] text-indigo-700">
-                  {existingAdmissions.length} Existing Purchases
+                <span className="flex items-center gap-1.5">
+                  <BookOpen className="w-4 h-4 text-indigo-600" />
+                  Student Active Course Enrollments
+                </span>
+                <span className="bg-white border border-indigo-200 px-2 py-0.5 rounded text-[11px] font-mono text-indigo-700 font-bold">
+                  {activeEnrollment.enrollment_number}
                 </span>
               </div>
-              <div className="divide-y divide-indigo-100 max-h-36 overflow-y-auto">
-                {existingAdmissions.map((adm) => (
-                  <div key={adm.id} className="py-1 flex items-center justify-between text-[11px]">
-                    <div>
-                      <span className="font-mono font-bold text-black">{adm.purchase_transaction_id || adm.admission_number}</span>
-                      <span className="text-slate-600 ml-2">({adm.admission_date})</span>
-                      <span className="text-slate-500 ml-2">
-                        {(adm.items || []).map((i) => i.item_name_snapshot).join(', ')}
-                      </span>
-                    </div>
-                    <div className="font-mono text-slate-700">
-                      Paid: <strong className="text-emerald-700">₹{Number(adm.amount_paid).toFixed(0)}</strong> · 
-                      Due: <strong className="text-rose-700">₹{Number(adm.balance_due).toFixed(0)}</strong>
-                    </div>
+
+              {activeEnrollment.active_green_card && (
+                <div className="p-2 bg-purple-100/70 border border-purple-200 rounded text-purple-950 flex items-center justify-between text-[11px]">
+                  <span className="font-bold flex items-center gap-1">
+                    <Award className="w-3.5 h-3.5 text-purple-700" />
+                    Active Green Card All-Access Pass
+                  </span>
+                  <span className="font-mono font-bold">
+                    Valid till: {activeEnrollment.active_green_card.valid_to} ({activeEnrollment.active_green_card.days_remaining}d remaining)
+                  </span>
+                </div>
+              )}
+
+              {activeEnrollment.active_subjects?.length > 0 ? (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px] text-slate-700 font-semibold">
+                    <span>Active Courses (Purchasing existing course will automatically renew for next cycle):</span>
+                    <span className="text-emerald-700 font-bold">{activeEnrollment.active_subjects.length} Currently Active</span>
                   </div>
-                ))}
-              </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                    {activeEnrollment.active_subjects.map((sub) => (
+                      <div key={sub.id} className="p-2 bg-white border border-indigo-100 rounded-md flex items-center justify-between text-[11px] shadow-2xs">
+                        <div>
+                          <div className="font-bold text-black flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                            <span>{sub.subject_name}</span>
+                          </div>
+                          <span className="text-[10px] text-slate-500 block">Faculty: {sub.teacher_name || 'General'}</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="font-mono text-indigo-950 font-bold block">{sub.valid_to}</span>
+                          <span className={`text-[10px] font-semibold ${sub.days_remaining <= 7 ? 'text-rose-600' : 'text-emerald-700'}`}>
+                            {sub.days_remaining}d remaining
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-[11px] text-slate-500 italic">
+                  No active subjects currently. This purchase will begin a new active course cycle.
+                </p>
+              )}
+
+              {/* Past Purchases / Invoices Collapsible */}
+              {existingAdmissions.length > 0 && (
+                <details className="pt-1 border-t border-indigo-100 text-[11px] text-slate-600">
+                  <summary className="cursor-pointer font-semibold text-indigo-800 hover:text-indigo-950">
+                    View Previous Purchase Invoices ({existingAdmissions.length})
+                  </summary>
+                  <div className="divide-y divide-indigo-100 max-h-32 overflow-y-auto mt-1 pt-1">
+                    {existingAdmissions.map((adm) => (
+                      <div key={adm.id} className="py-1 flex items-center justify-between text-[11px]">
+                        <div>
+                          <span className="font-mono font-bold text-black">{adm.purchase_transaction_id || adm.admission_number}</span>
+                          <span className="text-slate-600 ml-2">({adm.admission_date})</span>
+                          <span className="text-slate-500 ml-2">
+                            {(adm.items || []).map((i) => i.item_name_snapshot).join(', ')}
+                          </span>
+                        </div>
+                        <div className="font-mono text-slate-700">
+                          Paid: <strong className="text-emerald-700">₹{Number(adm.amount_paid).toFixed(0)}</strong> · 
+                          Due: <strong className="text-rose-700">₹{Number(adm.balance_due).toFixed(0)}</strong>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
             </div>
           )}
         </div>
@@ -923,11 +1082,17 @@ export default function NewAdmissionPage() {
                             onChange={(e) => handleSubjectChangeForItem(itm.tempId, e.target.value)}
                             className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-black focus:outline-none focus:border-indigo-600 font-medium"
                           >
-                            {subjects.map((s) => (
-                              <option key={s.id} value={s.id}>
-                                {s.name} — ₹{Number(s.default_fee).toFixed(0)}/mo {s.teacher_name_snapshot ? `(${s.teacher_name_snapshot})` : ''} {s.schedule ? `• [${s.schedule}]` : ''}
-                              </option>
-                            ))}
+                            {subjects.map((s) => {
+                              const activeMatch = activeEnrollment?.active_subjects?.find((as) => as.subject_id === s.id);
+                              return (
+                                <option key={s.id} value={s.id}>
+                                  {s.name} — ₹{Number(s.default_fee).toFixed(0)}/mo
+                                  {activeMatch ? ` • [Active till ${activeMatch.valid_to} — Renews Next Cycle]` : ''}
+                                  {s.teacher_name_snapshot ? ` (${s.teacher_name_snapshot})` : ''}
+                                  {s.schedule ? ` • [${s.schedule}]` : ''}
+                                </option>
+                              );
+                            })}
                           </select>
                         </div>
 
@@ -968,23 +1133,50 @@ export default function NewAdmissionPage() {
                           />
                         </div>
 
+                        {/* Renewal Banner if continuing cycle */}
+                        {itm.is_renewal && (
+                          <div className="sm:col-span-12 p-2 bg-emerald-50 border border-emerald-300 rounded flex flex-wrap items-center justify-between gap-1 text-xs text-emerald-950">
+                            <div className="flex items-center gap-1.5 font-bold">
+                              <Badge variant="success" size="xs">NEXT CYCLE RENEWAL</Badge>
+                              <span>Continuing student's existing {(itm.item_name_snapshot || '').split(' (')[0]} course</span>
+                            </div>
+                            <span className="text-[11px] text-emerald-800 font-mono font-semibold">
+                              Previous cycle ended: <strong>{itm.prev_valid_to}</strong>
+                            </span>
+                          </div>
+                        )}
+
                         {/* Snapshot badge preview & dates */}
-                        <div className="sm:col-span-12 flex flex-wrap items-center gap-2 text-[11px] text-slate-700 bg-white border border-slate-200 rounded px-2.5 py-1 font-medium">
-                          <span>Faculty: <strong className="text-indigo-900">{itm.teacher_name_snapshot || 'General Faculty'}</strong></span>
-                          <span>•</span>
-                          <span>Classroom: <strong className="text-black">{itm.hall_number_snapshot || 'Main Hall'}</strong></span>
-                          {(() => {
-                            const matched = subjects.find((s) => s.id === itm.subject_id);
-                            return matched?.schedule ? (
-                              <>
-                                <span>•</span>
-                                <span>Schedule: <strong className="text-indigo-700">{matched.schedule}</strong></span>
-                              </>
-                            ) : null;
-                          })()}
-                          <span className="ml-auto font-mono text-emerald-800 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
-                            Rolling Cycle: {validFrom} &rarr; {calculateEndDateFromMonths(validFrom, itm.months || billingMonths || 1)} ({itm.months || billingMonths || 1} Mo)
-                          </span>
+                        <div className="sm:col-span-12 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-700 bg-white border border-slate-200 rounded p-2 font-medium">
+                          <div className="flex items-center gap-2">
+                            <span>Faculty: <strong className="text-indigo-900">{itm.teacher_name_snapshot || 'General Faculty'}</strong></span>
+                            <span>•</span>
+                            <span>Classroom: <strong className="text-black">{itm.hall_number_snapshot || 'Main Hall'}</strong></span>
+                            {(() => {
+                              const matched = subjects.find((s) => s.id === itm.subject_id);
+                              return matched?.schedule ? (
+                                <>
+                                  <span>•</span>
+                                  <span>Schedule: <strong className="text-indigo-700">{matched.schedule}</strong></span>
+                                </>
+                              ) : null;
+                            })()}
+                          </div>
+
+                          <div className="flex items-center gap-1.5 ml-auto">
+                            <span className="text-slate-600 font-medium">Course Period:</span>
+                            <input
+                              type="date"
+                              value={itm.valid_from || validFrom}
+                              onChange={(e) => handleItemValidFromChange(itm.tempId, e.target.value)}
+                              className="border border-slate-300 rounded px-1.5 py-0.5 text-xs text-black font-mono font-bold bg-white focus:outline-none focus:border-indigo-600"
+                              title="Start date for this course"
+                            />
+                            <span className="text-slate-400">&rarr;</span>
+                            <span className="font-mono text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-bold">
+                              {itm.valid_to || calculateEndDateFromMonths(itm.valid_from || validFrom, itm.months || billingMonths || 1)} ({itm.months || billingMonths || 1} Mo)
+                            </span>
+                          </div>
                         </div>
                       </div>
                     ) : (

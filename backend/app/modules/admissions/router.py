@@ -111,11 +111,14 @@ async def create_admission(
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
 
-    # Generate admission number
+    # Generate admission number (ADM-YYYY-XXXX format with uniqueness guarantee)
     year_str = payload.admission_date.strftime("%Y")
     cnt_res = await db.execute(select(func.count(Admission.id)))
-    seq = cnt_res.scalar_one() + 1
-    adm_no = f"ADM{year_str}{seq:04d}"
+    seq = (cnt_res.scalar_one() or 0) + 1
+    adm_no = f"ADM-{year_str}-{seq:04d}"
+    while (await db.execute(select(Admission).where(Admission.admission_number == adm_no))).scalar_one_or_none():
+        seq += 1
+        adm_no = f"ADM-{year_str}-{seq:04d}"
 
     # Calculate item financials
     raw_items = [
@@ -1096,11 +1099,14 @@ async def renew_subject(
             if not h_no and batch.hall_number:
                 h_no = batch.hall_number
 
-    # Next sequential admission number
+    # Next sequential admission number (ADM-YYYY-XXXX format with uniqueness guarantee)
     year_str = date.today().strftime("%Y")
     cnt_res = await db.execute(select(func.count(Admission.id)))
-    seq = cnt_res.scalar_one() + 1
-    adm_no = f"ADM{year_str}{seq:04d}"
+    seq = (cnt_res.scalar_one() or 0) + 1
+    adm_no = f"ADM-{year_str}-{seq:04d}"
+    while (await db.execute(select(Admission).where(Admission.admission_number == adm_no))).scalar_one_or_none():
+        seq += 1
+        adm_no = f"ADM-{year_str}-{seq:04d}"
 
     # Calculate financials
     raw_item = {
