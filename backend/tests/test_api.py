@@ -758,6 +758,9 @@ async def test_batch_purchase_revocation_and_restoration():
         assert restored_adm["status"] == "ACTIVE"
         assert restored_adm["revocation_reason"] is None
         assert float(restored_adm["balance_due"]) == 3500.0  # 4000 total - 500 retained paid = 3500 due
+        assert float(restored_adm["amount_paid"]) == 500.0
+        assert float(restored_adm["items"][0]["amount_collected"]) == 500.0
+        assert float(restored_adm["items"][0]["balance_due"]) == 3500.0
 
 @pytest.mark.asyncio
 async def test_student_photo_compression_and_last_batch_period():

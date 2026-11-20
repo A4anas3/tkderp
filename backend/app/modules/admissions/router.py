@@ -302,6 +302,24 @@ async def get_admission(
     admission = res.scalar_one_or_none()
     if not admission:
         raise HTTPException(status_code=404, detail="Admission not found")
+
+    # Reconcile items collected and due if out of sync with admission.amount_paid
+    if admission.status == "ACTIVE" and admission.items:
+        sum_collected = sum((itm.amount_collected or Decimal("0.00")) for itm in admission.items)
+        if sum_collected != admission.amount_paid:
+            items_payload = [{"id": ai.id, "balance_due": ai.net_price} for ai in admission.items]
+            allocations = allocate_payment_proportionally(admission.amount_paid, items_payload)
+            changed = False
+            for itm_id, alloc_amt in allocations:
+                for ai in admission.items:
+                    if ai.id == itm_id and (ai.amount_collected != alloc_amt or ai.balance_due != (ai.net_price - alloc_amt)):
+                        ai.amount_collected = alloc_amt
+                        ai.balance_due = max(Decimal("0.00"), ai.net_price - alloc_amt)
+                        changed = True
+            if changed:
+                await db.commit()
+                await db.refresh(admission)
+
     return admission
 
 @router.get("/{admission_id}/slips", response_model=AdmissionSlipsResponse)
@@ -579,6 +597,20 @@ async def revoke_batch_purchase(
         db.add(refund_record)
         admission.amount_paid -= payload.refund_amount
 
+        # Proportionally reduce items' amount_collected
+        paid_items = [
+            {"id": itm.id, "balance_due": itm.amount_collected}
+            for itm in admission.items
+            if itm.amount_collected > Decimal("0.00")
+        ]
+        if paid_items:
+            reductions = allocate_payment_proportionally(payload.refund_amount, paid_items)
+            for itm_id, red_amt in reductions:
+                for ai in admission.items:
+                    if ai.id == itm_id:
+                        ai.amount_collected = max(Decimal("0.00"), ai.amount_collected - red_amt)
+                        ai.balance_due = min(ai.net_price, ai.net_price - ai.amount_collected)
+
     # 2. Revoke the batch purchase
     admission.status = "REVOKED"
     admission.revocation_reason = payload.reason.strip()
@@ -644,6 +676,16 @@ async def restore_batch_purchase(
         admission.payment_status = "PARTIALLY_PAID"
     else:
         admission.payment_status = "UNPAID"
+
+    # Re-sync items with restored admission amount_paid and balance_due
+    if admission.items:
+        items_payload = [{"id": ai.id, "balance_due": ai.net_price} for ai in admission.items]
+        allocations = allocate_payment_proportionally(admission.amount_paid, items_payload)
+        for itm_id, alloc_amt in allocations:
+            for ai in admission.items:
+                if ai.id == itm_id:
+                    ai.amount_collected = alloc_amt
+                    ai.balance_due = max(Decimal("0.00"), ai.net_price - alloc_amt)
 
     has_gc = any(itm.item_type == "GREEN_CARD" for itm in admission.items)
     if has_gc and admission.student:
