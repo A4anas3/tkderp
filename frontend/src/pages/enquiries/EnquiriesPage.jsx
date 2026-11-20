@@ -16,6 +16,10 @@ import {
   ThumbsUp,
   ThumbsDown,
   XCircle,
+  MoreHorizontal,
+  Users,
+  RotateCcw,
+  ChevronDown,
 } from 'lucide-react';
 import DataTable from '../../components/common/DataTable';
 import Modal from '../../components/common/Modal';
@@ -36,6 +40,31 @@ export default function EnquiriesPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(true);
+
+  // Summary counts for professional ERP pipeline overview
+  const [summary, setSummary] = useState({
+    total: 0,
+    ACTIVE_DEMO: 0,
+    INTERESTED: 0,
+    PENDING: 0,
+    CONVERTED: 0,
+    EXPIRED: 0,
+    NOT_INTERESTED: 0,
+  });
+
+  // Action Menu dropdown state (to limit buttons in table rows)
+  const [activeActionMenuId, setActiveActionMenuId] = useState(null);
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    const handleGlobalClick = () => {
+      setActiveActionMenuId(null);
+    };
+    if (activeActionMenuId) {
+      document.addEventListener('click', handleGlobalClick);
+      return () => document.removeEventListener('click', handleGlobalClick);
+    }
+  }, [activeActionMenuId]);
 
   // Deadlines widget data
   const [deadlines, setDeadlines] = useState([]);
@@ -72,6 +101,15 @@ export default function EnquiriesPage() {
     notes: '',
   });
 
+  const loadSummary = useCallback(async () => {
+    try {
+      const s = await enquiryApi.getSummary();
+      if (s) setSummary(s);
+    } catch (err) {
+      console.warn('Failed to load enquiry summary:', err);
+    }
+  }, []);
+
   const loadEnquiries = useCallback(async () => {
     setLoading(true);
     try {
@@ -79,6 +117,7 @@ export default function EnquiriesPage() {
         page,
         page_size: 15,
         search: search.trim() || undefined,
+        status_filter: statusFilter || undefined,
         status: statusFilter || undefined,
       });
       setEnquiries(res.items || []);
@@ -88,7 +127,7 @@ export default function EnquiriesPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, statusFilter]);
+  }, [page, search, statusFilter, error]);
 
   const loadDeadlines = async () => {
     setDeadlinesLoading(true);
@@ -108,11 +147,12 @@ export default function EnquiriesPage() {
 
   useEffect(() => {
     loadDeadlines();
+    loadSummary();
     subjectApi
       .getAll()
       .then((subs) => setAvailableSubjects(subs || []))
       .catch(console.warn);
-  }, []);
+  }, [loadSummary]);
 
   const handleCreateEnquiry = async (e) => {
     e.preventDefault();
@@ -149,6 +189,7 @@ export default function EnquiriesPage() {
       });
       loadEnquiries();
       loadDeadlines();
+      loadSummary();
     } catch (err) {
       error(err.message || 'Failed to create enquiry');
     } finally {
@@ -191,6 +232,7 @@ export default function EnquiriesPage() {
       setCourseUpdateModalOpen(false);
       loadEnquiries();
       loadDeadlines();
+      loadSummary();
     } catch (err) {
       error(err.message || 'Failed to update interested subject');
     } finally {
@@ -229,6 +271,7 @@ export default function EnquiriesPage() {
       success(`${enq.student_name} marked as INTERESTED! Ready for admission.`);
       loadEnquiries();
       loadDeadlines();
+      loadSummary();
     } catch (err) {
       error(err.message || 'Failed to update status');
     }
@@ -263,6 +306,7 @@ export default function EnquiriesPage() {
       setTargetNotInterestedEnquiry(null);
       loadEnquiries();
       loadDeadlines();
+      loadSummary();
     } catch (err) {
       error(err.message || 'Failed to update status');
     } finally {
@@ -384,79 +428,138 @@ export default function EnquiriesPage() {
     },
     {
       header: 'Action',
-      className: 'text-right min-w-[200px]',
-      render: (e) => (
-        <div className="flex items-center justify-end gap-1 flex-wrap">
-          <Button
-            size="xs"
-            variant="secondary"
-            icon={ExternalLink}
-            onClick={() => navigate(`/enquiries/${e.id}`)}
-            title="Open Dedicated Enquiry Page"
-          >
-            Detail ↗
-          </Button>
+      className: 'text-right w-44',
+      render: (e) => {
+        const isConverted = e.status === 'CONVERTED';
+        const isMenuOpen = activeActionMenuId === e.id;
 
-          {e.status === 'ACTIVE_DEMO' && (
-            <>
-              <Button
-                size="xs"
-                variant="success"
-                onClick={(ev) => handleMarkInterested(e, ev)}
-                title="Mark student as interested in admission"
-              >
-                👍 Interested
-              </Button>
-              <Button
-                size="xs"
-                variant="secondary"
-                className="text-rose-600 hover:text-rose-800 hover:bg-rose-50"
-                onClick={(ev) => handleOpenNotInterestedModal(e, ev)}
-                title="Mark as not interested / drop"
-              >
-                👎 Drop
-              </Button>
-            </>
-          )}
+        return (
+          <div className="flex items-center justify-end gap-1.5 relative">
+            {isConverted ? (
+              <>
+                <Badge size="xs" variant="success">
+                  Enrolled ✓
+                </Badge>
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  icon={ExternalLink}
+                  onClick={(ev) => {
+                    ev.stopPropagation();
+                    navigate(`/enquiries/${e.id}`);
+                  }}
+                  title="View Full Details"
+                >
+                  Detail ↗
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  size="xs"
+                  variant="primary"
+                  onClick={(ev) => handleConvertToAdmission(e, ev)}
+                  title="Convert to Admission & Collect Fees"
+                >
+                  Admit ↗
+                </Button>
 
-          {e.status === 'INTERESTED' && (
-            <Button
-              size="xs"
-              variant="secondary"
-              className="text-rose-600 hover:text-rose-800 hover:bg-rose-50"
-              onClick={(ev) => handleOpenNotInterestedModal(e, ev)}
-              title="Change to Not Interested / Drop"
-            >
-              👎 Drop
-            </Button>
-          )}
+                {/* Clean compact options menu (limits buttons on table rows) */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    data-no-row-click
+                    onClick={(ev) => {
+                      ev.stopPropagation();
+                      setActiveActionMenuId(isMenuOpen ? null : e.id);
+                    }}
+                    className={`p-1.5 rounded border transition cursor-pointer flex items-center justify-center ${
+                      isMenuOpen
+                        ? 'bg-indigo-50 border-indigo-400 text-indigo-700'
+                        : 'bg-white border-slate-300 text-slate-700 hover:text-black hover:bg-slate-50'
+                    }`}
+                    title="More actions"
+                  >
+                    <MoreHorizontal className="w-3.5 h-3.5" />
+                  </button>
 
-          {e.status === 'NOT_INTERESTED' && (
-            <Button
-              size="xs"
-              variant="secondary"
-              onClick={(ev) => handleMarkInterested(e, ev)}
-              title="Re-activate enquiry as Interested"
-            >
-              Re-activate
-            </Button>
-          )}
+                  {isMenuOpen && (
+                    <div
+                      data-no-row-click
+                      onClick={(ev) => ev.stopPropagation()}
+                      className="absolute right-0 top-full mt-1 w-44 bg-white rounded-lg shadow-xl border border-slate-200 py-1 z-30 text-xs divide-y divide-slate-100"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveActionMenuId(null);
+                          navigate(`/enquiries/${e.id}`);
+                        }}
+                        className="w-full text-left px-3 py-1.5 hover:bg-slate-50 flex items-center gap-2 text-slate-700 font-medium cursor-pointer"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+                        <span>View Details</span>
+                      </button>
 
-          {e.status !== 'CONVERTED' ? (
-            <Button
-              size="xs"
-              variant="primary"
-              onClick={() => handleConvertToAdmission(e)}
-            >
-              Admit
-            </Button>
-          ) : (
-            <Badge size="xs" variant="success">
-              Enrolled
-            </Badge>
-          )}
-        </div>
-      ),
+                      <button
+                        type="button"
+                        onClick={(ev) => {
+                          setActiveActionMenuId(null);
+                          handleOpenCourseUpdate(e, ev);
+                        }}
+                        className="w-full text-left px-3 py-1.5 hover:bg-slate-50 flex items-center gap-2 text-slate-700 font-medium cursor-pointer"
+                      >
+                        <Edit2 className="w-3.5 h-3.5 text-indigo-500" />
+                        <span>Update Subject</span>
+                      </button>
+
+                      {e.status !== 'INTERESTED' && (
+                        <button
+                          type="button"
+                          onClick={(ev) => {
+                            setActiveActionMenuId(null);
+                            handleMarkInterested(e, ev);
+                          }}
+                          className="w-full text-left px-3 py-1.5 hover:bg-emerald-50 flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer"
+                        >
+                          <ThumbsUp className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Mark as Interested</span>
+                        </button>
+                      )}
+
+                      {e.status !== 'NOT_INTERESTED' ? (
+                        <button
+                          type="button"
+                          onClick={(ev) => {
+                            setActiveActionMenuId(null);
+                            handleOpenNotInterestedModal(e, ev);
+                          }}
+                          className="w-full text-left px-3 py-1.5 hover:bg-rose-50 flex items-center gap-2 text-rose-700 font-medium cursor-pointer"
+                        >
+                          <ThumbsDown className="w-3.5 h-3.5 text-rose-500" />
+                          <span>Not Interested / Drop</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={(ev) => {
+                            setActiveActionMenuId(null);
+                            handleMarkInterested(e, ev);
+                          }}
+                          className="w-full text-left px-3 py-1.5 hover:bg-indigo-50 flex items-center gap-2 text-indigo-700 font-medium cursor-pointer"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5 text-indigo-500" />
+                          <span>Re-activate Enquiry</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        );
+      },
     },
   ];
 
@@ -478,27 +581,156 @@ export default function EnquiriesPage() {
         </Button>
       </div>
 
-      {/* Dedicated Upcoming Demo Deadlines Section */}
-      <div className="bg-white border border-amber-300 rounded-lg p-3 sm:p-4 shadow-xs">
-        <div className="flex items-center justify-between border-b border-amber-100 pb-2 mb-3">
-          <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4 text-amber-600" />
-            <h2 className="text-xs font-bold uppercase tracking-wider text-black">
-              Upcoming Demo Deadlines — Trial Classes Expiring Soon
-            </h2>
+      {/* Professional ERP Pipeline Overview Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+        <div
+          onClick={() => {
+            setStatusFilter('');
+            setPage(1);
+          }}
+          className={`p-2.5 rounded-lg border transition cursor-pointer ${
+            statusFilter === ''
+              ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
+              : 'bg-white border-slate-200 hover:border-slate-300'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className={`text-[10px] font-bold uppercase tracking-wider ${statusFilter === '' ? 'text-slate-300' : 'text-slate-500'}`}>
+              Total Leads
+            </span>
+            <Users className={`w-3.5 h-3.5 ${statusFilter === '' ? 'text-white' : 'text-slate-400'}`} />
           </div>
-          <span className="text-[11px] text-amber-900 font-semibold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-            {deadlines.length} Demos Requiring Action
-          </span>
+          <div className={`text-lg font-black mt-0.5 ${statusFilter === '' ? 'text-white' : 'text-black'}`}>
+            {summary.total}
+          </div>
         </div>
 
-        {deadlinesLoading ? (
-          <div className="py-4 text-center text-xs text-slate-500">Loading demo deadlines...</div>
-        ) : deadlines.length === 0 ? (
-          <div className="py-3 text-center text-xs text-slate-500">
-            No active demo deadlines right now.
+        <div
+          onClick={() => {
+            setStatusFilter('ACTIVE_DEMO');
+            setPage(1);
+          }}
+          className={`p-2.5 rounded-lg border transition cursor-pointer ${
+            statusFilter === 'ACTIVE_DEMO'
+              ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+              : 'bg-white border-slate-200 hover:border-indigo-300'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className={`text-[10px] font-bold uppercase tracking-wider ${statusFilter === 'ACTIVE_DEMO' ? 'text-indigo-100' : 'text-indigo-700'}`}>
+              Active Demos
+            </span>
+            <Clock className={`w-3.5 h-3.5 ${statusFilter === 'ACTIVE_DEMO' ? 'text-white' : 'text-indigo-500'}`} />
           </div>
-        ) : (
+          <div className={`text-lg font-black mt-0.5 ${statusFilter === 'ACTIVE_DEMO' ? 'text-white' : 'text-indigo-900'}`}>
+            {summary.ACTIVE_DEMO}
+          </div>
+        </div>
+
+        <div
+          onClick={() => {
+            setStatusFilter('INTERESTED');
+            setPage(1);
+          }}
+          className={`p-2.5 rounded-lg border transition cursor-pointer ${
+            statusFilter === 'INTERESTED'
+              ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+              : 'bg-white border-slate-200 hover:border-emerald-300'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className={`text-[10px] font-bold uppercase tracking-wider ${statusFilter === 'INTERESTED' ? 'text-emerald-100' : 'text-emerald-700'}`}>
+              Interested
+            </span>
+            <ThumbsUp className={`w-3.5 h-3.5 ${statusFilter === 'INTERESTED' ? 'text-white' : 'text-emerald-500'}`} />
+          </div>
+          <div className={`text-lg font-black mt-0.5 ${statusFilter === 'INTERESTED' ? 'text-white' : 'text-emerald-900'}`}>
+            {summary.INTERESTED}
+          </div>
+        </div>
+
+        <div
+          onClick={() => {
+            setStatusFilter('PENDING');
+            setPage(1);
+          }}
+          className={`p-2.5 rounded-lg border transition cursor-pointer ${
+            statusFilter === 'PENDING'
+              ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+              : 'bg-white border-slate-200 hover:border-amber-300'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className={`text-[10px] font-bold uppercase tracking-wider ${statusFilter === 'PENDING' ? 'text-amber-100' : 'text-amber-700'}`}>
+              Pending Demo
+            </span>
+            <Calendar className={`w-3.5 h-3.5 ${statusFilter === 'PENDING' ? 'text-white' : 'text-amber-500'}`} />
+          </div>
+          <div className={`text-lg font-black mt-0.5 ${statusFilter === 'PENDING' ? 'text-white' : 'text-amber-900'}`}>
+            {summary.PENDING}
+          </div>
+        </div>
+
+        <div
+          onClick={() => {
+            setStatusFilter('CONVERTED');
+            setPage(1);
+          }}
+          className={`p-2.5 rounded-lg border transition cursor-pointer ${
+            statusFilter === 'CONVERTED'
+              ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs'
+              : 'bg-white border-slate-200 hover:border-emerald-300'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className={`text-[10px] font-bold uppercase tracking-wider ${statusFilter === 'CONVERTED' ? 'text-emerald-100' : 'text-emerald-800'}`}>
+              Admitted
+            </span>
+            <CheckCircle2 className={`w-3.5 h-3.5 ${statusFilter === 'CONVERTED' ? 'text-white' : 'text-emerald-600'}`} />
+          </div>
+          <div className={`text-lg font-black mt-0.5 ${statusFilter === 'CONVERTED' ? 'text-white' : 'text-emerald-950'}`}>
+            {summary.CONVERTED}
+          </div>
+        </div>
+
+        <div
+          onClick={() => {
+            setStatusFilter('NOT_INTERESTED');
+            setPage(1);
+          }}
+          className={`p-2.5 rounded-lg border transition cursor-pointer ${
+            statusFilter === 'NOT_INTERESTED'
+              ? 'bg-slate-700 text-white border-slate-700 shadow-xs'
+              : 'bg-white border-slate-200 hover:border-slate-300'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className={`text-[10px] font-bold uppercase tracking-wider ${statusFilter === 'NOT_INTERESTED' ? 'text-slate-200' : 'text-slate-600'}`}>
+              Dropped / Other
+            </span>
+            <XCircle className={`w-3.5 h-3.5 ${statusFilter === 'NOT_INTERESTED' ? 'text-white' : 'text-slate-400'}`} />
+          </div>
+          <div className={`text-lg font-black mt-0.5 ${statusFilter === 'NOT_INTERESTED' ? 'text-white' : 'text-slate-700'}`}>
+            {summary.NOT_INTERESTED + summary.EXPIRED}
+          </div>
+        </div>
+      </div>
+
+      {/* Upcoming Demo Deadlines Section */}
+      {deadlines.length > 0 ? (
+        <div className="bg-amber-50/70 border border-amber-300 rounded-lg p-3 sm:p-4 shadow-2xs">
+          <div className="flex items-center justify-between border-b border-amber-200/80 pb-2 mb-3">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-amber-600" />
+              <h2 className="text-xs font-bold uppercase tracking-wider text-black">
+                Urgent Demo Deadlines — Trial Classes Expiring Soon
+              </h2>
+            </div>
+            <span className="text-[11px] text-amber-900 font-bold bg-amber-100 px-2 py-0.5 rounded border border-amber-300">
+              {deadlines.length} Requiring Decision
+            </span>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
             {deadlines.map((d) => {
               const isOverdue = d.demo_deadline < today;
@@ -507,14 +739,14 @@ export default function EnquiriesPage() {
               return (
                 <div
                   key={d.id}
-                  className={`p-2.5 rounded-lg border text-xs flex flex-col justify-between ${
+                  className={`p-3 rounded-lg border text-xs flex flex-col justify-between bg-white ${
                     isInterested
-                      ? 'bg-emerald-50/60 border-emerald-300'
+                      ? 'border-emerald-300'
                       : isOverdue
-                      ? 'bg-rose-50/60 border-rose-300'
+                      ? 'border-rose-300'
                       : isToday
-                      ? 'bg-amber-50/60 border-amber-300'
-                      : 'bg-slate-50 border-slate-200'
+                      ? 'border-amber-400'
+                      : 'border-slate-300'
                   }`}
                 >
                   <div>
@@ -559,29 +791,17 @@ export default function EnquiriesPage() {
                     </p>
                   </div>
 
-                  <div className="mt-2 pt-2 border-t border-slate-200 flex flex-col gap-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-mono text-slate-600">
-                        {d.mobile || 'No Phone'}
-                      </span>
-                      {isInterested ? (
-                        <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-300">
-                          Ready for Admission
-                        </span>
-                      ) : (
-                        <span className="text-[10px] text-slate-500 font-medium">
-                          Post-Demo Action:
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center justify-end gap-1 flex-wrap">
+                  <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between gap-1">
+                    <span className="text-[11px] font-mono text-slate-600 shrink-0">
+                      {d.mobile || 'No Phone'}
+                    </span>
+                    <div className="flex items-center gap-1">
                       {!isInterested && (
                         <Button
                           size="xs"
                           variant="success"
                           onClick={(ev) => handleMarkInterested(d, ev)}
-                          title="Student completed demo and is interested"
+                          title="Student completed demo and liked it"
                         >
                           👍 Interested
                         </Button>
@@ -593,13 +813,13 @@ export default function EnquiriesPage() {
                         onClick={(ev) => handleOpenNotInterestedModal(d, ev)}
                         title="Student not interested / drop"
                       >
-                        👎 Not Interested
+                        👎 Drop
                       </Button>
                       <Button
                         size="xs"
                         variant="primary"
                         onClick={() => handleConvertToAdmission(d)}
-                        title="Proceed to full student registration and admission billing"
+                        title="Convert to full student admission"
                       >
                         Admit ↗
                       </Button>
@@ -609,35 +829,57 @@ export default function EnquiriesPage() {
               );
             })}
           </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2 flex items-center justify-between text-xs text-slate-600">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+            <span className="font-medium text-slate-700">
+              All demo trial classes are currently active and on schedule — 0 urgent expiration deadlines.
+            </span>
+          </div>
+          <span className="text-[11px] text-slate-500 font-mono">Pipeline Healthy</span>
+        </div>
+      )}
 
-      {/* Status Filter Tabs */}
+      {/* Status Filter Tabs with Counts (Never mixes admitted ones into active demo) */}
       <div className="flex flex-wrap items-center gap-1.5 pt-1">
         {[
-          { label: 'All Enquiries', value: '' },
-          { label: 'Active Demo', value: 'ACTIVE_DEMO' },
-          { label: '👍 Interested (Post-Demo)', value: 'INTERESTED' },
-          { label: 'Pending Demo', value: 'PENDING' },
-          { label: 'Converted to Admission', value: 'CONVERTED' },
-          { label: 'Expired Demo', value: 'EXPIRED' },
-          { label: 'Not Interested (Dropped)', value: 'NOT_INTERESTED' },
-        ].map((tab) => (
-          <button
-            key={tab.value}
-            onClick={() => {
-              setStatusFilter(tab.value);
-              setPage(1);
-            }}
-            className={`px-3 py-1 text-xs rounded-full border transition font-medium ${
-              statusFilter === tab.value
-                ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+          { label: 'All Enquiries', value: '', count: summary.total },
+          { label: 'Active Demo', value: 'ACTIVE_DEMO', count: summary.ACTIVE_DEMO },
+          { label: 'Interested', value: 'INTERESTED', count: summary.INTERESTED },
+          { label: 'Pending Demo', value: 'PENDING', count: summary.PENDING },
+          { label: 'Converted to Admission', value: 'CONVERTED', count: summary.CONVERTED },
+          { label: 'Expired Demo', value: 'EXPIRED', count: summary.EXPIRED },
+          { label: 'Not Interested', value: 'NOT_INTERESTED', count: summary.NOT_INTERESTED },
+        ].map((tab) => {
+          const isActive = statusFilter === tab.value;
+          return (
+            <button
+              key={tab.value}
+              onClick={() => {
+                setStatusFilter(tab.value);
+                setPage(1);
+              }}
+              className={`px-3 py-1 text-xs rounded-full border transition font-medium flex items-center gap-1.5 cursor-pointer ${
+                isActive
+                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                  : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+              }`}
+            >
+              <span>{tab.label}</span>
+              <span
+                className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+                  isActive
+                    ? 'bg-indigo-500 text-white'
+                    : 'bg-slate-100 text-slate-700 border border-slate-200'
+                }`}
+              >
+                {tab.count ?? 0}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Enquiries Table */}

@@ -99,6 +99,10 @@ export const enquiryApi = {
     const res = await api.get('/enquiries', { params });
     return res.data;
   },
+  getSummary: async () => {
+    const res = await api.get('/enquiries/summary');
+    return res.data;
+  },
   getUpcomingDeadlines: async () => {
     const res = await api.get('/enquiries/upcoming-deadlines');
     return res.data;

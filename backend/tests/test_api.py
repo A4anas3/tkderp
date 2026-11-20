@@ -104,10 +104,22 @@ async def test_upcoming_demo_deadlines():
             "password": "Cashier@1234"
         })
         token = login_res.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # Create an active demo to ensure an upcoming deadline is present
+        await client.post("/api/enquiries", json={
+            "student_name": "Test Upcoming Demo Student",
+            "mobile": "9876543210",
+            "purpose": "Physics Test Demo",
+            "interested_subject": "Physics",
+            "demo_start_date": "2026-11-20",
+            "demo_duration_days": 3,
+            "status": "ACTIVE_DEMO"
+        }, headers=headers)
 
         res = await client.get(
             "/api/enquiries/upcoming-deadlines",
-            headers={"Authorization": f"Bearer {token}"}
+            headers=headers
         )
         assert res.status_code == 200
         deadlines = res.json()

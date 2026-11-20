@@ -21,6 +21,7 @@ async def list_enquiries(
     page_size: int = Query(15, ge=1, le=100),
     search: Optional[str] = None,
     status_filter: Optional[str] = None,
+    status: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_staff)
 ):
@@ -38,9 +39,10 @@ async def list_enquiries(
         query = query.where(filter_clause)
         count_query = count_query.where(filter_clause)
 
-    if status_filter:
-        query = query.where(Enquiry.status == status_filter)
-        count_query = count_query.where(Enquiry.status == status_filter)
+    effective_status = status_filter or status
+    if effective_status:
+        query = query.where(Enquiry.status == effective_status)
+        count_query = count_query.where(Enquiry.status == effective_status)
 
     total_result = await db.execute(count_query)
     total = total_result.scalar_one()
@@ -75,6 +77,26 @@ async def list_enquiries(
         response_items.append(resp)
 
     return PageResponse.create(items=response_items, total=total, params=PaginationParams(page=page, page_size=page_size))
+
+@router.get("/summary")
+async def get_enquiry_summary(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_staff)
+):
+    stmt = select(Enquiry.status, func.count(Enquiry.id)).group_by(Enquiry.status)
+    res = await db.execute(stmt)
+    status_counts = dict(res.all())
+    
+    total = sum(status_counts.values())
+    return {
+        "total": total,
+        "ACTIVE_DEMO": status_counts.get("ACTIVE_DEMO", 0),
+        "INTERESTED": status_counts.get("INTERESTED", 0),
+        "PENDING": status_counts.get("PENDING", 0),
+        "CONVERTED": status_counts.get("CONVERTED", 0),
+        "EXPIRED": status_counts.get("EXPIRED", 0),
+        "NOT_INTERESTED": status_counts.get("NOT_INTERESTED", 0),
+    }
 
 @router.get("/upcoming-deadlines", response_model=list[EnquiryResponse])
 async def get_upcoming_demo_deadlines(
