@@ -54,8 +54,12 @@ export const studentApi = {
     const res = await api.get(`/students/${id}`);
     return res.data;
   },
-  create: async (data) => {
-    const res = await api.post('/students', data);
+  checkMobile: async (mobile) => {
+    const res = await api.get(`/students/check-mobile/${encodeURIComponent(mobile)}`);
+    return res.data;
+  },
+  create: async (data, params = {}) => {
+    const res = await api.post('/students', data, { params });
     return res.data;
   },
   update: async (id, data) => {

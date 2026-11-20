@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, Upload, CheckCircle2, X, Sparkles } from 'lucide-react';
+import { Camera, Upload, CheckCircle2, X, Sparkles, AlertCircle, ExternalLink, Loader2 } from 'lucide-react';
 import Modal from '../common/Modal';
 import Input from '../common/Input';
 import Button from '../common/Button';
@@ -15,6 +15,8 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
   const [photoPreview, setPhotoPreview] = useState(null);
   const [photoFile, setPhotoFile] = useState(null);
   const [photoSizeKb, setPhotoSizeKb] = useState(null);
+  const [existingStudent, setExistingStudent] = useState(null);
+  const [checkingMobile, setCheckingMobile] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     mobile: '',
@@ -38,8 +40,41 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
       });
       setPhotoFile(null);
       setPhotoPreview(initialData?.photo_url || null);
+      setExistingStudent(null);
     }
   }, [isOpen, initialData]);
+
+  // Real-time mobile constraint verification
+  useEffect(() => {
+    if (!isOpen) {
+      setExistingStudent(null);
+      return;
+    }
+
+    const clean = formData.mobile ? formData.mobile.replace(/\D/g, '') : '';
+    if (clean.length < 8) {
+      setExistingStudent(null);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setCheckingMobile(true);
+      try {
+        const res = await studentApi.checkMobile(formData.mobile);
+        if (res?.exists && res?.student) {
+          setExistingStudent(res.student);
+        } else {
+          setExistingStudent(null);
+        }
+      } catch (err) {
+        console.warn('Failed to verify mobile uniqueness:', err);
+      } finally {
+        setCheckingMobile(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [formData.mobile, isOpen]);
 
   const handleChange = (e) => {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -76,6 +111,11 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
       return;
     }
 
+    if (existingStudent) {
+      error(`Student already registered with mobile ${formData.mobile}: ${existingStudent.name} (${existingStudent.student_code}). User already has admission/registration.`);
+      return;
+    }
+
     setLoading(true);
     try {
       let uploadedPhotoUrl = null;
@@ -99,7 +139,7 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
         notes: formData.notes.trim() || null,
       };
 
-      const res = await studentApi.create(payload);
+      const res = await studentApi.create(payload, { check_duplicate: true });
       success(`Student registered successfully: ${res.student_code} - ${res.name}`);
       setFormData({
         name: '',
@@ -110,6 +150,7 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
         dob: '',
         notes: '',
       });
+      setExistingStudent(null);
       handleRemovePhoto();
       if (onSuccess) onSuccess(res);
       onClose();
@@ -185,14 +226,22 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
         />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Input
-            label="Mobile Number (Optional)"
-            name="mobile"
-            type="tel"
-            value={formData.mobile}
-            onChange={handleChange}
-            placeholder="10-digit mobile"
-          />
+          <div>
+            <Input
+              label="Mobile Number (Optional)"
+              name="mobile"
+              type="tel"
+              value={formData.mobile}
+              onChange={handleChange}
+              placeholder="10-digit mobile"
+            />
+            {checkingMobile && (
+              <span className="text-[10px] text-slate-500 flex items-center gap-1 mt-1">
+                <Loader2 className="w-3 h-3 animate-spin text-indigo-600" />
+                Checking mobile constraint...
+              </span>
+            )}
+          </div>
           <Input
             label="Father's Name (Optional)"
             name="father_name"
@@ -201,6 +250,66 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
             placeholder="Father's Name"
           />
         </div>
+
+        {/* Existing Student Constraint Warning Banner */}
+        {existingStudent && (
+          <div className="p-3 bg-amber-50 border border-amber-300 rounded-lg text-xs space-y-2 animate-in fade-in duration-200">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <span className="font-bold text-amber-950 block">
+                  Student Already Registered with this Mobile Number!
+                </span>
+                <span className="text-amber-900 font-medium block mt-0.5">
+                  <strong className="text-black">{existingStudent.name}</strong> • Code:{' '}
+                  <strong className="font-mono text-black">{existingStudent.student_code}</strong>
+                  {existingStudent.latest_admission_number && (
+                    <span className="ml-1 text-emerald-800 font-bold bg-emerald-100 px-1.5 py-0.2 rounded border border-emerald-300">
+                      Admission #{existingStudent.latest_admission_number}
+                    </span>
+                  )}
+                </span>
+                {existingStudent.has_admission ? (
+                  <span className="text-[11px] text-emerald-800 font-bold block mt-1">
+                    ✓ User already has active course admission on file.
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-slate-600 font-medium block mt-1">
+                    Student account already exists in database. Ready for admission.
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1.5 border-t border-amber-200">
+              <Button
+                type="button"
+                size="xs"
+                variant="secondary"
+                icon={ExternalLink}
+                onClick={() => window.open(`/students/${existingStudent.id}`, '_blank')}
+                title="Open student detail profile in new tab"
+              >
+                View Detail Profile ↗
+              </Button>
+
+              {onSuccess && (
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="primary"
+                  onClick={() => {
+                    onSuccess(existingStudent);
+                    onClose();
+                  }}
+                  title="Select this existing registered student for admission"
+                >
+                  Use Existing Student ✓
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Input
@@ -232,8 +341,14 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
           <Button variant="secondary" onClick={onClose} disabled={loading}>
             Cancel
           </Button>
-          <Button type="submit" variant="primary" loading={loading}>
-            Register Student
+          <Button
+            type="submit"
+            variant="primary"
+            loading={loading}
+            disabled={loading || !!existingStudent}
+            title={existingStudent ? 'Mobile number already registered' : 'Register new student'}
+          >
+            {existingStudent ? 'Mobile Already Registered' : 'Register Student'}
           </Button>
         </div>
       </form>

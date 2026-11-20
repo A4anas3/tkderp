@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, User, Phone, Award, X, UserPlus, Loader2, Check, FileText } from 'lucide-react';
+import { Search, User, Phone, Award, X, UserPlus, Loader2, Check, FileText, ExternalLink } from 'lucide-react';
 import Button from './Button';
 import Badge from './Badge';
 import { studentApi } from '../../services/allApis';
@@ -151,11 +151,21 @@ export default function StudentSearchSelect({
             </div>
           </div>
 
-          <div className="flex items-center gap-1 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => window.open(`/students/${selectedStudent.id}`, '_blank')}
+              className="px-2 py-1 text-xs font-semibold rounded bg-white text-indigo-700 hover:bg-indigo-50 border border-slate-300 hover:border-indigo-300 transition flex items-center gap-1 cursor-pointer"
+              title="Open full student profile in new tab"
+            >
+              <ExternalLink className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Profile ↗</span>
+            </button>
+
             <button
               type="button"
               onClick={handleClear}
-              className="px-2 py-1 text-xs font-semibold rounded bg-white text-rose-700 hover:bg-rose-50 border border-slate-300 hover:border-rose-300 transition flex items-center gap-1"
+              className="px-2 py-1 text-xs font-semibold rounded bg-white text-rose-700 hover:bg-rose-50 border border-slate-300 hover:border-rose-300 transition flex items-center gap-1 cursor-pointer"
               title="Change or remove selected student"
             >
               <X className="w-3.5 h-3.5 text-rose-600" />

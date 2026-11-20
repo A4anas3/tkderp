@@ -162,17 +162,32 @@ export default function NewAdmissionPage() {
 
       // If came from enquiry and student is not yet registered
       if (paramEnquiryId && !paramStudentId && paramName) {
-        // Phone numbers are NOT unique in coaching institutes (siblings/family share parent's mobile).
-        // Only auto-match an existing student if BOTH full name and mobile match.
-        const found = loadedStudents.find(
-          (s) =>
-            s.name.trim().toLowerCase() === paramName.trim().toLowerCase() &&
-            (!paramMobile || !s.mobile || s.mobile.trim() === paramMobile.trim())
-        );
-        if (found) {
-          setStudentId(found.id);
+        let matchedStudent = null;
+
+        // 1. Check if student already exists by mobile number (normalized)
+        if (paramMobile) {
+          try {
+            const checkRes = await studentApi.checkMobile(paramMobile);
+            if (checkRes?.exists && checkRes?.student) {
+              matchedStudent = checkRes.student;
+            }
+          } catch (err) {
+            console.warn('Failed to verify mobile:', err);
+          }
+        }
+
+        // 2. If not matched by mobile, search by full name
+        if (!matchedStudent) {
+          matchedStudent = loadedStudents.find(
+            (s) => s.name.trim().toLowerCase() === paramName.trim().toLowerCase()
+          );
+        }
+
+        if (matchedStudent) {
+          setStudentId(matchedStudent.id);
+          success(`Found existing registered student profile for ${matchedStudent.name} (${matchedStudent.student_code}). Auto-selected for admission!`);
         } else {
-          // Sibling or new student sharing family phone: open Quick Student Registration pre-filled!
+          // Genuinely new student: open Quick Student Registration pre-filled
           setQuickStudentInitialData({
             name: paramName,
             mobile: paramMobile || '',

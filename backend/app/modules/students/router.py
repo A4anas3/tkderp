@@ -8,7 +8,18 @@ import json
 import uuid
 import os
 import io
+import re
 from PIL import Image
+
+def normalize_mobile(mobile: Optional[str]) -> Optional[str]:
+    if not mobile:
+        return None
+    digits = re.sub(r"\D", "", mobile)
+    if digits.startswith("91") and len(digits) == 12:
+        digits = digits[2:]
+    elif digits.startswith("0") and len(digits) == 11:
+        digits = digits[1:]
+    return digits or mobile.strip()
 
 from app.core.config import settings
 from app.database.session import get_db
@@ -73,16 +84,21 @@ async def list_students(
     if search:
         clean_search = search.strip()
         search_pattern = f"%{clean_search}%"
+        norm_search = normalize_mobile(clean_search)
         # Subquery to match student by admission number
         adm_subquery = select(Admission.student_id).where(Admission.admission_number.ilike(search_pattern))
 
-        search_filter = or_(
+        clauses = [
             Student.name.ilike(search_pattern),
             Student.student_code.ilike(search_pattern),
             Student.mobile.ilike(search_pattern),
             Student.father_name.ilike(search_pattern),
             Student.id.in_(adm_subquery)
-        )
+        ]
+        if norm_search and norm_search != clean_search:
+            clauses.append(Student.mobile.ilike(f"%{norm_search}%"))
+
+        search_filter = or_(*clauses)
         query = query.where(search_filter)
         count_query = count_query.where(search_filter)
 
@@ -123,6 +139,58 @@ async def list_students(
         page_size=page_size,
         total_pages=total_pages
     )
+
+@router.get("/check-mobile/{mobile}")
+async def check_student_by_mobile(
+    mobile: str,
+    db: AsyncSession = Depends(get_db),
+    user = Depends(require_staff)
+):
+    clean_mob = mobile.strip()
+    norm = normalize_mobile(clean_mob)
+    if not norm or len(norm) < 6:
+        return {"exists": False, "student": None}
+
+    clauses = [
+        Student.mobile == clean_mob,
+        Student.mobile == norm,
+        Student.mobile == f"0{norm}",
+        Student.mobile == f"+91{norm}",
+        Student.mobile.ilike(f"%{norm}%")
+    ]
+    stmt = select(Student).where(or_(*clauses)).order_by(Student.registration_date.desc(), Student.created_at.desc()).limit(1)
+    student = (await db.execute(stmt)).scalars().first()
+
+    if not student:
+        return {"exists": False, "student": None}
+
+    # Fetch admissions for this student
+    adm_stmt = (
+        select(Admission.admission_number, Admission.status)
+        .where(Admission.student_id == student.id)
+        .order_by(desc(Admission.admission_date))
+    )
+    adms = (await db.execute(adm_stmt)).all()
+    latest_adm = adms[0].admission_number if adms else None
+    has_active_adm = any(a.status == "ACTIVE" for a in adms)
+
+    return {
+        "exists": True,
+        "student": {
+            "id": str(student.id),
+            "student_code": student.student_code,
+            "name": student.name,
+            "mobile": student.mobile,
+            "father_name": student.father_name,
+            "email": student.email,
+            "address": student.address,
+            "photo_url": student.photo_url,
+            "has_admission": len(adms) > 0,
+            "has_active_admission": has_active_adm,
+            "latest_admission_number": latest_adm,
+            "admissions_count": len(adms),
+        }
+    }
 
 @router.get("/{student_id}", response_model=StudentDetailResponse)
 async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db), user = Depends(require_staff)):
@@ -177,9 +245,32 @@ async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db),
 @router.post("", response_model=StudentResponse, status_code=status.HTTP_201_CREATED)
 async def create_student(
     req: StudentCreate,
+    check_duplicate: bool = False,
     db: AsyncSession = Depends(get_db),
     user = Depends(require_cashier_or_admin)
 ):
+    # Check mobile number constraint when requested
+    if req.mobile and check_duplicate:
+        clean_mob = req.mobile.strip()
+        norm_mob = normalize_mobile(clean_mob)
+        if norm_mob and len(norm_mob) >= 8:
+            match_clauses = [
+                Student.mobile == clean_mob,
+                Student.mobile == norm_mob,
+                Student.mobile == f"0{norm_mob}",
+                Student.mobile == f"+91{norm_mob}",
+            ]
+            existing = (await db.execute(select(Student).where(or_(*match_clauses)).limit(1))).scalars().first()
+            if existing:
+                adm_exists = (await db.execute(
+                    select(Admission.admission_number).where(Admission.student_id == existing.id).limit(1)
+                )).scalar_one_or_none()
+                adm_text = f" with admission #{adm_exists}" if adm_exists else ""
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Student already registered{adm_text} with mobile {clean_mob}: {existing.name} ({existing.student_code}). Student ID: {existing.id}"
+                )
+
     # Auto-generate student code STU<Year><Count:04d>
     year = req.registration_date.year
     count = (await db.execute(select(func.count(Student.id)))).scalar() or 0
