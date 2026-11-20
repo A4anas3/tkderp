@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, Upload, CheckCircle2, X, Sparkles, AlertCircle, ExternalLink, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Camera, Upload, CheckCircle2, X, Sparkles, AlertCircle, ExternalLink, Loader2, User, ArrowRight } from 'lucide-react';
 import Modal from '../common/Modal';
 import Input from '../common/Input';
 import Button from '../common/Button';
@@ -10,6 +11,7 @@ import { compressImage } from '../../utils/imageCompressor';
 import { cleanMobileInput, isValid10DigitMobile } from '../../utils/phoneUtils';
 
 export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialData = null }) {
+  const navigate = useNavigate();
   const { success, error } = useToast();
   const [loading, setLoading] = useState(false);
   const [compressing, setCompressing] = useState(false);
@@ -316,19 +318,22 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
               </div>
             </div>
 
-            <div className="flex items-center gap-2 pt-1.5 border-t border-amber-200">
+            <div className="flex flex-wrap items-center gap-2 pt-1.5 border-t border-amber-200">
               <Button
                 type="button"
                 size="xs"
                 variant="secondary"
-                icon={ExternalLink}
-                onClick={() => window.open(`/students/${existingStudent.id}`, '_blank')}
-                title="Open student detail profile in new tab"
+                icon={User}
+                onClick={() => {
+                  onClose();
+                  navigate(`/students/${existingStudent.id}`);
+                }}
+                title="View student profile in same page"
               >
-                View Detail Profile ↗
+                View Detail Profile
               </Button>
 
-              {onSuccess && (
+              {onSuccess ? (
                 <Button
                   type="button"
                   size="xs"
@@ -340,6 +345,20 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
                   title="Select this existing registered student for admission"
                 >
                   Use Existing Student ✓
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="primary"
+                  icon={ArrowRight}
+                  onClick={() => {
+                    onClose();
+                    navigate(`/admissions/new?student_id=${existingStudent.id}`);
+                  }}
+                  title="Create new admission for this registered student"
+                >
+                  New Admission
                 </Button>
               )}
             </div>

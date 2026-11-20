@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Search, User, Phone, Award, X, UserPlus, Loader2, Check, FileText, ExternalLink } from 'lucide-react';
 import Button from './Button';
 import Badge from './Badge';
@@ -11,6 +12,7 @@ export default function StudentSearchSelect({
   placeholder = 'Search registered student by Name, Mobile No, or Admission / Student No...',
   required = false,
 }) {
+  const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -154,12 +156,12 @@ export default function StudentSearchSelect({
           <div className="flex items-center gap-1.5 shrink-0">
             <button
               type="button"
-              onClick={() => window.open(`/students/${selectedStudent.id}`, '_blank')}
+              onClick={() => navigate(`/students/${selectedStudent.id}`)}
               className="px-2 py-1 text-xs font-semibold rounded bg-white text-indigo-700 hover:bg-indigo-50 border border-slate-300 hover:border-indigo-300 transition flex items-center gap-1 cursor-pointer"
-              title="Open full student profile in new tab"
+              title="View student profile"
             >
-              <ExternalLink className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Profile ↗</span>
+              <User className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Profile</span>
             </button>
 
             <button
