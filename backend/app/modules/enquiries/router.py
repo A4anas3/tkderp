@@ -86,7 +86,7 @@ async def get_upcoming_demo_deadlines(
     max_date = today + timedelta(days=days_ahead)
     
     query = select(Enquiry).where(
-        Enquiry.status.in_(["PENDING", "ACTIVE_DEMO"]),
+        Enquiry.status.in_(["PENDING", "ACTIVE_DEMO", "INTERESTED"]),
         Enquiry.demo_deadline.isnot(None),
         Enquiry.demo_deadline <= max_date
     ).order_by(Enquiry.demo_deadline.asc())

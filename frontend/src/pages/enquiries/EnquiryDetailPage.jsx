@@ -12,7 +12,10 @@ import {
   FileText,
   Edit2,
   ExternalLink,
-  GraduationCap
+  GraduationCap,
+  ThumbsUp,
+  ThumbsDown,
+  RotateCcw,
 } from 'lucide-react';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
@@ -44,6 +47,12 @@ export default function EnquiryDetailPage() {
     demo_deadline: '',
     notes: '',
   });
+
+  // Not Interested Drop Modal State
+  const [dropModalOpen, setDropModalOpen] = useState(false);
+  const [dropReason, setDropReason] = useState('Fee too high / Budget issue');
+  const [customDropNotes, setCustomDropNotes] = useState('');
+  const [markingDrop, setMarkingDrop] = useState(false);
 
   const loadEnquiry = useCallback(async () => {
     setLoading(true);
@@ -83,6 +92,62 @@ export default function EnquiryDetailPage() {
       error(err.message || 'Failed to update enquiry');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleMarkInterested = async () => {
+    try {
+      const noteEntry = enquiry.notes
+        ? `${enquiry.notes} • [Post-Demo: Student is Interested in Admission]`
+        : '[Post-Demo: Student is Interested in Admission]';
+      await enquiryApi.update(id, {
+        status: 'INTERESTED',
+        notes: noteEntry,
+      });
+      success(`${enquiry.student_name} marked as INTERESTED in joining!`);
+      loadEnquiry();
+    } catch (err) {
+      error(err.message || 'Failed to update status');
+    }
+  };
+
+  const handleConfirmDrop = async (e) => {
+    e.preventDefault();
+    setMarkingDrop(true);
+    try {
+      const noteSummary = customDropNotes?.trim()
+        ? `[Not Interested: ${dropReason} - ${customDropNotes.trim()}]`
+        : `[Not Interested: ${dropReason}]`;
+      const combinedNotes = enquiry.notes
+        ? `${enquiry.notes} • ${noteSummary}`
+        : noteSummary;
+
+      await enquiryApi.update(id, {
+        status: 'NOT_INTERESTED',
+        notes: combinedNotes,
+      });
+      success(`${enquiry.student_name} marked as Not Interested.`);
+      setDropModalOpen(false);
+      loadEnquiry();
+    } catch (err) {
+      error(err.message || 'Failed to update status');
+    } finally {
+      setMarkingDrop(false);
+    }
+  };
+
+  const handleReactivate = async () => {
+    try {
+      await enquiryApi.update(id, {
+        status: 'ACTIVE_DEMO',
+        notes: enquiry.notes
+          ? `${enquiry.notes} • [Re-activated demo classes]`
+          : '[Re-activated demo classes]',
+      });
+      success(`Enquiry for ${enquiry.student_name} re-activated as Active Demo.`);
+      loadEnquiry();
+    } catch (err) {
+      error(err.message || 'Failed to re-activate enquiry');
     }
   };
 
@@ -131,16 +196,22 @@ export default function EnquiryDetailPage() {
 
   const today = new Date().toISOString().split('T')[0];
   const isConverted = enquiry.status === 'CONVERTED';
+  const isInterested = enquiry.status === 'INTERESTED';
   const isActiveDemo = enquiry.status === 'ACTIVE_DEMO';
   const isPending = enquiry.status === 'PENDING';
+  const isNotInterested = enquiry.status === 'NOT_INTERESTED';
   const isExpired = enquiry.status === 'EXPIRED' || (isActiveDemo && enquiry.demo_deadline && enquiry.demo_deadline < today);
 
   const statusVariant = isConverted
+    ? 'success'
+    : isInterested
     ? 'success'
     : isActiveDemo && !isExpired
     ? 'primary'
     : isPending
     ? 'warning'
+    : isNotInterested
+    ? 'neutral'
     : 'danger';
 
   // Days remaining calculation
@@ -196,6 +267,47 @@ export default function EnquiryDetailPage() {
             Edit Enquiry
           </Button>
 
+          {isNotInterested && (
+            <Button
+              variant="secondary"
+              icon={RotateCcw}
+              onClick={handleReactivate}
+              size="sm"
+              title="Re-open demo class"
+            >
+              Re-activate
+            </Button>
+          )}
+
+          {!isConverted && !isInterested && !isNotInterested && (
+            <Button
+              variant="success"
+              icon={ThumbsUp}
+              onClick={handleMarkInterested}
+              size="sm"
+              title="Student completed demo and liked it"
+            >
+              Mark Interested
+            </Button>
+          )}
+
+          {!isConverted && !isNotInterested && (
+            <Button
+              variant="secondary"
+              icon={ThumbsDown}
+              className="text-rose-700 hover:text-rose-800 hover:bg-rose-50 border-rose-200"
+              onClick={() => {
+                setDropReason('Fee too high / Budget issue');
+                setCustomDropNotes('');
+                setDropModalOpen(true);
+              }}
+              size="sm"
+              title="Student is not interested"
+            >
+              Not Interested
+            </Button>
+          )}
+
           {!isConverted && (
             <Button
               variant="primary"
@@ -203,7 +315,7 @@ export default function EnquiryDetailPage() {
               onClick={handleConvertToAdmission}
               size="sm"
             >
-              Convert to Admission
+              Convert to Admission ↗
             </Button>
           )}
         </div>
@@ -214,20 +326,26 @@ export default function EnquiryDetailPage() {
         className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs ${
           isConverted
             ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
+            : isInterested
+            ? 'bg-emerald-50 border-emerald-400 text-emerald-950'
             : isActiveDemo && !isExpired
             ? 'bg-indigo-50 border-indigo-300 text-indigo-950'
             : isPending
             ? 'bg-amber-50 border-amber-300 text-amber-950'
+            : isNotInterested
+            ? 'bg-slate-100 border-slate-300 text-slate-800'
             : 'bg-rose-50 border-rose-300 text-rose-950'
         }`}
       >
         <div className="flex items-center gap-3">
-          {isConverted ? (
+          {isConverted || isInterested ? (
             <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0" />
           ) : isActiveDemo && !isExpired ? (
             <Clock className="w-6 h-6 text-indigo-600 shrink-0" />
           ) : isPending ? (
             <AlertCircle className="w-6 h-6 text-amber-600 shrink-0" />
+          ) : isNotInterested ? (
+            <AlertCircle className="w-6 h-6 text-slate-500 shrink-0" />
           ) : (
             <AlertCircle className="w-6 h-6 text-rose-600 shrink-0" />
           )}
@@ -236,19 +354,27 @@ export default function EnquiryDetailPage() {
               Enquiry Status:{' '}
               {isConverted
                 ? 'CONVERTED (REGISTERED STUDENT)'
+                : isInterested
+                ? '👍 INTERESTED IN ADMISSION (POST-DEMO)'
                 : isActiveDemo && !isExpired
                 ? 'ACTIVE TRIAL DEMO'
                 : isPending
                 ? 'PENDING DEMO (ENQUIRY ONLY)'
-                : 'EXPIRED / NOT ACTIVE'}
+                : isNotInterested
+                ? 'NOT INTERESTED / DROPPED POST-DEMO'
+                : 'EXPIRED / LAPSED DEMO'}
             </div>
             <div className="text-xs text-slate-700 font-medium mt-0.5">
               {isConverted
                 ? 'Student successfully converted and registered into coaching cohorts'
+                : isInterested
+                ? 'Student completed trial classes and confirmed interest in admission. Ready for formal enrollment!'
                 : isActiveDemo && !isExpired
                 ? `Student is currently attending trial demo classes. ${daysRemainingText || ''}`
                 : isPending
                 ? 'Initial enquiry recorded. Demo class has not yet started.'
+                : isNotInterested
+                ? 'Student decided not to enroll after enquiry/trial. Feedback recorded in counselor notes below.'
                 : 'The trial class demo window has lapsed without student enrollment.'}
             </div>
           </div>
@@ -258,7 +384,7 @@ export default function EnquiryDetailPage() {
           size="md"
           className="uppercase font-bold tracking-wider self-start sm:self-auto"
         >
-          {enquiry.status}
+          {isInterested ? '👍 INTERESTED' : enquiry.status.replace('_', ' ')}
         </Badge>
       </div>
 
@@ -395,8 +521,10 @@ export default function EnquiryDetailPage() {
             options={[
               { value: 'PENDING', label: 'Pending Demo (Walk-in)' },
               { value: 'ACTIVE_DEMO', label: 'Active Trial Demo' },
+              { value: 'INTERESTED', label: 'Interested in Admission (Post-Demo)' },
               { value: 'CONVERTED', label: 'Converted to Admission' },
               { value: 'EXPIRED', label: 'Expired / Lapsed' },
+              { value: 'NOT_INTERESTED', label: 'Not Interested (Dropped)' },
             ]}
           />
 
@@ -439,6 +567,68 @@ export default function EnquiryDetailPage() {
             </Button>
             <Button type="submit" variant="primary" loading={submitting}>
               Save Changes
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Drop / Not Interested Modal */}
+      <Modal
+        isOpen={dropModalOpen}
+        onClose={() => setDropModalOpen(false)}
+        title="Mark Enquiry as Not Interested / Dropped"
+        subtitle={`Student: ${enquiry?.student_name || ''} • ${enquiry?.interested_subject || ''}`}
+        maxWidth="max-w-md"
+      >
+        <form onSubmit={handleConfirmDrop} className="space-y-3 text-xs">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Select Primary Reason for Dropping
+            </label>
+            <select
+              value={dropReason}
+              onChange={(e) => setDropReason(e.target.value)}
+              className="w-full text-xs p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-black font-medium focus:ring-1 focus:ring-rose-500"
+            >
+              <option value="Fee too high / Budget issue">Fee too high / Budget constraint</option>
+              <option value="Timings / Batch schedule clash">Timings / Batch schedule clash</option>
+              <option value="Distance / Transportation issue">Distance / Commute issue</option>
+              <option value="Joined another coaching institute">Joined another institute / competitor</option>
+              <option value="Decided on self-study / school only">Opted for self-study / school</option>
+              <option value="Demo feedback / Teaching style mismatch">Demo feedback / Teaching style mismatch</option>
+              <option value="Parent not convinced">Parent not convinced</option>
+              <option value="Other / Personal reasons">Other / Personal reasons</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Additional Feedback / Counselor Notes (Optional)
+            </label>
+            <textarea
+              rows={3}
+              value={customDropNotes}
+              onChange={(e) => setCustomDropNotes(e.target.value)}
+              placeholder="e.g. Student found timing conflicting with school lab classes..."
+              className="w-full text-xs p-2.5 bg-white border border-slate-300 rounded-lg text-black focus:ring-1 focus:ring-rose-500 font-medium"
+            />
+          </div>
+
+          <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setDropModalOpen(false)}
+              disabled={markingDrop}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="danger"
+              loading={markingDrop}
+            >
+              Confirm Not Interested
             </Button>
           </div>
         </form>

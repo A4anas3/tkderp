@@ -24,16 +24,22 @@ export default function EnquiryDetailModal({
 
   const today = new Date().toISOString().split('T')[0];
   const isConverted = enquiry.status === 'CONVERTED';
+  const isInterested = enquiry.status === 'INTERESTED';
   const isActiveDemo = enquiry.status === 'ACTIVE_DEMO';
   const isPending = enquiry.status === 'PENDING';
+  const isNotInterested = enquiry.status === 'NOT_INTERESTED';
   const isExpired = enquiry.status === 'EXPIRED' || (isActiveDemo && enquiry.demo_deadline && enquiry.demo_deadline < today);
 
   const statusVariant = isConverted
+    ? 'success'
+    : isInterested
     ? 'success'
     : isActiveDemo && !isExpired
     ? 'primary'
     : isPending
     ? 'warning'
+    : isNotInterested
+    ? 'neutral'
     : 'danger';
 
   return (
@@ -48,22 +54,26 @@ export default function EnquiryDetailModal({
         {/* Prominent Active vs Not Active Status Banner */}
         <div
           className={`p-3.5 rounded-lg border flex items-center justify-between ${
-            isConverted
+            isConverted || isInterested
               ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
               : isActiveDemo && !isExpired
               ? 'bg-indigo-50 border-indigo-300 text-indigo-950'
               : isPending
               ? 'bg-amber-50 border-amber-300 text-amber-950'
+              : isNotInterested
+              ? 'bg-slate-100 border-slate-300 text-slate-800'
               : 'bg-rose-50 border-rose-300 text-rose-950'
           }`}
         >
           <div className="flex items-center gap-2.5">
-            {isConverted ? (
+            {isConverted || isInterested ? (
               <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
             ) : isActiveDemo && !isExpired ? (
               <Clock className="w-5 h-5 text-indigo-600 shrink-0" />
             ) : isPending ? (
               <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
+            ) : isNotInterested ? (
+              <AlertCircle className="w-5 h-5 text-slate-500 shrink-0" />
             ) : (
               <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
             )}
@@ -72,25 +82,33 @@ export default function EnquiryDetailModal({
                 Status:{' '}
                 {isConverted
                   ? 'CONVERTED (REGISTERED STUDENT)'
+                  : isInterested
+                  ? '👍 INTERESTED (POST-DEMO)'
                   : isActiveDemo && !isExpired
                   ? 'ACTIVE TRIAL DEMO'
                   : isPending
                   ? 'PENDING DEMO (ENQUIRY ONLY)'
+                  : isNotInterested
+                  ? 'NOT INTERESTED / DROPPED'
                   : 'EXPIRED / NOT ACTIVE'}
               </div>
               <div className="text-[11px] text-slate-600 font-medium">
                 {isConverted
                   ? 'Student converted into an enrolled course admission'
+                  : isInterested
+                  ? 'Student completed trial classes and wants admission'
                   : isActiveDemo && !isExpired
                   ? 'Student is actively attending free trial classes'
                   : isPending
                   ? 'Enquiry taken, trial class demo not yet started'
+                  : isNotInterested
+                  ? 'Student dropped out or decided not to join'
                   : 'Trial class demo period has expired'}
               </div>
             </div>
           </div>
           <Badge variant={statusVariant} size="md" className="uppercase font-bold tracking-wide">
-            {enquiry.status.replace('_', ' ')}
+            {isInterested ? '👍 INTERESTED' : enquiry.status.replace('_', ' ')}
           </Badge>
         </div>
 

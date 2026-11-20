@@ -11,7 +11,7 @@ class EnquiryBase(BaseModel):
     demo_start_date: Optional[date] = None
     demo_duration_days: int = Field(default=3, ge=1, le=30)
     notes: Optional[str] = None
-    status: str = Field(default="PENDING", pattern="^(PENDING|ACTIVE_DEMO|CONVERTED|EXPIRED|NOT_INTERESTED)$")
+    status: str = Field(default="PENDING", pattern="^(PENDING|ACTIVE_DEMO|INTERESTED|NOT_INTERESTED|CONVERTED|EXPIRED)$")
 
 class EnquiryCreate(EnquiryBase):
     pass
@@ -24,7 +24,7 @@ class EnquiryUpdate(BaseModel):
     demo_start_date: Optional[date] = None
     demo_duration_days: Optional[int] = None
     notes: Optional[str] = None
-    status: Optional[str] = Field(default=None, pattern="^(PENDING|ACTIVE_DEMO|CONVERTED|EXPIRED|NOT_INTERESTED)$")
+    status: Optional[str] = Field(default=None, pattern="^(PENDING|ACTIVE_DEMO|INTERESTED|NOT_INTERESTED|CONVERTED|EXPIRED)$")
 
 class EnquiryResponse(EnquiryBase):
     id: uuid.UUID

@@ -162,15 +162,17 @@ export default function NewAdmissionPage() {
 
       // If came from enquiry and student is not yet registered
       if (paramEnquiryId && !paramStudentId && paramName) {
+        // Phone numbers are NOT unique in coaching institutes (siblings/family share parent's mobile).
+        // Only auto-match an existing student if BOTH full name and mobile match.
         const found = loadedStudents.find(
           (s) =>
-            s.name.toLowerCase() === paramName.toLowerCase() ||
-            (paramMobile && s.mobile === paramMobile)
+            s.name.trim().toLowerCase() === paramName.trim().toLowerCase() &&
+            (!paramMobile || !s.mobile || s.mobile.trim() === paramMobile.trim())
         );
         if (found) {
           setStudentId(found.id);
         } else {
-          // Student not registered yet: prepare reusable details and open Quick Student Registration!
+          // Sibling or new student sharing family phone: open Quick Student Registration pre-filled!
           setQuickStudentInitialData({
             name: paramName,
             mobile: paramMobile || '',

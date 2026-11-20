@@ -26,13 +26,13 @@ async def get_admin_dashboard(
     total_students = (await db.execute(select(func.count(Student.id)))).scalar_one()
     total_teachers = (await db.execute(select(func.count(Teacher.id)).where(Teacher.status == "ACTIVE"))).scalar_one()
     active_batches = (await db.execute(select(func.count(Batch.id)).where(Batch.status == "ACTIVE"))).scalar_one()
-    pending_enquiries = (await db.execute(select(func.count(Enquiry.id)).where(Enquiry.status.in_(["PENDING", "ACTIVE_DEMO"])))).scalar_one()
+    pending_enquiries = (await db.execute(select(func.count(Enquiry.id)).where(Enquiry.status.in_(["PENDING", "ACTIVE_DEMO", "INTERESTED"])))).scalar_one()
 
     # Upcoming demo deadlines in next 3 days
     demo_deadlines = (await db.execute(
         select(func.count(Enquiry.id))
         .where(
-            Enquiry.status.in_(["PENDING", "ACTIVE_DEMO"]),
+            Enquiry.status.in_(["PENDING", "ACTIVE_DEMO", "INTERESTED"]),
             Enquiry.demo_deadline.isnot(None),
             Enquiry.demo_deadline <= today + timedelta(days=3)
         )
@@ -143,7 +143,7 @@ async def get_cashier_dashboard(
     demo_res = await db.execute(
         select(Enquiry)
         .where(
-            Enquiry.status.in_(["PENDING", "ACTIVE_DEMO"]),
+            Enquiry.status.in_(["PENDING", "ACTIVE_DEMO", "INTERESTED"]),
             Enquiry.demo_deadline.isnot(None),
             Enquiry.demo_deadline <= today + timedelta(days=5)
         )

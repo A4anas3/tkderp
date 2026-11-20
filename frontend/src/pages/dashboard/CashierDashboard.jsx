@@ -147,9 +147,19 @@ export default function CashierDashboard() {
                 <div className="flex items-center gap-2">
                   <Badge
                     size="xs"
-                    variant={d.remaining_days < 0 ? 'danger' : d.remaining_days <= 1 ? 'warning' : 'primary'}
+                    variant={
+                      d.status === 'INTERESTED'
+                        ? 'success'
+                        : d.remaining_days < 0
+                        ? 'danger'
+                        : d.remaining_days <= 1
+                        ? 'warning'
+                        : 'primary'
+                    }
                   >
-                    {d.remaining_days < 0
+                    {d.status === 'INTERESTED'
+                      ? '👍 Interested'
+                      : d.remaining_days < 0
                       ? 'Expired'
                       : d.remaining_days === 0
                       ? 'Expires Today'
