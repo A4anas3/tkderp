@@ -13,25 +13,54 @@ input, select, textarea {
   @apply text-black border-slate-300 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600;
 }
 
-/* Clean print styling for receipts */
+/* Clean enterprise print styling for slips & receipts */
 @media print {
+  @page {
+    size: A4 portrait;
+    margin: 8mm 10mm;
+  }
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
   body * {
     visibility: hidden;
   }
-  #printable-receipt, #printable-receipt * {
+  .printable-slip-document,
+  .printable-slip-document *,
+  #printable-receipt,
+  #printable-receipt *,
+  #printable-refund-voucher,
+  #printable-refund-voucher *,
+  #printable-combined-statement,
+  #printable-combined-statement * {
     visibility: visible;
   }
-  #printable-receipt {
+  .printable-slip-document,
+  #printable-receipt,
+  #printable-refund-voucher,
+  #printable-combined-statement {
     position: absolute;
     left: 0;
     top: 0;
-    width: 100%;
-    margin: 0;
-    padding: 16px;
-    background: white !important;
-    color: black !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border: none !important;
   }
   .no-print {
     display: none !important;
+  }
+  table {
+    border-collapse: collapse !important;
+  }
+  .slip-box, table, tr, .summary-box {
+    page-break-inside: avoid;
+    break-inside: avoid;
   }
 }

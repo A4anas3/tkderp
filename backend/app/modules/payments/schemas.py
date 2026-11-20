@@ -58,6 +58,7 @@ class RefundReceiptResponse(BaseModel):
     student_name: str
     student_reg_no: str
     student_mobile: Optional[str] = None
+    student_father_name: Optional[str] = None
     admission_number: str
     course_name: Optional[str] = None
     admission_total_payable: Decimal
@@ -105,6 +106,7 @@ class PaymentReceiptResponse(BaseModel):
     student_name: str
     student_reg_no: str
     student_mobile: Optional[str] = None
+    student_father_name: Optional[str] = None
     admission_number: str
     total_admission_payable: Decimal
     total_amount_paid_so_far: Decimal

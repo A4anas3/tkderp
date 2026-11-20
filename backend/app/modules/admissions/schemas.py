@@ -73,6 +73,9 @@ class AdmissionResponse(BaseModel):
     purchase_transaction_id: Optional[str] = None
     student_id: uuid.UUID
     student_name_snapshot: str
+    student_reg_no: Optional[str] = None
+    student_mobile: Optional[str] = None
+    student_father_name: Optional[str] = None
     admission_date: date
     subtotal: Decimal
     individual_discount_total: Decimal
@@ -129,6 +132,7 @@ class AdmissionSlipsResponse(BaseModel):
     student_name: str
     student_reg_no: Optional[str] = None
     student_mobile: Optional[str] = None
+    student_father_name: Optional[str] = None
     total_payable: Decimal
     amount_paid: Decimal
     balance_due: Decimal

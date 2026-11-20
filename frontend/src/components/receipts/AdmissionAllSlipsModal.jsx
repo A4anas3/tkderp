@@ -21,6 +21,8 @@ import { admissionApi } from '../../services/allApis';
 import AdmissionReceiptModal from './AdmissionReceiptModal';
 import PaymentReceiptModal from './PaymentReceiptModal';
 import RefundReceiptModal from './RefundReceiptModal';
+import ReceiptHeader from './ReceiptHeader';
+import ReceiptFooter from './ReceiptFooter';
 
 export default function AdmissionAllSlipsModal({
   isOpen,
@@ -99,8 +101,8 @@ export default function AdmissionAllSlipsModal({
           {printMode ? (
             <div className="space-y-4">
               <div className="flex items-center justify-between pb-2 border-b border-slate-200 no-print">
-                <span className="text-xs text-slate-600 font-medium">
-                  Showing Unified Multi-Slip Statement of Account
+                <span className="text-xs text-slate-700 font-semibold">
+                  Unified Multi-Slip Statement of Account Preview
                 </span>
                 <div className="flex items-center gap-2">
                   <Button
@@ -116,94 +118,123 @@ export default function AdmissionAllSlipsModal({
                     icon={Printer}
                     onClick={handlePrintCombined}
                   >
-                    Print Statement Now
+                    Print Statement
                   </Button>
                 </div>
               </div>
 
               <div
                 id="printable-combined-statement"
-                className="border-2 border-slate-300 rounded-lg p-5 bg-white text-black shadow-xs space-y-4 font-sans text-xs sm:text-sm"
+                className="printable-slip-document border border-slate-300 rounded-lg p-5 bg-white text-black shadow-xs space-y-4 font-sans text-xs sm:text-sm slip-box"
               >
-                {/* Header */}
-                <div className="border-b-2 border-indigo-600 pb-3 text-center">
-                  <h2 className="text-lg sm:text-xl font-black text-black tracking-tight uppercase">
-                    THAKURDWARA COACHING INSTITUTE
-                  </h2>
-                  <p className="text-[11px] text-slate-600 font-medium">
-                    Civil Lines Road, Thakurdwara • Contact: +91-98765-43210
-                  </p>
-                  <div className="mt-2 inline-block bg-indigo-50 border border-indigo-300 px-3 py-0.5 rounded text-[11px] font-bold text-indigo-900 uppercase tracking-widest">
-                    OFFICIAL STUDENT ADMISSION & COMPLETE PAYMENT STATEMENT
-                  </div>
-                </div>
+                {/* Header with Emblem */}
+                <ReceiptHeader
+                  documentTitle="OFFICIAL STUDENT ADMISSION & COMPLETE PAYMENT STATEMENT"
+                  copyType="OFFICE & AUDIT LEDGER"
+                  documentSubtitle={`Account Ledger: ${data?.admission_number}`}
+                />
 
-                {/* Info Grid */}
-                <div className="grid grid-cols-2 gap-2 text-xs border-b border-slate-200 pb-3">
-                  <div>
-                    <span className="text-slate-500 block">Admission / Purchase ID:</span>
-                    <span className="font-mono font-bold text-black text-sm">
-                      {data?.admission_number}
-                    </span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-slate-500 block">Admission Date:</span>
-                    <span className="font-semibold text-black">
-                      {data?.admission_date}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block">Student Full Name:</span>
-                    <span className="font-bold text-black text-sm">
-                      {data?.student_name}
-                    </span>
+                {/* 2-Column Info Grid */}
+                <div className="grid grid-cols-2 gap-3 text-xs border border-slate-300 rounded p-3 bg-slate-50/50">
+                  <div className="space-y-1 border-r border-slate-200 pr-2">
+                    <div>
+                      <span className="text-slate-500 text-[10px] uppercase font-semibold block">Student Full Name:</span>
+                      <span className="font-bold text-black text-sm block">{data?.student_name}</span>
+                    </div>
                     {data?.student_reg_no && (
-                      <span className="font-mono text-[11px] text-slate-600 block">
-                        Reg ID: {data?.student_reg_no}
-                      </span>
+                      <div>
+                        <span className="text-slate-500 text-[10px] uppercase font-semibold block">Registration / Roll No:</span>
+                        <span className="font-mono font-bold text-black">{data?.student_reg_no}</span>
+                      </div>
+                    )}
+                    {data?.student_father_name && (
+                      <div>
+                        <span className="text-slate-500 text-[10px] uppercase font-semibold block">Father / Guardian:</span>
+                        <span className="font-semibold text-slate-800">{data?.student_father_name}</span>
+                      </div>
+                    )}
+                    {data?.student_mobile && (
+                      <div>
+                        <span className="text-slate-500 text-[10px] uppercase font-semibold block">Mobile Contact:</span>
+                        <span className="font-mono font-medium text-slate-800">{data?.student_mobile}</span>
+                      </div>
                     )}
                   </div>
-                  <div className="text-right">
-                    <span className="text-slate-500 block">Cycle / Validity Period:</span>
-                    <span className="font-mono font-semibold text-indigo-900">
-                      {data?.valid_from && data?.valid_to
-                        ? `${data.valid_from} to ${data.valid_to}`
-                        : 'Standard Cycle'}
-                    </span>
+
+                  <div className="space-y-1 pl-1">
+                    <div>
+                      <span className="text-slate-500 text-[10px] uppercase font-semibold block">Admission / Purchase ID:</span>
+                      <span className="font-mono font-bold text-black text-sm">{data?.admission_number}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 text-[10px] uppercase font-semibold block">Admission Date:</span>
+                      <span className="font-semibold text-black">{data?.admission_date}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 text-[10px] uppercase font-semibold block">Fee Coverage Cycle:</span>
+                      <span className="font-mono font-semibold text-indigo-900 text-[11px]">
+                        {data?.valid_from && data?.valid_to
+                          ? `${data.valid_from} to ${data.valid_to}`
+                          : 'Standard Cycle'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 text-[10px] uppercase font-semibold block">Account Status:</span>
+                      <span className="inline-block mt-0.5">
+                        <Badge
+                          size="xs"
+                          variant={
+                            data?.status === 'REVOKED'
+                              ? 'danger'
+                              : data?.payment_status === 'PAID'
+                              ? 'success'
+                              : data?.payment_status === 'PARTIALLY_PAID'
+                              ? 'warning'
+                              : 'danger'
+                          }
+                        >
+                          {data?.status === 'REVOKED' ? 'REVOKED' : data?.payment_status}
+                        </Badge>
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                {/* Enrolled Items */}
-                <div>
-                  <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+                {/* Enrolled Courses / Items */}
+                <div className="space-y-1">
+                  <span className="text-[10px] font-bold text-slate-800 uppercase tracking-wider block">
                     Enrolled Courses & Batches
-                  </h4>
-                  <table className="w-full text-left text-xs border border-slate-200">
-                    <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+                  </span>
+                  <table className="w-full text-left text-xs border border-slate-300">
+                    <thead className="bg-slate-100 text-slate-800 font-bold border-b border-slate-300">
                       <tr>
-                        <th className="p-1.5">Item Description</th>
-                        <th className="p-1.5 text-right">Fee (₹)</th>
-                        <th className="p-1.5 text-right">Disc (₹)</th>
-                        <th className="p-1.5 text-right">Net Price (₹)</th>
+                        <th className="p-1.5 w-8 text-center border-r border-slate-300">#</th>
+                        <th className="p-1.5 border-r border-slate-300">Item Description</th>
+                        <th className="p-1.5 text-right border-r border-slate-300 w-24">Fee (₹)</th>
+                        <th className="p-1.5 text-right border-r border-slate-300 w-24">Discount (₹)</th>
+                        <th className="p-1.5 text-right w-24">Net Price (₹)</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <tbody className="divide-y divide-slate-200">
                       {(data?.items || []).map((itm, i) => (
-                        <tr key={i}>
-                          <td className="p-1.5">
-                            <span className="font-semibold text-black block">{itm.item_name_snapshot}</span>
+                        <tr key={i} className="hover:bg-slate-50">
+                          <td className="p-1.5 text-center font-mono border-r border-slate-200 text-slate-600">
+                            {i + 1}
+                          </td>
+                          <td className="p-1.5 border-r border-slate-200">
+                            <span className="font-bold text-black block">{itm.item_name_snapshot}</span>
                             {(itm.teacher_name_snapshot || itm.hall_number_snapshot) && (
-                              <span className="text-[10px] text-slate-600 block">
+                              <span className="text-[10px] text-slate-600 block mt-0.5">
                                 {itm.teacher_name_snapshot && `Faculty: ${itm.teacher_name_snapshot}`}
                                 {itm.teacher_name_snapshot && itm.hall_number_snapshot && ' • '}
                                 {itm.hall_number_snapshot && `Hall: ${itm.hall_number_snapshot}`}
                               </span>
                             )}
                           </td>
-                          <td className="p-1.5 text-right font-mono">
+                          <td className="p-1.5 text-right font-mono border-r border-slate-200 text-slate-700">
                             ₹{Number(itm.original_price).toFixed(2)}
                           </td>
-                          <td className="p-1.5 text-right font-mono text-slate-600">
+                          <td className="p-1.5 text-right font-mono text-slate-600 border-r border-slate-200">
                             -₹{(Number(itm.discount_amount || 0) + Number(itm.overall_discount_share || 0)).toFixed(2)}
                           </td>
                           <td className="p-1.5 text-right font-mono font-bold text-black">
@@ -216,30 +247,30 @@ export default function AdmissionAllSlipsModal({
                 </div>
 
                 {/* Slips Ledger History (Payments + Refunds) */}
-                <div>
-                  <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+                <div className="space-y-1">
+                  <span className="text-[10px] font-bold text-slate-800 uppercase tracking-wider block">
                     All Financial Slips & Receipts History
-                  </h4>
-                  <table className="w-full text-left text-xs border border-slate-200">
-                    <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+                  </span>
+                  <table className="w-full text-left text-xs border border-slate-300">
+                    <thead className="bg-slate-100 text-slate-800 font-bold border-b border-slate-300">
                       <tr>
-                        <th className="p-1.5">Slip # / Document</th>
-                        <th className="p-1.5">Date</th>
-                        <th className="p-1.5">Type & Description</th>
-                        <th className="p-1.5">Mode</th>
+                        <th className="p-1.5 border-r border-slate-300">Slip # / Voucher</th>
+                        <th className="p-1.5 border-r border-slate-300">Date</th>
+                        <th className="p-1.5 border-r border-slate-300">Type & Description</th>
+                        <th className="p-1.5 border-r border-slate-300">Mode</th>
                         <th className="p-1.5 text-right">Amount (₹)</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <tbody className="divide-y divide-slate-200">
                       {slips.map((s, idx) => (
-                        <tr key={idx} className={s.slip_type === 'REFUND_VOUCHER' ? 'bg-rose-50/40' : ''}>
-                          <td className="p-1.5 font-mono font-bold text-black">
+                        <tr key={idx} className={s.slip_type === 'REFUND_VOUCHER' ? 'bg-rose-50/40' : 'hover:bg-slate-50'}>
+                          <td className="p-1.5 font-mono font-bold text-black border-r border-slate-200">
                             {s.slip_number}
                           </td>
-                          <td className="p-1.5 text-slate-600">
+                          <td className="p-1.5 text-slate-700 border-r border-slate-200">
                             {new Date(s.date).toLocaleDateString('en-IN')}
                           </td>
-                          <td className="p-1.5 font-medium text-black">
+                          <td className="p-1.5 font-medium text-black border-r border-slate-200">
                             {s.title}
                             {s.notes && (
                               <span className="block text-[10px] text-slate-500 italic">
@@ -247,7 +278,7 @@ export default function AdmissionAllSlipsModal({
                               </span>
                             )}
                           </td>
-                          <td className="p-1.5 text-slate-700 uppercase font-semibold text-[10px]">
+                          <td className="p-1.5 text-slate-800 uppercase font-semibold text-[10px] border-r border-slate-200">
                             {s.mode || '—'}
                           </td>
                           <td className="p-1.5 text-right font-mono font-bold">
@@ -256,7 +287,7 @@ export default function AdmissionAllSlipsModal({
                             ) : s.slip_type === 'REFUND_VOUCHER' ? (
                               <span className="text-rose-700">-₹{Number(s.amount).toFixed(2)}</span>
                             ) : (
-                              <span className="text-emerald-700">+₹{Number(s.amount).toFixed(2)}</span>
+                              <span className="text-emerald-800">+₹{Number(s.amount).toFixed(2)}</span>
                             )}
                           </td>
                         </tr>
@@ -266,7 +297,7 @@ export default function AdmissionAllSlipsModal({
                 </div>
 
                 {/* Account Balances Summary Box */}
-                <div className="bg-slate-50 border border-slate-200 rounded p-3 text-xs space-y-1">
+                <div className="border border-slate-300 rounded p-3 text-xs bg-slate-50/70 space-y-1">
                   <div className="flex justify-between text-slate-700">
                     <span>Total Billed Course Fee:</span>
                     <span className="font-mono font-bold text-black">
@@ -274,7 +305,7 @@ export default function AdmissionAllSlipsModal({
                     </span>
                   </div>
                   <div className="flex justify-between text-emerald-800 font-semibold">
-                    <span>Total Amount Paid:</span>
+                    <span>Total Realized Amount Paid:</span>
                     <span className="font-mono">
                       ₹{Number(data?.amount_paid || 0).toFixed(2)}
                     </span>
@@ -287,17 +318,17 @@ export default function AdmissionAllSlipsModal({
                   </div>
                 </div>
 
-                {/* Signatures */}
-                <div className="pt-6 flex items-end justify-between text-[11px] text-slate-600 border-t border-slate-200">
-                  <div>
-                    <p>Verified Statement generated on {new Date().toLocaleDateString('en-IN')}</p>
-                  </div>
-                  <div className="text-center">
-                    <div className="w-32 border-b border-black mb-1"></div>
-                    <p className="font-semibold text-black">Authorized Signatory</p>
-                    <p className="text-[10px] text-slate-500">Thakurdwara Institute</p>
-                  </div>
-                </div>
+                {/* Footer with Seal & Signatures */}
+                <ReceiptFooter
+                  amount={data?.amount_paid || 0}
+                  issuedDate={data?.admission_date}
+                  collectorName="Accounts Section"
+                  terms={[
+                    'This statement reflects complete financial transactions (fees billed, receipts realized & refunds).',
+                    'All receipts listed are reconciled in real-time with the institute accounting ledger.',
+                    'For any discrepancy, present individual computer-generated receipts to the accounts office.',
+                  ]}
+                />
               </div>
             </div>
           ) : (
@@ -370,7 +401,7 @@ export default function AdmissionAllSlipsModal({
                             : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                         }`}
                       >
-                        Admission Invoice
+                        Enrollment Slip
                       </button>
                       <button
                         onClick={() => setActiveTab('PAYMENT')}
@@ -402,7 +433,7 @@ export default function AdmissionAllSlipsModal({
                       icon={Printer}
                       onClick={() => setPrintMode(true)}
                     >
-                      Print All Slips / Statement
+                      Print Statement
                     </Button>
                   </div>
 

@@ -54,6 +54,18 @@ class Admission(BaseModel):
     def purchase_transaction_id(self) -> str:
         return self.admission_number
 
+    @property
+    def student_reg_no(self) -> Optional[str]:
+        return self.student.student_code if self.student else None
+
+    @property
+    def student_mobile(self) -> Optional[str]:
+        return self.student.mobile if self.student else None
+
+    @property
+    def student_father_name(self) -> Optional[str]:
+        return self.student.father_name if self.student else None
+
     # Relationships
     items: Mapped[List["AdmissionItem"]] = relationship("AdmissionItem", back_populates="admission", cascade="all, delete-orphan", lazy="selectin")
     student: Mapped["app.modules.students.models.Student"] = relationship("app.modules.students.models.Student", lazy="joined")
