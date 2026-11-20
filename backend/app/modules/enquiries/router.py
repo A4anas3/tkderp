@@ -8,7 +8,7 @@ from sqlalchemy import select, func, or_, and_, desc, case
 
 from app.database.session import get_db
 from app.core.dependencies import require_staff, require_cashier_or_admin
-from app.database.models import Enquiry, EnquiryDemoItem, Student, User, Teacher, Subject, Batch
+from app.database.models import Enquiry, EnquiryDemoItem, Student, User, Teacher, Subject, Batch, Admission
 from app.modules.enquiries.schemas import (
     EnquiryCreate, EnquiryUpdate, EnquiryResponse, ConvertEnquiryRequest,
     EnquiryDemoItemResponse, EnquiryDemoItemStatusUpdate, EnquiryDemoRegisterItem,
@@ -152,6 +152,42 @@ async def list_enquiries(
     items_result = await db.execute(query)
     items = items_result.scalars().all()
 
+    # Batch resolve student admission & course enrollment metadata
+    student_ids = [item.converted_student_id for item in items if item.converted_student_id]
+    mobiles = [item.mobile for item in items if item.mobile and not item.converted_student_id]
+
+    student_map_by_id = {}
+    if student_ids:
+        s_res = await db.execute(select(Student).where(Student.id.in_(student_ids)))
+        for s in s_res.scalars().all():
+            student_map_by_id[s.id] = s
+
+    student_map_by_mobile = {}
+    if mobiles:
+        s_res2 = await db.execute(select(Student).where(Student.mobile.in_(mobiles)))
+        for s in s_res2.scalars().all():
+            if s.mobile not in student_map_by_mobile:
+                student_map_by_mobile[s.mobile] = s
+
+    all_found_student_ids = set(student_map_by_id.keys())
+    for s in student_map_by_mobile.values():
+        all_found_student_ids.add(s.id)
+
+    admissions_map_by_student_id = {}
+    if all_found_student_ids:
+        adm_res = await db.execute(
+            select(Admission)
+            .where(
+                Admission.student_id.in_(list(all_found_student_ids)),
+                Admission.status != "CANCELLED"
+            )
+            .order_by(desc(Admission.created_at))
+        )
+        for adm in adm_res.scalars().all():
+            if adm.student_id not in admissions_map_by_student_id:
+                admissions_map_by_student_id[adm.student_id] = []
+            admissions_map_by_student_id[adm.student_id].append(adm)
+
     today = date.today()
     response_items = []
     for item in items:
@@ -163,6 +199,18 @@ async def list_enquiries(
         formatted_demo_items = []
         if hasattr(item, 'demo_items') and item.demo_items:
             formatted_demo_items = [_format_demo_item_response(d, today) for d in item.demo_items]
+
+        matched_student = student_map_by_id.get(item.converted_student_id)
+        if not matched_student and item.mobile:
+            matched_student = student_map_by_mobile.get(item.mobile)
+
+        effective_student_id = item.converted_student_id or (matched_student.id if matched_student else None)
+        effective_student_code = matched_student.student_code if matched_student else None
+        has_student = matched_student is not None or bool(item.converted_student_id)
+
+        student_admissions = admissions_map_by_student_id.get(effective_student_id, []) if effective_student_id else []
+        has_course = len(student_admissions) > 0
+        latest_adm = student_admissions[0] if student_admissions else None
 
         resp = EnquiryResponse(
             id=item.id,
@@ -179,7 +227,13 @@ async def list_enquiries(
             notes=item.notes,
             status=item.status,
             remaining_days=rem_days,
-            converted_student_id=item.converted_student_id,
+            converted_student_id=effective_student_id,
+            converted_student_code=effective_student_code,
+            has_student_admission=has_student,
+            has_course_purchase=has_course,
+            course_admission_id=latest_adm.id if latest_adm else None,
+            course_admission_number=latest_adm.admission_number if latest_adm else None,
+            course_items_count=len(student_admissions),
             created_by=item.created_by,
             demo_items=formatted_demo_items
         )
@@ -641,8 +695,35 @@ async def create_enquiry(
     await db.refresh(enquiry)
 
     today = date.today()
-    rem_days = (enquiry.demo_deadline - today).days if enquiry.demo_deadline else None
     formatted_children = [_format_demo_item_response(d, today) for d in child_items]
+    return await _resolve_single_enquiry_response(db, enquiry, formatted_children, today)
+
+
+async def _resolve_single_enquiry_response(db: AsyncSession, enquiry: Enquiry, formatted_demo_items: list, today: date) -> EnquiryResponse:
+    matched_student = None
+    if enquiry.converted_student_id:
+        s_res = await db.execute(select(Student).where(Student.id == enquiry.converted_student_id))
+        matched_student = s_res.scalar_one_or_none()
+    elif enquiry.mobile:
+        s_res = await db.execute(select(Student).where(Student.mobile == enquiry.mobile))
+        matched_student = s_res.scalars().first()
+
+    effective_student_id = enquiry.converted_student_id or (matched_student.id if matched_student else None)
+    effective_student_code = matched_student.student_code if matched_student else None
+    has_student = matched_student is not None or bool(enquiry.converted_student_id)
+
+    student_admissions = []
+    if effective_student_id:
+        adm_res = await db.execute(
+            select(Admission)
+            .where(Admission.student_id == effective_student_id, Admission.status != "CANCELLED")
+            .order_by(desc(Admission.created_at))
+        )
+        student_admissions = adm_res.scalars().all()
+
+    has_course = len(student_admissions) > 0
+    latest_adm = student_admissions[0] if student_admissions else None
+    rem_days = (enquiry.demo_deadline - today).days if enquiry.demo_deadline else None
 
     return EnquiryResponse(
         id=enquiry.id,
@@ -659,9 +740,15 @@ async def create_enquiry(
         notes=enquiry.notes,
         status=enquiry.status,
         remaining_days=rem_days,
-        converted_student_id=enquiry.converted_student_id,
+        converted_student_id=effective_student_id,
+        converted_student_code=effective_student_code,
+        has_student_admission=has_student,
+        has_course_purchase=has_course,
+        course_admission_id=latest_adm.id if latest_adm else None,
+        course_admission_number=latest_adm.admission_number if latest_adm else None,
+        course_items_count=len(student_admissions),
         created_by=enquiry.created_by,
-        demo_items=formatted_children
+        demo_items=formatted_demo_items
     )
 
 
@@ -677,32 +764,11 @@ async def get_enquiry(
         raise HTTPException(status_code=404, detail="Enquiry not found")
 
     today = date.today()
-    rem_days = (enquiry.demo_deadline - today).days if enquiry.demo_deadline else None
-
-    # Load child demo items
     d_res = await db.execute(select(EnquiryDemoItem).where(EnquiryDemoItem.enquiry_id == enquiry.id).order_by(EnquiryDemoItem.demo_start_date.asc()))
     d_items = d_res.scalars().all()
     formatted_demo_items = [_format_demo_item_response(d, today) for d in d_items]
 
-    return EnquiryResponse(
-        id=enquiry.id,
-        enquiry_code=enquiry.enquiry_code,
-        student_name=enquiry.student_name,
-        mobile=enquiry.mobile,
-        father_name=enquiry.father_name,
-        school_college=enquiry.school_college,
-        purpose=enquiry.purpose,
-        interested_subject=enquiry.interested_subject,
-        demo_start_date=enquiry.demo_start_date,
-        demo_duration_days=enquiry.demo_duration_days,
-        demo_deadline=enquiry.demo_deadline,
-        notes=enquiry.notes,
-        status=enquiry.status,
-        remaining_days=rem_days,
-        converted_student_id=enquiry.converted_student_id,
-        created_by=enquiry.created_by,
-        demo_items=formatted_demo_items
-    )
+    return await _resolve_single_enquiry_response(db, enquiry, formatted_demo_items, today)
 
 
 @router.put("/demos/{demo_item_id}/status", response_model=EnquiryDemoItemResponse)
@@ -768,30 +834,11 @@ async def update_enquiry(
     await db.refresh(enquiry)
 
     today = date.today()
-    rem_days = (enquiry.demo_deadline - today).days if enquiry.demo_deadline else None
     d_res = await db.execute(select(EnquiryDemoItem).where(EnquiryDemoItem.enquiry_id == enquiry.id).order_by(EnquiryDemoItem.demo_start_date.asc()))
     d_items = d_res.scalars().all()
     formatted_demo_items = [_format_demo_item_response(d, today) for d in d_items]
 
-    return EnquiryResponse(
-        id=enquiry.id,
-        enquiry_code=enquiry.enquiry_code,
-        student_name=enquiry.student_name,
-        mobile=enquiry.mobile,
-        father_name=enquiry.father_name,
-        school_college=enquiry.school_college,
-        purpose=enquiry.purpose,
-        interested_subject=enquiry.interested_subject,
-        demo_start_date=enquiry.demo_start_date,
-        demo_duration_days=enquiry.demo_duration_days,
-        demo_deadline=enquiry.demo_deadline,
-        notes=enquiry.notes,
-        status=enquiry.status,
-        remaining_days=rem_days,
-        converted_student_id=enquiry.converted_student_id,
-        created_by=enquiry.created_by,
-        demo_items=formatted_demo_items
-    )
+    return await _resolve_single_enquiry_response(db, enquiry, formatted_demo_items, today)
 
 
 @router.post("/{enquiry_id}/convert", status_code=status.HTTP_200_OK)

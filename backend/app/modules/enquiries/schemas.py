@@ -76,6 +76,7 @@ class EnquiryUpdate(BaseModel):
     demo_duration_days: Optional[int] = None
     notes: Optional[str] = None
     status: Optional[str] = Field(default=None, pattern="^(PENDING|ACTIVE_DEMO|INTERESTED|NOT_INTERESTED|CONVERTED|EXPIRED)$")
+    converted_student_id: Optional[uuid.UUID] = None
 
     @field_validator("mobile", mode="before")
     @classmethod
@@ -88,6 +89,12 @@ class EnquiryResponse(EnquiryBase):
     demo_deadline: Optional[date] = None
     remaining_days: Optional[int] = None
     converted_student_id: Optional[uuid.UUID] = None
+    converted_student_code: Optional[str] = None
+    has_student_admission: bool = False
+    has_course_purchase: bool = False
+    course_admission_id: Optional[uuid.UUID] = None
+    course_admission_number: Optional[str] = None
+    course_items_count: int = 0
     created_by: Optional[uuid.UUID] = None
     demo_items: List[EnquiryDemoItemResponse] = []
 

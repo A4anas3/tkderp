@@ -181,6 +181,9 @@ export default function EnquiryDetailPage() {
       purpose: enquiry.purpose || '',
       auto_register: '1',
     });
+    if (enquiry.converted_student_id) {
+      params.set('student_id', enquiry.converted_student_id);
+    }
     navigate(`/admissions/new?${params.toString()}`);
   };
 
@@ -337,7 +340,26 @@ export default function EnquiryDetailPage() {
             </Button>
           )}
 
-          {!isConverted && (
+          {enquiry.has_course_purchase ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => navigate(`/admissions/${enquiry.course_admission_id || ''}`)}
+              className="text-emerald-700 bg-emerald-50 border-emerald-300 hover:bg-emerald-100 font-bold"
+            >
+              View Course Bill ({enquiry.course_admission_number || 'Enrolled ✓'}) ↗
+            </Button>
+          ) : enquiry.has_student_admission || isConverted ? (
+            <Button
+              variant="primary"
+              icon={UserPlus}
+              onClick={handleConvertToAdmission}
+              size="sm"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+            >
+              Buy Course / Collect Fees ↗
+            </Button>
+          ) : (
             <Button
               variant="primary"
               icon={UserPlus}
@@ -353,8 +375,10 @@ export default function EnquiryDetailPage() {
       {/* Prominent Active vs Not Active Status Banner */}
       <div
         className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs ${
-          isConverted
-            ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
+          enquiry.has_course_purchase
+            ? 'bg-emerald-50 border-emerald-400 text-emerald-950'
+            : isConverted || enquiry.has_student_admission
+            ? 'bg-blue-50 border-blue-300 text-blue-950'
             : isInterested
             ? 'bg-emerald-50 border-emerald-400 text-emerald-950'
             : isActiveDemo && !isExpired
@@ -367,7 +391,11 @@ export default function EnquiryDetailPage() {
         }`}
       >
         <div className="flex items-center gap-3">
-          {isConverted || isInterested ? (
+          {enquiry.has_course_purchase ? (
+            <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0" />
+          ) : isConverted || enquiry.has_student_admission ? (
+            <CheckCircle2 className="w-6 h-6 text-blue-600 shrink-0" />
+          ) : isInterested ? (
             <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0" />
           ) : isActiveDemo && !isExpired ? (
             <Clock className="w-6 h-6 text-indigo-600 shrink-0" />
@@ -381,8 +409,10 @@ export default function EnquiryDetailPage() {
           <div>
             <div className="text-xs font-black uppercase tracking-wider">
               Enquiry Status:{' '}
-              {isConverted
-                ? 'CONVERTED (REGISTERED STUDENT)'
+              {enquiry.has_course_purchase
+                ? `COURSE ENROLLED & PAID (${enquiry.course_admission_number || 'ADMISSION COMPLETED'})`
+                : isConverted || enquiry.has_student_admission
+                ? `STUDENT ADMITTED (NO COURSE PURCHASED YET) ${enquiry.converted_student_code ? `• ${enquiry.converted_student_code}` : ''}`
                 : isInterested
                 ? '👍 INTERESTED IN ADMISSION (POST-DEMO)'
                 : isActiveDemo && !isExpired
@@ -394,8 +424,10 @@ export default function EnquiryDetailPage() {
                 : 'EXPIRED / LAPSED DEMO'}
             </div>
             <div className="text-xs text-slate-700 font-medium mt-0.5">
-              {isConverted
-                ? 'Student successfully converted and registered into coaching cohorts'
+              {enquiry.has_course_purchase
+                ? `Student has purchased courses/batches and is actively enrolled. Admission #${enquiry.course_admission_number || ''}`
+                : isConverted || enquiry.has_student_admission
+                ? 'Student admission profile is created in system, but NO course or batch has been purchased yet.'
                 : isInterested
                 ? 'Student completed trial classes and confirmed interest in admission. Ready for formal enrollment!'
                 : isActiveDemo && !isExpired
@@ -409,11 +441,23 @@ export default function EnquiryDetailPage() {
           </div>
         </div>
         <Badge
-          variant={statusVariant}
+          variant={
+            enquiry.has_course_purchase
+              ? 'success'
+              : isConverted || enquiry.has_student_admission
+              ? 'info'
+              : statusVariant
+          }
           size="md"
           className="uppercase font-bold tracking-wider self-start sm:self-auto"
         >
-          {isInterested ? '👍 INTERESTED' : enquiry.status.replace('_', ' ')}
+          {enquiry.has_course_purchase
+            ? 'COURSE PAID ✓'
+            : isConverted || enquiry.has_student_admission
+            ? 'ADMITTED (NO COURSE)'
+            : isInterested
+            ? '👍 INTERESTED'
+            : enquiry.status.replace('_', ' ')}
         </Badge>
       </div>
 

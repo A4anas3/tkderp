@@ -461,12 +461,13 @@ export default function EnquiriesPage() {
     }
   };
 
-  // Convert to Admission
+  // Convert to Admission / Course Purchase
   const handleConvertToAdmission = (enq, ev, specificSubject = null) => {
     if (ev) ev.stopPropagation();
     const subParam = specificSubject || enq.interested_subject || '';
+    const stuParam = enq.converted_student_id ? `&student_id=${enq.converted_student_id}` : '';
     navigate(
-      `/admissions/new?enquiry_id=${enq.id}&name=${encodeURIComponent(
+      `/admissions/new?enquiry_id=${enq.id}${stuParam}&name=${encodeURIComponent(
         enq.student_name
       )}&mobile=${encodeURIComponent(enq.mobile || '')}&subject=${encodeURIComponent(
         subParam
@@ -673,13 +674,44 @@ export default function EnquiriesPage() {
     },
     {
       header: 'Status',
-      className: 'text-center w-32',
+      className: 'text-center w-36',
       render: (e) => {
+        const isConverted = e.status === 'CONVERTED';
+        const hasCourse = Boolean(e.has_course_purchase);
+        const hasStudent = Boolean(e.has_student_admission) || Boolean(e.converted_student_id);
+
+        if (isConverted || hasStudent) {
+          if (hasCourse) {
+            return (
+              <div>
+                <Badge size="xs" variant="success">
+                  Course Enrolled ✓
+                </Badge>
+                {e.converted_student_code && (
+                  <span className="text-[10px] text-slate-500 font-mono block mt-0.5">
+                    {e.converted_student_code}
+                  </span>
+                )}
+              </div>
+            );
+          } else {
+            return (
+              <div>
+                <Badge size="xs" variant="primary">
+                  Admitted (No Course)
+                </Badge>
+                <span className="text-[10px] text-amber-700 block font-semibold mt-0.5">
+                  {e.converted_student_code || 'Student Registered'}
+                </span>
+              </div>
+            );
+          }
+        }
+
         const variants = {
           ACTIVE_DEMO: 'primary',
           INTERESTED: 'success',
           PENDING: 'warning',
-          CONVERTED: 'success',
           EXPIRED: 'danger',
           NOT_INTERESTED: 'neutral',
         };
@@ -687,7 +719,6 @@ export default function EnquiriesPage() {
           ACTIVE_DEMO: 'Active Demo',
           INTERESTED: '👍 Interested',
           PENDING: 'Pending',
-          CONVERTED: 'Converted',
           EXPIRED: 'Expired',
           NOT_INTERESTED: 'Not Interested',
         };
@@ -700,9 +731,11 @@ export default function EnquiriesPage() {
     },
     {
       header: 'Action',
-      className: 'text-right w-52',
+      className: 'text-right w-56',
       render: (e) => {
         const isConverted = e.status === 'CONVERTED';
+        const hasCourse = Boolean(e.has_course_purchase);
+        const hasStudent = Boolean(e.has_student_admission) || Boolean(e.converted_student_id);
         const isMenuOpen = activeActionMenuId === e.id;
 
         return (
@@ -721,11 +754,38 @@ export default function EnquiriesPage() {
               Slip
             </Button>
 
-            {isConverted ? (
+            {hasCourse ? (
               <>
                 <Badge size="xs" variant="success">
-                  Enrolled ✓
+                  Course Paid ✓
                 </Badge>
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  icon={ExternalLink}
+                  onClick={(ev) => {
+                    ev.stopPropagation();
+                    if (e.course_admission_id) {
+                      navigate(`/admissions/${e.course_admission_id}`);
+                    } else {
+                      navigate(`/enquiries/${e.id}`);
+                    }
+                  }}
+                  title="View Course Bill"
+                >
+                  Bill ↗
+                </Button>
+              </>
+            ) : hasStudent || isConverted ? (
+              <>
+                <Button
+                  size="xs"
+                  variant="primary"
+                  onClick={(ev) => handleConvertToAdmission(e, ev)}
+                  title="Student is registered! Click to purchase course and collect fees"
+                >
+                  Buy Course ↗
+                </Button>
                 <Button
                   size="xs"
                   variant="secondary"

@@ -37,8 +37,13 @@ export default function EnquiryDetailModal({
   const isNotInterested = enquiry.status === 'NOT_INTERESTED';
   const isExpired = enquiry.status === 'EXPIRED' || (isActiveDemo && enquiry.demo_deadline && enquiry.demo_deadline < today);
 
-  const statusVariant = isConverted
+  const hasCourse = Boolean(enquiry.has_course_purchase);
+  const hasStudent = Boolean(enquiry.has_student_admission) || Boolean(enquiry.converted_student_id);
+
+  const statusVariant = hasCourse
     ? 'success'
+    : isConverted || hasStudent
+    ? 'primary'
     : isInterested
     ? 'success'
     : isActiveDemo && !isExpired
@@ -64,7 +69,11 @@ export default function EnquiryDetailModal({
           {/* Prominent Active vs Not Active Status Banner */}
           <div
             className={`p-3.5 rounded-lg border flex items-center justify-between ${
-              isConverted || isInterested
+              hasCourse
+                ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
+                : isConverted || hasStudent
+                ? 'bg-indigo-50 border-indigo-300 text-indigo-950'
+                : isInterested
                 ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
                 : isActiveDemo && !isExpired
                 ? 'bg-indigo-50 border-indigo-300 text-indigo-950'
@@ -76,9 +85,9 @@ export default function EnquiryDetailModal({
             }`}
           >
             <div className="flex items-center gap-2.5">
-              {isConverted || isInterested ? (
+              {hasCourse || isInterested ? (
                 <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-              ) : isActiveDemo && !isExpired ? (
+              ) : isConverted || hasStudent || (isActiveDemo && !isExpired) ? (
                 <Clock className="w-5 h-5 text-indigo-600 shrink-0" />
               ) : isPending ? (
                 <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
@@ -90,8 +99,10 @@ export default function EnquiryDetailModal({
               <div>
                 <div className="text-xs font-bold uppercase tracking-wider">
                   Status:{' '}
-                  {isConverted
-                    ? 'CONVERTED (REGISTERED STUDENT)'
+                  {hasCourse
+                    ? 'COURSE ENROLLED (PURCHASED BATCHES)'
+                    : isConverted || hasStudent
+                    ? 'STUDENT ADMITTED (NO COURSE PURCHASED YET)'
                     : isInterested
                     ? '👍 INTERESTED (POST-DEMO)'
                     : isActiveDemo && !isExpired
@@ -103,8 +114,10 @@ export default function EnquiryDetailModal({
                     : 'EXPIRED / NOT ACTIVE'}
                 </div>
                 <div className="text-[11px] text-slate-600 font-medium">
-                  {isConverted
-                    ? 'Student converted into an enrolled course admission'
+                  {hasCourse
+                    ? `Student has purchased courses and is enrolled (${enquiry.course_admission_number || 'Billed'})`
+                    : isConverted || hasStudent
+                    ? `Student registration profile ${enquiry.converted_student_code ? `(${enquiry.converted_student_code})` : ''} created, but no course has been purchased or billed yet.`
                     : isInterested
                     ? 'Student completed trial classes and wants admission'
                     : isActiveDemo && !isExpired
@@ -118,7 +131,13 @@ export default function EnquiryDetailModal({
               </div>
             </div>
             <Badge variant={statusVariant} size="md" className="uppercase font-bold tracking-wide">
-              {isInterested ? '👍 INTERESTED' : enquiry.status.replace('_', ' ')}
+              {hasCourse
+                ? 'Course Enrolled ✓'
+                : isConverted || hasStudent
+                ? 'Admitted (No Course)'
+                : isInterested
+                ? '👍 INTERESTED'
+                : enquiry.status.replace('_', ' ')}
             </Badge>
           </div>
 
@@ -268,7 +287,7 @@ export default function EnquiryDetailModal({
                 Close
               </Button>
 
-              {!isConverted && onConvertToAdmission && (
+              {!hasCourse && onConvertToAdmission && (
                 <Button
                   size="sm"
                   variant="primary"
@@ -278,7 +297,7 @@ export default function EnquiryDetailModal({
                     onConvertToAdmission(enquiry);
                   }}
                 >
-                  Admit Student
+                  {hasStudent || isConverted ? 'Buy Course / Collect Fees ↗' : 'Admit Student'}
                 </Button>
               )}
             </div>
