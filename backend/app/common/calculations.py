@@ -54,10 +54,10 @@ def evaluate_student_rolling_cycle(
         badge_variant = "danger"
         status_subtext = f"Cycle ended {c_end.strftime('%d %b %Y')} · Overdue by {(today - c_end).days}d"
     elif today > c_end:
-        cycle_status = "RENEWAL_DUE"
-        status_label = "Renewal Due"
-        badge_variant = "warning"
-        status_subtext = f"Cycle ended {c_end.strftime('%d %b %Y')} · Next renewal due"
+        cycle_status = "INACTIVE"
+        status_label = "Inactive (Expired)"
+        badge_variant = "danger"
+        status_subtext = f"Cycle ended {(today - c_end).days}d ago ({c_end.strftime('%d %b %Y')})"
     elif today < c_start:
         cycle_status = "UPCOMING"
         status_label = "Upcoming"

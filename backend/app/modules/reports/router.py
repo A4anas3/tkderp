@@ -5,7 +5,7 @@ from typing import Optional, List, Dict, Any
 from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, or_
+from sqlalchemy import select, func, and_, or_, case
 
 from app.database.session import get_db
 from app.common.calculations import evaluate_student_rolling_cycle, compute_rolling_cycle_end
@@ -97,19 +97,23 @@ async def get_subject_revenue_report(
             *date_conds
         ]
 
+        today = date.today()
         stmt = (
             select(
                 func.coalesce(func.sum(AdmissionItem.original_price), Decimal("0.00")),
                 func.coalesce(func.sum(AdmissionItem.discount_amount + AdmissionItem.overall_discount_share), Decimal("0.00")),
                 func.coalesce(func.sum(AdmissionItem.net_price), Decimal("0.00")),
                 func.coalesce(func.sum(AdmissionItem.amount_collected), Decimal("0.00")),
-                func.coalesce(func.count(AdmissionItem.id), 0)
+                func.coalesce(func.count(AdmissionItem.id), 0),
+                func.count(case((and_(Admission.status == "ACTIVE", end_col >= today), 1), else_=None)),
+                func.count(case((and_(Admission.status == "ACTIVE", end_col < today), 1), else_=None)),
+                func.count(func.distinct(Admission.student_id))
             )
             .join(Admission, AdmissionItem.admission_id == Admission.id)
             .where(and_(*where_filter))
         )
         res = await db.execute(stmt)
-        orig_price, total_disc, booked, collected, student_count = res.one()
+        orig_price, total_disc, booked, collected, student_count, active_enr, inactive_enr, uniq_stu = res.one()
 
         balance = booked - collected
         total_revenue_all += booked
@@ -155,6 +159,10 @@ async def get_subject_revenue_report(
             "subject_name": s.name,
             "default_fee": float(s.default_fee),
             "enrolled_count": student_count,
+            "total_enrollments": student_count,
+            "active_enrollments": active_enr or 0,
+            "inactive_enrollments": inactive_enr or 0,
+            "unique_students_count": uniq_stu or 0,
             "original_billed": float(orig_price),
             "total_discounts": float(total_disc),
             "total_booked": float(booked),
@@ -223,6 +231,10 @@ async def get_subject_revenue_report(
             "subject_name": "Green Card (All-Access Pass)",
             "default_fee": 15000.0,
             "enrolled_count": gc_count,
+            "total_enrollments": gc_count,
+            "active_enrollments": gc_count,
+            "inactive_enrollments": 0,
+            "unique_students_count": gc_count,
             "original_billed": float(gc_booked),
             "total_discounts": 0.0,
             "total_booked": float(gc_booked),
@@ -284,17 +296,21 @@ async def get_batch_revenue_report(
             *date_conds
         ]
 
+        today = date.today()
         stmt = (
             select(
                 func.coalesce(func.sum(AdmissionItem.net_price), Decimal("0.00")),
                 func.coalesce(func.sum(AdmissionItem.amount_collected), Decimal("0.00")),
-                func.coalesce(func.count(AdmissionItem.id), 0)
+                func.coalesce(func.count(AdmissionItem.id), 0),
+                func.count(case((and_(Admission.status == "ACTIVE", end_col >= today), 1), else_=None)),
+                func.count(case((and_(Admission.status == "ACTIVE", end_col < today), 1), else_=None)),
+                func.count(func.distinct(Admission.student_id))
             )
             .join(Admission, AdmissionItem.admission_id == Admission.id)
             .where(and_(*where_filter))
         )
         res = await db.execute(stmt)
-        booked, collected, count = res.one()
+        booked, collected, count, active_enr, inactive_enr, uniq_stu = res.one()
 
         total_booked_all += booked
         total_collected_all += collected
@@ -339,6 +355,10 @@ async def get_batch_revenue_report(
             "teacher_name": b.teacher_name_snapshot,
             "hall_number": b.hall_number,
             "enrolled_count": count,
+            "total_enrollments": count,
+            "active_enrollments": active_enr or 0,
+            "inactive_enrollments": inactive_enr or 0,
+            "unique_students_count": uniq_stu or 0,
             "total_booked": float(booked),
             "total_collected": float(collected),
             "balance_due": float(booked - collected),
