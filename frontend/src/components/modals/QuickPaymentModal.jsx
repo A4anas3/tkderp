@@ -92,22 +92,47 @@ export default function QuickPaymentModal({
         setLoading(true);
         try {
           const res = await admissionApi.list({ page: 1, page_size: 100 });
-          const dues = (res.items || []).filter(
+          let dues = (res.items || []).filter(
             (a) => Number(a.balance_due) > 0 && a.status === 'ACTIVE'
           );
-          setAdmissions(dues);
 
           if (initialAdmissionId) {
-            setSelectedAdmissionId(initialAdmissionId);
-            const found = dues.find((a) => a.id === initialAdmissionId);
-            if (found) {
-              setAmount(Number(found.balance_due).toFixed(2));
-              initPeriodFromAdmission(found);
+            let found = dues.find((a) => a.id === initialAdmissionId);
+            if (!found) {
+              try {
+                const directAdm = await admissionApi.get(initialAdmissionId);
+                if (directAdm) {
+                  found = directAdm;
+                  dues = [directAdm, ...dues.filter((d) => d.id !== directAdm.id)];
+                }
+              } catch (e) {
+                console.error('Failed to fetch initial admission directly:', e);
+              }
             }
-          } else if (dues.length > 0) {
-            setSelectedAdmissionId(dues[0].id);
-            setAmount(Number(dues[0].balance_due).toFixed(2));
-            initPeriodFromAdmission(dues[0]);
+
+            setAdmissions(dues);
+            if (found) {
+              setSelectedAdmissionId(found.id);
+              setAmount(Number(found.balance_due || 0).toFixed(2));
+              initPeriodFromAdmission(found);
+            } else if (dues.length > 0) {
+              setSelectedAdmissionId(dues[0].id);
+              setAmount(Number(dues[0].balance_due || 0).toFixed(2));
+              initPeriodFromAdmission(dues[0]);
+            } else {
+              setSelectedAdmissionId('');
+              setAmount('0.00');
+            }
+          } else {
+            setAdmissions(dues);
+            if (dues.length > 0) {
+              setSelectedAdmissionId(dues[0].id);
+              setAmount(Number(dues[0].balance_due || 0).toFixed(2));
+              initPeriodFromAdmission(dues[0]);
+            } else {
+              setSelectedAdmissionId('');
+              setAmount('0.00');
+            }
           }
         } catch (err) {
           error(err.message || 'Failed to load unpaid admissions');
@@ -116,10 +141,13 @@ export default function QuickPaymentModal({
         }
       };
       fetchDueAdmissions();
+    } else {
+      setSearchFilter('');
     }
   }, [isOpen, initialAdmissionId]);
 
   const initPeriodFromAdmission = (adm) => {
+    if (!adm) return;
     if (adm.valid_from && adm.valid_to) {
       setValidFrom(adm.valid_from);
       setValidTo(adm.valid_to);
@@ -159,12 +187,14 @@ export default function QuickPaymentModal({
     setSelectedAdmissionId(id);
     const found = admissions.find((a) => a.id === id);
     if (found) {
-      setAmount(Number(found.balance_due).toFixed(2));
+      setAmount(Number(found.balance_due || 0).toFixed(2));
       initPeriodFromAdmission(found);
     }
   };
 
-  const selectedAdmission = admissions.find((a) => a.id === selectedAdmissionId);
+  const selectedAdmission =
+    admissions.find((a) => a.id === selectedAdmissionId) ||
+    (admissions.length > 0 ? admissions[0] : null);
 
   // Filter admissions for search
   const filteredAdmissions = admissions.filter((a) => {
@@ -177,20 +207,21 @@ export default function QuickPaymentModal({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!selectedAdmissionId) {
+    const effectiveAdm = selectedAdmission;
+    if (!effectiveAdm) {
       error('Please select a course purchase record');
       return;
     }
-    const payAmt = selectedAdmission ? Number(selectedAdmission.balance_due) : parseFloat(amount);
+    const payAmt = Number(effectiveAdm.balance_due || 0);
     if (isNaN(payAmt) || payAmt <= 0) {
-      error('Please select an admission with an outstanding balance');
+      error('This record has zero outstanding balance due');
       return;
     }
 
     setSubmitting(true);
     try {
       const payload = {
-        admission_id: selectedAdmissionId,
+        admission_id: effectiveAdm.id,
         amount: payAmt,
         payment_mode: paymentMode,
         transaction_reference: transactionRef.trim() || null,
@@ -488,14 +519,19 @@ export default function QuickPaymentModal({
                     Full Outstanding Balance Due
                   </span>
                   <span className="text-xl font-black font-mono text-emerald-950">
-                    ₹{Number(selectedAdmission.balance_due).toFixed(2)}
+                    ₹{selectedAdmission ? Number(selectedAdmission.balance_due || 0).toFixed(2) : (amount || '0.00')}
                   </span>
                   <span className="text-[11px] text-emerald-800 font-medium block mt-0.5">
-                    Full settlement required • No partial payments permitted
+                    {selectedAdmission && Number(selectedAdmission.balance_due || 0) > 0
+                      ? 'Full settlement required • No partial payments permitted'
+                      : 'No pending balance for this record'}
                   </span>
                 </div>
-                <Badge variant="success" size="md">
-                  FULL SETTLEMENT
+                <Badge
+                  variant={selectedAdmission && Number(selectedAdmission.balance_due || 0) > 0 ? 'success' : 'neutral'}
+                  size="md"
+                >
+                  {selectedAdmission && Number(selectedAdmission.balance_due || 0) > 0 ? 'FULL SETTLEMENT' : 'ZERO DUE'}
                 </Badge>
               </div>
 
@@ -536,7 +572,12 @@ export default function QuickPaymentModal({
               <Button variant="secondary" onClick={onClose} disabled={submitting}>
                 Cancel
               </Button>
-              <Button type="submit" variant="success" loading={submitting}>
+              <Button
+                type="submit"
+                variant="success"
+                loading={submitting}
+                disabled={submitting || !selectedAdmission || Number(selectedAdmission?.balance_due || 0) <= 0}
+              >
                 Record Payment & Print Receipt
               </Button>
             </div>
