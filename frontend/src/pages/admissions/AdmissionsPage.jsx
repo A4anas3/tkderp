@@ -72,8 +72,8 @@ export default function AdmissionsPage() {
       render: (a) => (
         <div>
           <span>{a.purchase_transaction_id || a.admission_number}</span>
-          {a.status === 'REVOKED' && (
-            <span className="block text-[10px] text-rose-600 font-sans font-normal">(Revoked)</span>
+          {(a.status === 'REVOKED' || a.status === 'CANCELLED') && (
+            <span className="block text-[10px] text-rose-600 font-sans font-normal">(Cancelled)</span>
           )}
         </div>
       ),
@@ -138,7 +138,7 @@ export default function AdmissionsPage() {
     {
       header: 'Due Balance',
       className: 'text-right font-mono font-bold text-rose-700 w-28',
-      render: (a) => a.status === 'REVOKED' ? (
+      render: (a) => (a.status === 'REVOKED' || a.status === 'CANCELLED') ? (
         <span className="text-slate-400 line-through">₹0.00</span>
       ) : (
         `₹${Number(a.balance_due).toFixed(2)}`
@@ -148,8 +148,8 @@ export default function AdmissionsPage() {
       header: 'Payment Status',
       className: 'text-center w-28',
       render: (a) => {
-        if (a.status === 'REVOKED') {
-          return <Badge size="xs" variant="danger">REVOKED</Badge>;
+        if (a.status === 'REVOKED' || a.status === 'CANCELLED') {
+          return <Badge size="xs" variant="danger">CANCELLED</Badge>;
         }
         const variants = {
           PAID: 'success',

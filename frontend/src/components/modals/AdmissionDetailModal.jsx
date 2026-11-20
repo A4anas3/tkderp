@@ -34,7 +34,8 @@ export default function AdmissionDetailModal({
 
   const validFrom = admission.valid_from || admission.admission_date;
   const validTo = admission.valid_to;
-  const cycleInfo = evaluateCycleStatus(validTo, admission.balance_due);
+  const isInactive = isRevoked || isCancelled;
+  const cycleInfo = evaluateCycleStatus(validTo, admission.balance_due, isInactive);
 
   return (
     <Modal

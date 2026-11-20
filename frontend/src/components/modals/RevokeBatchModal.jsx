@@ -39,7 +39,7 @@ export default function RevokeBatchModal({
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!reason.trim()) {
-      error('Please provide a mandatory reason for revoking / taking back this batch');
+      error('Please provide a mandatory reason for cancelling this batch');
       return;
     }
 
@@ -66,7 +66,7 @@ export default function RevokeBatchModal({
 
       const res = await admissionApi.revoke(admission.id, payload);
       success(
-        `Batch purchase (${txnId}) revoked successfully.${
+        `Batch purchase (${txnId}) cancelled successfully.${
           refundVal > 0 ? ` Refunded ₹${refundVal} to student.` : ''
         }`
       );
@@ -76,7 +76,7 @@ export default function RevokeBatchModal({
         onSuccess(res, refundVal > 0);
       }
     } catch (err) {
-      error(err.message || 'Failed to revoke batch purchase');
+      error(err.message || 'Failed to cancel batch purchase');
     } finally {
       setSubmitting(false);
     }
@@ -86,8 +86,8 @@ export default function RevokeBatchModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Revoke / Return Batch Purchase"
-      subtitle="Taking back this batch drops the student from class lists and voids pending balance due"
+      title="Cancel Course / Batch Purchase"
+      subtitle="Cancelling this batch drops the student from active class attendance lists and voids pending balance due"
       maxWidth="max-w-md"
     >
       <form onSubmit={handleSubmit} className="space-y-3.5">
@@ -220,7 +220,7 @@ export default function RevokeBatchModal({
             loading={submitting}
             icon={Undo2}
           >
-            Confirm Batch Revocation
+            Confirm Batch Cancellation
           </Button>
         </div>
       </form>

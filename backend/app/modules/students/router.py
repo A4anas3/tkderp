@@ -199,7 +199,7 @@ async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db),
     )).scalar() or 0
 
     revoked_adm_count = (await db.execute(
-        select(func.count(Admission.id)).where(Admission.student_id == student_id, Admission.status == "REVOKED")
+        select(func.count(Admission.id)).where(Admission.student_id == student_id, Admission.status.in_(["REVOKED", "CANCELLED"]))
     )).scalar() or 0
 
     active_row = (await db.execute(
@@ -344,6 +344,19 @@ async def revoke_student(
     student.revoked_by = user.id
     student.has_green_card = False
 
+    # Automatically revoke/cancel all active batch purchases of this student
+    active_adms_res = await db.execute(
+        select(Admission).where(Admission.student_id == student_id, Admission.status == "ACTIVE")
+    )
+    for adm in active_adms_res.scalars().all():
+        adm.status = "REVOKED"
+        adm.revocation_reason = f"Student admission revoked: {payload.reason.strip()}"
+        adm.revoked_at = datetime.now(timezone.utc)
+        adm.revoked_by = user.id
+        adm.balance_due = Decimal("0.00")
+        if adm.amount_paid <= Decimal("0.00"):
+            adm.payment_status = "VOID"
+
     audit = AuditLog(
         user_id=user.id,
         action="REVOKE_STUDENT",
@@ -373,6 +386,29 @@ async def restore_student(
     old_reason = student.revoke_reason
     student.status = "ACTIVE"
     student.revoke_reason = None
+    student.revoked_at = None
+    student.revoked_by = None
+
+    # Automatically restore admissions that were revoked due to student revocation
+    revoked_adms_res = await db.execute(
+        select(Admission).where(
+            Admission.student_id == student_id,
+            Admission.status.in_(["REVOKED", "CANCELLED"]),
+            Admission.revocation_reason.like("Student admission revoked:%")
+        )
+    )
+    for adm in revoked_adms_res.scalars().all():
+        adm.status = "ACTIVE"
+        adm.revocation_reason = None
+        adm.revoked_at = None
+        adm.revoked_by = None
+        adm.balance_due = max(Decimal("0.00"), adm.total_payable - adm.amount_paid)
+        if adm.balance_due == Decimal("0.00"):
+            adm.payment_status = "PAID"
+        elif adm.amount_paid > Decimal("0.00"):
+            adm.payment_status = "PARTIALLY_PAID"
+        else:
+            adm.payment_status = "UNPAID"
     student.revoked_at = None
     student.revoked_by = None
 

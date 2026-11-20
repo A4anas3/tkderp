@@ -131,13 +131,14 @@ export default function AdmissionDetailPage() {
     );
   }
 
-  const isActive = admission.status === 'ACTIVE';
   const isRevoked = admission.status === 'REVOKED';
   const isCancelled = admission.status === 'CANCELLED';
+  const isInactive = isRevoked || isCancelled;
+  const isActive = admission.status === 'ACTIVE';
 
   const validFrom = admission.valid_from || admission.admission_date;
   const validTo = admission.valid_to;
-  const cycleInfo = evaluateCycleStatus(validTo, admission.balance_due);
+  const cycleInfo = evaluateCycleStatus(validTo, admission.balance_due, isInactive);
 
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-5">
@@ -206,11 +207,11 @@ export default function AdmissionDetailPage() {
               loading={revoking}
               size="sm"
             >
-              {Number(admission.amount_paid || 0) > 0 ? 'Full Refund & Revoke' : 'Revoke Purchase'}
+              {Number(admission.amount_paid || 0) > 0 ? 'Full Refund & Cancel' : 'Cancel Purchase'}
             </Button>
           )}
 
-          {isAdmin && isRevoked && (
+          {isAdmin && isInactive && (
             <Button
               variant="primary"
               icon={RotateCcw}
@@ -299,10 +300,10 @@ export default function AdmissionDetailPage() {
       </div>
 
       {/* Rolling Date-to-Date Fee Cycle Card */}
-      <div className="bg-indigo-50/60 p-4 rounded-xl border border-indigo-200 space-y-3 shadow-2xs">
+      <div className={`${isInactive ? 'bg-rose-50/50 border-rose-200' : 'bg-indigo-50/60 border-indigo-200'} p-4 rounded-xl border space-y-3 shadow-2xs`}>
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-xs font-bold text-indigo-950 uppercase tracking-wider">
-            <Calendar className="w-4 h-4 text-indigo-700" />
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-900 uppercase tracking-wider">
+            <Calendar className={`w-4 h-4 ${isInactive ? 'text-rose-600' : 'text-indigo-700'}`} />
             <span>Rolling Date-to-Date Monthly Fee Cycle</span>
           </div>
           <Badge variant={cycleInfo.variant} size="xs">
@@ -311,7 +312,7 @@ export default function AdmissionDetailPage() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-          <div className="bg-white p-3 rounded-lg border border-indigo-100 shadow-2xs">
+          <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs">
             <span className="text-[11px] text-slate-500 block font-medium">Cycle Period Window</span>
             <span className="font-mono font-bold text-black text-sm">
               {formatCycleLabel(validFrom, validTo)}
@@ -320,22 +321,22 @@ export default function AdmissionDetailPage() {
               {admission.valid_from ? formatIndianDate(admission.valid_from) : '—'} to {admission.valid_to ? formatIndianDate(admission.valid_to) : '—'}
             </div>
           </div>
-          <div className="bg-white p-3 rounded-lg border border-indigo-100 shadow-2xs">
+          <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs">
             <span className="text-[11px] text-slate-500 block font-medium">Individual Billing Anchor</span>
-            <span className="font-bold text-indigo-900 text-sm">
+            <span className="font-bold text-slate-900 text-sm">
               Day {validFrom ? parseInt(validFrom.split('-')[2], 10) : '—'} of month
             </span>
             <div className="text-[10px] text-slate-500 mt-0.5">
               Cycle rolls on enrollment date
             </div>
           </div>
-          <div className="bg-white p-3 rounded-lg border border-indigo-100 shadow-2xs">
+          <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs">
             <span className="text-[11px] text-slate-500 block font-medium">Renewal Due Status</span>
-            <span className="font-bold text-black text-sm">
+            <span className={`font-bold text-sm ${isInactive ? 'text-rose-700' : cycleInfo.variant === 'danger' ? 'text-rose-700' : cycleInfo.variant === 'warning' ? 'text-amber-800' : 'text-emerald-800'}`}>
               {cycleInfo.label}
             </span>
-            <div className="text-[10px] text-slate-600 mt-0.5 font-medium">
-              {cycleInfo.subtext}
+            <div className={`text-[10px] mt-0.5 font-medium ${isInactive ? 'text-rose-700' : 'text-slate-600'}`}>
+              {isInactive ? (admission.revocation_reason || 'Course purchase cancelled / revoked') : cycleInfo.subtext}
             </div>
           </div>
         </div>
@@ -433,7 +434,9 @@ export default function AdmissionDetailPage() {
             <span className="text-slate-500 block text-[11px]">Payment Status</span>
             <Badge
               variant={
-                admission.payment_status === 'PAID'
+                isInactive
+                  ? 'danger'
+                  : admission.payment_status === 'PAID'
                   ? 'success'
                   : admission.payment_status === 'PARTIAL'
                   ? 'warning'
@@ -442,7 +445,7 @@ export default function AdmissionDetailPage() {
               size="sm"
               className="mt-1 font-bold"
             >
-              {admission.payment_status}
+              {isInactive ? 'CANCELLED' : admission.payment_status}
             </Badge>
           </div>
         </div>

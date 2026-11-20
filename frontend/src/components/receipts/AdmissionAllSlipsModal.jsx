@@ -184,7 +184,7 @@ export default function AdmissionAllSlipsModal({
                         <Badge
                           size="xs"
                           variant={
-                            data?.status === 'REVOKED'
+                            (data?.status === 'REVOKED' || data?.status === 'CANCELLED')
                               ? 'danger'
                               : data?.payment_status === 'PAID'
                               ? 'success'
@@ -193,7 +193,7 @@ export default function AdmissionAllSlipsModal({
                               : 'danger'
                           }
                         >
-                          {data?.status === 'REVOKED' ? 'REVOKED' : data?.payment_status}
+                          {(data?.status === 'REVOKED' || data?.status === 'CANCELLED') ? 'CANCELLED' : data?.payment_status}
                         </Badge>
                       </span>
                     </div>
@@ -366,7 +366,7 @@ export default function AdmissionAllSlipsModal({
                       <Badge
                         size="xs"
                         variant={
-                          data?.status === 'REVOKED'
+                          (data?.status === 'REVOKED' || data?.status === 'CANCELLED')
                             ? 'danger'
                             : data?.payment_status === 'PAID'
                             ? 'success'
@@ -375,7 +375,7 @@ export default function AdmissionAllSlipsModal({
                             : 'danger'
                         }
                       >
-                        {data?.status === 'REVOKED' ? 'REVOKED' : data?.payment_status}
+                        {(data?.status === 'REVOKED' || data?.status === 'CANCELLED') ? 'CANCELLED' : data?.payment_status}
                       </Badge>
                     </div>
                   </div>

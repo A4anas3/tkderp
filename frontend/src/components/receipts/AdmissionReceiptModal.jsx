@@ -25,13 +25,13 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission }) {
           documentSubtitle={`Transaction ID: ${admission.purchase_transaction_id || admission.admission_number}`}
         />
 
-        {/* Revocation Banner if revoked */}
-        {admission.status === 'REVOKED' && (
+        {/* Revocation Banner if revoked or cancelled */}
+        {(admission.status === 'REVOKED' || admission.status === 'CANCELLED') && (
           <div className="p-2 bg-rose-50 border border-rose-300 rounded text-center text-xs text-rose-800 font-bold uppercase tracking-wider">
-            [REVOKED BATCH PURCHASE — ENROLLMENT TERMINATED]
+            [CANCELLED BATCH PURCHASE — ENROLLMENT TERMINATED]
             {admission.revocation_reason && (
               <span className="block normal-case font-normal text-rose-700 mt-0.5">
-                Revocation Reason: {admission.revocation_reason}
+                Reason: {admission.revocation_reason}
               </span>
             )}
           </div>
@@ -91,7 +91,7 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission }) {
                 <Badge
                   size="xs"
                   variant={
-                    admission.status === 'REVOKED'
+                    (admission.status === 'REVOKED' || admission.status === 'CANCELLED')
                       ? 'danger'
                       : admission.payment_status === 'PAID'
                       ? 'success'
@@ -100,7 +100,7 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission }) {
                       : 'danger'
                   }
                 >
-                  {admission.status === 'REVOKED' ? 'REVOKED' : admission.payment_status}
+                  {(admission.status === 'REVOKED' || admission.status === 'CANCELLED') ? 'CANCELLED' : admission.payment_status}
                 </Badge>
               </span>
             </div>

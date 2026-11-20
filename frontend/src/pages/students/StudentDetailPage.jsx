@@ -53,14 +53,17 @@ import RevokeBatchModal from '../../components/modals/RevokeBatchModal';
 import EditStudentModal from '../../components/modals/EditStudentModal';
 
 function getValidityStatus(adm) {
-  if (adm.status === 'REVOKED') {
+  const isCancelledOrRevoked = adm.status === 'REVOKED' || adm.status === 'CANCELLED';
+  if (isCancelledOrRevoked) {
+    const formattedDate = adm.revoked_at ? new Date(adm.revoked_at).toLocaleDateString('en-IN') : null;
     return {
-      status: 'REVOKED',
+      status: 'CANCELLED',
       badgeVariant: 'danger',
-      label: 'Revoked',
-      subtext: adm.revoked_at ? `Revoked on ${new Date(adm.revoked_at).toLocaleDateString('en-IN')}` : 'Revoked',
+      label: 'Cancelled',
+      subtext: adm.revocation_reason ? adm.revocation_reason : (formattedDate ? `Cancelled on ${formattedDate}` : 'Cancelled'),
       isExpired: false,
       isExpiringSoon: false,
+      isCancelled: true,
       canRenew: false,
     };
   }
@@ -356,7 +359,7 @@ export default function StudentDetailPage() {
             <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
             <div>
               <span className="font-bold text-rose-950 uppercase tracking-wider block">
-                STUDENT ADMISSION HAS BEEN REVOKED
+                STUDENT ADMISSION REVOKED — ALL ACTIVE ENROLLMENTS CANCELLED
               </span>
               <p className="text-rose-800">
                 Reason: <strong className="text-black italic">{student.revoke_reason || 'Administrative action'}</strong>
@@ -506,7 +509,7 @@ export default function StudentDetailPage() {
             {Number(student.revoked_admissions_count) > 0 && (
               <>
                 <span>•</span>
-                <span className="text-rose-600">{student.revoked_admissions_count} Revoked</span>
+                <span className="text-rose-600">{student.revoked_admissions_count} Cancelled</span>
               </>
             )}
           </div>
@@ -519,7 +522,9 @@ export default function StudentDetailPage() {
           <div className="text-xl font-bold text-black mt-0.5">
             ₹{Number(student.total_billed).toFixed(2)}
           </div>
-          <span className="text-[10px] text-slate-500">Active courses fee</span>
+          <span className="text-[10px] text-slate-500">
+            {Number(student.active_admissions_count) > 0 ? 'Active courses fee' : 'No active courses'}
+          </span>
         </div>
 
         <div className="bg-white rounded-lg border border-emerald-200 border-l-4 border-l-emerald-600 p-3 shadow-xs">
@@ -709,7 +714,7 @@ export default function StudentDetailPage() {
               <option value="PAID">Fully Paid</option>
               <option value="PARTIALLY_PAID">Partially Paid</option>
               <option value="UNPAID">Unpaid</option>
-              <option value="REVOKED">Revoked</option>
+              <option value="CANCELLED">Cancelled / Revoked</option>
             </select>
           </div>
 
@@ -744,21 +749,25 @@ export default function StudentDetailPage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {admissions.map((adm) => {
-                  const isBatchRevoked = adm.status === 'REVOKED';
+                  const isBatchCancelled = adm.status === 'REVOKED' || adm.status === 'CANCELLED';
                   const validity = getValidityStatus(adm);
                   return (
-                    <tr key={adm.id} className={`hover:bg-slate-50 ${isBatchRevoked ? 'bg-rose-50/40 opacity-85' : ''}`}>
+                    <tr key={adm.id} className={`hover:bg-slate-50 ${isBatchCancelled ? 'bg-rose-50/40 opacity-85' : ''}`}>
                       <td className="p-2 font-mono font-bold text-black">
                         <div>{adm.purchase_transaction_id || adm.admission_number}</div>
-                        {isBatchRevoked && (
-                          <span className="text-[10px] text-rose-700 font-normal">
-                            (Batch Revoked)
+                        {isBatchCancelled && (
+                          <span className="text-[10px] text-rose-700 font-normal block">
+                            (Batch Cancelled)
                           </span>
                         )}
                       </td>
                       <td className="p-2 text-slate-600">
                         <span className="font-semibold text-black block">{adm.admission_date}</span>
-                        {adm.valid_from && adm.valid_to ? (
+                        {isBatchCancelled ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-rose-50 text-rose-800 border-rose-200 mt-1">
+                            {validity.subtext}
+                          </span>
+                        ) : adm.valid_from && adm.valid_to ? (
                           <div className="mt-1 space-y-0.5">
                             <span className="text-[10px] text-slate-700 font-mono block">
                               {adm.valid_from} &rarr; {adm.valid_to}
@@ -809,17 +818,17 @@ export default function StudentDetailPage() {
                         ₹{Number(adm.amount_paid).toFixed(2)}
                       </td>
                       <td className="p-2 text-right font-mono text-rose-700 font-bold">
-                        {isBatchRevoked ? (
+                        {isBatchCancelled ? (
                           <span className="line-through text-slate-400">₹0.00</span>
                         ) : (
                           `₹${Number(adm.balance_due).toFixed(2)}`
                         )}
                       </td>
                       <td className="p-2 text-center">
-                        {isBatchRevoked ? (
+                        {isBatchCancelled ? (
                           <div className="space-y-0.5">
                             <Badge size="xs" variant="danger">
-                              REVOKED
+                              CANCELLED
                             </Badge>
                             {adm.revocation_reason && (
                               <div
@@ -873,7 +882,7 @@ export default function StudentDetailPage() {
                           </Button>
 
                           {/* Collect Due Fee (2nd Payment) if pending */}
-                          {Number(adm.balance_due) > 0 && !isBatchRevoked && !isRevoked && (
+                          {Number(adm.balance_due) > 0 && !isBatchCancelled && !isRevoked && (
                             <Button
                               size="xs"
                               variant="success"
@@ -889,7 +898,7 @@ export default function StudentDetailPage() {
                           )}
 
                           {/* Renew / Next Cycle button */}
-                          {!isBatchRevoked && !isRevoked && (
+                          {!isBatchCancelled && !isRevoked && (
                             <Button
                               size="xs"
                               variant={validity.isExpired ? 'danger' : validity.isExpiringSoon ? 'warning' : 'primary'}
@@ -900,14 +909,14 @@ export default function StudentDetailPage() {
                                   )}&renew=1`
                                 )
                               }
-                              title="Pay next month fee cycle / renew batch"
+                              title={validity.isExpired ? 'Renew expired batch cycle' : 'Pay next month fee cycle'}
                             >
                               {validity.isExpired ? 'Renew Batch' : '+ Next Month'}
                             </Button>
                           )}
 
-                          {/* If Revoked: Offer Refund (if paid) and Restore Batch */}
-                          {isBatchRevoked ? (
+                          {/* If Cancelled: Offer Refund (if paid) and Restore Batch */}
+                          {isBatchCancelled ? (
                             <>
                               {isAdmin && Number(adm.amount_paid) > 0 && (
                                 <Button
@@ -917,7 +926,7 @@ export default function StudentDetailPage() {
                                     setSelectedAdmissionForRefund(adm);
                                     setRefundModalOpen(true);
                                   }}
-                                  title="Issue refund on revoked batch"
+                                  title="Issue refund on cancelled batch"
                                 >
                                   Refund
                                 </Button>
@@ -929,14 +938,15 @@ export default function StudentDetailPage() {
                                   icon={RotateCcw}
                                   loading={restoringBatchId === adm.id}
                                   onClick={() => handleRestoreBatch(adm)}
+                                  title="Restore cancelled batch to Active"
                                 >
-                                  Restore
+                                  Restore Batch
                                 </Button>
                               )}
                             </>
                           ) : (
                             <>
-                              {/* Revoke Batch Button (Admin Only) */}
+                              {/* Cancel Batch Button (Admin Only) */}
                               {isAdmin && (
                                 <Button
                                   size="xs"
@@ -945,8 +955,9 @@ export default function StudentDetailPage() {
                                     setSelectedAdmissionForBatchRevoke(adm);
                                     setRevokeBatchModalOpen(true);
                                   }}
+                                  title="Cancel student batch enrollment"
                                 >
-                                  Revoke
+                                  Cancel Batch
                                 </Button>
                               )}
 
@@ -959,6 +970,7 @@ export default function StudentDetailPage() {
                                     setSelectedAdmissionForRefund(adm);
                                     setRefundModalOpen(true);
                                   }}
+                                  title="Issue refund"
                                 >
                                   Refund
                                 </Button>

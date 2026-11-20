@@ -65,7 +65,17 @@ export function formatCycleLabel(startDateStr, endDateStr) {
   return `${formatIndianDate(startDateStr)} → ${formatIndianDate(endDateStr)}`;
 }
 
-export function evaluateCycleStatus(endDateStr, balanceDue = 0) {
+export function evaluateCycleStatus(endDateStr, balanceDue = 0, isCancelledOrRevoked = false) {
+  if (isCancelledOrRevoked) {
+    return {
+      status: 'CANCELLED',
+      label: 'Cancelled',
+      variant: 'danger',
+      daysRemaining: 0,
+      subtext: 'Enrollment cancelled / dropped',
+    };
+  }
+
   if (!endDateStr) {
     return {
       status: 'UNKNOWN',
@@ -86,23 +96,15 @@ export function evaluateCycleStatus(endDateStr, balanceDue = 0) {
   const diffTime = end.getTime() - today.getTime();
   const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-  if (Number(balanceDue) > 0 && daysRemaining < 0) {
+  if (daysRemaining < 0) {
     return {
-      status: 'OVERDUE',
-      label: 'Payment Overdue',
+      status: 'EXPIRED',
+      label: 'Expired',
       variant: 'danger',
       daysRemaining,
-      subtext: `Cycle ended · Overdue by ${Math.abs(daysRemaining)}d`,
+      subtext: `Cycle expired ${Math.abs(daysRemaining)}d ago · Renewal due`,
     };
-  } else if (daysRemaining < 0) {
-    return {
-      status: 'RENEWAL_DUE',
-      label: 'Renewal Due',
-      variant: 'warning',
-      daysRemaining,
-      subtext: `Cycle ended · Renewal due`,
-    };
-  } else if (daysRemaining <= 5) {
+  } else if (daysRemaining <= 7) {
     return {
       status: 'DUE_SOON',
       label: 'Expiring Soon',

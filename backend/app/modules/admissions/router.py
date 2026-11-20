@@ -77,8 +77,12 @@ async def list_admissions(
         count_query = count_query.where(Admission.student_id == student_id)
 
     if payment_status and payment_status != "ALL":
-        query = query.where(Admission.payment_status == payment_status)
-        count_query = count_query.where(Admission.payment_status == payment_status)
+        if payment_status in ("REVOKED", "CANCELLED"):
+            query = query.where(Admission.status.in_(["REVOKED", "CANCELLED"]))
+            count_query = count_query.where(Admission.status.in_(["REVOKED", "CANCELLED"]))
+        else:
+            query = query.where(Admission.payment_status == payment_status)
+            count_query = count_query.where(Admission.payment_status == payment_status)
 
     total_result = await db.execute(count_query)
     total = total_result.scalar_one()
@@ -547,14 +551,38 @@ async def cancel_admission(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin)
 ):
-    query = select(Admission).options(selectinload(Admission.items)).where(Admission.id == admission_id)
+    query = select(Admission).options(selectinload(Admission.items), selectinload(Admission.student)).where(Admission.id == admission_id)
     res = await db.execute(query)
     admission = res.scalar_one_or_none()
     if not admission:
         raise HTTPException(status_code=404, detail="Admission not found")
 
     admission.status = "CANCELLED"
+    admission.revocation_reason = "Cancelled by administrator"
+    admission.revoked_at = datetime.now(timezone.utc)
+    admission.revoked_by = current_user.id
+    admission.balance_due = Decimal("0.00")
+    if admission.amount_paid <= Decimal("0.00"):
+        admission.payment_status = "VOID"
+
+    has_gc = any(itm.item_type == "GREEN_CARD" for itm in admission.items)
+    if has_gc and admission.student:
+        admission.student.has_green_card = False
+
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="BATCH_PURCHASE_CANCELLED",
+        entity_type="ADMISSION",
+        entity_id=admission.id,
+        details=json.dumps({
+            "purchase_transaction_id": admission.admission_number,
+            "student_name": admission.student_name_snapshot,
+            "reason": "Cancelled by administrator"
+        })
+    )
+    db.add(audit)
     await db.commit()
+    await db.refresh(admission)
     return admission
 
 @router.post("/{admission_id}/revoke", response_model=AdmissionResponse)
