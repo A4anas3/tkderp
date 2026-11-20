@@ -837,6 +837,301 @@ async def seed_data():
         session.add(ref1)
 
         # -------------------------------------------------------------
+        # 12b. Admission 6: Tanvi Aggarwal - Month 1 Biology (Expired Cycle)
+        # -------------------------------------------------------------
+        adm6 = Admission(
+            id=uuid.UUID("77777777-7777-7777-7777-777777777706"),
+            admission_number="ADM/2026/006",
+            student_id=stu6.id,
+            student_name_snapshot=stu6.name,
+            admission_date=today - timedelta(days=98),
+            subtotal=Decimal("1300.00"),
+            individual_discount_total=Decimal("0.00"),
+            overall_discount_type="NONE",
+            overall_discount_value=Decimal("0.00"),
+            overall_discount_amount=Decimal("0.00"),
+            total_discount=Decimal("0.00"),
+            gst_enabled=False,
+            gst_rate=Decimal("18.00"),
+            taxable_base=Decimal("1300.00"),
+            gst_amount=Decimal("0.00"),
+            total_payable=Decimal("1300.00"),
+            amount_paid=Decimal("1300.00"),
+            balance_due=Decimal("0.00"),
+            payment_status="PAID",
+            status="ACTIVE",
+            notes="Biology NEET monthly cycle (Aug-Sept). Paid in full.",
+            valid_from=today - timedelta(days=98),
+            valid_to=today - timedelta(days=69),
+            created_by=cashier_user.id
+        )
+        session.add(adm6)
+        await session.flush()
+
+        adm6_item = AdmissionItem(
+            admission_id=adm6.id,
+            item_type="BATCH_SUBJECT",
+            subject_id=sub_bio.id,
+            batch_id=batch3.id,
+            teacher_id=teacher2.id,
+            teacher_name_snapshot=teacher2.name,
+            hall_number_snapshot="Hall 105",
+            item_name_snapshot="Biology & Medical Target (NEET)",
+            original_price=Decimal("1300.00"),
+            discount_type="NONE",
+            discount_value=Decimal("0.00"),
+            discount_amount=Decimal("0.00"),
+            overall_discount_share=Decimal("0.00"),
+            net_price=Decimal("1300.00"),
+            amount_collected=Decimal("1300.00"),
+            balance_due=Decimal("0.00"),
+            valid_from=today - timedelta(days=98),
+            valid_to=today - timedelta(days=69)
+        )
+        session.add(adm6_item)
+        await session.flush()
+
+        pmt6 = Payment(
+            payment_number="RCP/2026/006",
+            admission_id=adm6.id,
+            student_id=stu6.id,
+            amount=Decimal("1300.00"),
+            payment_mode="UPI",
+            transaction_reference="UPI/6001/TANVI",
+            payment_date=now - timedelta(days=98),
+            collected_by=cashier_user.id,
+            collector_name_snapshot=cashier_user.full_name,
+            notes="UPI fee received for Month 1",
+            valid_from=today - timedelta(days=98),
+            valid_to=today - timedelta(days=69),
+            fee_period="Aug 2026 - Sep 2026"
+        )
+        session.add(pmt6)
+        await session.flush()
+        session.add(PaymentAllocation(payment_id=pmt6.id, admission_item_id=adm6_item.id, allocated_amount=Decimal("1300.00")))
+
+        # -------------------------------------------------------------
+        # 12c. Admission 7: Tanvi Aggarwal - Month 2 Biology (Expired Cycle)
+        # -------------------------------------------------------------
+        adm7 = Admission(
+            id=uuid.UUID("77777777-7777-7777-7777-777777777707"),
+            admission_number="ADM/2026/007",
+            student_id=stu6.id,
+            student_name_snapshot=stu6.name,
+            admission_date=today - timedelta(days=68),
+            subtotal=Decimal("1300.00"),
+            individual_discount_total=Decimal("0.00"),
+            overall_discount_type="NONE",
+            overall_discount_value=Decimal("0.00"),
+            overall_discount_amount=Decimal("0.00"),
+            total_discount=Decimal("0.00"),
+            gst_enabled=False,
+            gst_rate=Decimal("18.00"),
+            taxable_base=Decimal("1300.00"),
+            gst_amount=Decimal("0.00"),
+            total_payable=Decimal("1300.00"),
+            amount_paid=Decimal("1300.00"),
+            balance_due=Decimal("0.00"),
+            payment_status="PAID",
+            status="ACTIVE",
+            notes="Biology NEET monthly cycle (Sep-Oct). Paid in full.",
+            valid_from=today - timedelta(days=68),
+            valid_to=today - timedelta(days=39),
+            created_by=cashier_user.id
+        )
+        session.add(adm7)
+        await session.flush()
+
+        adm7_item = AdmissionItem(
+            admission_id=adm7.id,
+            item_type="BATCH_SUBJECT",
+            subject_id=sub_bio.id,
+            batch_id=batch3.id,
+            teacher_id=teacher2.id,
+            teacher_name_snapshot=teacher2.name,
+            hall_number_snapshot="Hall 105",
+            item_name_snapshot="Biology & Medical Target (NEET)",
+            original_price=Decimal("1300.00"),
+            discount_type="NONE",
+            discount_value=Decimal("0.00"),
+            discount_amount=Decimal("0.00"),
+            overall_discount_share=Decimal("0.00"),
+            net_price=Decimal("1300.00"),
+            amount_collected=Decimal("1300.00"),
+            balance_due=Decimal("0.00"),
+            valid_from=today - timedelta(days=68),
+            valid_to=today - timedelta(days=39)
+        )
+        session.add(adm7_item)
+        await session.flush()
+
+        pmt7 = Payment(
+            payment_number="RCP/2026/007",
+            admission_id=adm7.id,
+            student_id=stu6.id,
+            amount=Decimal("1300.00"),
+            payment_mode="UPI",
+            transaction_reference="UPI/6002/TANVI",
+            payment_date=now - timedelta(days=68),
+            collected_by=cashier_user.id,
+            collector_name_snapshot=cashier_user.full_name,
+            notes="UPI fee received for Month 2",
+            valid_from=today - timedelta(days=68),
+            valid_to=today - timedelta(days=39),
+            fee_period="Sep 2026 - Oct 2026"
+        )
+        session.add(pmt7)
+        await session.flush()
+        session.add(PaymentAllocation(payment_id=pmt7.id, admission_item_id=adm7_item.id, allocated_amount=Decimal("1300.00")))
+
+        # -------------------------------------------------------------
+        # 12d. Admission 8: Tanvi Aggarwal - Month 3 Biology (Active Current Cycle)
+        # -------------------------------------------------------------
+        adm8 = Admission(
+            id=uuid.UUID("77777777-7777-7777-7777-777777777708"),
+            admission_number="ADM/2026/008",
+            student_id=stu6.id,
+            student_name_snapshot=stu6.name,
+            admission_date=today - timedelta(days=7),
+            subtotal=Decimal("1300.00"),
+            individual_discount_total=Decimal("0.00"),
+            overall_discount_type="NONE",
+            overall_discount_value=Decimal("0.00"),
+            overall_discount_amount=Decimal("0.00"),
+            total_discount=Decimal("0.00"),
+            gst_enabled=False,
+            gst_rate=Decimal("18.00"),
+            taxable_base=Decimal("1300.00"),
+            gst_amount=Decimal("0.00"),
+            total_payable=Decimal("1300.00"),
+            amount_paid=Decimal("1300.00"),
+            balance_due=Decimal("0.00"),
+            payment_status="PAID",
+            status="ACTIVE",
+            notes="Biology NEET monthly cycle (Nov-Dec). Active cycle paid in full.",
+            valid_from=today - timedelta(days=7),
+            valid_to=today + timedelta(days=22),
+            created_by=cashier_user.id
+        )
+        session.add(adm8)
+        await session.flush()
+
+        adm8_item = AdmissionItem(
+            admission_id=adm8.id,
+            item_type="BATCH_SUBJECT",
+            subject_id=sub_bio.id,
+            batch_id=batch3.id,
+            teacher_id=teacher2.id,
+            teacher_name_snapshot=teacher2.name,
+            hall_number_snapshot="Hall 105",
+            item_name_snapshot="Biology & Medical Target (NEET)",
+            original_price=Decimal("1300.00"),
+            discount_type="NONE",
+            discount_value=Decimal("0.00"),
+            discount_amount=Decimal("0.00"),
+            overall_discount_share=Decimal("0.00"),
+            net_price=Decimal("1300.00"),
+            amount_collected=Decimal("1300.00"),
+            balance_due=Decimal("0.00"),
+            valid_from=today - timedelta(days=7),
+            valid_to=today + timedelta(days=22)
+        )
+        session.add(adm8_item)
+        await session.flush()
+
+        pmt8 = Payment(
+            payment_number="RCP/2026/008",
+            admission_id=adm8.id,
+            student_id=stu6.id,
+            amount=Decimal("1300.00"),
+            payment_mode="UPI",
+            transaction_reference="UPI/6003/TANVI",
+            payment_date=now - timedelta(days=7),
+            collected_by=cashier_user.id,
+            collector_name_snapshot=cashier_user.full_name,
+            notes="UPI fee received for Month 3",
+            valid_from=today - timedelta(days=7),
+            valid_to=today + timedelta(days=22),
+            fee_period="Nov 2026 - Dec 2026"
+        )
+        session.add(pmt8)
+        await session.flush()
+        session.add(PaymentAllocation(payment_id=pmt8.id, admission_item_id=adm8_item.id, allocated_amount=Decimal("1300.00")))
+
+        # -------------------------------------------------------------
+        # 12e. Admission 9: Rohan Gupta - Biology NEET (Active Current Cycle)
+        # -------------------------------------------------------------
+        adm9 = Admission(
+            id=uuid.UUID("77777777-7777-7777-7777-777777777709"),
+            admission_number="ADM/2026/009",
+            student_id=stu3.id,
+            student_name_snapshot=stu3.name,
+            admission_date=today,
+            subtotal=Decimal("1300.00"),
+            individual_discount_total=Decimal("0.00"),
+            overall_discount_type="NONE",
+            overall_discount_value=Decimal("0.00"),
+            overall_discount_amount=Decimal("0.00"),
+            total_discount=Decimal("0.00"),
+            gst_enabled=False,
+            gst_rate=Decimal("18.00"),
+            taxable_base=Decimal("1300.00"),
+            gst_amount=Decimal("0.00"),
+            total_payable=Decimal("1300.00"),
+            amount_paid=Decimal("1300.00"),
+            balance_due=Decimal("0.00"),
+            payment_status="PAID",
+            status="ACTIVE",
+            notes="Biology NEET monthly cycle (Nov-Dec). Active cycle paid in full.",
+            valid_from=today,
+            valid_to=today + timedelta(days=29),
+            created_by=cashier_user.id
+        )
+        session.add(adm9)
+        await session.flush()
+
+        adm9_item = AdmissionItem(
+            admission_id=adm9.id,
+            item_type="BATCH_SUBJECT",
+            subject_id=sub_bio.id,
+            batch_id=batch3.id,
+            teacher_id=teacher2.id,
+            teacher_name_snapshot=teacher2.name,
+            hall_number_snapshot="Hall 105",
+            item_name_snapshot="Biology & Medical Target (NEET)",
+            original_price=Decimal("1300.00"),
+            discount_type="NONE",
+            discount_value=Decimal("0.00"),
+            discount_amount=Decimal("0.00"),
+            overall_discount_share=Decimal("0.00"),
+            net_price=Decimal("1300.00"),
+            amount_collected=Decimal("1300.00"),
+            balance_due=Decimal("0.00"),
+            valid_from=today,
+            valid_to=today + timedelta(days=29)
+        )
+        session.add(adm9_item)
+        await session.flush()
+
+        pmt9 = Payment(
+            payment_number="RCP/2026/009",
+            admission_id=adm9.id,
+            student_id=stu3.id,
+            amount=Decimal("1300.00"),
+            payment_mode="CASH",
+            payment_date=now,
+            collected_by=cashier_user.id,
+            collector_name_snapshot=cashier_user.full_name,
+            notes="Cash received for Biology monthly cycle",
+            valid_from=today,
+            valid_to=today + timedelta(days=29),
+            fee_period="Nov 2026 - Dec 2026"
+        )
+        session.add(pmt9)
+        await session.flush()
+        session.add(PaymentAllocation(payment_id=pmt9.id, admission_item_id=adm9_item.id, allocated_amount=Decimal("1300.00")))
+
+        # -------------------------------------------------------------
         # 13. Expense Categories & Institute Expenses
         # -------------------------------------------------------------
         cat_sal = ExpenseCategory(name="Faculty Remuneration & Salaries", description="Monthly salaries and allowances for teaching and admin staff")

@@ -43,3 +43,55 @@ class TeacherResponse(TeacherBase):
     user_id: Optional[uuid.UUID] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+class TeacherEnrollmentItem(BaseModel):
+    item_id: uuid.UUID
+    admission_id: uuid.UUID
+    admission_number: str
+    admission_date: date
+    student_id: uuid.UUID
+    student_code: str
+    student_name: str
+    mobile: Optional[str] = None
+    father_name: Optional[str] = None
+    photo_url: Optional[str] = None
+    subject_id: Optional[uuid.UUID] = None
+    subject_name: str
+    subject_code: Optional[str] = None
+    batch_id: Optional[uuid.UUID] = None
+    batch_name: str
+    hall_number: str
+    fee_billed: float
+    fee_collected: float
+    balance_due: float
+    payment_status: str
+    admission_status: str
+    valid_from: Optional[date] = None
+    valid_to: Optional[date] = None
+    days_remaining: int
+    cycle_status: str  # ACTIVE, INACTIVE, CANCELLED
+    status_label: str
+    badge_variant: str
+    status_subtext: str
+    billing_day: Optional[int] = None
+    cycle_period_label: str
+
+class TeacherRosterMetrics(BaseModel):
+    total_enrollments: int
+    active_enrollments: int
+    inactive_enrollments: int
+    cancelled_enrollments: int
+    unique_students_count: int
+
+class TeacherSubjectOption(BaseModel):
+    id: uuid.UUID
+    name: str
+
+class TeacherRosterResponse(BaseModel):
+    items: list[TeacherEnrollmentItem]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+    metrics: TeacherRosterMetrics
+    subjects: list[TeacherSubjectOption] = []

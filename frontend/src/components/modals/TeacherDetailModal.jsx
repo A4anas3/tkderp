@@ -142,13 +142,13 @@ export default function TeacherDetailModal({
             <Button
               size="sm"
               variant="secondary"
-              icon={Users}
+              icon={BookOpen}
               onClick={() => {
                 onClose();
                 onViewRoster(teacher);
               }}
             >
-              View Student Roster
+              View Course Enrollments
             </Button>
           )}
 

@@ -43,6 +43,10 @@ export const teacherApi = {
     const res = await api.put(`/teachers/${id}`, data);
     return res.data;
   },
+  getRoster: async (id, params) => {
+    const res = await api.get(`/teachers/${id}/roster`, { params });
+    return res.data;
+  },
 };
 
 export const studentApi = {
