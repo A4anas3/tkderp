@@ -38,22 +38,30 @@ export default function PaymentReceiptModal({ isOpen, onClose, receipt }) {
           <div className="space-y-1 border-r border-slate-200 pr-2">
             <div>
               <span className="text-slate-500 text-[10px] uppercase font-semibold block">Student Name:</span>
-              <span className="font-bold text-black text-sm block">{receipt.student_name}</span>
+              <span className="font-bold text-black text-sm block">
+                {receipt.student_name || receipt.student?.name || '—'}
+              </span>
             </div>
             <div>
               <span className="text-slate-500 text-[10px] uppercase font-semibold block">Registration / Roll No:</span>
-              <span className="font-mono font-bold text-black">{receipt.student_reg_no || '—'}</span>
+              <span className="font-mono font-bold text-black">
+                {receipt.student_reg_no || receipt.student_code || receipt.student?.student_code || receipt.student?.registration_no || '—'}
+              </span>
             </div>
-            {receipt.student_father_name && (
+            {(receipt.student_father_name || receipt.student?.father_name) && (
               <div>
                 <span className="text-slate-500 text-[10px] uppercase font-semibold block">Father / Guardian:</span>
-                <span className="font-semibold text-slate-800">{receipt.student_father_name}</span>
+                <span className="font-semibold text-slate-800">
+                  {receipt.student_father_name || receipt.student?.father_name}
+                </span>
               </div>
             )}
-            {receipt.student_mobile && (
+            {(receipt.student_mobile || receipt.student?.mobile) && (
               <div>
                 <span className="text-slate-500 text-[10px] uppercase font-semibold block">Mobile Contact:</span>
-                <span className="font-mono font-medium text-slate-800">{receipt.student_mobile}</span>
+                <span className="font-mono font-medium text-slate-800">
+                  {receipt.student_mobile || receipt.student?.mobile}
+                </span>
               </div>
             )}
           </div>

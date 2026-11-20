@@ -43,24 +43,30 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission }) {
           <div className="space-y-1 border-r border-slate-200 pr-2">
             <div>
               <span className="text-slate-500 text-[10px] uppercase font-semibold block">Student Name:</span>
-              <span className="font-bold text-black text-sm block">{admission.student_name_snapshot}</span>
+              <span className="font-bold text-black text-sm block">
+                {admission.student_name_snapshot || admission.student?.name || admission.student_name || '—'}
+              </span>
             </div>
-            {admission.student_reg_no && (
-              <div>
-                <span className="text-slate-500 text-[10px] uppercase font-semibold block">Registration / Roll No:</span>
-                <span className="font-mono font-bold text-black">{admission.student_reg_no}</span>
-              </div>
-            )}
-            {admission.student_father_name && (
+            <div>
+              <span className="text-slate-500 text-[10px] uppercase font-semibold block">Registration / Roll No:</span>
+              <span className="font-mono font-bold text-black">
+                {admission.student_reg_no || admission.student_code || admission.student?.student_code || admission.student?.registration_no || '—'}
+              </span>
+            </div>
+            {(admission.student_father_name || admission.student?.father_name) && (
               <div>
                 <span className="text-slate-500 text-[10px] uppercase font-semibold block">Father / Guardian:</span>
-                <span className="font-semibold text-slate-800">{admission.student_father_name}</span>
+                <span className="font-semibold text-slate-800">
+                  {admission.student_father_name || admission.student?.father_name}
+                </span>
               </div>
             )}
-            {admission.student_mobile && (
+            {(admission.student_mobile || admission.student?.mobile) && (
               <div>
                 <span className="text-slate-500 text-[10px] uppercase font-semibold block">Contact Number:</span>
-                <span className="font-mono font-medium text-slate-800">{admission.student_mobile}</span>
+                <span className="font-mono font-medium text-slate-800">
+                  {admission.student_mobile || admission.student?.mobile}
+                </span>
               </div>
             )}
           </div>
@@ -142,7 +148,7 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission }) {
                       {i + 1}
                     </td>
                     <td className="p-1.5 border-r border-slate-200">
-                      <span className="font-bold text-black block">{itm.item_name_snapshot}</span>
+                      <span className="font-bold text-black block">{itm.item_name_snapshot || itm.item_name}</span>
                       <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-600 mt-0.5">
                         {itm.teacher_name_snapshot && (
                           <span className="bg-slate-100 border border-slate-200 px-1 py-0.2 rounded text-slate-800">
@@ -152,6 +158,11 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission }) {
                         {itm.hall_number_snapshot && (
                           <span className="bg-slate-100 border border-slate-200 px-1 py-0.2 rounded text-slate-800">
                             Hall: <strong className="text-black">{itm.hall_number_snapshot}</strong>
+                          </span>
+                        )}
+                        {itm.valid_from && itm.valid_to && (
+                          <span className="bg-indigo-50 border border-indigo-200 px-1 py-0.2 rounded text-indigo-900 font-mono text-[9px]">
+                            Validity: {itm.valid_from} &rarr; {itm.valid_to}
                           </span>
                         )}
                         <span className="text-slate-400">({itm.item_type})</span>
