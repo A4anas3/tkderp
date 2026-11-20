@@ -102,4 +102,10 @@ class AdmissionItem(BaseModel):
     valid_from: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     valid_to: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
 
+    # Subject Lifecycle Status & Tracking
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="ACTIVE", index=True) # ACTIVE, SUSPENDED, DISCONTINUED, EXPIRED, COMPLETED
+    suspended_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    discontinued_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    lifecycle_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     admission: Mapped["Admission"] = relationship("Admission", back_populates="items")

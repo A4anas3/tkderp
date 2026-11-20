@@ -9,6 +9,7 @@ export default function SuspendDiscontinueModal({
   isOpen,
   onClose,
   admission,
+  item,
   mode = 'SUSPEND', // 'SUSPEND' | 'DISCONTINUE'
   onSuccess,
 }) {
@@ -16,20 +17,32 @@ export default function SuspendDiscontinueModal({
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  if (!admission) return null;
+  const activeTarget = item || admission;
+  if (!activeTarget) return null;
 
   const isSuspend = mode === 'SUSPEND';
+  const targetName = item ? (item.subject_name || item.item_name_snapshot) : (admission.purchase_transaction_id || admission.admission_number);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
     try {
-      if (isSuspend) {
-        await admissionApi.suspend(admission.id, { reason: reason.trim() || undefined });
-        success('Subject enrollment temporarily suspended.');
+      if (item) {
+        if (isSuspend) {
+          await admissionApi.suspendItem(item.id, { reason: reason.trim() || undefined });
+          success(`Subject "${targetName}" temporarily suspended.`);
+        } else {
+          await admissionApi.discontinueItem(item.id, { reason: reason.trim() || undefined });
+          success(`Subject "${targetName}" marked as discontinued.`);
+        }
       } else {
-        await admissionApi.discontinue(admission.id, { reason: reason.trim() || undefined });
-        success('Subject enrollment marked as discontinued.');
+        if (isSuspend) {
+          await admissionApi.suspend(admission.id, { reason: reason.trim() || undefined });
+          success('Subject enrollment temporarily suspended.');
+        } else {
+          await admissionApi.discontinue(admission.id, { reason: reason.trim() || undefined });
+          success('Subject enrollment marked as discontinued.');
+        }
       }
       onSuccess?.();
       onClose();
@@ -44,7 +57,7 @@ export default function SuspendDiscontinueModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={isSuspend ? 'Suspend Subject Temporarily' : 'Discontinue Subject Enrollment'}
+      title={isSuspend ? `Suspend Subject: ${targetName}` : `Discontinue Subject: ${targetName}`}
       maxWidth="max-w-md"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -57,7 +70,7 @@ export default function SuspendDiscontinueModal({
           </div>
           <p className="text-slate-600">
             {isSuspend
-              ? 'This will pause attendance and move the subject to the historical/suspended tab until resumed.'
+              ? 'This will pause attendance for this subject and move it to the historical/suspended tab until resumed.'
               : 'The student will stop attending this subject. Invoices, receipts, and past marks remain in historical records.'}
           </p>
         </div>

@@ -9,6 +9,7 @@ export default function EditValidityModal({
   isOpen,
   onClose,
   admission,
+  item,
   onSuccess,
 }) {
   const { success, error } = useToast();
@@ -17,15 +18,17 @@ export default function EditValidityModal({
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  const activeTarget = item || admission;
+
   useEffect(() => {
-    if (admission) {
-      setValidFrom(admission.valid_from || '');
-      setValidTo(admission.valid_to || '');
+    if (activeTarget) {
+      setValidFrom(activeTarget.valid_from || '');
+      setValidTo(activeTarget.valid_to || '');
       setNotes('');
     }
-  }, [admission, isOpen]);
+  }, [activeTarget, isOpen]);
 
-  if (!admission) return null;
+  if (!activeTarget) return null;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -40,12 +43,21 @@ export default function EditValidityModal({
 
     setSubmitting(true);
     try {
-      await admissionApi.updateValidity(admission.id, {
-        valid_from: validFrom,
-        valid_to: validTo,
-        notes: notes.trim() || undefined,
-      });
-      success('Subject fee validity dates successfully updated!');
+      if (item) {
+        await admissionApi.updateItemValidity(item.id, {
+          valid_from: validFrom,
+          valid_to: validTo,
+          notes: notes.trim() || undefined,
+        });
+        success(`Validity dates for ${item.subject_name || item.item_name_snapshot || 'subject'} updated!`);
+      } else {
+        await admissionApi.updateValidity(admission.id, {
+          valid_from: validFrom,
+          valid_to: validTo,
+          notes: notes.trim() || undefined,
+        });
+        success('Subject fee validity dates successfully updated!');
+      }
       onSuccess?.();
       onClose();
     } catch (err) {
@@ -59,17 +71,33 @@ export default function EditValidityModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Adjust Subject Fee Validity Dates"
+      title={item ? `Adjust Validity: ${item.subject_name || item.item_name_snapshot}` : "Adjust Course Fee Validity Dates"}
       maxWidth="max-w-md"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 text-xs text-indigo-950 space-y-1">
-          <div className="font-bold">
-            Purchase ID: <span className="font-mono">{admission.purchase_transaction_id || admission.admission_number}</span>
-          </div>
-          <div className="text-slate-600">
-            Student: <strong className="text-black">{admission.student_name_snapshot || 'Student'}</strong>
-          </div>
+          {item ? (
+            <>
+              <div className="font-bold flex justify-between">
+                <span>Subject: {item.subject_name || item.item_name_snapshot}</span>
+                <span className="font-mono text-indigo-700">{item.admission_number || ''}</span>
+              </div>
+              {item.teacher_name && (
+                <div className="text-slate-600">
+                  Teacher: <strong className="text-black">{item.teacher_name}</strong>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="font-bold">
+                Purchase ID: <span className="font-mono">{admission.purchase_transaction_id || admission.admission_number}</span>
+              </div>
+              <div className="text-slate-600">
+                Student: <strong className="text-black">{admission.student_name_snapshot || 'Student'}</strong>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-3 text-xs">

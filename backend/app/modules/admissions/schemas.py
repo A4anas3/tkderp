@@ -40,6 +40,10 @@ class AdmissionItemResponse(BaseModel):
     balance_due: Decimal
     valid_from: Optional[date] = None
     valid_to: Optional[date] = None
+    status: str = "ACTIVE"
+    suspended_at: Optional[datetime] = None
+    discontinued_at: Optional[datetime] = None
+    lifecycle_reason: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -150,4 +154,28 @@ class AdmissionValidityUpdate(BaseModel):
 
 class AdmissionLifecycleAction(BaseModel):
     reason: Optional[str] = None
+
+class AdmissionItemValidityUpdate(BaseModel):
+    valid_from: Optional[date] = None
+    valid_to: Optional[date] = None
+    notes: Optional[str] = None
+
+class AdmissionItemLifecycleAction(BaseModel):
+    action: str = Field(..., pattern="^(SUSPEND|RESUME|DISCONTINUE)$")
+    reason: Optional[str] = None
+
+class SubjectRenewalRequest(BaseModel):
+    student_id: uuid.UUID
+    subject_id: uuid.UUID
+    teacher_id: Optional[uuid.UUID] = None
+    batch_id: Optional[uuid.UUID] = None
+    valid_from: date
+    valid_to: date
+    months: int = Field(default=1, ge=1)
+    fee: Decimal = Field(..., ge=0)
+    discount_type: str = Field(default="NONE", pattern="^(NONE|FIXED|PERCENTAGE)$")
+    discount_value: Decimal = Field(default=Decimal("0.00"), ge=0)
+    initial_payment: Optional[InitialPaymentData] = None
+    notes: Optional[str] = None
+
 

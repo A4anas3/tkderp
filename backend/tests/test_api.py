@@ -1191,4 +1191,151 @@ async def test_10_digit_numeric_mobile_validation():
         assert tch_invalid.status_code in [400, 422]
 
 
+@pytest.mark.asyncio
+async def test_subject_lifecycle_and_renewal_flow():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # 1. Login as Admin
+        admin_login = await client.post("/api/auth/login", json={
+            "username": "ADM001",
+            "password": "Admin@1234"
+        })
+        assert admin_login.status_code == 200
+        headers = {"Authorization": f"Bearer {admin_login.json()['access_token']}"}
+
+        # 2. Create student
+        suffix = uuid.uuid4().hex[:6]
+        stu_res = await client.post("/api/students", json={
+            "name": f"Lifecycle Student {suffix}",
+            "mobile": f"9876{uuid.uuid4().int % 1000000:06d}",
+            "father_name": "Test Father"
+        }, headers=headers)
+        assert stu_res.status_code == 201
+        student = stu_res.json()
+        student_id = student["id"]
+
+        # 3. Create subject
+        sub_res = await client.post("/api/subjects", json={
+            "name": f"Lifecycle Physics {suffix}",
+            "code": f"LP{suffix[:4].upper()}",
+            "default_fee": 2000.00
+        }, headers=headers)
+        assert sub_res.status_code == 201
+        subject = sub_res.json()
+        subject_id = subject["id"]
+
+        # 4. Enroll student in the subject
+        today = date.today()
+        from datetime import timedelta
+        end_date = today + timedelta(days=30)
+        adm_res = await client.post("/api/admissions", json={
+            "student_id": student_id,
+            "admission_date": today.isoformat(),
+            "items": [
+                {
+                    "item_type": "SUBJECT",
+                    "subject_id": subject_id,
+                    "item_name_snapshot": subject["name"],
+                    "original_price": 2000.00,
+                    "valid_from": today.isoformat(),
+                    "valid_to": end_date.isoformat()
+                }
+            ]
+        }, headers=headers)
+        assert adm_res.status_code == 201
+        adm_data = adm_res.json()
+        assert len(adm_data["items"]) == 1
+        item_id = adm_data["items"][0]["id"]
+
+        # 5. Check active enrollment endpoint
+        enr_res = await client.get(f"/api/students/{student_id}/active-enrollment", headers=headers)
+        assert enr_res.status_code == 200
+        enr_data = enr_res.json()
+        assert enr_data["is_student_active"] is True
+        assert enr_data["enrollment_number"].startswith("ENR-")
+        assert len(enr_data["active_subjects"]) == 1
+        assert len(enr_data["historical_subjects"]) == 0
+        assert enr_data["active_totals"]["total_fee"] == 2000.00
+
+        # 6. Test item-level validity adjustment
+        new_end = today + timedelta(days=45)
+        val_res = await client.patch(f"/api/admissions/items/{item_id}/validity", json={
+            "valid_to": new_end.isoformat(),
+            "notes": "Medical extension"
+        }, headers=headers)
+        assert val_res.status_code == 200
+        assert val_res.json()["valid_to"] == new_end.isoformat()
+
+        # 7. Test item-level suspension
+        sus_res = await client.post(f"/api/admissions/items/{item_id}/suspend", json={
+            "action": "SUSPEND",
+            "reason": "Student traveling"
+        }, headers=headers)
+        assert sus_res.status_code == 200
+        assert sus_res.json()["status"] == "SUSPENDED"
+
+        # Check active enrollment after suspension: subject moved to history
+        enr_sus = await client.get(f"/api/students/{student_id}/active-enrollment", headers=headers)
+        assert enr_sus.status_code == 200
+        assert enr_sus.json()["is_student_active"] is False
+        assert len(enr_sus.json()["active_subjects"]) == 0
+        assert len(enr_sus.json()["historical_subjects"]) == 1
+        assert enr_sus.json()["historical_subjects"][0]["status"] == "SUSPENDED"
+
+        # 8. Test item-level resume
+        res_res = await client.post(f"/api/admissions/items/{item_id}/resume", headers=headers)
+        assert res_res.status_code == 200
+        assert res_res.json()["status"] == "ACTIVE"
+
+        enr_resumed = await client.get(f"/api/students/{student_id}/active-enrollment", headers=headers)
+        assert enr_resumed.json()["is_student_active"] is True
+        assert len(enr_resumed.json()["active_subjects"]) == 1
+
+        # 9. Test item-level discontinuation
+        disc_res = await client.post(f"/api/admissions/items/{item_id}/discontinue", json={
+            "action": "DISCONTINUE",
+            "reason": "Shifted to morning timings"
+        }, headers=headers)
+        assert disc_res.status_code == 200
+        assert disc_res.json()["status"] == "DISCONTINUED"
+
+        enr_disc = await client.get(f"/api/students/{student_id}/active-enrollment", headers=headers)
+        assert enr_disc.json()["is_student_active"] is False
+        assert len(enr_disc.json()["active_subjects"]) == 0
+        assert len(enr_disc.json()["historical_subjects"]) == 1
+
+        # 10. Test subject renewal endpoint with initial payment
+        ren_from = today + timedelta(days=1)
+        ren_to = ren_from + timedelta(days=30)
+        renew_res = await client.post("/api/admissions/renew-subject", json={
+            "student_id": student_id,
+            "subject_id": subject_id,
+            "valid_from": ren_from.isoformat(),
+            "valid_to": ren_to.isoformat(),
+            "fee": 2500.00,
+            "initial_payment": {
+                "amount": 1500.00,
+                "payment_mode": "CASH"
+            },
+            "notes": "Renewed for next term"
+        }, headers=headers)
+        assert renew_res.status_code == 201
+        renew_data = renew_res.json()
+        assert float(renew_data["total_payable"]) == 2500.00
+        assert float(renew_data["amount_paid"]) == 1500.00
+        assert float(renew_data["balance_due"]) == 1000.00
+        assert renew_data["payment_status"] == "PARTIALLY_PAID"
+
+        # 11. Final active enrollment check: 1 active renewal item, 1 historical discontinued item
+        final_enr = await client.get(f"/api/students/{student_id}/active-enrollment", headers=headers)
+        assert final_enr.status_code == 200
+        final_data = final_enr.json()
+        assert final_data["is_student_active"] is True
+        assert len(final_data["active_subjects"]) == 1
+        assert len(final_data["historical_subjects"]) == 1
+        assert float(final_data["active_totals"]["total_fee"]) == 2500.00
+        assert float(final_data["active_totals"]["total_paid"]) == 1500.00
+        assert float(final_data["active_totals"]["total_due"]) == 1000.00
+
+
+
 

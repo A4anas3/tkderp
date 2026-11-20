@@ -606,3 +606,92 @@ async def get_student_last_batch_period(
             "item_name": None
         }
 
+
+@router.get("/{student_id}/active-enrollment")
+async def get_student_active_enrollment(
+    student_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user = Depends(require_staff)
+):
+    student = (await db.execute(select(Student).where(Student.id == student_id))).scalar_one_or_none()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    # Fetch all admission items with parent admissions
+    stmt = (
+        select(AdmissionItem, Admission)
+        .join(Admission, AdmissionItem.admission_id == Admission.id)
+        .where(Admission.student_id == student_id)
+        .order_by(desc(func.coalesce(AdmissionItem.valid_to, Admission.valid_to)), desc(Admission.admission_date))
+    )
+    rows = (await db.execute(stmt)).all()
+
+    today = date.today()
+    active_items = []
+    historical_items = []
+
+    active_fee_total = Decimal("0.00")
+    active_paid_total = Decimal("0.00")
+    active_due_total = Decimal("0.00")
+
+    for item, adm in rows:
+        # Determine status
+        is_active = (
+            adm.status == "ACTIVE" and
+            item.status == "ACTIVE" and
+            (item.valid_to is None or item.valid_to >= today)
+        )
+
+        days_remaining = None
+        if item.valid_to:
+            days_remaining = (item.valid_to - today).days
+
+        item_dict = {
+            "id": str(item.id),
+            "admission_id": str(adm.id),
+            "admission_number": adm.admission_number,
+            "subject_id": str(item.subject_id) if item.subject_id else None,
+            "subject_name": item.item_name_snapshot,
+            "item_type": item.item_type,
+            "teacher_id": str(item.teacher_id) if item.teacher_id else None,
+            "teacher_name": item.teacher_name_snapshot,
+            "hall_number": item.hall_number_snapshot,
+            "valid_from": item.valid_from.isoformat() if item.valid_from else (adm.valid_from.isoformat() if adm.valid_from else None),
+            "valid_to": item.valid_to.isoformat() if item.valid_to else (adm.valid_to.isoformat() if adm.valid_to else None),
+            "original_price": float(item.original_price),
+            "net_price": float(item.net_price),
+            "amount_collected": float(item.amount_collected),
+            "balance_due": float(item.balance_due),
+            "status": item.status if adm.status == "ACTIVE" else adm.status,
+            "days_remaining": days_remaining,
+            "is_expiring_soon": days_remaining is not None and 0 <= days_remaining <= 7,
+            "is_expired": days_remaining is not None and days_remaining < 0,
+            "lifecycle_reason": item.lifecycle_reason or adm.revocation_reason
+        }
+
+        if is_active:
+            active_items.append(item_dict)
+            active_fee_total += item.net_price
+            active_paid_total += item.amount_collected
+            active_due_total += item.balance_due
+        else:
+            historical_items.append(item_dict)
+
+    # Permanent enrollment code (stable)
+    enrollment_number = f"ENR-{student.student_code}" if student.student_code else f"ENR-{student.id.hex[:8]}"
+
+    return {
+        "student_id": str(student.id),
+        "student_code": student.student_code,
+        "enrollment_number": enrollment_number,
+        "student_name": student.name,
+        "is_student_active": len(active_items) > 0,
+        "active_subjects": active_items,
+        "historical_subjects": historical_items,
+        "active_totals": {
+            "total_fee": float(active_fee_total),
+            "total_paid": float(active_paid_total),
+            "total_due": float(active_due_total)
+        }
+    }
+

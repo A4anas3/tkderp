@@ -11,11 +11,13 @@ from sqlalchemy.orm import selectinload
 from app.database.session import get_db
 from app.core.dependencies import require_staff, require_cashier_or_admin, require_admin
 from app.database.models import (
-    Admission, AdmissionItem, Student, Payment, PaymentAllocation, GreenCardProduct, User, BatchSubject, Refund, AuditLog
+    Admission, AdmissionItem, Student, Payment, PaymentAllocation, GreenCardProduct, User, BatchSubject, Refund, AuditLog,
+    Subject, Batch, Teacher
 )
 from app.modules.admissions.schemas import (
     AdmissionCreate, AdmissionResponse, AdmissionCalculatePreviewRequest, AdmissionItemResponse, AdmissionRevokeRequest,
-    AdmissionSlipsResponse, SlipItemResponse, AdmissionValidityUpdate, AdmissionLifecycleAction
+    AdmissionSlipsResponse, SlipItemResponse, AdmissionValidityUpdate, AdmissionLifecycleAction,
+    AdmissionItemValidityUpdate, AdmissionItemLifecycleAction, SubjectRenewalRequest
 )
 from app.common.calculations import (
     calculate_admission_financials, allocate_payment_proportionally, compute_rolling_cycle_end
@@ -908,3 +910,327 @@ async def discontinue_admission(
     await db.commit()
     await db.refresh(admission)
     return admission
+
+
+@router.patch("/items/{item_id}/validity", response_model=AdmissionItemResponse)
+async def update_item_validity(
+    item_id: uuid.UUID,
+    payload: AdmissionItemValidityUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_cashier_or_admin)
+):
+    query = select(AdmissionItem).where(AdmissionItem.id == item_id)
+    res = await db.execute(query)
+    item = res.scalar_one_or_none()
+    if not item:
+        raise HTTPException(status_code=404, detail="Subject enrollment item not found")
+
+    old_from = item.valid_from
+    old_to = item.valid_to
+
+    if payload.valid_from is not None:
+        item.valid_from = payload.valid_from
+    if payload.valid_to is not None:
+        item.valid_to = payload.valid_to
+
+    # Update parent admission boundaries if applicable
+    adm_res = await db.execute(select(Admission).options(selectinload(Admission.items)).where(Admission.id == item.admission_id))
+    admission = adm_res.scalar_one_or_none()
+    if admission and admission.items:
+        valid_froms = [i.valid_from for i in admission.items if i.valid_from]
+        valid_tos = [i.valid_to for i in admission.items if i.valid_to]
+        if valid_froms:
+            admission.valid_from = min(valid_froms)
+        if valid_tos:
+            admission.valid_to = max(valid_tos)
+
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="ADMISSION_ITEM_VALIDITY_UPDATED",
+        entity_type="ADMISSION_ITEM",
+        entity_id=item.id,
+        details=json.dumps({
+            "subject": item.item_name_snapshot,
+            "old_valid_from": str(old_from) if old_from else None,
+            "old_valid_to": str(old_to) if old_to else None,
+            "new_valid_from": str(item.valid_from) if item.valid_from else None,
+            "new_valid_to": str(item.valid_to) if item.valid_to else None,
+            "notes": payload.notes
+        })
+    )
+    db.add(audit)
+    await db.commit()
+    await db.refresh(item)
+    return item
+
+
+@router.post("/items/{item_id}/suspend", response_model=AdmissionItemResponse)
+async def suspend_admission_item(
+    item_id: uuid.UUID,
+    payload: AdmissionItemLifecycleAction,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    res = await db.execute(select(AdmissionItem).where(AdmissionItem.id == item_id))
+    item = res.scalar_one_or_none()
+    if not item:
+        raise HTTPException(status_code=404, detail="Subject enrollment item not found")
+
+    item.status = "SUSPENDED"
+    item.suspended_at = datetime.now(timezone.utc)
+    item.lifecycle_reason = payload.reason or "Suspended by Administrator"
+
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="ADMISSION_ITEM_SUSPENDED",
+        entity_type="ADMISSION_ITEM",
+        entity_id=item.id,
+        details=json.dumps({
+            "subject": item.item_name_snapshot,
+            "reason": payload.reason
+        })
+    )
+    db.add(audit)
+    await db.commit()
+    await db.refresh(item)
+    return item
+
+
+@router.post("/items/{item_id}/resume", response_model=AdmissionItemResponse)
+async def resume_admission_item(
+    item_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    res = await db.execute(select(AdmissionItem).where(AdmissionItem.id == item_id))
+    item = res.scalar_one_or_none()
+    if not item:
+        raise HTTPException(status_code=404, detail="Subject enrollment item not found")
+
+    item.status = "ACTIVE"
+    item.suspended_at = None
+    item.lifecycle_reason = None
+
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="ADMISSION_ITEM_RESUMED",
+        entity_type="ADMISSION_ITEM",
+        entity_id=item.id,
+        details=json.dumps({
+            "subject": item.item_name_snapshot
+        })
+    )
+    db.add(audit)
+    await db.commit()
+    await db.refresh(item)
+    return item
+
+
+@router.post("/items/{item_id}/discontinue", response_model=AdmissionItemResponse)
+async def discontinue_admission_item(
+    item_id: uuid.UUID,
+    payload: AdmissionItemLifecycleAction,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    res = await db.execute(select(AdmissionItem).where(AdmissionItem.id == item_id))
+    item = res.scalar_one_or_none()
+    if not item:
+        raise HTTPException(status_code=404, detail="Subject enrollment item not found")
+
+    item.status = "DISCONTINUED"
+    item.discontinued_at = datetime.now(timezone.utc)
+    item.lifecycle_reason = payload.reason or "Discontinued by Student/Admin"
+
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="ADMISSION_ITEM_DISCONTINUED",
+        entity_type="ADMISSION_ITEM",
+        entity_id=item.id,
+        details=json.dumps({
+            "subject": item.item_name_snapshot,
+            "reason": payload.reason
+        })
+    )
+    db.add(audit)
+    await db.commit()
+    await db.refresh(item)
+    return item
+
+
+@router.post("/renew-subject", response_model=AdmissionResponse, status_code=status.HTTP_201_CREATED)
+async def renew_subject(
+    payload: SubjectRenewalRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_cashier_or_admin)
+):
+    # Verify student
+    st_res = await db.execute(select(Student).where(Student.id == payload.student_id))
+    student = st_res.scalar_one_or_none()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    # Verify subject
+    sb_res = await db.execute(select(Subject).where(Subject.id == payload.subject_id))
+    subject = sb_res.scalar_one_or_none()
+    if not subject:
+        raise HTTPException(status_code=404, detail="Subject not found")
+
+    # Resolve Teacher and Hall
+    t_id = payload.teacher_id
+    t_name = None
+    h_no = None
+
+    if t_id:
+        t_res = await db.execute(select(Teacher).where(Teacher.id == t_id))
+        teacher = t_res.scalar_one_or_none()
+        if teacher:
+            t_name = teacher.name
+
+    if payload.batch_id:
+        b_res = await db.execute(select(Batch).where(Batch.id == payload.batch_id))
+        batch = b_res.scalar_one_or_none()
+        if batch:
+            if not t_name and batch.teacher_name_snapshot:
+                t_name = batch.teacher_name_snapshot
+            if not h_no and batch.hall_number:
+                h_no = batch.hall_number
+
+    # Next sequential admission number
+    year_str = date.today().strftime("%Y")
+    cnt_res = await db.execute(select(func.count(Admission.id)))
+    seq = cnt_res.scalar_one() + 1
+    adm_no = f"ADM{year_str}{seq:04d}"
+
+    # Calculate financials
+    raw_item = {
+        "price": payload.fee,
+        "discount_type": payload.discount_type,
+        "discount_value": payload.discount_value
+    }
+    calc = calculate_admission_financials(
+        items=[raw_item],
+        overall_discount_type="NONE",
+        overall_discount_value=Decimal("0.00"),
+        gst_enabled=False,
+        gst_rate=Decimal("18.00")
+    )
+
+    admission = Admission(
+        admission_number=adm_no,
+        student_id=student.id,
+        student_name_snapshot=student.full_name,
+        admission_date=date.today(),
+        subtotal=calc["subtotal"],
+        individual_discount_total=calc["individual_discount_total"],
+        overall_discount_type="NONE",
+        overall_discount_value=Decimal("0.00"),
+        overall_discount_amount=Decimal("0.00"),
+        total_discount=calc["total_discount"],
+        gst_enabled=False,
+        gst_rate=Decimal("18.00"),
+        taxable_base=calc["taxable_base"],
+        gst_amount=Decimal("0.00"),
+        total_payable=calc["total_payable"],
+        amount_paid=Decimal("0.00"),
+        balance_due=calc["total_payable"],
+        payment_status="UNPAID",
+        status="ACTIVE",
+        notes=payload.notes or f"Renewal: {subject.name}",
+        valid_from=payload.valid_from,
+        valid_to=payload.valid_to,
+        created_by=current_user.id
+    )
+    db.add(admission)
+    await db.flush()
+
+    item_calc = calc["items"][0]
+    ai = AdmissionItem(
+        admission_id=admission.id,
+        item_type="SUBJECT",
+        batch_id=payload.batch_id,
+        subject_id=subject.id,
+        teacher_id=t_id,
+        teacher_name_snapshot=t_name,
+        hall_number_snapshot=h_no,
+        item_name_snapshot=subject.name,
+        original_price=item_calc["original_price"],
+        discount_type=payload.discount_type,
+        discount_value=payload.discount_value,
+        discount_amount=item_calc["individual_discount"],
+        overall_discount_share=Decimal("0.00"),
+        net_price=item_calc["net_price"],
+        amount_collected=Decimal("0.00"),
+        balance_due=item_calc["net_price"],
+        valid_from=payload.valid_from,
+        valid_to=payload.valid_to,
+        status="ACTIVE"
+    )
+    db.add(ai)
+    await db.flush()
+
+    # Process Initial Payment if provided
+    if payload.initial_payment and payload.initial_payment.amount > Decimal("0.00"):
+        pay_amount = min(payload.initial_payment.amount, admission.total_payable)
+        p_cnt_res = await db.execute(select(func.count(Payment.id)))
+        p_seq = p_cnt_res.scalar_one() + 1
+        pay_no = f"PAY{year_str}{p_seq:04d}"
+
+        payment = Payment(
+            payment_number=pay_no,
+            admission_id=admission.id,
+            student_id=student.id,
+            amount=pay_amount,
+            payment_mode=payload.initial_payment.payment_mode,
+            transaction_reference=payload.initial_payment.transaction_reference,
+            payment_date=datetime.now(timezone.utc),
+            collected_by=current_user.id,
+            collector_name_snapshot=current_user.full_name,
+            notes=payload.initial_payment.notes or f"Renewal payment for {subject.name}"
+        )
+        db.add(payment)
+        await db.flush()
+
+        pa = PaymentAllocation(
+            payment_id=payment.id,
+            admission_item_id=ai.id,
+            allocated_amount=pay_amount
+        )
+        db.add(pa)
+
+        ai.amount_collected = pay_amount
+        ai.balance_due = ai.net_price - pay_amount
+
+        admission.amount_paid = pay_amount
+        admission.balance_due = admission.total_payable - pay_amount
+        if admission.balance_due == Decimal("0.00"):
+            admission.payment_status = "PAID"
+        elif admission.amount_paid > Decimal("0.00"):
+            admission.payment_status = "PARTIALLY_PAID"
+
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="SUBJECT_RENEWED",
+        entity_type="ADMISSION",
+        entity_id=admission.id,
+        details=json.dumps({
+            "student_id": str(student.id),
+            "subject": subject.name,
+            "valid_from": str(payload.valid_from),
+            "valid_to": str(payload.valid_to),
+            "fee": str(payload.fee),
+            "admission_number": admission.admission_number
+        })
+    )
+    db.add(audit)
+    await db.commit()
+
+    # Re-query with eager load of items and student
+    stmt = (
+        select(Admission)
+        .options(selectinload(Admission.items), selectinload(Admission.student))
+        .where(Admission.id == admission.id)
+    )
+    res = await db.execute(stmt)
+    full_adm = res.scalar_one()
+    return full_adm

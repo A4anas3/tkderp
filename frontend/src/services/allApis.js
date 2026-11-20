@@ -100,6 +100,10 @@ export const studentApi = {
     });
     return res.data;
   },
+  getActiveEnrollment: async (studentId) => {
+    const res = await api.get(`/students/${studentId}/active-enrollment`);
+    return res.data;
+  },
 };
 
 export const enquiryApi = {
@@ -257,6 +261,26 @@ export const admissionApi = {
   },
   discontinue: async (id, data) => {
     const res = await api.post(`/admissions/${id}/discontinue`, data);
+    return res.data;
+  },
+  updateItemValidity: async (itemId, data) => {
+    const res = await api.patch(`/admissions/items/${itemId}/validity`, data);
+    return res.data;
+  },
+  suspendItem: async (itemId, data) => {
+    const res = await api.post(`/admissions/items/${itemId}/suspend`, data);
+    return res.data;
+  },
+  resumeItem: async (itemId) => {
+    const res = await api.post(`/admissions/items/${itemId}/resume`);
+    return res.data;
+  },
+  discontinueItem: async (itemId, data) => {
+    const res = await api.post(`/admissions/items/${itemId}/discontinue`, data);
+    return res.data;
+  },
+  renewSubject: async (payload) => {
+    const res = await api.post('/admissions/renew-subject', payload);
     return res.data;
   },
 };
