@@ -822,10 +822,33 @@ export default function StudentDetailPage() {
                 <span className="font-mono font-bold text-purple-950 block">
                   ₹{Number(enrollmentData.active_green_card.net_price).toFixed(2)}
                 </span>
-                <span className="text-[10px] text-purple-600 font-mono">
+                {Number(enrollmentData.active_green_card.balance_due) > 0 ? (
+                  <span className="text-[11px] font-mono text-rose-700 font-bold block">
+                    Due: ₹{Number(enrollmentData.active_green_card.balance_due).toFixed(2)}
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-emerald-700 font-bold block">
+                    ✓ Fully Paid
+                  </span>
+                )}
+                <span className="text-[10px] text-purple-600 font-mono block">
                   Invoice #{enrollmentData.active_green_card.admission_number}
                 </span>
               </div>
+              {Number(enrollmentData.active_green_card.balance_due) > 0 && !isRevoked && (
+                <Button
+                  size="xs"
+                  variant="success"
+                  icon={CreditCard}
+                  onClick={() => {
+                    setTargetAdmissionId(enrollmentData.active_green_card.admission_id);
+                    setPayModalOpen(true);
+                  }}
+                  title="Collect pending Green Card pass fee"
+                >
+                  Pay Due
+                </Button>
+              )}
             </div>
           </div>
         )}
@@ -918,6 +941,20 @@ export default function StudentDetailPage() {
                     </td>
                     <td className="py-2.5 px-3 text-center">
                       <div className="flex items-center justify-center gap-1">
+                        {Number(item.balance_due) > 0 && !isRevoked && (
+                          <Button
+                            size="xs"
+                            variant="success"
+                            icon={CreditCard}
+                            onClick={() => {
+                              setTargetAdmissionId(item.admission_id);
+                              setPayModalOpen(true);
+                            }}
+                            title={`Pay pending due fee of ₹${Number(item.balance_due).toFixed(0)}`}
+                          >
+                            Pay Due
+                          </Button>
+                        )}
                         <Button
                           size="xs"
                           variant="secondary"
