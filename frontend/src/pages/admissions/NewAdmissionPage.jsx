@@ -667,9 +667,8 @@ export default function NewAdmissionPage() {
           : (parseFloat(itm.original_price) / itmMonths);
 
         const cleanSubjectName = (itm.item_name_snapshot || '').split(' (')[0].replace(/^\[Renewal\]\s*/, '').trim();
-        const cyclePrefix = itm.is_renewal ? '[Renewal] ' : '';
         const formattedSnapshotName = itm.item_type === 'SUBJECT'
-          ? `${cyclePrefix}${cleanSubjectName} (${itmMonths} Mo @ ₹${baseFee.toFixed(0)}/mo)`
+          ? `${cleanSubjectName} (${itmMonths} Mo @ ₹${baseFee.toFixed(0)}/mo)`
           : itm.item_name_snapshot;
 
         return {

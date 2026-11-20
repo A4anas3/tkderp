@@ -629,8 +629,7 @@ async def get_student_active_enrollment(
 
     today = date.today()
     active_green_card = None
-    seen_active_subjects = set()
-    active_subjects = []
+    active_subjects_dict = {}  # subj_key -> list of (item, adm, item_dict)
     historical_subjects = []
     historical_memberships = []
 
@@ -639,7 +638,7 @@ async def get_student_active_enrollment(
     active_due_total = Decimal("0.00")
 
     for item, adm in rows:
-        # Determine status
+        # Determine active status: parent admission and item must both be ACTIVE, and valid_to must cover today or future
         is_active = (
             adm.status == "ACTIVE" and
             item.status == "ACTIVE" and
@@ -650,12 +649,17 @@ async def get_student_active_enrollment(
         if item.valid_to:
             days_remaining = (item.valid_to - today).days
 
+        # Clean subject name: strip any legacy "[Renewal] " prefix from display
+        raw_name = item.item_name_snapshot or ""
+        if raw_name.startswith("[Renewal] "):
+            raw_name = raw_name[len("[Renewal] "):]
+
         item_dict = {
             "id": str(item.id),
             "admission_id": str(adm.id),
             "admission_number": adm.admission_number,
             "subject_id": str(item.subject_id) if item.subject_id else None,
-            "subject_name": item.item_name_snapshot,
+            "subject_name": raw_name,
             "item_type": item.item_type,
             "teacher_id": str(item.teacher_id) if item.teacher_id else None,
             "teacher_name": item.teacher_name_snapshot,
@@ -679,15 +683,71 @@ async def get_student_active_enrollment(
             else:
                 historical_memberships.append(item_dict)
         else:
-            subj_key = str(item.subject_id) if item.subject_id else item.item_name_snapshot.strip().lower()
-            if is_active and subj_key not in seen_active_subjects:
-                seen_active_subjects.add(subj_key)
-                active_subjects.append(item_dict)
-                active_fee_total += item.net_price
-                active_paid_total += item.amount_collected
-                active_due_total += item.balance_due
+            if is_active:
+                clean_base_key = raw_name.split(" (")[0].strip().lower()
+                subj_key = str(item.subject_id) if item.subject_id else clean_base_key
+                if subj_key not in active_subjects_dict:
+                    active_subjects_dict[subj_key] = []
+                active_subjects_dict[subj_key].append((item, adm, item_dict))
             else:
-                historical_subjects.append(item_dict)
+                hist_item = dict(item_dict)
+                if hist_item["status"] == "ACTIVE" and (item.valid_to and item.valid_to < today):
+                    hist_item["status"] = "EXPIRED"
+                historical_subjects.append(hist_item)
+
+    # Consolidate chained active cycles for each subject (e.g. Month 1 + Month 2 renewal)
+    active_subjects = []
+    for subj_key, cycle_list in active_subjects_dict.items():
+        # Sort cycles chronologically by valid_from
+        cycle_list.sort(key=lambda x: (x[0].valid_from or x[1].valid_from or x[1].admission_date or date.min))
+
+        valid_froms = [x[0].valid_from or x[1].valid_from for x in cycle_list if (x[0].valid_from or x[1].valid_from)]
+        earliest_start = min(valid_froms) if valid_froms else (cycle_list[0][0].valid_from or cycle_list[0][1].admission_date)
+
+        valid_tos = [x[0].valid_to or x[1].valid_to for x in cycle_list if (x[0].valid_to or x[1].valid_to)]
+        latest_end = max(valid_tos) if valid_tos else None
+
+        # Most recent cycle provides assigned teacher, hall, and admission reference
+        latest_item, latest_adm, latest_dict = cycle_list[-1]
+
+        total_original = sum(Decimal(str(x[0].original_price)) for x in cycle_list)
+        total_net = sum(Decimal(str(x[0].net_price)) for x in cycle_list)
+        total_paid = sum(Decimal(str(x[0].amount_collected)) for x in cycle_list)
+        total_due = sum(Decimal(str(x[0].balance_due)) for x in cycle_list)
+
+        days_remaining = None
+        if latest_end:
+            days_remaining = (latest_end - today).days
+
+        consolidated = {
+            "id": latest_dict["id"],
+            "admission_id": latest_dict["admission_id"],
+            "admission_number": latest_dict["admission_number"],
+            "subject_id": latest_dict["subject_id"],
+            "subject_name": latest_dict["subject_name"],
+            "item_type": latest_dict["item_type"],
+            "teacher_id": latest_dict["teacher_id"],
+            "teacher_name": latest_dict["teacher_name"],
+            "hall_number": latest_dict["hall_number"],
+            "valid_from": earliest_start.isoformat() if earliest_start else latest_dict["valid_from"],
+            "valid_to": latest_end.isoformat() if latest_end else latest_dict["valid_to"],
+            "original_price": float(total_original),
+            "net_price": float(total_net),
+            "amount_collected": float(total_paid),
+            "balance_due": float(total_due),
+            "status": "ACTIVE",
+            "days_remaining": days_remaining,
+            "is_expiring_soon": days_remaining is not None and 0 <= days_remaining <= 7,
+            "is_expired": False,
+            "is_renewed": len(cycle_list) > 1,
+            "cycle_count": len(cycle_list),
+            "lifecycle_reason": latest_dict["lifecycle_reason"]
+        }
+
+        active_subjects.append(consolidated)
+        active_fee_total += total_net
+        active_paid_total += total_paid
+        active_due_total += total_due
 
     # Permanent enrollment code (stable)
     enrollment_number = f"ENR-{student.student_code}" if student.student_code else f"ENR-{student.id.hex[:8]}"

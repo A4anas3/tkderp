@@ -894,9 +894,14 @@ export default function StudentDetailPage() {
                 {enrollmentData.active_subjects.map((item) => (
                   <tr key={item.id} className="hover:bg-indigo-50/30 transition">
                     <td className="py-2.5 px-3">
-                      <div className="font-bold text-black flex items-center gap-1.5">
+                      <div className="font-bold text-black flex items-center gap-1.5 flex-wrap">
                         <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
                         <span>{item.subject_name}</span>
+                        {item.is_renewed && (
+                          <Badge variant="success" size="xs">
+                            Renewed ({item.cycle_count} Months)
+                          </Badge>
+                        )}
                       </div>
                       <div className="flex items-center gap-1 mt-0.5">
                         <span className="text-[10px] text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.2 rounded font-mono font-medium">
