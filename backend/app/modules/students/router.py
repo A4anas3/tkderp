@@ -559,13 +559,14 @@ async def get_student_last_batch_period(
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
 
-    # Search for latest active admission item for this student
+    # Search for latest active admission item for this student (excluding Green Card passes)
     stmt = (
         select(AdmissionItem, Admission)
         .join(Admission, AdmissionItem.admission_id == Admission.id)
         .where(
             Admission.student_id == student_id,
-            Admission.status == "ACTIVE"
+            Admission.status == "ACTIVE",
+            AdmissionItem.item_type != "GREEN_CARD"
         )
     )
     if batch_id:
@@ -627,8 +628,10 @@ async def get_student_active_enrollment(
     rows = (await db.execute(stmt)).all()
 
     today = date.today()
-    active_items = []
-    historical_items = []
+    active_green_card = None
+    active_subjects = []
+    historical_subjects = []
+    historical_memberships = []
 
     active_fee_total = Decimal("0.00")
     active_paid_total = Decimal("0.00")
@@ -669,13 +672,19 @@ async def get_student_active_enrollment(
             "lifecycle_reason": item.lifecycle_reason or adm.revocation_reason
         }
 
-        if is_active:
-            active_items.append(item_dict)
-            active_fee_total += item.net_price
-            active_paid_total += item.amount_collected
-            active_due_total += item.balance_due
+        if item.item_type == "GREEN_CARD":
+            if is_active and not active_green_card:
+                active_green_card = item_dict
+            else:
+                historical_memberships.append(item_dict)
         else:
-            historical_items.append(item_dict)
+            if is_active:
+                active_subjects.append(item_dict)
+                active_fee_total += item.net_price
+                active_paid_total += item.amount_collected
+                active_due_total += item.balance_due
+            else:
+                historical_subjects.append(item_dict)
 
     # Permanent enrollment code (stable)
     enrollment_number = f"ENR-{student.student_code}" if student.student_code else f"ENR-{student.id.hex[:8]}"
@@ -685,9 +694,11 @@ async def get_student_active_enrollment(
         "student_code": student.student_code,
         "enrollment_number": enrollment_number,
         "student_name": student.name,
-        "is_student_active": len(active_items) > 0,
-        "active_subjects": active_items,
-        "historical_subjects": historical_items,
+        "has_active_green_card": active_green_card is not None or student.has_green_card,
+        "active_green_card": active_green_card,
+        "is_student_active": len(active_subjects) > 0 or active_green_card is not None,
+        "active_subjects": active_subjects,
+        "historical_subjects": historical_subjects,
         "active_totals": {
             "total_fee": float(active_fee_total),
             "total_paid": float(active_paid_total),

@@ -1,11 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, and_, desc, case
 from datetime import date, timedelta
 from typing import Optional
 import uuid
+import os
 
 from app.database.session import get_db
+from app.core.config import settings
+from app.modules.students.router import compress_avatar_image
 from app.modules.teachers.models import Teacher
 from app.modules.teachers.schemas import (
     TeacherCreate, TeacherUpdate, TeacherResponse,
@@ -113,6 +116,74 @@ async def update_teacher(
     if req.joining_date is not None: teacher.joining_date = req.joining_date
     if req.status is not None: teacher.status = req.status
 
+    await db.commit()
+    await db.refresh(teacher)
+    return TeacherResponse.model_validate(teacher)
+
+@router.post("/upload-photo")
+async def upload_teacher_photo_standalone(
+    file: UploadFile = File(...),
+    admin = Depends(require_admin)
+):
+    """
+    Upload and compress a teacher photo to <= 20 KB.
+    Used during faculty registration before record exists.
+    """
+    raw_bytes = await file.read()
+    if not raw_bytes:
+        raise HTTPException(status_code=400, detail="Empty file uploaded")
+
+    try:
+        compressed_bytes = compress_avatar_image(raw_bytes, max_kb=20)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid image format: {str(e)}")
+
+    upload_dir = os.path.join(os.path.abspath(settings.UPLOAD_DIR), "teachers")
+    os.makedirs(upload_dir, exist_ok=True)
+
+    filename = f"temp_tch_{uuid.uuid4().hex[:12]}.jpg"
+    filepath = os.path.join(upload_dir, filename)
+    with open(filepath, "wb") as f:
+        f.write(compressed_bytes)
+
+    photo_url = f"/uploads/teachers/{filename}"
+    return {
+        "photo_url": photo_url,
+        "size_kb": round(len(compressed_bytes) / 1024, 2)
+    }
+
+@router.post("/{teacher_id}/photo", response_model=TeacherResponse)
+async def upload_teacher_photo(
+    teacher_id: uuid.UUID,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    admin = Depends(require_admin)
+):
+    """
+    Upload, compress to <= 20 KB and attach photo directly to an existing faculty member.
+    """
+    teacher = (await db.execute(select(Teacher).where(Teacher.id == teacher_id))).scalar_one_or_none()
+    if not teacher:
+        raise HTTPException(status_code=404, detail="Teacher not found")
+
+    raw_bytes = await file.read()
+    if not raw_bytes:
+        raise HTTPException(status_code=400, detail="Empty file uploaded")
+
+    try:
+        compressed_bytes = compress_avatar_image(raw_bytes, max_kb=20)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid image format: {str(e)}")
+
+    upload_dir = os.path.join(os.path.abspath(settings.UPLOAD_DIR), "teachers")
+    os.makedirs(upload_dir, exist_ok=True)
+
+    filename = f"tch_{teacher.teacher_code.lower()}_{uuid.uuid4().hex[:8]}.jpg"
+    filepath = os.path.join(upload_dir, filename)
+    with open(filepath, "wb") as f:
+        f.write(compressed_bytes)
+
+    teacher.photo_url = f"/uploads/teachers/{filename}"
     await db.commit()
     await db.refresh(teacher)
     return TeacherResponse.model_validate(teacher)

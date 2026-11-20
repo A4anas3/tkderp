@@ -47,6 +47,22 @@ export const teacherApi = {
     const res = await api.get(`/teachers/${id}/roster`, { params });
     return res.data;
   },
+  uploadPhoto: async (id, file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await api.post(`/teachers/${id}/photo`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data;
+  },
+  uploadStandalonePhoto: async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await api.post('/teachers/upload-photo', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data;
+  },
 };
 
 export const studentApi = {

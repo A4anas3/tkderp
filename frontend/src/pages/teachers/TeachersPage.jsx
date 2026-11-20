@@ -1,16 +1,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Edit2, UserCheck, UserX, Phone, Mail, Award, BookOpen, ExternalLink } from 'lucide-react';
+import { Plus, Edit2, UserCheck, UserX, Phone, Mail, Award, BookOpen, ExternalLink, Camera, X } from 'lucide-react';
 import DataTable from '../../components/common/DataTable';
 import Modal from '../../components/common/Modal';
 import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
+import Avatar from '../../components/common/Avatar';
 import TeacherDetailModal from '../../components/modals/TeacherDetailModal';
 import { teacherApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 import { cleanMobileInput } from '../../utils/phoneUtils';
+import { compressImage } from '../../utils/imageCompressor';
 
 export default function TeachersPage() {
   const navigate = useNavigate();
@@ -26,12 +28,20 @@ export default function TeachersPage() {
   const [editingTeacher, setEditingTeacher] = useState(null);
   const [detailTeacher, setDetailTeacher] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Photo Upload State
+  const [compressing, setCompressing] = useState(false);
+  const [photoPreview, setPhotoPreview] = useState(null);
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoSizeKb, setPhotoSizeKb] = useState(null);
+
   const [formData, setFormData] = useState({
     name: '',
     mobile: '',
     email: '',
     qualification: '',
     specialization: '',
+    photo_url: null,
     joining_date: new Date().toISOString().split('T')[0],
     status: 'ACTIVE',
   });
@@ -55,12 +65,16 @@ export default function TeachersPage() {
 
   const handleOpenAdd = () => {
     setEditingTeacher(null);
+    setPhotoPreview(null);
+    setPhotoFile(null);
+    setPhotoSizeKb(null);
     setFormData({
       name: '',
       mobile: '',
       email: '',
       qualification: '',
       specialization: '',
+      photo_url: null,
       joining_date: new Date().toISOString().split('T')[0],
       status: 'ACTIVE',
     });
@@ -69,16 +83,45 @@ export default function TeachersPage() {
 
   const handleOpenEdit = (t) => {
     setEditingTeacher(t);
+    setPhotoPreview(t.photo_url || null);
+    setPhotoFile(null);
+    setPhotoSizeKb(null);
     setFormData({
       name: t.name,
       mobile: t.mobile,
       email: t.email || '',
       qualification: t.qualification,
       specialization: t.specialization,
+      photo_url: t.photo_url || null,
       joining_date: t.joining_date,
       status: t.status,
     });
     setModalOpen(true);
+  };
+
+  const handlePhotoSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setCompressing(true);
+    try {
+      const result = await compressImage(file, 20);
+      setPhotoFile(result.file);
+      setPhotoPreview(result.previewUrl);
+      setPhotoSizeKb(result.sizeKb);
+      success(`Photo compressed to ${result.sizeKb} KB (under 20 KB limit)`);
+    } catch (err) {
+      error(err.message || 'Failed to process photo');
+    } finally {
+      setCompressing(false);
+    }
+  };
+
+  const handleRemovePhoto = () => {
+    setPhotoFile(null);
+    setPhotoPreview(null);
+    setPhotoSizeKb(null);
+    setFormData((prev) => ({ ...prev, photo_url: null }));
   };
 
   const handleSubmit = async (e) => {
@@ -96,18 +139,42 @@ export default function TeachersPage() {
 
     setSubmitting(true);
     try {
+      let finalPhotoUrl = editingTeacher?.photo_url || null;
+
+      // Handle standalone upload for new teacher
+      if (!editingTeacher && photoFile) {
+        try {
+          const uploadRes = await teacherApi.uploadStandalonePhoto(photoFile);
+          finalPhotoUrl = uploadRes.photo_url;
+        } catch (uploadErr) {
+          console.warn('Teacher photo upload failed:', uploadErr);
+        }
+      } else if (editingTeacher && !photoPreview) {
+        // Teacher photo was removed
+        finalPhotoUrl = null;
+      }
+
       const payload = {
         name: formData.name.trim(),
         mobile: cleanMob,
         email: formData.email.trim() || null,
         qualification: formData.qualification.trim(),
         specialization: formData.specialization.trim(),
+        photo_url: finalPhotoUrl,
         joining_date: formData.joining_date,
         status: formData.status,
       };
 
       if (editingTeacher) {
         await teacherApi.update(editingTeacher.id, payload);
+        // If an existing teacher has a new photo file, upload it directly
+        if (photoFile) {
+          try {
+            await teacherApi.uploadPhoto(editingTeacher.id, photoFile);
+          } catch (uploadErr) {
+            console.warn('Faculty photo upload warning:', uploadErr);
+          }
+        }
         success(`Teacher updated: ${formData.name}`);
       } else {
         const res = await teacherApi.create(payload);
@@ -132,9 +199,12 @@ export default function TeachersPage() {
     {
       header: 'Faculty Name',
       render: (t) => (
-        <div>
-          <span className="font-bold text-black block">{t.name}</span>
-          <span className="text-[11px] text-slate-500">{t.specialization}</span>
+        <div className="flex items-center gap-2.5">
+          <Avatar src={t.photo_url} name={t.name} size="sm" status={t.status} />
+          <div>
+            <span className="font-bold text-black block">{t.name}</span>
+            <span className="text-[11px] text-slate-500">{t.specialization}</span>
+          </div>
         </div>
       ),
     },
@@ -242,6 +312,50 @@ export default function TeachersPage() {
         maxWidth="max-w-lg"
       >
         <form onSubmit={handleSubmit} className="space-y-3">
+          {/* Faculty Photo Upload Section */}
+          <div className="flex items-center gap-4 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+            <Avatar
+              src={photoPreview}
+              name={formData.name || 'Faculty'}
+              size="lg"
+              status={formData.status}
+            />
+            <div className="flex-1 space-y-1">
+              <span className="text-xs font-bold text-black block">Faculty Photograph</span>
+              <p className="text-[11px] text-slate-500">
+                Auto-compressed to under 20 KB. Allowed formats: JPG, PNG, WEBP.
+              </p>
+              {photoSizeKb && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                  ✓ Size: {photoSizeKb} KB
+                </span>
+              )}
+              <div className="flex items-center gap-2 pt-1">
+                <label className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 cursor-pointer shadow-2xs transition">
+                  <Camera className="w-3.5 h-3.5 text-indigo-700" />
+                  {compressing ? 'Compressing...' : photoPreview ? 'Change Photo' : 'Upload Photo'}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePhotoSelect}
+                    disabled={compressing}
+                    className="hidden"
+                  />
+                </label>
+                {photoPreview && (
+                  <button
+                    type="button"
+                    onClick={handleRemovePhoto}
+                    className="p-1 rounded text-slate-400 hover:text-rose-600 transition"
+                    title="Remove Photo"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
           <Input
             label="Teacher Full Name"
             value={formData.name}

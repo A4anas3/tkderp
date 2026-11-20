@@ -792,6 +792,44 @@ export default function StudentDetailPage() {
           )}
         </div>
 
+        {/* Active Green Card Pass Banner (if student holds an active all-access membership) */}
+        {enrollmentData?.active_green_card && (
+          <div className="bg-gradient-to-r from-purple-50 via-indigo-50 to-purple-50 border border-purple-200 rounded-lg p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-purple-100 border border-purple-300 flex items-center justify-center text-purple-700 shrink-0">
+                <Award className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-xs text-purple-950">Active Green Card All-Access Pass</span>
+                  <Badge variant="purple" size="xs">ALL ACCESS</Badge>
+                </div>
+                <p className="text-[11px] text-purple-800 mt-0.5">
+                  Entitled to attend all classes & batches • Pass validity:{' '}
+                  <span className="font-mono font-bold text-purple-950">
+                    {enrollmentData.active_green_card.valid_from} → {enrollmentData.active_green_card.valid_to}
+                  </span>
+                  {enrollmentData.active_green_card.days_remaining !== null && (
+                    <span className="ml-1.5 px-1.5 py-0.2 rounded bg-purple-200/70 text-purple-900 font-semibold font-mono text-[10px]">
+                      {enrollmentData.active_green_card.days_remaining}d remaining
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 text-right text-xs">
+              <div>
+                <span className="font-mono font-bold text-purple-950 block">
+                  ₹{Number(enrollmentData.active_green_card.net_price).toFixed(2)}
+                </span>
+                <span className="text-[10px] text-purple-600 font-mono">
+                  Invoice #{enrollmentData.active_green_card.admission_number}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Active Subjects Table / Empty State */}
         {!enrollmentData?.active_subjects || enrollmentData.active_subjects.length === 0 ? (
           <div className="p-6 bg-slate-50 border border-dashed border-slate-200 rounded-lg text-center space-y-2">
@@ -1139,14 +1177,14 @@ export default function StudentDetailPage() {
         </div>
       )}
 
-      {/* TAB 2: Course Purchases & Batch Enrollments (Invoices) */}
+      {/* TAB 2: Invoices & Billing History */}
       {activeMainTab === 'INVOICES' && (
       <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs space-y-3">
         <div className="pb-3 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
-            <h2 className="text-sm font-bold text-black">Course Purchases & Batch Enrollments</h2>
+            <h2 className="text-sm font-bold text-black">Invoices & Billing History</h2>
             <p className="text-xs text-slate-500">
-              History of all course purchases, rolling fee cycle validity, and payment statuses
+              Permanent financial ledger of all admission invoices, fee payments, and printable receipts
             </p>
           </div>
 
@@ -1163,7 +1201,7 @@ export default function StudentDetailPage() {
                 )
               }
             >
-              + Purchase Another Course / Batch
+              + New Admission / Invoice
             </Button>
           )}
         </div>
@@ -1235,14 +1273,14 @@ export default function StudentDetailPage() {
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
                 <tr>
-                  <th className="p-2">Purchase Transaction ID</th>
-                  <th className="p-2">Date & Validity</th>
-                  <th className="p-2">Enrolled Items (Faculty & Hall)</th>
+                  <th className="p-2">Invoice / Admission ID</th>
+                  <th className="p-2">Invoice Date</th>
+                  <th className="p-2">Billed Courses & Items</th>
                   <th className="p-2 text-right">Total Payable</th>
                   <th className="p-2 text-right">Paid</th>
                   <th className="p-2 text-right text-rose-700">Due</th>
-                  <th className="p-2 text-center">Payment & Batch Status</th>
-                  <th className="p-2 text-right">Actions</th>
+                  <th className="p-2 text-center">Payment Status</th>
+                  <th className="p-2 text-right">Slips & Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -1392,24 +1430,6 @@ export default function StudentDetailPage() {
                               title="Collect outstanding balance (2nd Payment)"
                             >
                               Pay Due (₹{Number(adm.balance_due).toFixed(0)})
-                            </Button>
-                          )}
-
-                          {/* Renew / Next Cycle button */}
-                          {!isBatchCancelled && !isRevoked && (
-                            <Button
-                              size="xs"
-                              variant={validity.isExpired ? 'danger' : validity.isExpiringSoon ? 'warning' : 'primary'}
-                              onClick={() =>
-                                navigate(
-                                  `/admissions/new?student_id=${student.id}&name=${encodeURIComponent(
-                                    student.name
-                                  )}&renew=1`
-                                )
-                              }
-                              title={validity.isExpired ? 'Renew expired batch cycle' : 'Pay next month fee cycle'}
-                            >
-                              {validity.isExpired ? 'Renew Batch' : '+ Next Month'}
                             </Button>
                           )}
 

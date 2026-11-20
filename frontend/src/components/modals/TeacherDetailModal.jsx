@@ -14,6 +14,7 @@ import {
 import Modal from '../common/Modal';
 import Button from '../common/Button';
 import Badge from '../common/Badge';
+import Avatar from '../common/Avatar';
 import { formatIndianDate } from '../../utils/dateCycleUtils';
 
 export default function TeacherDetailModal({
@@ -72,9 +73,12 @@ export default function TeacherDetailModal({
 
         {/* Bio Header */}
         <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 flex items-center gap-3">
-          <div className="w-12 h-12 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-base border border-indigo-200 shrink-0">
-            {teacher.name ? teacher.name.slice(0, 2).toUpperCase() : 'TC'}
-          </div>
+          <Avatar
+            src={teacher.photo_url}
+            name={teacher.name}
+            size="lg"
+            status={teacher.status}
+          />
           <div className="min-w-0 flex-1">
             <h3 className="font-bold text-black text-base truncate">{teacher.name}</h3>
             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 font-medium mt-0.5">

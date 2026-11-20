@@ -20,17 +20,20 @@ import {
   ChevronsRight,
   RefreshCw,
   X,
-  Filter
+  Filter,
+  Camera
 } from 'lucide-react';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
 import Modal from '../../components/common/Modal';
 import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
+import Avatar from '../../components/common/Avatar';
 import { teacherApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 import { formatIndianDate } from '../../utils/dateCycleUtils';
 import { cleanMobileInput } from '../../utils/phoneUtils';
+import { compressImage } from '../../utils/imageCompressor';
 
 const PAGE_SIZE = 10;
 
@@ -66,6 +69,13 @@ export default function TeacherDetailPage() {
   // Edit Modal State
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // Photo Upload State
+  const [compressing, setCompressing] = useState(false);
+  const [photoPreview, setPhotoPreview] = useState(null);
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoSizeKb, setPhotoSizeKb] = useState(null);
+
   const [formData, setFormData] = useState({
     name: '',
     mobile: '',
@@ -96,6 +106,9 @@ export default function TeacherDetailPage() {
     try {
       const tData = await teacherApi.get(id);
       setTeacher(tData);
+      setPhotoPreview(tData.photo_url || null);
+      setPhotoFile(null);
+      setPhotoSizeKb(null);
       setFormData({
         name: tData.name || '',
         mobile: tData.mobile || '',
@@ -115,6 +128,30 @@ export default function TeacherDetailPage() {
   useEffect(() => {
     loadProfile();
   }, [loadProfile]);
+
+  const handlePhotoSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setCompressing(true);
+    try {
+      const result = await compressImage(file, 20);
+      setPhotoFile(result.file);
+      setPhotoPreview(result.previewUrl);
+      setPhotoSizeKb(result.sizeKb);
+      success(`Photo compressed to ${result.sizeKb} KB (under 20 KB limit)`);
+    } catch (err) {
+      error(err.message || 'Failed to process photo');
+    } finally {
+      setCompressing(false);
+    }
+  };
+
+  const handleRemovePhoto = () => {
+    setPhotoFile(null);
+    setPhotoPreview(null);
+    setPhotoSizeKb(null);
+  };
 
   // Fetch paginated, database-filtered roster
   const loadRoster = useCallback(async () => {
@@ -160,7 +197,23 @@ export default function TeacherDetailPage() {
 
     setSubmitting(true);
     try {
-      await teacherApi.update(id, { ...formData, mobile: cleanMob });
+      let finalPhotoUrl = teacher?.photo_url || null;
+      if (photoFile) {
+        try {
+          const photoRes = await teacherApi.uploadPhoto(id, photoFile);
+          finalPhotoUrl = photoRes.photo_url;
+        } catch (uploadErr) {
+          console.warn('Photo upload warning:', uploadErr);
+        }
+      } else if (!photoPreview) {
+        finalPhotoUrl = null;
+      }
+
+      await teacherApi.update(id, {
+        ...formData,
+        mobile: cleanMob,
+        photo_url: finalPhotoUrl,
+      });
       success('Faculty profile updated successfully');
       setEditModalOpen(false);
       loadProfile();
@@ -289,9 +342,12 @@ export default function TeacherDetailPage() {
       {/* Faculty Bio Grid */}
       <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-2xs space-y-4">
         <div className="flex items-center gap-3.5 border-b border-slate-100 pb-3">
-          <div className="w-12 h-12 rounded-full bg-indigo-100 text-indigo-700 font-black flex items-center justify-center text-base border border-indigo-200 shrink-0">
-            {teacher.name ? teacher.name.slice(0, 2).toUpperCase() : 'TC'}
-          </div>
+          <Avatar
+            src={teacher.photo_url}
+            name={teacher.name}
+            size="lg"
+            status={teacher.status}
+          />
           <div>
             <h2 className="font-bold text-black text-lg">
               {teacher.name}
@@ -695,6 +751,50 @@ export default function TeacherDetailPage() {
         maxWidth="max-w-md"
       >
         <form onSubmit={handleUpdate} className="space-y-3 text-xs">
+          {/* Profile Photo Upload */}
+          <div className="flex items-center gap-3 p-2.5 bg-slate-50 border border-slate-200 rounded-lg">
+            <Avatar
+              src={photoPreview}
+              name={formData.name || 'Faculty'}
+              size="lg"
+              status={formData.status}
+            />
+            <div className="flex-1 space-y-1">
+              <span className="text-xs font-bold text-black block">Faculty Photograph</span>
+              <p className="text-[11px] text-slate-500">
+                Auto-compressed to under 20 KB. Formats: JPG, PNG, WEBP.
+              </p>
+              {photoSizeKb && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                  ✓ Size: {photoSizeKb} KB
+                </span>
+              )}
+              <div className="flex items-center gap-2 pt-1">
+                <label className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 cursor-pointer shadow-2xs transition">
+                  <Camera className="w-3.5 h-3.5 text-indigo-700" />
+                  {compressing ? 'Compressing...' : photoPreview ? 'Change Photo' : 'Upload Photo'}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePhotoSelect}
+                    disabled={compressing}
+                    className="hidden"
+                  />
+                </label>
+                {photoPreview && (
+                  <button
+                    type="button"
+                    onClick={handleRemovePhoto}
+                    className="p-1 rounded text-slate-400 hover:text-rose-600 transition"
+                    title="Remove Photo"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
           <Input
             label="Faculty Name"
             required
