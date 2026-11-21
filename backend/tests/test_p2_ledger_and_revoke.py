@@ -432,3 +432,173 @@ async def test_verify_ledger_cli_command():
     """
     mismatches = await verify_ledger(fix=False)
     assert mismatches == 0
+
+@pytest.mark.asyncio
+async def test_property_pay_edit_refund_verify_ledger():
+    """
+    Acceptance Test:
+    verify_ledger reports 0 mismatches after a sequence of pay/edit/refund operations.
+    """
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        adm_login = await client.post("/api/auth/login", json={"username": "ADM001", "password": "Admin@1234"})
+        assert adm_login.status_code == 200
+        admin_headers = {"Authorization": f"Bearer {adm_login.json()['access_token']}"}
+
+        # Create student
+        st_res = await client.post("/api/students", json={
+            "name": "Property Test Student",
+            "mobile": f"91{uuid.uuid4().int % 100000000:08d}"
+        }, headers=admin_headers)
+        assert st_res.status_code == 201
+        st = st_res.json()
+
+        b_res = await client.get("/api/batches/all", headers=admin_headers)
+        batches = b_res.json()
+        sub = batches[0]["subjects"][0]
+
+        # Create admission with 3 subjects of 1000 each = 3000
+        adm_res = await client.post("/api/admissions", json={
+            "student_id": st["id"],
+            "admission_date": "2026-11-21",
+            "items": [
+                {
+                    "item_type": "BATCH_SUBJECT",
+                    "batch_id": batches[0]["id"],
+                    "subject_id": sub["subject_id"],
+                    "item_name_snapshot": "Subject A",
+                    "original_price": 1000.0
+                },
+                {
+                    "item_type": "BATCH_SUBJECT",
+                    "batch_id": batches[0]["id"],
+                    "subject_id": sub["subject_id"],
+                    "item_name_snapshot": "Subject B",
+                    "original_price": 1000.0
+                },
+                {
+                    "item_type": "BATCH_SUBJECT",
+                    "batch_id": batches[0]["id"],
+                    "subject_id": sub["subject_id"],
+                    "item_name_snapshot": "Subject C",
+                    "original_price": 1000.0
+                }
+            ]
+        }, headers=admin_headers)
+        assert adm_res.status_code == 201
+        adm = adm_res.json()
+        adm_id = adm["id"]
+
+        # 1. Pay 1000
+        p1_res = await client.post("/api/payments", json={
+            "admission_id": adm_id,
+            "amount": 1000.0,
+            "payment_mode": "CASH"
+        }, headers=admin_headers)
+        assert p1_res.status_code == 201
+        p1 = p1_res.json()
+
+        # 2. Edit payment #1: 1000 -> 1500
+        edit1_res = await client.put(f"/api/payments/{p1['id']}", json={
+            "amount": 1500.0,
+            "edit_reason": "Cashier corrected initial deposit amount"
+        }, headers=admin_headers)
+        assert edit1_res.status_code == 200
+
+        # 3. Pay 600
+        p2_res = await client.post("/api/payments", json={
+            "admission_id": adm_id,
+            "amount": 600.0,
+            "payment_mode": "UPI"
+        }, headers=admin_headers)
+        assert p2_res.status_code == 201
+        p2 = p2_res.json()
+
+        # 4. Refund 200 from payment #2
+        ref_res = await client.post("/api/payments/refund", json={
+            "admission_id": adm_id,
+            "payment_id": p2["id"],
+            "amount": 200.0,
+            "reason": "Overcharge refund"
+        }, headers=admin_headers)
+        assert ref_res.status_code == 201
+
+        # 5. Edit payment #1 again: 1500 -> 1200
+        edit2_res = await client.put(f"/api/payments/{p1['id']}", json={
+            "amount": 1200.0,
+            "edit_reason": "Readjusting receipt after verification"
+        }, headers=admin_headers)
+        assert edit2_res.status_code == 200
+
+        # 6. Pay 400
+        p3_res = await client.post("/api/payments", json={
+            "admission_id": adm_id,
+            "amount": 400.0,
+            "payment_mode": "CASH"
+        }, headers=admin_headers)
+        assert p3_res.status_code == 201
+
+        # Run verify_ledger
+        mismatches = await verify_ledger(fix=False)
+        assert mismatches == 0
+
+        # Fetch final admission
+        adm_final = (await client.get(f"/api/admissions/{adm_id}", headers=admin_headers)).json()
+        # Net paid = 1200 (p1 edited) + 600 (p2) - 200 (refund) + 400 (p3) = 2000.00
+        assert float(adm_final["amount_paid"]) == 2000.0
+        assert float(adm_final["balance_due"]) == 1000.0
+        assert adm_final["payment_status"] == "PARTIALLY_REFUNDED"
+
+
+@pytest.mark.asyncio
+async def test_payment_rejection_discontinued_and_non_active():
+    """
+    Test: Payments must be rejected when admission.status != ACTIVE or item is DISCONTINUED / SUSPENDED.
+    """
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        adm_login = await client.post("/api/auth/login", json={"username": "ADM001", "password": "Admin@1234"})
+        assert adm_login.status_code == 200
+        admin_headers = {"Authorization": f"Bearer {adm_login.json()['access_token']}"}
+
+        st_res = await client.post("/api/students", json={
+            "name": "Rejection Test Student",
+            "mobile": f"91{uuid.uuid4().int % 100000000:08d}"
+        }, headers=admin_headers)
+        assert st_res.status_code == 201
+        st = st_res.json()
+
+        b_res = await client.get("/api/batches/all", headers=admin_headers)
+        batches = b_res.json()
+        sub = batches[0]["subjects"][0]
+
+        adm_res = await client.post("/api/admissions", json={
+            "student_id": st["id"],
+            "admission_date": "2026-11-21",
+            "items": [
+                {
+                    "item_type": "BATCH_SUBJECT",
+                    "batch_id": batches[0]["id"],
+                    "subject_id": sub["subject_id"],
+                    "item_name_snapshot": "Subject X",
+                    "original_price": 1000.0
+                }
+            ]
+        }, headers=admin_headers)
+        assert adm_res.status_code == 201
+        adm = adm_res.json()
+        item_id = adm["items"][0]["id"]
+
+        # 1. Discontinue item -> payment rejected with 400
+        disc_res = await client.post(f"/api/admissions/items/{item_id}/discontinue", json={
+            "action": "DISCONTINUE",
+            "reason": "Student opted out"
+        }, headers=admin_headers)
+        assert disc_res.status_code == 200
+
+        pay_fail = await client.post("/api/payments", json={
+            "admission_id": adm["id"],
+            "amount": 500.0,
+            "payment_mode": "CASH"
+        }, headers=admin_headers)
+        assert pay_fail.status_code == 400
+        assert "no outstanding balance" in pay_fail.json()["detail"].lower() or "discontinued" in pay_fail.json()["detail"].lower()
+

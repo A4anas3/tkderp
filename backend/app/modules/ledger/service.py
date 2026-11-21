@@ -15,6 +15,7 @@ from app.database.models import (
 )
 from app.common.numbering import next_number
 from app.common.calculations import allocate_payment_proportionally, round_money
+from app.core.config import settings
 
 async def _ensure_items_loaded(admission: Admission, db: AsyncSession) -> List[AdmissionItem]:
     """Ensures admission.items is eagerly loaded in async context without lazy loading triggers."""
@@ -114,18 +115,56 @@ async def record_payment_service(
     if getattr(admission, "document_status", "VALID") == "VOID":
         raise HTTPException(status_code=400, detail="Cannot accept payment on a VOID admission document")
 
+    items = await _ensure_items_loaded(admission, db)
+    has_keep_due = any(getattr(itm, "keep_due", False) for itm in items)
+    if admission.status != "ACTIVE" and not (admission.status == "REVOKED" and has_keep_due):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot record payment: admission status is {admission.status} (must be ACTIVE)"
+        )
+
     amount = round_money(amount)
     if amount <= Decimal("0.00"):
         raise HTTPException(status_code=400, detail="Payment amount must be greater than zero")
 
-    items = await _ensure_items_loaded(admission, db)
-    # Only lines that are not REVOKED, or are REVOKED with KEEP_DUE, can receive payments
-    payable_items = [
-        {"id": itm.id, "balance_due": itm.balance_due}
-        for itm in items
-        if (getattr(itm, "access_status", "ACTIVE") != "REVOKED" or getattr(itm, "keep_due", False))
-        and itm.balance_due > Decimal("0.00")
-    ]
+    allow_suspended = getattr(settings, "ALLOW_PAY_WHEN_SUSPENDED", False)
+
+    # Validate target items when in MANUAL mode
+    if allocation_mode == "MANUAL" and manual_allocations:
+        item_map = {itm.id: itm for itm in items}
+        for ma in manual_allocations:
+            m_id = (
+                getattr(ma, "admission_item_id", None)
+                or getattr(ma, "item_id", None)
+                or (ma.get("admission_item_id") if isinstance(ma, dict) else None)
+                or (ma.get("item_id") if isinstance(ma, dict) else None)
+            )
+            if m_id and m_id in item_map:
+                target_itm = item_map[m_id]
+                if target_itm.status == "DISCONTINUED" or getattr(target_itm, "access_status", "ACTIVE") == "DISCONTINUED":
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Cannot record payment: subject line '{target_itm.item_name_snapshot}' is DISCONTINUED"
+                    )
+                if (target_itm.status == "SUSPENDED" or getattr(target_itm, "access_status", "ACTIVE") == "SUSPENDED") and not allow_suspended:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Cannot record payment: subject line '{target_itm.item_name_snapshot}' is SUSPENDED"
+                    )
+
+    # Only lines that are not REVOKED (or REVOKED with KEEP_DUE), not DISCONTINUED, and not SUSPENDED (unless allowed)
+    payable_items = []
+    for itm in items:
+        is_revoked = getattr(itm, "access_status", "ACTIVE") == "REVOKED"
+        keep_due = getattr(itm, "keep_due", False)
+        if is_revoked and not keep_due:
+            continue
+        if (itm.status == "DISCONTINUED" or getattr(itm, "access_status", "ACTIVE") == "DISCONTINUED") and not keep_due:
+            continue
+        if (itm.status == "SUSPENDED" or getattr(itm, "access_status", "ACTIVE") == "SUSPENDED") and not allow_suspended:
+            continue
+        if itm.balance_due > Decimal("0.00"):
+            payable_items.append({"id": itm.id, "balance_due": itm.balance_due})
 
     total_available_balance = sum((itm["balance_due"] for itm in payable_items), Decimal("0.00"))
     if total_available_balance <= Decimal("0.00"):
@@ -260,9 +299,20 @@ async def edit_payment_service(
         if new_amount <= Decimal("0.00"):
             raise HTTPException(status_code=400, detail="New payment amount must be greater than zero")
 
-        # 1. Create reversal rows for the old positive allocations
-        for pa in list(payment.allocations):
-            if pa.kind == "PAYMENT" and pa.allocated_amount > Decimal("0.00"):
+        # 1. Create reversal rows for the active positive allocations not yet reversed
+        alloc_res = await db.execute(
+            select(PaymentAllocation).where(PaymentAllocation.payment_id == payment.id)
+        )
+        existing_allocations = list(alloc_res.scalars().all())
+
+        reversed_ids = {
+            pa.reverses_allocation_id
+            for pa in existing_allocations
+            if pa.kind == "REVERSAL" and pa.reverses_allocation_id is not None
+        }
+
+        for pa in existing_allocations:
+            if pa.kind == "PAYMENT" and pa.allocated_amount > Decimal("0.00") and pa.id not in reversed_ids:
                 rev_pa = PaymentAllocation(
                     payment=payment,
                     payment_id=payment.id,

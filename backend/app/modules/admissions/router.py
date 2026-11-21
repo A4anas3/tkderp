@@ -746,7 +746,7 @@ async def revoke_batch_purchase(
     for itm in target_items:
         itm.previous_access_status = getattr(itm, "access_status", "ACTIVE")
         itm.access_status = "REVOKED"
-        itm.status = "DISCONTINUED"
+        itm.status = "REVOKED"
         itm.revoke_type = payload.revoke_type
         itm.valid_to = min(itm.valid_to or eff_date, eff_date)
         itm.discontinued_at = datetime.now(timezone.utc)
