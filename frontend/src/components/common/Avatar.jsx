@@ -49,7 +49,7 @@ export default function Avatar({
             className="w-full h-full object-cover"
           />
         ) : (
-          <span className="font-bold tracking-tight text-indigo-950">
+          <span className="font-bold tracking-tight text-odoo-900">
             {name ? getInitials(name) : <User className="w-1/2 h-1/2 text-slate-400" />}
           </span>
         )}

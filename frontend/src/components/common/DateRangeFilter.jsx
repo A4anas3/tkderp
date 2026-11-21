@@ -129,12 +129,12 @@ export default function DateRangeFilter({ onFilterChange, title = 'Filter Date R
     <div className="bg-white border border-slate-200 rounded-lg p-3 shadow-sm mb-4">
       <div className="flex flex-wrap items-center justify-between gap-2 pb-2 mb-2 border-b border-slate-100">
         <div className="flex items-center gap-1.5 text-xs font-bold text-black uppercase tracking-wider">
-          <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+          <Calendar className="w-3.5 h-3.5 text-odoo-600" />
           <span>{title}</span>
         </div>
 
         {/* Quick Presets */}
-        <div className="flex flex-wrap items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1.5">
           {[
             { id: 'all', label: 'All Time' },
             { id: 'today', label: 'Today' },
@@ -146,9 +146,9 @@ export default function DateRangeFilter({ onFilterChange, title = 'Filter Date R
             <button
               key={p.id}
               onClick={() => applyPreset(p.id)}
-              className={`px-2 py-0.5 rounded text-xs font-semibold transition ${
+              className={`min-h-[30px] px-2.5 py-1 rounded text-xs font-semibold transition ${
                 activePreset === p.id
-                  ? 'bg-indigo-600 text-white shadow-sm'
+                  ? 'bg-odoo-600 text-white shadow-sm'
                   : 'bg-slate-100 text-black hover:bg-slate-200'
               }`}
             >
@@ -171,7 +171,7 @@ export default function DateRangeFilter({ onFilterChange, title = 'Filter Date R
               setFromDate(e.target.value);
               setActivePreset('custom');
             }}
-            className="w-full rounded border border-slate-300 px-2.5 py-1 text-xs font-medium text-black bg-white focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600"
+            className="w-full rounded border border-slate-300 px-2.5 py-1.5 min-h-[36px] text-xs font-medium text-black bg-white focus:outline-none focus:border-odoo-600 focus:ring-1 focus:ring-odoo-600 shadow-2xs"
           />
         </div>
 
@@ -186,7 +186,7 @@ export default function DateRangeFilter({ onFilterChange, title = 'Filter Date R
               setToDate(e.target.value);
               setActivePreset('custom');
             }}
-            className="w-full rounded border border-slate-300 px-2.5 py-1 text-xs font-medium text-black bg-white focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600"
+            className="w-full rounded border border-slate-300 px-2.5 py-1.5 min-h-[36px] text-xs font-medium text-black bg-white focus:outline-none focus:border-odoo-600 focus:ring-1 focus:ring-odoo-600 shadow-2xs"
           />
         </div>
 
@@ -197,7 +197,7 @@ export default function DateRangeFilter({ onFilterChange, title = 'Filter Date R
           <select
             value={selectedMonth}
             onChange={(e) => handleMonthYearChange(e.target.value, selectedYear)}
-            className="w-full rounded border border-slate-300 px-2 py-1 text-xs font-medium text-black bg-white focus:outline-none focus:border-indigo-600"
+            className="w-full rounded border border-slate-300 px-2 py-1.5 min-h-[36px] text-xs font-medium text-black bg-white focus:outline-none focus:border-odoo-600 shadow-2xs"
           >
             <option value="">-- Choose Month --</option>
             {months.map((m) => (
@@ -215,7 +215,7 @@ export default function DateRangeFilter({ onFilterChange, title = 'Filter Date R
           <select
             value={selectedYear}
             onChange={(e) => handleMonthYearChange(selectedMonth, e.target.value)}
-            className="w-full rounded border border-slate-300 px-2 py-1 text-xs font-medium text-black bg-white focus:outline-none focus:border-indigo-600"
+            className="w-full rounded border border-slate-300 px-2 py-1.5 min-h-[36px] text-xs font-medium text-black bg-white focus:outline-none focus:border-odoo-600 shadow-2xs"
           >
             {[currentYear - 2, currentYear - 1, currentYear, currentYear + 1].map((y) => (
               <option key={y} value={y}>
@@ -228,14 +228,14 @@ export default function DateRangeFilter({ onFilterChange, title = 'Filter Date R
         <div className="flex items-center gap-1.5">
           <button
             onClick={handleCustomApply}
-            className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-1 px-3 rounded text-xs transition shadow-sm"
+            className="flex-1 bg-odoo-600 hover:bg-odoo-700 active:bg-indigo-800 text-white font-bold min-h-[36px] py-1.5 px-3 rounded text-xs transition shadow-sm"
           >
             Apply Range
           </button>
           <button
             onClick={handleReset}
             title="Reset Filters"
-            className="p-1 rounded border border-slate-300 hover:bg-slate-100 text-black transition"
+            className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded border border-slate-300 hover:bg-slate-100 active:bg-slate-200 text-black transition shadow-2xs"
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </button>

@@ -98,6 +98,10 @@ export const studentApi = {
     const res = await api.post(`/students/${id}/restore`);
     return res.data;
   },
+  getAudit: async (id, params) => {
+    const res = await api.get(`/audit/student/${id}`, { params });
+    return res.data;
+  },
   uploadPhoto: async (id, file) => {
     const formData = new FormData();
     formData.append('file', file);
@@ -303,6 +307,10 @@ export const admissionApi = {
     const res = await api.post('/admissions/renew-subject', payload);
     return res.data;
   },
+  changeSubject: async (payload) => {
+    const res = await api.post('/admissions/change-subject', payload);
+    return res.data;
+  },
 };
 
 export const paymentApi = {
@@ -429,6 +437,33 @@ export const assessmentApi = {
   },
   getStudentHistory: async (studentId) => {
     const res = await api.get(`/assessments/students/${studentId}/history`);
+    return res.data;
+  },
+};
+
+export const auditApi = {
+  list: async (params) => {
+    const res = await api.get('/audit', { params });
+    return res.data;
+  },
+  getStudentAudit: async (studentId, params) => {
+    const res = await api.get(`/audit/student/${studentId}`, { params });
+    return res.data;
+  },
+  getActions: async () => {
+    const res = await api.get('/audit/actions');
+    return res.data;
+  },
+  getEntityTypes: async () => {
+    const res = await api.get('/audit/entity-types');
+    return res.data;
+  },
+  getUsers: async () => {
+    const res = await api.get('/audit/users');
+    return res.data;
+  },
+  getStats: async () => {
+    const res = await api.get('/audit/stats');
     return res.data;
   },
 };

@@ -1,4 +1,5 @@
 import uuid
+import json
 import calendar
 from datetime import date, timedelta
 from typing import Optional, List
@@ -8,7 +9,7 @@ from sqlalchemy import select, func, or_, and_, desc, case
 
 from app.database.session import get_db
 from app.core.dependencies import require_staff, require_cashier_or_admin
-from app.database.models import Enquiry, EnquiryDemoItem, Student, User, Teacher, Subject, Batch, Admission
+from app.database.models import Enquiry, EnquiryDemoItem, Student, User, Teacher, Subject, Batch, Admission, AuditLog
 from app.modules.enquiries.schemas import (
     EnquiryCreate, EnquiryUpdate, EnquiryResponse, ConvertEnquiryRequest,
     EnquiryDemoItemResponse, EnquiryDemoItemStatusUpdate, EnquiryDemoRegisterItem,
@@ -889,6 +890,22 @@ async def convert_enquiry_to_student(
     d_rows = (await db.execute(d_stmt)).scalars().all()
     for d_itm in d_rows:
         d_itm.status = "CONVERTED"
+
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="STUDENT_CREATED_FROM_ENQUIRY",
+        entity_type="STUDENT",
+        entity_id=student.id,
+        details=json.dumps({
+            "student_id": str(student.id),
+            "student_code": student.student_code,
+            "name": student.name,
+            "mobile": student.mobile,
+            "enquiry_id": str(enquiry.id),
+            "enquiry_code": enquiry.enquiry_code
+        })
+    )
+    db.add(audit)
 
     await db.commit()
 

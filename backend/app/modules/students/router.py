@@ -21,6 +21,7 @@ from app.modules.admissions.models import Admission, AdmissionItem
 from app.modules.payments.models import Payment, Refund, PaymentAllocation, FinancialTransaction
 from app.modules.batches.models import Batch
 from app.modules.audit.models import AuditLog
+from app.modules.audit.schemas import AuditLogResponse
 from app.modules.students.schemas import (
     StudentCreate, StudentUpdate, StudentRevokeRequest,
     StudentResponse, StudentDetailResponse, StudentLineResponse
@@ -429,6 +430,31 @@ async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db),
     res.transactions = [FinancialTransactionResponse.model_validate(tx) for tx in txns]
     return res
 
+@router.get("/{student_id}/audit", response_model=PageResponse[AuditLogResponse])
+async def get_student_audit_alias(
+    student_id: uuid.UUID,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    action: Optional[str] = Query(None),
+    from_date: Optional[date] = Query(None),
+    to_date: Optional[date] = Query(None),
+    search: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_staff)
+):
+    from app.modules.audit.router import get_student_audit_logs
+    return await get_student_audit_logs(
+        student_id=student_id,
+        page=page,
+        page_size=page_size,
+        action=action,
+        from_date=from_date,
+        to_date=to_date,
+        search=search,
+        db=db,
+        current_user=user
+    )
+
 @router.post("", response_model=StudentResponse, status_code=status.HTTP_201_CREATED)
 async def create_student(
     req: StudentCreate,
@@ -483,6 +509,25 @@ async def create_student(
         notes=req.notes
     )
     db.add(new_student)
+    await db.flush()
+
+    audit = AuditLog(
+        user_id=user.id,
+        action="STUDENT_CREATED",
+        entity_type="STUDENT",
+        entity_id=new_student.id,
+        details=json.dumps({
+            "student_id": str(new_student.id),
+            "student_code": new_student.student_code,
+            "name": new_student.name,
+            "mobile": new_student.mobile,
+            "father_name": new_student.father_name,
+            "email": new_student.email,
+            "registration_date": str(new_student.registration_date) if new_student.registration_date else None,
+            "status": new_student.status
+        })
+    )
+    db.add(audit)
     await db.commit()
     await db.refresh(new_student)
     return StudentResponse.model_validate(new_student)
@@ -518,6 +563,22 @@ async def update_student(
     if req.registration_date is not None: student.registration_date = req.registration_date
     if req.status is not None: student.status = req.status
     if req.notes is not None: student.notes = req.notes
+
+    updated_fields = {k: str(v) if v is not None else None for k, v in req.model_dump(exclude_unset=True).items()}
+    audit = AuditLog(
+        user_id=user.id,
+        action="STUDENT_UPDATED",
+        entity_type="STUDENT",
+        entity_id=student.id,
+        details=json.dumps({
+            "student_id": str(student.id),
+            "student_code": student.student_code,
+            "name": student.name,
+            "mobile": student.mobile,
+            "updated_fields": updated_fields
+        })
+    )
+    db.add(audit)
 
     await db.commit()
     await db.refresh(student)

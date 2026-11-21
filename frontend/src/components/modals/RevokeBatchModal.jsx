@@ -95,7 +95,7 @@ export default function RevokeBatchModal({
         <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs space-y-1">
           <div className="flex justify-between items-center">
             <span className="text-slate-500">Purchase Transaction ID:</span>
-            <span className="font-mono font-bold text-indigo-700 text-sm">{txnId}</span>
+            <span className="font-mono font-bold text-odoo-700 text-sm">{txnId}</span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-slate-500">Student Name:</span>
@@ -210,8 +210,8 @@ export default function RevokeBatchModal({
         )}
 
         {/* Confirmation Buttons */}
-        <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
-          <Button variant="secondary" onClick={onClose} disabled={submitting}>
+        <div className="pt-3 flex flex-col-reverse sm:flex-row sm:justify-end gap-2 border-t border-slate-100">
+          <Button variant="secondary" onClick={onClose} disabled={submitting} className="w-full sm:w-auto">
             Cancel
           </Button>
           <Button
@@ -219,6 +219,7 @@ export default function RevokeBatchModal({
             variant="danger"
             loading={submitting}
             icon={Undo2}
+            className="w-full sm:w-auto"
           >
             Confirm Batch Cancellation
           </Button>

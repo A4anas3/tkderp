@@ -74,11 +74,11 @@ export default function RevokeStudentModal({
           />
         </div>
 
-        <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
-          <Button variant="secondary" onClick={onClose} disabled={submitting}>
+        <div className="pt-3 flex flex-col-reverse sm:flex-row sm:justify-end gap-2 border-t border-slate-100">
+          <Button variant="secondary" onClick={onClose} disabled={submitting} className="w-full sm:w-auto">
             Cancel
           </Button>
-          <Button type="submit" variant="danger" loading={submitting} icon={UserX}>
+          <Button type="submit" variant="danger" loading={submitting} icon={UserX} className="w-full sm:w-auto">
             Confirm Revocation
           </Button>
         </div>

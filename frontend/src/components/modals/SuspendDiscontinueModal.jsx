@@ -84,12 +84,12 @@ export default function SuspendDiscontinueModal({
             placeholder={isSuspend ? 'e.g., Student unwell, exam break, resuming next month' : 'e.g., Relocated to another city, timetable clash'}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            className="w-full border border-slate-300 rounded p-2 text-xs text-black focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="w-full border border-slate-300 rounded p-2 text-xs text-black focus:outline-none focus:ring-1 focus:ring-odoo-500"
           />
         </div>
 
-        <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
-          <Button type="button" variant="secondary" size="sm" onClick={onClose} disabled={submitting}>
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-3 border-t border-slate-200">
+          <Button type="button" variant="secondary" size="sm" onClick={onClose} disabled={submitting} className="w-full sm:w-auto">
             Cancel
           </Button>
           <Button
@@ -97,6 +97,7 @@ export default function SuspendDiscontinueModal({
             variant={isSuspend ? 'warning' : 'danger'}
             size="sm"
             loading={submitting}
+            className="w-full sm:w-auto"
           >
             {isSuspend ? 'Confirm Suspension' : 'Confirm Discontinue'}
           </Button>

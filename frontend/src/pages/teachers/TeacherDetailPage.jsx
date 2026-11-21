@@ -292,7 +292,7 @@ export default function TeacherDetailPage() {
     return (
       <div className="p-6 max-w-5xl mx-auto">
         <div className="flex items-center gap-2 text-xs text-slate-500 mb-4">
-          <ArrowLeft className="w-4 h-4 animate-spin text-indigo-600" />
+          <ArrowLeft className="w-4 h-4 animate-spin text-odoo-600" />
           <span>Loading faculty profile & roster...</span>
         </div>
         <div className="bg-white rounded-xl p-8 border border-slate-200 animate-pulse space-y-4">
@@ -321,34 +321,34 @@ export default function TeacherDetailPage() {
   const hasActiveFilters = statusFilter !== 'ALL' || debouncedSearch.trim() !== '' || subjectFilter !== '';
 
   return (
-    <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-5">
+    <div className="space-y-4 sm:space-y-5">
       {/* Top Navigation & Breadcrumb */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+        <div className="flex items-start sm:items-center gap-2.5 min-w-0">
           <button
             onClick={() => navigate('/teachers')}
-            className="p-2 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 transition-colors shadow-2xs cursor-pointer"
+            className="p-2 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 transition-colors shadow-2xs cursor-pointer shrink-0 min-h-[38px] min-w-[38px] flex items-center justify-center"
             title="Back to Faculty & Teachers"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-lg sm:text-xl font-black text-black">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-lg sm:text-xl font-black text-black break-words leading-tight">
                 {teacher.name}
               </h1>
-              <span className="font-mono text-xs px-2 py-0.5 bg-slate-100 text-slate-800 rounded font-bold border border-slate-200">
+              <span className="font-mono text-xs px-2 py-0.5 bg-slate-100 text-slate-800 rounded font-bold border border-slate-200 shrink-0">
                 {teacher.teacher_code}
               </span>
             </div>
-            <p className="text-xs text-slate-500 font-medium">
+            <p className="text-xs text-slate-500 font-medium truncate mt-0.5">
               {teacher.specialization || 'Faculty Member'} • Joined on {formatIndianDate(teacher.joining_date)}
             </p>
           </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <Button
             variant="secondary"
             icon={Edit2}
@@ -408,7 +408,7 @@ export default function TeacherDetailPage() {
               {teacher.name}
             </h2>
             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 mt-0.5">
-              <span className="font-semibold text-indigo-700">{teacher.qualification || 'Educator'}</span>
+              <span className="font-semibold text-odoo-700">{teacher.qualification || 'Educator'}</span>
               <span>•</span>
               <span className="font-mono">{teacher.teacher_code}</span>
             </div>
@@ -466,7 +466,7 @@ export default function TeacherDetailPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
           <div>
             <h3 className="font-bold text-black text-sm flex items-center gap-2">
-              <BookOpen className="w-4 h-4 text-indigo-600" />
+              <BookOpen className="w-4 h-4 text-odoo-600" />
               <span>Assigned Course Enrollments ({rosterTotal})</span>
             </h3>
             <p className="text-[11px] text-slate-500 font-medium mt-0.5">
@@ -478,10 +478,10 @@ export default function TeacherDetailPage() {
             <button
               onClick={loadRoster}
               disabled={rosterLoading}
-              className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-2xs disabled:opacity-50"
+              className="px-2.5 py-1.5 min-h-[36px] rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-2xs disabled:opacity-50"
               title="Refresh roster from database"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${rosterLoading ? 'animate-spin text-indigo-600' : 'text-slate-600'}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${rosterLoading ? 'animate-spin text-odoo-600' : 'text-slate-600'}`} />
               <span>Refresh</span>
             </button>
           </div>
@@ -490,11 +490,11 @@ export default function TeacherDetailPage() {
         {/* Database-Level Filtering Toolbar */}
         <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
           {/* Segmented Status Tabs */}
-          <div className="flex items-center gap-1 overflow-x-auto pb-1 lg:pb-0">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0 -webkit-overflow-scrolling-touch">
             <button
               type="button"
               onClick={() => setStatusFilter('ALL')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+              className={`min-h-[34px] px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap cursor-pointer ${
                 statusFilter === 'ALL'
                   ? 'bg-black text-white shadow-2xs'
                   : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
@@ -505,7 +505,7 @@ export default function TeacherDetailPage() {
             <button
               type="button"
               onClick={() => setStatusFilter('ACTIVE')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+              className={`min-h-[34px] px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
                 statusFilter === 'ACTIVE'
                   ? 'bg-emerald-700 text-white shadow-2xs'
                   : 'bg-white text-emerald-800 border border-emerald-200 hover:bg-emerald-50'
@@ -517,7 +517,7 @@ export default function TeacherDetailPage() {
             <button
               type="button"
               onClick={() => setStatusFilter('INACTIVE')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+              className={`min-h-[34px] px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
                 statusFilter === 'INACTIVE'
                   ? 'bg-rose-700 text-white shadow-2xs'
                   : 'bg-white text-rose-800 border border-rose-200 hover:bg-rose-50'
@@ -530,7 +530,7 @@ export default function TeacherDetailPage() {
               <button
                 type="button"
                 onClick={() => setStatusFilter('CANCELLED')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+                className={`min-h-[34px] px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
                   statusFilter === 'CANCELLED'
                     ? 'bg-slate-800 text-white shadow-2xs'
                     : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
@@ -547,7 +547,7 @@ export default function TeacherDetailPage() {
               <select
                 value={subjectFilter}
                 onChange={(e) => setSubjectFilter(e.target.value)}
-                className="px-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded-lg text-black font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-2xs"
+                className="px-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded-lg text-black font-semibold focus:outline-none focus:ring-1 focus:ring-odoo-500 shadow-2xs"
               >
                 <option value="">All Assigned Subjects</option>
                 {subjectOptions.map((opt) => (
@@ -565,7 +565,7 @@ export default function TeacherDetailPage() {
                 placeholder="Search student, code, course..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-7 py-1.5 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 text-black placeholder:text-slate-400 font-medium shadow-2xs"
+                className="w-full pl-8 pr-7 py-1.5 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-odoo-500 text-black placeholder:text-slate-400 font-medium shadow-2xs"
               />
               {searchQuery && (
                 <button
@@ -595,7 +595,7 @@ export default function TeacherDetailPage() {
         {/* Roster Table */}
         {rosterLoading ? (
           <div className="py-12 text-center text-xs text-slate-500 bg-slate-50 rounded-lg border border-slate-200 animate-pulse">
-            <RefreshCw className="w-5 h-5 animate-spin text-indigo-600 mx-auto mb-2" />
+            <RefreshCw className="w-5 h-5 animate-spin text-odoo-600 mx-auto mb-2" />
             <span>Fetching assigned course enrollments from database...</span>
           </div>
         ) : rosterItems.length === 0 ? (
@@ -608,15 +608,15 @@ export default function TeacherDetailPage() {
             {hasActiveFilters && (
               <button
                 onClick={handleClearFilters}
-                className="mt-2 text-xs font-bold text-indigo-700 hover:underline cursor-pointer"
+                className="mt-2 text-xs font-bold text-odoo-700 hover:underline cursor-pointer"
               >
                 Clear All Filters
               </button>
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-slate-200">
-            <table className="w-full text-left text-xs">
+          <div className="overflow-x-auto rounded-lg border border-slate-200 -webkit-overflow-scrolling-touch">
+            <table className="w-full text-left text-xs min-w-[800px]">
               <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
                 <tr>
                   <th className="p-3">Enrolled Student</th>
@@ -636,7 +636,7 @@ export default function TeacherDetailPage() {
                   <tr
                     key={s.item_id}
                     onClick={() => navigate(`/students/${s.student_id}`)}
-                    className="hover:bg-indigo-50/40 cursor-pointer transition-colors"
+                    className="hover:bg-purple-50/40 cursor-pointer transition-colors"
                     title="Click to view full student profile & ledger"
                   >
                     {/* Student Info */}
@@ -649,12 +649,12 @@ export default function TeacherDetailPage() {
                             className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0"
                           />
                         ) : (
-                          <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-xs shrink-0 border border-indigo-200">
+                          <div className="w-8 h-8 rounded-full bg-purple-100 text-odoo-700 font-bold flex items-center justify-center text-xs shrink-0 border border-purple-200">
                             {s.student_name ? s.student_name.slice(0, 2).toUpperCase() : 'ST'}
                           </div>
                         )}
                         <div>
-                          <div className="font-bold text-black hover:text-indigo-600 transition">
+                          <div className="font-bold text-black hover:text-odoo-600 transition">
                             {s.student_name}
                           </div>
                           <div className="font-mono text-[11px] text-slate-600 font-semibold">
@@ -685,7 +685,7 @@ export default function TeacherDetailPage() {
                       <div className="font-mono font-bold text-black text-xs">
                         {s.cycle_period_label}
                       </div>
-                      <div className="text-[11px] text-indigo-700 font-semibold">
+                      <div className="text-[11px] text-odoo-700 font-semibold">
                         {s.billing_day ? `Day ${s.billing_day} cycle` : 'Rolling cycle'}
                       </div>
                     </td>
@@ -826,7 +826,7 @@ export default function TeacherDetailPage() {
               )}
               <div className="flex items-center gap-2 pt-1">
                 <label className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 cursor-pointer shadow-2xs transition">
-                  <Camera className="w-3.5 h-3.5 text-indigo-700" />
+                  <Camera className="w-3.5 h-3.5 text-odoo-700" />
                   {compressing ? 'Compressing...' : photoPreview ? 'Change Photo' : 'Upload Photo'}
                   <input
                     type="file"

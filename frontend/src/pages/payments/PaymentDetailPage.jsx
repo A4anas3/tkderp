@@ -58,7 +58,7 @@ export default function PaymentDetailPage() {
     return (
       <div className="p-6 max-w-4xl mx-auto">
         <div className="flex items-center gap-2 text-xs text-slate-500 mb-4">
-          <ArrowLeft className="w-4 h-4 animate-spin text-indigo-600" />
+          <ArrowLeft className="w-4 h-4 animate-spin text-odoo-600" />
           <span>Loading financial transaction details...</span>
         </div>
         <div className="bg-white rounded-xl p-8 border border-slate-200 animate-pulse space-y-4">
@@ -87,34 +87,34 @@ export default function PaymentDetailPage() {
   const isActive = !isRefunded && payment.status !== 'CANCELLED';
 
   return (
-    <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-5">
+    <div className="space-y-4 sm:space-y-5">
       {/* Top Navigation & Breadcrumb */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+        <div className="flex items-start sm:items-center gap-2.5 min-w-0">
           <button
             onClick={() => navigate('/payments')}
-            className="p-2 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 transition-colors shadow-2xs cursor-pointer"
+            className="p-2 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 transition-colors shadow-2xs cursor-pointer shrink-0 min-h-[38px] min-w-[38px] flex items-center justify-center"
             title="Back to Payments"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-lg sm:text-xl font-black text-black">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-lg sm:text-xl font-black text-black break-words leading-tight">
                 Fee Payment Receipt & Transaction
               </h1>
-              <span className="font-mono text-xs px-2 py-0.5 bg-indigo-50 text-indigo-800 rounded font-bold border border-indigo-200">
+              <span className="font-mono text-xs px-2 py-0.5 bg-purple-50 text-odoo-800 rounded font-bold border border-odoo-200 shrink-0">
                 {payment.receipt_number || 'RECEIPT'}
               </span>
             </div>
-            <p className="text-xs text-slate-500 font-mono">
+            <p className="text-xs text-slate-500 font-mono truncate mt-0.5">
               Transaction ID: {payment.id} • Processed on {formatIndianDate(payment.payment_date)}
             </p>
           </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <Button
             variant="secondary"
             icon={Printer}
@@ -177,7 +177,7 @@ export default function PaymentDetailPage() {
           <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
             Amount Collected
           </span>
-          <div className="font-mono font-black text-3xl sm:text-4xl text-emerald-800 mt-1">
+          <div className="font-mono font-black text-2xl sm:text-4xl text-emerald-800 mt-1 break-all sm:break-normal">
             ₹{payment.amount ? Number(payment.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}
           </div>
           <div className="flex items-center gap-2 text-xs text-slate-600 mt-1">
@@ -202,7 +202,7 @@ export default function PaymentDetailPage() {
           {payment.admission_id && (
             <Link
               to={`/admissions/${payment.admission_id}`}
-              className="mt-2 text-xs font-bold text-indigo-700 hover:text-indigo-900 inline-flex items-center gap-1"
+              className="mt-2 text-xs font-bold text-odoo-700 hover:text-odoo-900 inline-flex items-center gap-1"
             >
               <span>View Course Purchase</span>
               <ExternalLink className="w-3 h-3" />
@@ -214,7 +214,7 @@ export default function PaymentDetailPage() {
       {/* Student Details Card */}
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-full bg-indigo-100 text-indigo-700 font-black flex items-center justify-center text-sm border border-indigo-200 shrink-0">
+          <div className="w-12 h-12 rounded-full bg-purple-100 text-odoo-700 font-black flex items-center justify-center text-sm border border-odoo-200 shrink-0">
             {payment.student_name ? payment.student_name.slice(0, 2).toUpperCase() : 'ST'}
           </div>
           <div>
@@ -242,24 +242,24 @@ export default function PaymentDetailPage() {
         {payment.student_id && (
           <Link
             to={`/students/${payment.student_id}`}
-            className="px-3 py-1.5 text-xs font-bold bg-slate-50 hover:bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg shadow-2xs flex items-center gap-1.5 self-start sm:self-auto transition-colors"
+            className="px-3 py-1.5 text-xs font-bold bg-slate-50 hover:bg-purple-50 text-odoo-700 border border-odoo-200 rounded-lg shadow-2xs flex items-center gap-1.5 self-start sm:self-auto transition-colors"
           >
             <User className="w-3.5 h-3.5" />
             <span>Open Student Profile</span>
-            <ExternalLink className="w-3 h-3 text-indigo-400" />
+            <ExternalLink className="w-3 h-3 text-odoo-400" />
           </Link>
         )}
       </div>
 
       {/* Rolling Date-to-Date Fee Period Window */}
       {(payment.valid_from || payment.valid_to || payment.fee_period) && (
-        <div className="bg-indigo-50/60 p-4 rounded-xl border border-indigo-200 space-y-2 shadow-2xs">
-          <div className="flex items-center gap-2 text-xs font-bold text-indigo-950 uppercase tracking-wider">
-            <Calendar className="w-4 h-4 text-indigo-700" />
+        <div className="bg-purple-50/60 p-4 rounded-xl border border-odoo-200 space-y-2 shadow-2xs">
+          <div className="flex items-center gap-2 text-xs font-bold text-odoo-900 uppercase tracking-wider">
+            <Calendar className="w-4 h-4 text-odoo-700" />
             <span>Fee Billing Period Window</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1">
-            <div className="bg-white p-3 rounded-lg border border-indigo-100 shadow-2xs">
+            <div className="bg-white p-3 rounded-lg border border-purple-100 shadow-2xs">
               <span className="text-[11px] text-slate-500 block font-medium">Covered Period</span>
               <span className="font-mono font-bold text-black text-sm">
                 {formatCycleLabel(payment.valid_from, payment.valid_to) || payment.fee_period}
@@ -268,9 +268,9 @@ export default function PaymentDetailPage() {
                 {payment.valid_from ? formatIndianDate(payment.valid_from) : ''} {payment.valid_to ? `to ${formatIndianDate(payment.valid_to)}` : ''}
               </div>
             </div>
-            <div className="bg-white p-3 rounded-lg border border-indigo-100 shadow-2xs">
+            <div className="bg-white p-3 rounded-lg border border-purple-100 shadow-2xs">
               <span className="text-[11px] text-slate-500 block font-medium">Billing Cycle Rule</span>
-              <span className="font-bold text-indigo-900 text-sm">
+              <span className="font-bold text-odoo-900 text-sm">
                 Rolling Date-to-Date Cycle
               </span>
               <div className="text-[10px] text-slate-500 mt-0.5">
@@ -286,7 +286,7 @@ export default function PaymentDetailPage() {
         <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
           <div className="p-4 border-b border-slate-100 flex items-center justify-between">
             <h3 className="font-bold text-black text-sm flex items-center gap-2">
-              <BookOpen className="w-4 h-4 text-indigo-600" />
+              <BookOpen className="w-4 h-4 text-odoo-600" />
               <span>Subject & Course Revenue Allocations</span>
             </h3>
             <span className="text-xs text-slate-500 font-medium">
@@ -294,8 +294,8 @@ export default function PaymentDetailPage() {
             </span>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+          <div className="overflow-x-auto -webkit-overflow-scrolling-touch">
+            <table className="w-full text-left text-xs min-w-[550px]">
               <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
                 <tr>
                   <th className="p-3">Subject / Course</th>

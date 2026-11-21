@@ -82,7 +82,7 @@ export default function TeacherDetailModal({
           <div className="min-w-0 flex-1">
             <h3 className="font-bold text-black text-base truncate">{teacher.name}</h3>
             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 font-medium mt-0.5">
-              <span className="font-semibold text-indigo-700">{teacher.specialization || 'General Faculty'}</span>
+              <span className="font-semibold text-odoo-700">{teacher.specialization || 'General Faculty'}</span>
               <span>•</span>
               <span className="font-mono text-slate-500">{teacher.teacher_code}</span>
             </div>
@@ -96,7 +96,7 @@ export default function TeacherDetailModal({
             <div>
               <span className="text-[11px] text-slate-500 block">Mobile Contact</span>
               {teacher.mobile ? (
-                <a href={`tel:${teacher.mobile}`} className="font-mono font-bold text-black hover:text-indigo-600">
+                <a href={`tel:${teacher.mobile}`} className="font-mono font-bold text-black hover:text-odoo-600">
                   {teacher.mobile}
                 </a>
               ) : (
@@ -137,8 +137,8 @@ export default function TeacherDetailModal({
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
-          <Button size="sm" variant="secondary" onClick={onClose}>
+        <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 pt-2 border-t border-slate-200">
+          <Button size="sm" variant="secondary" onClick={onClose} className="w-full sm:w-auto">
             Close
           </Button>
 
@@ -147,6 +147,7 @@ export default function TeacherDetailModal({
               size="sm"
               variant="secondary"
               icon={BookOpen}
+              className="w-full sm:w-auto"
               onClick={() => {
                 onClose();
                 onViewRoster(teacher);
@@ -161,6 +162,7 @@ export default function TeacherDetailModal({
               size="sm"
               variant="primary"
               icon={Edit2}
+              className="w-full sm:w-auto"
               onClick={() => {
                 onClose();
                 onEditTeacher(teacher);

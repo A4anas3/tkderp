@@ -18,7 +18,7 @@ from app.database.models import (
 from app.modules.admissions.schemas import (
     AdmissionCreate, AdmissionResponse, AdmissionCalculatePreviewRequest, AdmissionItemResponse, AdmissionRevokeRequest,
     AdmissionSlipsResponse, SlipItemResponse, AdmissionValidityUpdate, AdmissionLifecycleAction,
-    AdmissionItemValidityUpdate, AdmissionItemLifecycleAction, SubjectRenewalRequest,
+    AdmissionItemValidityUpdate, AdmissionItemLifecycleAction, SubjectRenewalRequest, SubjectChangeRequest,
     ItemRenewalRequest, RenewalsDueItemResponse, ItemRenewalSpec
 )
 from app.common.calculations import (
@@ -256,6 +256,30 @@ async def create_admission(
             else:
                 s_pct = None
 
+        # Archive/discontinue previous subject if changing subject
+        if raw.change_from_item_id:
+            old_res = await db.execute(
+                select(AdmissionItem).where(
+                    AdmissionItem.id == raw.change_from_item_id,
+                    AdmissionItem.student_id == admission.student_id
+                )
+            )
+            old_item = old_res.scalar_one_or_none()
+            if old_item and old_item.status != "DISCONTINUED":
+                old_item.previous_status = old_item.status
+                old_item.status = "DISCONTINUED"
+                old_item.access_status = "REVOKED"
+                old_item.discontinued_at = datetime.now(timezone.utc)
+                old_item.lifecycle_reason = f"Changed subject to {raw.item_name_snapshot}"
+                old_item.written_off_amount = old_item.balance_due
+                old_item.balance_due = Decimal("0.00")
+                old_adm_res = await db.execute(
+                    select(Admission).options(selectinload(Admission.items)).where(Admission.id == old_item.admission_id)
+                )
+                old_adm = old_adm_res.scalar_one_or_none()
+                if old_adm:
+                    await recompute_admission_totals(old_adm, db)
+
         ai = AdmissionItem(
             admission=admission,
             student_id=admission.student_id,
@@ -277,6 +301,8 @@ async def create_admission(
             balance_due=c_itm["net_price"],
             valid_from=itm_from,
             valid_to=itm_to,
+            renewed_from_item_id=raw.change_from_item_id or raw.renewed_from_item_id,
+            price_override_reason=raw.price_override_reason,
             share_type=s_type,
             share_value=s_val,
             share_percent=s_pct
@@ -313,6 +339,32 @@ async def create_admission(
             allocation_mode=payload.initial_payment.allocation_mode,
             manual_allocations=payload.initial_payment.manual_allocations
         )
+
+    # Audit log for admission creation / course purchase
+    adm_audit = AuditLog(
+        user_id=current_user.id,
+        action="ADMISSION_CREATED",
+        entity_type="ADMISSION",
+        entity_id=admission.id,
+        details=json.dumps({
+            "admission_number": admission.admission_number,
+            "student_id": str(admission.student_id),
+            "student_name": student.name,
+            "total_payable": float(admission.total_payable),
+            "amount_paid": float(admission.amount_paid),
+            "balance_due": float(admission.balance_due),
+            "payment_status": admission.payment_status,
+            "items": [
+                {
+                    "item_id": str(itm.id),
+                    "subject": itm.item_name_snapshot,
+                    "net_price": float(itm.net_price)
+                }
+                for itm in db_items
+            ]
+        })
+    )
+    db.add(adm_audit)
 
     await db.commit()
 
@@ -798,6 +850,7 @@ async def update_admission_validity(
             details=json.dumps({
                 "admission_id": str(admission.id),
                 "admission_number": admission.admission_number,
+                "student_id": str(admission.student_id),
                 "item_id": str(itm.id),
                 "item_name": itm.item_name_snapshot,
                 "old_valid_from": old_item_from,
@@ -854,6 +907,7 @@ async def suspend_admission(
         entity_id=admission.id,
         details=json.dumps({
             "purchase_transaction_id": admission.admission_number,
+            "student_id": str(admission.student_id),
             "reason": payload.reason
         })
     )
@@ -890,7 +944,8 @@ async def resume_admission(
         entity_type="ADMISSION",
         entity_id=admission.id,
         details=json.dumps({
-            "purchase_transaction_id": admission.admission_number
+            "purchase_transaction_id": admission.admission_number,
+            "student_id": str(admission.student_id)
         })
     )
     db.add(audit)
@@ -952,6 +1007,7 @@ async def discontinue_admission(
         entity_id=admission.id,
         details=json.dumps({
             "purchase_transaction_id": admission.admission_number,
+            "student_id": str(admission.student_id),
             "reason": payload.reason,
             "before": {
                 "status": before_status,
@@ -1019,6 +1075,7 @@ async def update_item_validity(
         entity_type="ADMISSION_ITEM",
         entity_id=item.id,
         details=json.dumps({
+            "student_id": str(item.student_id),
             "subject": item.item_name_snapshot,
             "old_valid_from": str(old_from) if old_from else None,
             "old_valid_to": str(old_to) if old_to else None,
@@ -1055,6 +1112,7 @@ async def suspend_admission_item(
         entity_type="ADMISSION_ITEM",
         entity_id=item.id,
         details=json.dumps({
+            "student_id": str(item.student_id),
             "subject": item.item_name_snapshot,
             "reason": payload.reason
         })
@@ -1086,6 +1144,7 @@ async def resume_admission_item(
         entity_type="ADMISSION_ITEM",
         entity_id=item.id,
         details=json.dumps({
+            "student_id": str(item.student_id),
             "subject": item.item_name_snapshot
         })
     )
@@ -1132,6 +1191,7 @@ async def discontinue_admission_item(
         entity_type="ADMISSION_ITEM",
         entity_id=item.id,
         details=json.dumps({
+            "student_id": str(item.student_id),
             "subject": item.item_name_snapshot,
             "reason": payload.reason,
             "before_status": before_status,
@@ -1261,3 +1321,266 @@ async def renew_subject(
             status_code=404,
             detail="No previous enrollment found for this student and subject to renew."
         )
+
+
+@router.post("/change-subject", response_model=AdmissionResponse, status_code=status.HTTP_201_CREATED)
+async def change_subject(
+    payload: SubjectChangeRequest,
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_cashier_or_admin)
+):
+    if idempotency_key:
+        cached = await get_idempotency_record(db, idempotency_key, "POST /api/admissions/change-subject")
+        if cached:
+            return build_idempotent_response(cached)
+
+    # 1. Verify student exists
+    st_res = await db.execute(select(Student).where(Student.id == payload.student_id))
+    student = st_res.scalar_one_or_none()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    # 2. Locate and discontinue old subject line if specified
+    old_item = None
+    if payload.old_item_id:
+        old_res = await db.execute(
+            select(AdmissionItem).where(
+                AdmissionItem.id == payload.old_item_id,
+                AdmissionItem.student_id == payload.student_id
+            )
+        )
+        old_item = old_res.scalar_one_or_none()
+    elif payload.old_subject_id:
+        old_stmt = (
+            select(AdmissionItem)
+            .join(Admission, AdmissionItem.admission_id == Admission.id)
+            .where(
+                AdmissionItem.student_id == payload.student_id,
+                AdmissionItem.subject_id == payload.old_subject_id,
+                AdmissionItem.status != "DISCONTINUED",
+                Admission.document_status == "VALID",
+                Admission.status != "CANCELLED"
+            )
+            .order_by(
+                func.coalesce(AdmissionItem.valid_to, Admission.valid_to).desc(),
+                AdmissionItem.created_at.desc()
+            )
+        )
+        old_item = (await db.execute(old_stmt)).scalars().first()
+
+    # 3. Verify new subject exists
+    sub_res = await db.execute(select(Subject).where(Subject.id == payload.new_subject_id))
+    new_sub = sub_res.scalar_one_or_none()
+    if not new_sub:
+        raise HTTPException(status_code=404, detail="New subject not found")
+
+    # If old item exists, mark it as DISCONTINUED and clear balance due
+    if old_item and old_item.status != "DISCONTINUED":
+        old_item.previous_status = old_item.status
+        old_item.status = "DISCONTINUED"
+        old_item.access_status = "REVOKED"
+        old_item.discontinued_at = datetime.now(timezone.utc)
+        note_text = f": {payload.notes}" if payload.notes else ""
+        old_item.lifecycle_reason = f"Changed subject to {new_sub.name}{note_text}"
+        old_item.written_off_amount = old_item.balance_due
+        old_item.balance_due = Decimal("0.00")
+
+        old_adm_res = await db.execute(
+            select(Admission).options(selectinload(Admission.items)).where(Admission.id == old_item.admission_id)
+        )
+        old_adm = old_adm_res.scalar_one_or_none()
+        if old_adm:
+            await recompute_admission_totals(old_adm, db)
+
+    # 4. Resolve validity dates
+    val_from = payload.valid_from or date.today()
+    if payload.valid_to:
+        val_to = payload.valid_to
+    else:
+        val_to, _ = compute_rolling_cycle_end(val_from, payload.months or 1)
+
+    if val_to < val_from:
+        raise HTTPException(status_code=400, detail="End date cannot be earlier than start date")
+
+    # 5. Overlap check for student with the NEW subject
+    overlap_stmt = (
+        select(AdmissionItem)
+        .join(Admission, AdmissionItem.admission_id == Admission.id)
+        .where(
+            AdmissionItem.student_id == payload.student_id,
+            AdmissionItem.subject_id == payload.new_subject_id,
+            AdmissionItem.status != "DISCONTINUED",
+            Admission.document_status == "VALID",
+            Admission.status != "CANCELLED",
+            AdmissionItem.valid_from != None,
+            AdmissionItem.valid_to != None,
+            AdmissionItem.valid_from <= val_to,
+            AdmissionItem.valid_to >= val_from
+        )
+    )
+    overlap_res = await db.execute(overlap_stmt)
+    overlap = overlap_res.scalars().first()
+    if overlap:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Student already has an overlapping active enrollment for '{new_sub.name}' from {overlap.valid_from} to {overlap.valid_to}."
+        )
+
+    # 6. Resolve teacher, hall, and compensation
+    t_id = payload.teacher_id or new_sub.teacher_id
+    t_name = new_sub.teacher_name_snapshot
+    h_no = new_sub.hall_number or "Main Hall"
+    if payload.teacher_id:
+        t_res = await db.execute(select(Teacher).where(Teacher.id == payload.teacher_id))
+        t_obj = t_res.scalar_one_or_none()
+        if t_obj:
+            t_name = t_obj.name
+
+    s_type = "PERCENT"
+    s_val = Decimal("0.00")
+    s_pct = Decimal("0.00")
+    if t_id:
+        t_res = await db.execute(select(Teacher).where(Teacher.id == t_id))
+        t_obj = t_res.scalar_one_or_none()
+        if t_obj:
+            s_type = t_obj.share_type or "PERCENT"
+            s_val = t_obj.share_value or Decimal("0.00")
+            s_pct = s_val if s_type == "PERCENT" else None
+
+    # 7. Fee calculation
+    std_fee = Decimal(str(payload.fee if payload.fee is not None else new_sub.default_fee))
+    raw_calc_item = {
+        "price": std_fee,
+        "discount_type": payload.discount_type,
+        "discount_value": payload.discount_value
+    }
+    calc = calculate_admission_financials(
+        items=[raw_calc_item],
+        overall_discount_type="NONE",
+        overall_discount_value=Decimal("0.00"),
+        gst_enabled=False,
+        gst_rate=Decimal("18.00")
+    )
+    calc_item = calc["items"][0]
+
+    # 8. Generate sequential admission number
+    adm_no = await next_number(db, "ADM")
+
+    admission = Admission(
+        admission_number=adm_no,
+        student_id=student.id,
+        student_name_snapshot=student.full_name,
+        admission_date=val_from,
+        subtotal=calc["subtotal"],
+        individual_discount_total=calc["individual_discount_total"],
+        overall_discount_type="NONE",
+        overall_discount_value=Decimal("0.00"),
+        overall_discount_amount=Decimal("0.00"),
+        total_discount=calc["total_discount"],
+        gst_enabled=calc["gst_enabled"],
+        gst_rate=calc["gst_rate"],
+        taxable_base=calc["taxable_base"],
+        gst_amount=calc["gst_amount"],
+        total_payable=calc["total_payable"],
+        amount_paid=Decimal("0.00"),
+        balance_due=calc["total_payable"],
+        payment_status="UNPAID",
+        status="ACTIVE",
+        notes=payload.notes or f"Changed subject from {old_item.item_name_snapshot if old_item else 'previous course'} to {new_sub.name}",
+        valid_from=val_from,
+        valid_to=val_to,
+        created_by=current_user.id
+    )
+    db.add(admission)
+    await db.flush()
+
+    ai = AdmissionItem(
+        admission=admission,
+        student_id=student.id,
+        item_type="BATCH_SUBJECT",
+        batch_id=payload.batch_id,
+        subject_id=new_sub.id,
+        teacher_id=t_id,
+        teacher_name_snapshot=t_name,
+        hall_number_snapshot=h_no,
+        item_name_snapshot=new_sub.name,
+        original_price=std_fee,
+        discount_type=payload.discount_type,
+        discount_value=payload.discount_value,
+        discount_amount=calc_item["individual_discount"],
+        overall_discount_share=Decimal("0.00"),
+        net_price=calc_item["net_price"],
+        amount_collected=Decimal("0.00"),
+        balance_due=calc_item["net_price"],
+        valid_from=val_from,
+        valid_to=val_to,
+        renewed_from_item_id=old_item.id if old_item else None,
+        price_override_reason=payload.price_override_reason,
+        share_type=s_type,
+        share_value=s_val,
+        share_percent=s_pct
+    )
+    db.add(ai)
+    await db.flush()
+
+    # 9. Process Initial Payment if provided
+    if payload.initial_payment and payload.initial_payment.amount > Decimal("0.00"):
+        if payload.initial_payment.amount > admission.total_payable:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Initial payment amount ₹{payload.initial_payment.amount} exceeds total payable ₹{admission.total_payable}"
+            )
+        await record_payment_service(
+            db=db,
+            admission=admission,
+            amount=payload.initial_payment.amount,
+            payment_mode=payload.initial_payment.payment_mode,
+            collected_by_user=current_user,
+            transaction_reference=payload.initial_payment.transaction_reference,
+            notes=payload.initial_payment.notes or f"Payment collected at subject change to {new_sub.name}",
+            valid_from=val_from,
+            valid_to=val_to,
+            fee_period=f"{val_from} to {val_to}",
+            allocation_mode=payload.initial_payment.allocation_mode,
+            manual_allocations=payload.initial_payment.manual_allocations
+        )
+
+    # 10. Audit log
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="SUBJECT_CHANGED",
+        entity_type="ADMISSION",
+        entity_id=admission.id,
+        details=json.dumps({
+            "admission_number": admission.admission_number,
+            "student_id": str(admission.student_id),
+            "student_name": student.name,
+            "old_item_id": str(old_item.id) if old_item else None,
+            "old_subject": old_item.item_name_snapshot if old_item else None,
+            "new_subject": new_sub.name,
+            "valid_from": str(val_from),
+            "valid_to": str(val_to),
+            "total_payable": float(admission.total_payable),
+            "amount_paid": float(admission.amount_paid),
+            "balance_due": float(admission.balance_due)
+        })
+    )
+    db.add(audit)
+
+    await db.commit()
+
+    full_adm = await get_admission(admission.id, db, current_user)
+
+    if idempotency_key:
+        resp_data = AdmissionResponse.model_validate(full_adm).model_dump(mode="json")
+        await save_idempotency_record(
+            db,
+            idempotency_key,
+            "POST /api/admissions/change-subject",
+            status.HTTP_201_CREATED,
+            resp_data
+        )
+        await db.commit()
+
+    return full_adm

@@ -1,4 +1,5 @@
 import uuid
+import json
 from datetime import date
 from decimal import Decimal
 from typing import Optional
@@ -9,7 +10,7 @@ from sqlalchemy.orm import selectinload
 
 from app.database.session import get_db
 from app.core.dependencies import require_staff, require_cashier_or_admin, require_admin
-from app.database.models import ExpenseCategory, Expense, SalaryRecord, User
+from app.database.models import ExpenseCategory, Expense, SalaryRecord, User, AuditLog
 from app.modules.expenses.schemas import (
     ExpenseCategoryCreate, ExpenseCategoryResponse,
     ExpenseCreate, ExpenseResponse,
@@ -133,6 +134,24 @@ async def create_expense(
         added_by=current_user.id
     )
     db.add(expense)
+    await db.flush()
+
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="EXPENSE_CREATED",
+        entity_type="EXPENSE",
+        entity_id=expense.id,
+        details=json.dumps({
+            "title": expense.title,
+            "category": cat.name,
+            "amount": float(expense.amount),
+            "expense_date": str(expense.expense_date),
+            "payment_mode": expense.payment_mode,
+            "transaction_reference": expense.transaction_reference,
+            "notes": expense.notes
+        })
+    )
+    db.add(audit)
     await db.commit()
     await db.refresh(expense)
 
@@ -225,6 +244,25 @@ async def pay_salary(
         record.status = "PAID"
     else:
         record.status = "PARTIALLY_PAID"
+
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="SALARY_PAID",
+        entity_type="SALARY",
+        entity_id=record.id,
+        details=json.dumps({
+            "record_id": str(record.id),
+            "employee_name": record.employee_name_snapshot,
+            "employee_type": record.employee_type,
+            "month_year": record.month_year,
+            "paid_amount": float(payload.paid_amount),
+            "payment_date": str(payload.payment_date),
+            "payment_mode": payload.payment_mode,
+            "status": record.status,
+            "notes": payload.notes
+        })
+    )
+    db.add(audit)
 
     await db.commit()
     await db.refresh(record)

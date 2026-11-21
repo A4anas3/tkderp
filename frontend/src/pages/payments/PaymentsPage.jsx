@@ -143,7 +143,7 @@ export default function PaymentsPage() {
     {
       header: 'Receipt No',
       accessor: 'payment_number',
-      className: 'font-mono font-bold text-indigo-700 w-28',
+      className: 'font-mono font-bold text-odoo-700 w-28',
     },
     {
       header: 'Student Name',
@@ -323,10 +323,10 @@ export default function PaymentsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
           <h1 className="text-xl font-bold text-black tracking-tight">Fee Collection & Refund Management</h1>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-500 mt-0.5">
             Realized cash collections, editable payment receipts, and fee refund audit logs
           </p>
         </div>
@@ -335,18 +335,19 @@ export default function PaymentsPage() {
           variant="success"
           icon={CreditCard}
           onClick={() => setIsCollectModalOpen(true)}
+          className="w-full sm:w-auto"
         >
           Collect Fee Payment
         </Button>
       </div>
 
       {/* Tabs Switcher */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-1">
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-1">
         <button
           onClick={() => setActiveTab('payments')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-t-lg transition border-b-2 ${
+          className={`flex items-center gap-1.5 px-3 py-2 min-h-[36px] text-xs font-bold rounded-t-lg transition border-b-2 cursor-pointer ${
             activeTab === 'payments'
-              ? 'border-indigo-600 text-indigo-950 bg-indigo-50/50'
+              ? 'border-odoo-600 text-odoo-900 bg-purple-50/50'
               : 'border-transparent text-slate-600 hover:text-black hover:bg-slate-100'
           }`}
         >
@@ -356,7 +357,7 @@ export default function PaymentsPage() {
 
         <button
           onClick={() => setActiveTab('refunds')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-t-lg transition border-b-2 ${
+          className={`flex items-center gap-1.5 px-3 py-2 min-h-[36px] text-xs font-bold rounded-t-lg transition border-b-2 cursor-pointer ${
             activeTab === 'refunds'
               ? 'border-amber-600 text-amber-950 bg-amber-50/50'
               : 'border-transparent text-slate-600 hover:text-black hover:bg-slate-100'

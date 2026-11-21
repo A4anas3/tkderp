@@ -23,6 +23,7 @@ from app.modules.reports.router import router as reports_router
 from app.modules.dashboard.router import router as dashboard_router
 from app.modules.assessments.router import router as assessments_router
 from app.modules.enrollments.router import router as enrollments_router
+from app.modules.audit.router import router as audit_router
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -87,6 +88,7 @@ app.include_router(reports_router)
 app.include_router(dashboard_router)
 app.include_router(assessments_router)
 app.include_router(enrollments_router)
+app.include_router(audit_router)
 
 # Direct root alias for batches active summary
 @app.get("/batches/active-summary", tags=["Batches"])

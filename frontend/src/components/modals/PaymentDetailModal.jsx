@@ -77,7 +77,7 @@ export default function PaymentDetailModal({
         <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
           <div>
             <span className="text-slate-500 block text-[11px]">Receipt Number</span>
-            <span className="font-mono font-bold text-indigo-700">
+            <span className="font-mono font-bold text-odoo-700">
               {payment.receipt_number || 'REC-DIRECT'}
             </span>
           </div>
@@ -121,15 +121,15 @@ export default function PaymentDetailModal({
 
         {/* Rolling Cycle Window Covered */}
         {(payment.valid_from || payment.valid_to) && (
-          <div className="bg-indigo-50/60 p-3 rounded-lg border border-indigo-200 flex items-center justify-between text-xs">
+          <div className="bg-purple-50/60 p-3 rounded-lg border border-odoo-200 flex items-center justify-between text-xs">
             <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-indigo-700" />
-              <span className="font-bold text-indigo-950">Rolling Fee Cycle Covered:</span>
+              <Calendar className="w-4 h-4 text-odoo-700" />
+              <span className="font-bold text-odoo-900">Rolling Fee Cycle Covered:</span>
               <span className="font-mono font-bold text-black">
                 {formatCycleLabel(payment.valid_from, payment.valid_to)}
               </span>
             </div>
-            <span className="text-[11px] text-indigo-800 bg-white px-2 py-0.5 rounded border border-indigo-200 font-semibold">
+            <span className="text-[11px] text-odoo-800 bg-white px-2 py-0.5 rounded border border-odoo-200 font-semibold">
               Day {payment.valid_from ? parseInt(payment.valid_from.split('-')[2], 10) : '—'} cycle
             </span>
           </div>
@@ -164,8 +164,8 @@ export default function PaymentDetailModal({
         )}
 
         {/* Actions */}
-        <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
-          <Button size="sm" variant="secondary" onClick={onClose}>
+        <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 pt-2 border-t border-slate-200">
+          <Button size="sm" variant="secondary" onClick={onClose} className="w-full sm:w-auto">
             Close
           </Button>
 
@@ -174,6 +174,7 @@ export default function PaymentDetailModal({
               size="sm"
               variant="danger"
               icon={RotateCcw}
+              className="w-full sm:w-auto"
               onClick={() => {
                 onClose();
                 onIssueRefund(payment);
@@ -188,6 +189,7 @@ export default function PaymentDetailModal({
               size="sm"
               variant="secondary"
               icon={Edit2}
+              className="w-full sm:w-auto"
               onClick={() => {
                 onClose();
                 onEditPayment(payment);
@@ -202,6 +204,7 @@ export default function PaymentDetailModal({
               size="sm"
               variant="primary"
               icon={Printer}
+              className="w-full sm:w-auto"
               onClick={() => {
                 onClose();
                 onPrintReceipt(payment);

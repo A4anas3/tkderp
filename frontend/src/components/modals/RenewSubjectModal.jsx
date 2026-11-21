@@ -390,8 +390,8 @@ export default function RenewSubjectModal({
         </div>
 
         {/* Modal Actions */}
-        <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
-          <Button type="button" variant="secondary" size="sm" onClick={onClose} disabled={submitting}>
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-3 border-t border-slate-200">
+          <Button type="button" variant="secondary" size="sm" onClick={onClose} disabled={submitting} className="w-full sm:w-auto">
             Cancel
           </Button>
           <Button
@@ -400,6 +400,7 @@ export default function RenewSubjectModal({
             size="sm"
             icon={RefreshCw}
             loading={submitting}
+            className="w-full sm:w-auto"
           >
             Confirm Renewal
           </Button>

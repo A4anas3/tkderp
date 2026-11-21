@@ -47,23 +47,24 @@ export default function CashierDashboard() {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+      {/* Odoo Control Panel Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-black tracking-tight">
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
             Cashier Front Desk & Fee Portal
           </h1>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-500 mt-0.5">
             Admissions, manual fee collection, receipt generation, and demo follow-ups
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <Button
             size="xs"
             variant="primary"
             icon={Plus}
             onClick={() => navigate('/admissions/new')}
+            className="flex-1 sm:flex-initial"
             title="Purchase & Pay for Course Batches"
           >
             Course Paid
@@ -73,6 +74,7 @@ export default function CashierDashboard() {
             variant="success"
             icon={CreditCard}
             onClick={() => setSelectedAdmissionForPay('any')}
+            className="flex-1 sm:flex-initial"
           >
             Collect Fee
           </Button>
@@ -80,7 +82,7 @@ export default function CashierDashboard() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard
           title="Today's Collections"
           value={`₹${(m.today_collections || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
@@ -93,7 +95,7 @@ export default function CashierDashboard() {
           value={m.today_admissions_count ?? 0}
           subtext="Enrolled today"
           icon={CheckCircle}
-          color="indigo"
+          color="odoo"
         />
         <StatCard
           title="Today's Expenses"
@@ -112,7 +114,7 @@ export default function CashierDashboard() {
       </div>
 
       {/* Upcoming Demo Deadlines Alert Card */}
-      <div className="bg-white border border-amber-300 rounded-lg p-4 shadow-sm">
+      <div className="bg-white border border-amber-300 rounded-lg p-4 shadow-2xs">
         <div className="flex items-center justify-between pb-3 border-b border-amber-100">
           <div className="flex items-center gap-2">
             <Clock className="w-5 h-5 text-amber-600" />
@@ -123,7 +125,7 @@ export default function CashierDashboard() {
           </div>
           <button
             onClick={() => navigate('/enquiries')}
-            className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+            className="text-xs font-semibold text-odoo-600 hover:text-odoo-800 flex items-center gap-1"
           >
             All Enquiries <ArrowRight className="w-3.5 h-3.5" />
           </button>
@@ -136,16 +138,16 @@ export default function CashierDashboard() {
             </p>
           ) : (
             data.upcoming_demos.map((d) => (
-              <div key={d.id} className="py-2 flex items-center justify-between text-xs">
-                <div>
-                  <span className="font-bold text-black">{d.student_name}</span>
-                  <div className="text-[11px] text-slate-500">
+              <div key={d.id} className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs hover:bg-slate-50/70 px-1 rounded transition-colors">
+                <div className="min-w-0 flex-1">
+                  <span className="font-bold text-black truncate block">{d.student_name}</span>
+                  <div className="text-[11px] text-slate-500 truncate">
                     Subject: <strong className="text-slate-700">{d.interested_subject || 'General'}</strong>
                     {d.mobile && ` • Mob: ${d.mobile}`}
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto shrink-0">
                   <Badge
                     size="xs"
                     variant={
@@ -188,34 +190,34 @@ export default function CashierDashboard() {
       </div>
 
       {/* Due / Outstanding Purchases Table */}
-      <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+      <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-2xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-200">
           <div>
             <h2 className="text-sm font-bold text-black">Purchases with Outstanding Fee Balances</h2>
             <p className="text-[11px] text-slate-500">Follow up with students and record partial or full fee collections</p>
           </div>
           <button
             onClick={() => navigate('/admissions')}
-            className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+            className="text-xs font-semibold text-odoo-600 hover:text-odoo-800 flex items-center gap-1 self-start sm:self-auto"
           >
             All Purchases <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
 
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+        <div className="mt-3 overflow-x-auto -webkit-overflow-scrolling-touch">
+          <table className="w-full text-left text-xs min-w-[650px]">
+            <thead className="bg-slate-100/80 text-slate-700 font-bold uppercase tracking-wider text-[11px] border-b border-slate-200">
               <tr>
-                <th className="p-2">Purchase Transaction ID</th>
-                <th className="p-2">Student Name</th>
-                <th className="p-2 text-right">Total Fee</th>
-                <th className="p-2 text-right">Paid</th>
-                <th className="p-2 text-right text-rose-700">Due Balance</th>
-                <th className="p-2 text-center">Status</th>
-                <th className="p-2 text-right">Action</th>
+                <th className="p-2.5">Purchase Transaction ID</th>
+                <th className="p-2.5">Student Name</th>
+                <th className="p-2.5 text-right">Total Fee</th>
+                <th className="p-2.5 text-right">Paid</th>
+                <th className="p-2.5 text-right text-rose-700">Due Balance</th>
+                <th className="p-2.5 text-center">Status</th>
+                <th className="p-2.5 text-right">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 bg-white">
               {(data?.due_admissions || []).length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-6 text-center text-slate-500">
@@ -224,26 +226,26 @@ export default function CashierDashboard() {
                 </tr>
               ) : (
                 data.due_admissions.map((adm) => (
-                  <tr key={adm.id} className="hover:bg-slate-50">
-                    <td className="p-2 font-mono font-bold text-black">
+                  <tr key={adm.id} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="p-2.5 font-mono font-bold text-black">
                       {adm.purchase_transaction_id || adm.admission_number}
                     </td>
-                    <td className="p-2 font-semibold text-black">{adm.student_name}</td>
-                    <td className="p-2 text-right font-mono text-black">
+                    <td className="p-2.5 font-semibold text-black">{adm.student_name}</td>
+                    <td className="p-2.5 text-right font-mono text-black">
                       ₹{adm.total_payable.toFixed(2)}
                     </td>
-                    <td className="p-2 text-right font-mono text-emerald-800 font-semibold">
+                    <td className="p-2.5 text-right font-mono text-emerald-800 font-semibold">
                       ₹{adm.amount_paid.toFixed(2)}
                     </td>
-                    <td className="p-2 text-right font-mono text-rose-700 font-bold">
+                    <td className="p-2.5 text-right font-mono text-rose-700 font-bold">
                       ₹{adm.balance_due.toFixed(2)}
                     </td>
-                    <td className="p-2 text-center">
+                    <td className="p-2.5 text-center">
                       <Badge size="xs" variant={adm.payment_status === 'PARTIALLY_PAID' ? 'warning' : 'danger'}>
                         {adm.payment_status}
                       </Badge>
                     </td>
-                    <td className="p-2 text-right">
+                    <td className="p-2.5 text-right">
                       <Button
                         size="xs"
                         variant="success"

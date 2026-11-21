@@ -10,22 +10,30 @@ import {
   CreditCard,
   UserPlus,
   CheckCircle2,
-  Percent,
   CalendarDays,
+  Check,
+  ChevronRight,
+  ChevronLeft,
+  User,
+  Phone,
+  Sparkles,
+  AlertCircle,
+  Tag,
+  DollarSign,
+  ShieldCheck,
 } from 'lucide-react';
 import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
-import Modal from '../../components/common/Modal';
 import StudentSearchSelect from '../../components/common/StudentSearchSelect';
 import {
   studentApi,
   subjectApi,
-  batchApi,
   greenCardApi,
   admissionApi,
   enquiryApi,
+  teacherApi,
 } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 import QuickStudentModal from '../../components/modals/QuickStudentModal';
@@ -38,6 +46,9 @@ export default function NewAdmissionPage() {
   const [searchParams] = useSearchParams();
   const { success, error } = useToast();
 
+  // Wizard Step State (1: Student, 2: Subjects & Dates, 3: Discounts, 4: Confirm & Pay)
+  const [currentStep, setCurrentStep] = useState(1);
+
   // Query Params
   const paramStudentId = searchParams.get('student_id');
   const paramEnquiryId = searchParams.get('enquiry_id');
@@ -47,15 +58,19 @@ export default function NewAdmissionPage() {
   const paramSubject = searchParams.get('subject');
   const paramPurpose = searchParams.get('purpose');
   const paramFather = searchParams.get('father_name');
-  const paramAutoRegister = searchParams.get('auto_register');
+  const paramChangeFromItemId = searchParams.get('change_from_item_id');
+  const paramChangeFromSubject = searchParams.get('change_from_subject');
 
-  // Form State
+  // Reference Data
   const [students, setStudents] = useState([]);
   const [subjects, setSubjects] = useState([]);
+  const [teachers, setTeachers] = useState([]);
   const [greenCards, setGreenCards] = useState([]);
   const [loadingRefs, setLoadingRefs] = useState(true);
 
+  // Step 1: Student & Dates
   const [studentId, setStudentId] = useState(paramStudentId || '');
+  const [selectedStudentObj, setSelectedStudentObj] = useState(null);
   const [existingAdmissions, setExistingAdmissions] = useState([]);
   const [activeEnrollment, setActiveEnrollment] = useState(null);
   const [admissionDate, setAdmissionDate] = useState(new Date().toISOString().split('T')[0]);
@@ -67,27 +82,23 @@ export default function NewAdmissionPage() {
   });
   const [billingMonths, setBillingMonths] = useState(1);
   const [lastBatchPeriodInfo, setLastBatchPeriodInfo] = useState(null);
-  const [notes, setNotes] = useState('');
 
-  // Selected items: array of { tempId, item_type, batch_id, subject_id, green_card_id, item_name_snapshot, original_price, discount_type, discount_value }
+  // Step 2: Selected Items
   const [items, setItems] = useState([]);
 
-  // Discounts & GST
+  // Step 3: Discounts & GST
   const [overallDiscountType, setOverallDiscountType] = useState('NONE');
   const [overallDiscountValue, setOverallDiscountValue] = useState('0');
   const [gstEnabled, setGstEnabled] = useState(false);
   const [gstRate, setGstRate] = useState('18.00');
 
-  // Payment Mode
+  // Step 4: Payment Settlement & Notes
   const [paymentMode, setPaymentMode] = useState('CASH');
   const [paymentRef, setPaymentRef] = useState('');
   const [paymentNotes, setPaymentNotes] = useState('');
+  const [notes, setNotes] = useState('');
 
-  // Selected Student Object & Confirmation Modal
-  const [selectedStudentObj, setSelectedStudentObj] = useState(null);
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
-
-  // Live Preview Result from backend
+  // Live Backend Calculation Preview
   const [calculation, setCalculation] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -96,12 +107,14 @@ export default function NewAdmissionPage() {
   const [quickStudentInitialData, setQuickStudentInitialData] = useState(null);
   const [completedAdmission, setCompletedAdmission] = useState(null);
 
+  // Date calculation helper
   const calculateEndDateFromMonths = (startDateStr, monthsCount) => {
     if (!startDateStr) return '';
     const rolling = computeRollingCycle(startDateStr, monthsCount);
     return rolling ? rolling.endDate : '';
   };
 
+  // Change default billing months
   const handleBillingMonthsChange = (newMonths) => {
     const m = Math.max(1, parseInt(newMonths, 10) || 1);
     setBillingMonths(m);
@@ -149,14 +162,15 @@ export default function NewAdmissionPage() {
     );
   };
 
-  // Load References (students, subjects, green cards)
+  // Load References
   const loadReferences = useCallback(async () => {
     setLoadingRefs(true);
     try {
-      const [stuRes, subRes, gcRes] = await Promise.all([
+      const [stuRes, subRes, gcRes, teachRes] = await Promise.all([
         studentApi.list({ page: 1, page_size: 100 }),
         subjectApi.getAll(),
         greenCardApi.list(),
+        teacherApi.list({ status: 'ACTIVE', page_size: 100 }),
       ]);
 
       const loadedStudents = stuRes.items || [];
@@ -164,12 +178,11 @@ export default function NewAdmissionPage() {
       setStudents(loadedStudents);
       setSubjects(loadedSubjects);
       setGreenCards(gcRes || []);
+      setTeachers(teachRes.items || []);
 
       // If came from enquiry and student is not yet registered
       if (paramEnquiryId && !paramStudentId && paramName) {
         let matchedStudent = null;
-
-        // 1. Check if student already exists by mobile number (normalized)
         const cleanParamMob = cleanMobileInput(paramMobile);
         if (cleanParamMob && cleanParamMob.length === 10) {
           try {
@@ -182,7 +195,6 @@ export default function NewAdmissionPage() {
           }
         }
 
-        // 2. If not matched by mobile, search by full name
         if (!matchedStudent) {
           matchedStudent = loadedStudents.find(
             (s) => s.name.trim().toLowerCase() === paramName.trim().toLowerCase()
@@ -191,9 +203,8 @@ export default function NewAdmissionPage() {
 
         if (matchedStudent) {
           setStudentId(matchedStudent.id);
-          success(`Found existing registered student profile for ${matchedStudent.name} (${matchedStudent.student_code}). Auto-selected for admission!`);
+          success(`Found registered profile for ${matchedStudent.name}. Auto-selected!`);
         } else {
-          // Genuinely new student: open Quick Student Registration pre-filled
           setQuickStudentInitialData({
             name: paramName,
             mobile: cleanParamMob || '',
@@ -216,10 +227,11 @@ export default function NewAdmissionPage() {
             original_price: Number(gc.price),
             discount_type: 'NONE',
             discount_value: 0,
+            valid_from: validFrom,
+            valid_to: calculateEndDateFromMonths(validFrom, 12),
           },
         ]);
       } else if (items.length === 0 && loadedSubjects.length > 0) {
-        // Match subject from enquiry if specified
         let matchedSub = null;
         if (paramSubject) {
           const sSearch = paramSubject.toLowerCase();
@@ -251,6 +263,11 @@ export default function NewAdmissionPage() {
             hall_number_snapshot: firstSub.hall_number || 'Main Hall',
             discount_type: defaultDisc > 0 ? 'PERCENTAGE' : 'NONE',
             discount_value: defaultDisc > 0 ? String(defaultDisc) : '10',
+            valid_from: validFrom,
+            valid_to: calculateEndDateFromMonths(validFrom, initialMonths),
+            is_subject_change: !!paramChangeFromItemId,
+            change_from_item_id: paramChangeFromItemId || null,
+            replaced_subject_name: paramSubject || null,
           },
         ]);
       }
@@ -259,20 +276,24 @@ export default function NewAdmissionPage() {
     } finally {
       setLoadingRefs(false);
     }
-  }, [paramStudentId, paramEnquiryId, paramName, paramMobile, paramItemType, paramSubject, paramFather, paramPurpose, paramAutoRegister]);
+  }, [paramStudentId, paramEnquiryId, paramName, paramMobile, paramItemType, paramSubject, paramFather, paramPurpose, paramChangeFromItemId, paramChangeFromSubject]);
 
   useEffect(() => {
     loadReferences();
   }, [loadReferences]);
 
-  // Fetch existing admissions & last batch coverage period for student
+  // Fetch student history & active enrollment
   useEffect(() => {
     if (!studentId) {
       setExistingAdmissions([]);
       setLastBatchPeriodInfo(null);
       setActiveEnrollment(null);
+      setSelectedStudentObj(null);
       return;
     }
+
+    studentApi.get(studentId).then(setSelectedStudentObj).catch(console.warn);
+
     const fetchStudentHistory = async () => {
       try {
         const [admRes, periodRes, activeRes] = await Promise.all([
@@ -283,7 +304,6 @@ export default function NewAdmissionPage() {
         setExistingAdmissions(admRes.items || []);
         setActiveEnrollment(activeRes || null);
 
-        // Smart next batch period: defaults to next date after last batch end
         if (periodRes && periodRes.has_previous) {
           setLastBatchPeriodInfo(periodRes);
           setValidFrom(periodRes.suggested_start_date);
@@ -294,13 +314,13 @@ export default function NewAdmissionPage() {
           setValidTo(calculateEndDateFromMonths(admissionDate, billingMonths));
         }
       } catch (e) {
-        console.error('Failed to load student existing admissions or period info:', e);
+        console.error('Failed to load student history:', e);
       }
     };
     fetchStudentHistory();
   }, [studentId, admissionDate]);
 
-  // Sync items with active enrollment when student is selected or changes
+  // Sync active renewal dates for subjects
   useEffect(() => {
     if (activeEnrollment?.active_subjects && items.length > 0) {
       setItems((prev) =>
@@ -329,15 +349,6 @@ export default function NewAdmissionPage() {
     }
   }, [activeEnrollment]);
 
-  // Track full student details for confirmation modal preview
-  useEffect(() => {
-    if (studentId) {
-      studentApi.get(studentId).then(setSelectedStudentObj).catch(console.warn);
-    } else {
-      setSelectedStudentObj(null);
-    }
-  }, [studentId]);
-
   const handleValidFromChange = (newFrom) => {
     setValidFrom(newFrom);
     if (newFrom) {
@@ -352,7 +363,7 @@ export default function NewAdmissionPage() {
     }
   };
 
-  // Recalculate Live Preview whenever items, discounts, or GST change
+  // Live Backend Preview
   useEffect(() => {
     if (items.length === 0) {
       setCalculation(null);
@@ -380,20 +391,12 @@ export default function NewAdmissionPage() {
       } catch (err) {
         console.error('Calculation preview failed:', err);
       }
-    }, 200);
+    }, 150);
 
     return () => clearTimeout(timer);
   }, [items, overallDiscountType, overallDiscountValue, gstEnabled, gstRate]);
 
-  // Helper: check if subject is already active for selected student (Renewal detection)
-  const getSubjectRenewalInfo = (subjId, currentActiveEnrollment) => {
-    if (!currentActiveEnrollment?.active_subjects || !subjId) return null;
-    return currentActiveEnrollment.active_subjects.find(
-      (as) => as.subject_id === subjId
-    );
-  };
-
-  // Add Item Helpers
+  // Add Item Handlers
   const handleAddSubject = () => {
     if (subjects.length === 0) {
       error('No active subjects found.');
@@ -407,8 +410,7 @@ export default function NewAdmissionPage() {
     const baseFee = Number(s.default_fee);
     const m = billingMonths || 1;
 
-    // Check if this subject is currently active for this student
-    const activeMatch = getSubjectRenewalInfo(s.id, activeEnrollment);
+    const activeMatch = activeEnrollment?.active_subjects?.find((as) => as.subject_id === s.id);
     let itemFrom = validFrom;
     let isRenewal = false;
     let prevValidTo = null;
@@ -444,22 +446,6 @@ export default function NewAdmissionPage() {
     setItems((prev) => [...prev, newItem]);
   };
 
-  const handleItemValidFromChange = (tempId, newFrom) => {
-    setItems((prev) =>
-      prev.map((itm) => {
-        if (itm.tempId === tempId) {
-          const m = itm.months || billingMonths || 1;
-          return {
-            ...itm,
-            valid_from: newFrom,
-            valid_to: calculateEndDateFromMonths(newFrom, m),
-          };
-        }
-        return itm;
-      })
-    );
-  };
-
   const handleAddGreenCard = () => {
     if (greenCards.length === 0) {
       error('No Green Card product configured.');
@@ -468,13 +454,11 @@ export default function NewAdmissionPage() {
     const gc = greenCards.find((c) => c.is_active) || greenCards[0];
     const validityDays = gc.validity_days || 365;
 
-    // Calculate dynamic validity from validFrom
     const fromDate = validFrom ? new Date(validFrom) : new Date();
     const toDate = new Date(fromDate);
     toDate.setDate(toDate.getDate() + validityDays);
     const toStr = toDate.toISOString().split('T')[0];
 
-    // Automatically expand the overall coverage to include pass validity
     if (!validTo || toStr > validTo) {
       setValidTo(toStr);
     }
@@ -495,6 +479,62 @@ export default function NewAdmissionPage() {
       valid_to: toStr,
     };
     setItems((prev) => [...prev, newItem]);
+  };
+
+  const handleRemoveItem = (tempId) => {
+    setItems((prev) => prev.filter((i) => i.tempId !== tempId));
+  };
+
+  const handleSubjectChangeForItem = (tempId, newSubjId) => {
+    const s = subjects.find((x) => x.id === newSubjId);
+    if (!s) return;
+
+    setItems((prev) =>
+      prev.map((itm) => {
+        if (itm.tempId === tempId) {
+          const defaultDisc = s.default_discount_percentage !== undefined && s.default_discount_percentage !== null
+            ? Number(s.default_discount_percentage)
+            : 10;
+          const baseFee = Number(s.default_fee);
+          const m = itm.months || billingMonths || 1;
+
+          const activeMatch = activeEnrollment?.active_subjects?.find((as) => as.subject_id === s.id);
+          let itemFrom = validFrom;
+          let isRenewal = false;
+          let prevValidTo = null;
+
+          if (activeMatch && activeMatch.valid_to) {
+            isRenewal = true;
+            prevValidTo = activeMatch.valid_to;
+            const nextStart = new Date(activeMatch.valid_to);
+            nextStart.setDate(nextStart.getDate() + 1);
+            itemFrom = nextStart.toISOString().split('T')[0];
+          }
+          const itemTo = calculateEndDateFromMonths(itemFrom, m);
+
+          return {
+            ...itm,
+            subject_id: s.id,
+            item_name_snapshot: s.name,
+            base_monthly_fee: baseFee,
+            months: m,
+            original_price: baseFee * m,
+            teacher_id: s.teacher_id || null,
+            teacher_name_snapshot: s.teacher_name_snapshot || null,
+            hall_number_snapshot: s.hall_number || 'Main Hall',
+            valid_from: itemFrom,
+            valid_to: itemTo,
+            is_renewal: isRenewal,
+            prev_valid_to: prevValidTo,
+            discount_type: itm.discount_type === 'NONE' && defaultDisc > 0 ? 'PERCENTAGE' : itm.discount_type,
+            discount_value: itm.discount_type === 'PERCENTAGE' && (!itm.discount_value || itm.discount_value === '0')
+              ? String(defaultDisc)
+              : itm.discount_value,
+          };
+        }
+        return itm;
+      })
+    );
   };
 
   const handleGreenCardChangeForItem = (tempId, newGcId) => {
@@ -524,55 +564,62 @@ export default function NewAdmissionPage() {
     );
   };
 
-  const handleRemoveItem = (tempId) => {
-    setItems((prev) => prev.filter((i) => i.tempId !== tempId));
-  };
-
-  const handleSubjectChangeForItem = (tempId, newSubjId) => {
-    const s = subjects.find((x) => x.id === newSubjId);
-    if (!s) return;
-
+  const handleItemValidFromChange = (tempId, newFrom) => {
     setItems((prev) =>
       prev.map((itm) => {
         if (itm.tempId === tempId) {
-          const defaultDisc = s.default_discount_percentage !== undefined && s.default_discount_percentage !== null
-            ? Number(s.default_discount_percentage)
-            : 10;
-          const baseFee = Number(s.default_fee);
           const m = itm.months || billingMonths || 1;
-
-          const activeMatch = getSubjectRenewalInfo(s.id, activeEnrollment);
-          let itemFrom = validFrom;
-          let isRenewal = false;
-          let prevValidTo = null;
-
-          if (activeMatch && activeMatch.valid_to) {
-            isRenewal = true;
-            prevValidTo = activeMatch.valid_to;
-            const nextStart = new Date(activeMatch.valid_to);
-            nextStart.setDate(nextStart.getDate() + 1);
-            itemFrom = nextStart.toISOString().split('T')[0];
-          }
-          const itemTo = calculateEndDateFromMonths(itemFrom, m);
-
           return {
             ...itm,
-            subject_id: s.id,
-            item_name_snapshot: s.name,
-            base_monthly_fee: baseFee,
-            months: m,
-            original_price: baseFee * m,
-            teacher_id: s.teacher_id || null,
-            teacher_name_snapshot: s.teacher_name_snapshot || null,
-            hall_number_snapshot: s.hall_number || 'Main Hall',
-            valid_from: itemFrom,
-            valid_to: itemTo,
-            is_renewal: isRenewal,
-            prev_valid_to: prevValidTo,
-            discount_type: itm.discount_type === 'NONE' && defaultDisc > 0 ? 'PERCENTAGE' : itm.discount_type,
-            discount_value: itm.discount_type === 'PERCENTAGE' && (!itm.discount_value || itm.discount_value === '0' || itm.discount_value === 0)
-              ? String(defaultDisc)
-              : itm.discount_value,
+            valid_from: newFrom,
+            valid_to: calculateEndDateFromMonths(newFrom, m),
+          };
+        }
+        return itm;
+      })
+    );
+  };
+
+  const handleItemValidToChange = (tempId, newTo) => {
+    setItems((prev) =>
+      prev.map((itm) => {
+        if (itm.tempId === tempId) {
+          return {
+            ...itm,
+            valid_to: newTo,
+          };
+        }
+        return itm;
+      })
+    );
+  };
+
+  const handleItemTeacherChange = (tempId, newTeacherId) => {
+    const t = teachers.find((tch) => tch.id === newTeacherId);
+    setItems((prev) =>
+      prev.map((itm) => {
+        if (itm.tempId === tempId) {
+          return {
+            ...itm,
+            teacher_id: newTeacherId || null,
+            teacher_name_snapshot: t ? t.name : null,
+          };
+        }
+        return itm;
+      })
+    );
+  };
+
+  const handleItemChangeFromItemChange = (tempId, changeFromId) => {
+    const activeSub = activeEnrollment?.active_subjects?.find((as) => as.id === changeFromId);
+    setItems((prev) =>
+      prev.map((itm) => {
+        if (itm.tempId === tempId) {
+          return {
+            ...itm,
+            change_from_item_id: changeFromId || null,
+            is_subject_change: !!changeFromId,
+            replaced_subject_name: activeSub ? activeSub.subject_name : null,
           };
         }
         return itm;
@@ -622,24 +669,77 @@ export default function NewAdmissionPage() {
     );
   };
 
-  const handleInitiateSubmit = (e) => {
-    e.preventDefault();
+  // Step Validation & Navigation
+  const validateStep = (stepNumber) => {
+    if (stepNumber === 1) {
+      if (!studentId) {
+        error('Please select or register a student first');
+        return false;
+      }
+      return true;
+    }
+    if (stepNumber === 2) {
+      if (items.length === 0) {
+        error('Please select at least one subject to proceed');
+        return false;
+      }
+      return true;
+    }
+    return true;
+  };
+
+  const handleGoToNextStep = () => {
+    if (validateStep(currentStep)) {
+      if (currentStep < 4) {
+        setCurrentStep((prev) => prev + 1);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }
+  };
+
+  const handleGoToPrevStep = () => {
+    if (currentStep > 1) {
+      setCurrentStep((prev) => prev - 1);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const handleJumpToStep = (targetStep) => {
+    if (targetStep < currentStep) {
+      setCurrentStep(targetStep);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    // Check if prerequisite steps are valid
+    if (targetStep >= 2 && !studentId) {
+      error('Please select a student first');
+      return;
+    }
+    if (targetStep >= 3 && items.length === 0) {
+      error('Please add at least one subject first');
+      return;
+    }
+    setCurrentStep(targetStep);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Final Submit
+  const handleFinalExecutePurchase = async () => {
     if (!studentId) {
-      error('Please select or register a student first');
+      error('Please select or register a student');
+      setCurrentStep(1);
       return;
     }
     if (items.length === 0) {
-      error('Please add at least one subject to the purchase');
+      error('Please add at least one subject');
+      setCurrentStep(2);
       return;
     }
     if (!calculation) {
-      error('Please wait for fee calculation to finish');
+      error('Please wait for fee calculations to finish');
       return;
     }
-    setShowConfirmModal(true);
-  };
 
-  const handleFinalExecutePurchase = async () => {
     setSubmitting(true);
     try {
       const hasGc = items.some((i) => i.item_type === 'GREEN_CARD');
@@ -653,13 +753,15 @@ export default function NewAdmissionPage() {
       const itemsPayload = items.map((itm) => {
         const itmMonths = itm.months || billingMonths || 1;
         let itmFrom = itm.valid_from || validFrom;
-        let itmTo = itm.valid_to || overallValidTo;
-        if (itm.item_type === 'GREEN_CARD') {
-          const d = new Date(itmFrom);
-          d.setDate(d.getDate() + 365);
-          itmTo = d.toISOString().split('T')[0];
-        } else {
-          itmTo = calculateEndDateFromMonths(itmFrom, itmMonths);
+        let itmTo = itm.valid_to;
+        if (!itmTo) {
+          if (itm.item_type === 'GREEN_CARD') {
+            const d = new Date(itmFrom);
+            d.setDate(d.getDate() + 365);
+            itmTo = d.toISOString().split('T')[0];
+          } else {
+            itmTo = calculateEndDateFromMonths(itmFrom, itmMonths);
+          }
         }
 
         const baseFee = itm.base_monthly_fee !== undefined
@@ -685,6 +787,7 @@ export default function NewAdmissionPage() {
           discount_value: parseFloat(itm.discount_value) || 0,
           valid_from: itmFrom,
           valid_to: itmTo,
+          change_from_item_id: itm.change_from_item_id || null,
         };
       });
 
@@ -715,9 +818,8 @@ export default function NewAdmissionPage() {
       };
 
       const res = await admissionApi.create(payload);
-      success(`Purchase confirmed: ${res.purchase_transaction_id || res.admission_number}`);
+      success(`Admission confirmed: ${res.purchase_transaction_id || res.admission_number}`);
 
-      // If enquiry was associated, convert it
       if (paramEnquiryId) {
         try {
           await enquiryApi.convert(paramEnquiryId);
@@ -726,54 +828,72 @@ export default function NewAdmissionPage() {
         }
       }
 
-      setShowConfirmModal(false);
       setCompletedAdmission(res);
     } catch (err) {
-      error(err.message || 'Failed to complete purchase');
+      error(err.message || 'Failed to complete admission');
     } finally {
       setSubmitting(false);
     }
   };
 
+  // Dynamic calculations for display
+  const itemsSubtotal = items.reduce((sum, itm) => sum + (parseFloat(itm.original_price) || 0), 0);
+  const currentPayable = calculation ? calculation.total_payable : itemsSubtotal;
+  const currentDiscounts = calculation ? calculation.total_discount : 0;
+
+  const stepsMeta = [
+    { num: 1, title: 'Student', subtitle: 'Select student' },
+    { num: 2, title: 'Subjects', subtitle: 'Pick courses & dates' },
+    { num: 3, title: 'Discounts', subtitle: 'Apply fee reductions' },
+    { num: 4, title: 'Confirm', subtitle: 'Payment & Slip' },
+  ];
+
   return (
-    <div className="space-y-4 max-w-4xl mx-auto pb-10">
+    <div className="max-w-4xl mx-auto space-y-4 pb-36">
       {/* Top Header */}
       <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           <button
+            type="button"
             onClick={() => navigate('/admissions')}
-            className="p-1.5 rounded-md border border-slate-300 text-slate-600 hover:text-black hover:bg-slate-100 transition"
+            className="p-2 rounded-md border border-slate-300 text-slate-700 hover:text-black hover:bg-slate-100 transition min-w-[38px] min-h-[38px] flex items-center justify-center"
+            title="Back to Admissions"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
           <div>
-            <h1 className="text-xl font-bold text-black tracking-tight">New Course Purchase</h1>
-            <p className="text-xs text-slate-500">
-              Combine multiple subjects under a unified purchase invoice with customized discounts & payments
+            <h1 className="text-lg sm:text-xl font-bold text-black tracking-tight flex items-center gap-2">
+              <span>New Admission / Enrolment</span>
+              <span className="text-[11px] font-mono font-bold bg-odoo-100 text-odoo-800 px-2 py-0.5 rounded-full">
+                Step {currentStep} of 4
+              </span>
+            </h1>
+            <p className="text-xs text-slate-600">
+              Cashier Enrolment: Student → Subjects → Discounts → Payment Confirmation
             </p>
           </div>
         </div>
 
         {paramEnquiryId && (
-          <Badge variant="warning">Converting from Enquiry / Demo</Badge>
+          <Badge variant="warning" size="xs">Enquiry Demo</Badge>
         )}
       </div>
 
-      {/* Enquiry Conversion Reusable Banner */}
+      {/* Enquiry Conversion Banner */}
       {paramEnquiryId && (
-        <div className="p-3.5 bg-indigo-50 border border-indigo-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-indigo-100 text-indigo-700 shrink-0">
-              <UserPlus className="w-5 h-5" />
+        <div className="p-3 bg-purple-50 border border-odoo-200 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 rounded-md bg-purple-100 text-odoo-700 shrink-0">
+              <UserPlus className="w-4 h-4" />
             </div>
             <div>
-              <div className="text-xs font-bold text-indigo-950 uppercase tracking-wider">
-                Converting Enquiry for: <span className="text-black font-black text-sm">{paramName || 'Enquiry Student'}</span>
+              <div className="text-xs font-bold text-odoo-900 uppercase tracking-wider">
+                Converting Enquiry for: <span className="text-black font-black">{paramName || 'Enquiry Student'}</span>
               </div>
-              <div className="text-[11px] text-indigo-800 font-medium mt-0.5">
+              <div className="text-[11px] text-odoo-800 font-medium">
                 {paramMobile ? `📞 ${paramMobile} • ` : ''}
                 {paramSubject ? `Interested in: ${paramSubject} • ` : ''}
-                {studentId ? 'Registered student profile linked' : 'Student not registered yet. Details pre-filled for quick registration.'}
+                {studentId ? 'Registered student profile linked' : 'Student not registered yet'}
               </div>
             </div>
           </div>
@@ -792,82 +912,270 @@ export default function NewAdmissionPage() {
                 setIsQuickStudentOpen(true);
               }}
             >
-              Open New Registration
+              Quick Register
             </Button>
           )}
         </div>
       )}
 
-      <form onSubmit={handleInitiateSubmit} className="space-y-4">
-        {/* Step 1: Student & Date Card */}
-        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs space-y-3">
-          <h2 className="text-xs font-bold uppercase tracking-wider text-black border-b border-slate-100 pb-2">
-            1. Select Student & Purchase Date
-          </h2>
+      {/* Modern 4-Step Progress Header */}
+      <div className="bg-white border border-slate-200 rounded-lg p-2.5 sm:p-3 shadow-xs">
+        <div className="grid grid-cols-4 gap-1.5 sm:gap-3">
+          {stepsMeta.map((s) => {
+            const isCompleted = currentStep > s.num;
+            const isCurrent = currentStep === s.num;
+            return (
+              <button
+                key={s.num}
+                type="button"
+                onClick={() => handleJumpToStep(s.num)}
+                className={`flex flex-col sm:flex-row items-center sm:items-center gap-1 sm:gap-2.5 p-1.5 sm:p-2 rounded-md transition text-left ${
+                  isCurrent
+                    ? 'bg-odoo-50 border border-odoo-300 text-odoo-900 font-bold'
+                    : isCompleted
+                    ? 'bg-emerald-50/60 border border-emerald-200 text-emerald-900 hover:bg-emerald-50'
+                    : 'bg-slate-50 border border-slate-200 text-slate-500 hover:bg-slate-100'
+                }`}
+              >
+                <div
+                  className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center text-[10px] sm:text-xs font-bold shrink-0 ${
+                    isCurrent
+                      ? 'bg-odoo-600 text-white shadow-xs'
+                      : isCompleted
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-slate-200 text-slate-600'
+                  }`}
+                >
+                  {isCompleted ? <Check className="w-3.5 h-3.5" /> : s.num}
+                </div>
+                <div className="min-w-0 text-center sm:text-left">
+                  <span className="block text-[11px] sm:text-xs font-bold truncate">
+                    {s.title}
+                  </span>
+                  <span className="hidden sm:block text-[10px] font-normal text-slate-500 truncate">
+                    {s.subtitle}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-            <div className="sm:col-span-2">
-              <label className="block text-xs font-semibold text-black mb-1">
-                Registered Student <span className="text-rose-600">*</span>
-              </label>
-              <StudentSearchSelect
-                value={studentId}
-                onChange={(id) => setStudentId(id)}
-                onOpenQuickRegister={() => setIsQuickStudentOpen(true)}
-                required
-              />
-            </div>
-
-            <Input
-              label="Purchase Date"
-              type="date"
-              value={admissionDate}
-              onChange={(e) => setAdmissionDate(e.target.value)}
-              required
-            />
-          </div>
-
-          {/* Fee Period & Billing Duration (Whole Months — No Partial Month) */}
-          <div className="pt-2 border-t border-slate-100 space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+      {/* STEP 1: PICK STUDENT & ADMISSION DATE */}
+      {currentStep === 1 && (
+        <div className="space-y-4">
+          <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs space-y-3.5">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
               <div>
-                <label className="text-xs font-bold text-black flex items-center gap-1.5">
-                  <CalendarDays className="w-4 h-4 text-indigo-600" />
-                  Fee Period & Billing Duration (Strictly Whole Months — No Partial Month)
-                </label>
+                <h2 className="text-sm font-bold text-black flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-odoo-600 text-white flex items-center justify-center text-xs">
+                    1
+                  </span>
+                  <span>Pick Registered Student</span>
+                </h2>
                 <p className="text-[11px] text-slate-500">
-                  Coaching fee standard: Subject catalog fees are per 30 days. Bill in whole integer months (1, 2, 3, 6, 12).
+                  Search by student name, 10-digit mobile, or registration code
                 </p>
               </div>
 
-              {lastBatchPeriodInfo?.has_previous && (
-                <span className="text-[10px] bg-amber-50 text-amber-900 border border-amber-200 px-2 py-0.5 rounded font-medium">
-                  Last batch ended on: <strong className="font-mono">{lastBatchPeriodInfo.last_end_date}</strong>
-                </span>
-              )}
+              <Button
+                size="xs"
+                variant="secondary"
+                icon={UserPlus}
+                onClick={() => {
+                  setQuickStudentInitialData(null);
+                  setIsQuickStudentOpen(true);
+                }}
+              >
+                + Register New
+              </Button>
             </div>
 
-            {lastBatchPeriodInfo?.has_previous && (
-              <div className="bg-amber-50/70 border border-amber-200 rounded-md p-2 text-xs text-amber-900 flex items-center gap-2">
-                <CalendarDays className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>
-                  Previous batch ended on <strong>{lastBatchPeriodInfo.last_end_date}</strong>. Next fee cycle starts on <strong>{lastBatchPeriodInfo.suggested_start_date}</strong>.
-                </span>
+            {/* Student Search & Select Component */}
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-black mb-1">
+                  Registered Student <span className="text-rose-600">*</span>
+                </label>
+                <StudentSearchSelect
+                  value={studentId}
+                  onChange={(id) => setStudentId(id)}
+                  onOpenQuickRegister={() => {
+                    setQuickStudentInitialData(null);
+                    setIsQuickStudentOpen(true);
+                  }}
+                  required
+                />
+              </div>
+
+              {/* Selected Student Card */}
+              {selectedStudentObj && (
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-full bg-odoo-600 text-white font-bold flex items-center justify-center text-sm shadow-xs">
+                        {selectedStudentObj.name ? selectedStudentObj.name.charAt(0).toUpperCase() : 'S'}
+                      </div>
+                      <div>
+                        <div className="font-bold text-black text-sm">{selectedStudentObj.name}</div>
+                        <div className="text-[11px] text-slate-600 flex items-center gap-2 flex-wrap">
+                          <span className="font-mono font-bold text-odoo-800 bg-odoo-100 px-1.5 py-0.2 rounded">
+                            {selectedStudentObj.student_code}
+                          </span>
+                          {selectedStudentObj.mobile && (
+                            <span className="font-mono text-black">📞 {selectedStudentObj.mobile}</span>
+                          )}
+                          {selectedStudentObj.father_name && (
+                            <span className="text-slate-600">S/D of {selectedStudentObj.father_name}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setStudentId('')}
+                      className="text-xs text-odoo-700 hover:text-odoo-900 font-semibold px-2 py-1 rounded border border-slate-300 hover:bg-slate-100 transition"
+                    >
+                      Change
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Purchase Date */}
+              <div className="pt-2 border-t border-slate-100">
+                <div className="max-w-xs">
+                  <Input
+                    label="Admission / Purchase Date"
+                    type="date"
+                    value={admissionDate}
+                    onChange={(e) => setAdmissionDate(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Active Enrollment Info (if any) */}
+            {activeEnrollment && (
+              <div className="bg-purple-50/60 border border-odoo-200 rounded-lg p-3 text-xs space-y-2">
+                <div className="flex items-center justify-between font-bold text-odoo-900">
+                  <span className="flex items-center gap-1.5">
+                    <BookOpen className="w-4 h-4 text-odoo-600" />
+                    Student Active Course Coverage
+                  </span>
+                  <span className="bg-white border border-odoo-200 px-2 py-0.5 rounded text-[11px] font-mono text-odoo-700 font-bold">
+                    {activeEnrollment.enrollment_number}
+                  </span>
+                </div>
+
+                {activeEnrollment.active_green_card && (
+                  <div className="p-2 bg-purple-100/70 border border-purple-200 rounded text-purple-950 flex items-center justify-between text-[11px]">
+                    <span className="font-bold flex items-center gap-1">
+                      <Award className="w-3.5 h-3.5 text-purple-700" />
+                      Active Green Card All-Access Pass
+                    </span>
+                    <span className="font-mono font-bold">
+                      Valid till: {activeEnrollment.active_green_card.valid_to}
+                    </span>
+                  </div>
+                )}
+
+                {activeEnrollment.active_subjects?.length > 0 ? (
+                  <div className="space-y-1">
+                    <div className="text-[11px] text-slate-700 font-semibold">
+                      Currently Enrolled Courses (Renewals seamlessly continue from last end date):
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                      {activeEnrollment.active_subjects.map((sub) => (
+                        <div key={sub.id} className="p-2 bg-white border border-purple-100 rounded-md flex items-center justify-between text-[11px]">
+                          <div>
+                            <div className="font-bold text-black">{sub.subject_name}</div>
+                            <span className="text-[10px] text-slate-500">Faculty: {sub.teacher_name || 'General'}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="font-mono text-odoo-900 font-bold block">{sub.valid_to}</span>
+                            <span className={`text-[10px] font-semibold ${sub.days_remaining <= 7 ? 'text-rose-600' : 'text-emerald-700'}`}>
+                              {sub.days_remaining}d left
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-slate-500 italic">
+                    No active courses currently. This admission will begin a fresh course cycle.
+                  </p>
+                )}
               </div>
             )}
 
-            {/* Quick Month Preset Buttons */}
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold text-slate-700">
-                  Select Subscription Duration:
+            {/* Last Batch Coverage Info (if any) */}
+            {lastBatchPeriodInfo?.has_previous && (
+              <div className="bg-amber-50 border border-amber-200 rounded-md p-2.5 text-xs text-amber-950 flex items-center gap-2">
+                <CalendarDays className="w-4 h-4 text-amber-700 shrink-0" />
+                <span>
+                  Previous cycle ended on <strong>{lastBatchPeriodInfo.last_end_date}</strong>. Suggested new cycle starts on <strong>{lastBatchPeriodInfo.suggested_start_date}</strong>.
                 </span>
-                <span className="text-[11px] text-indigo-700 font-bold">
-                  {billingMonths} Month{billingMonths > 1 ? 's' : ''} ({billingMonths * 30} Days Coverage)
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* STEP 2: PICK SUBJECTS & DATE RANGE */}
+      {currentStep === 2 && (
+        <div className="space-y-4">
+          <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs space-y-3.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+              <div>
+                <h2 className="text-sm font-bold text-black flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-odoo-600 text-white flex items-center justify-center text-xs">
+                    2
+                  </span>
+                  <span>Pick Subject(s) & Duration</span>
+                </h2>
+                <p className="text-[11px] text-slate-500">
+                  Select coaching subjects, billing duration (whole months), and validity dates
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  size="xs"
+                  variant="primary"
+                  icon={Plus}
+                  onClick={handleAddSubject}
+                >
+                  Add Subject
+                </Button>
+                <Button
+                  size="xs"
+                  variant="purple"
+                  icon={Award}
+                  onClick={handleAddGreenCard}
+                >
+                  Add Green Card
+                </Button>
+              </div>
+            </div>
+
+            {/* Billing Duration Presets (Whole Months) */}
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                <span className="text-xs font-bold text-black flex items-center gap-1.5">
+                  <CalendarDays className="w-4 h-4 text-odoo-600" />
+                  Default Fee Billing Duration (30 Days / Month):
+                </span>
+                <span className="text-xs text-odoo-800 font-bold">
+                  {billingMonths} Month{billingMonths > 1 ? 's' : ''} ({billingMonths * 30} Days)
                 </span>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                 {[
                   { m: 1, label: '1 Month', days: '30d' },
                   { m: 2, label: '2 Months', days: '60d' },
@@ -881,16 +1189,16 @@ export default function NewAdmissionPage() {
                       key={preset.m}
                       type="button"
                       onClick={() => handleBillingMonthsChange(preset.m)}
-                      className={`px-3 py-1.5 rounded-md text-xs font-semibold transition flex items-center gap-1.5 border ${
+                      className={`min-h-[36px] px-2.5 py-1 rounded-md text-xs font-semibold transition flex items-center gap-1.5 border ${
                         isSelected
-                          ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs'
+                          ? 'bg-odoo-600 text-white border-odoo-700 shadow-xs'
                           : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100 hover:border-slate-400'
                       }`}
                     >
                       <span>{preset.label}</span>
                       <span
                         className={`text-[10px] px-1 py-0.2 rounded font-mono ${
-                          isSelected ? 'bg-indigo-700 text-indigo-100' : 'bg-slate-100 text-slate-500'
+                          isSelected ? 'bg-odoo-700 text-purple-100' : 'bg-slate-100 text-slate-500'
                         }`}
                       >
                         {preset.days}
@@ -899,7 +1207,6 @@ export default function NewAdmissionPage() {
                   );
                 })}
 
-                {/* Custom Month Stepper */}
                 <div className="flex items-center gap-1.5 ml-auto">
                   <span className="text-xs text-slate-600 font-medium">Custom:</span>
                   <input
@@ -914,311 +1221,283 @@ export default function NewAdmissionPage() {
                         handleBillingMonthsChange(val);
                       }
                     }}
-                    className="w-16 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-center font-bold text-black font-mono focus:outline-none focus:border-indigo-600"
+                    className="w-16 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-center font-bold text-black font-mono focus:outline-none focus:border-odoo-600 min-h-[34px]"
                   />
-                  <span className="text-xs text-slate-500">months</span>
+                  <span className="text-xs text-slate-500">mo</span>
+                </div>
+              </div>
+
+              {/* Coverage Dates Row */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-slate-200/80">
+                <Input
+                  label="Coverage Start Date (From Date)"
+                  type="date"
+                  value={validFrom}
+                  onChange={(e) => handleValidFromChange(e.target.value)}
+                  required
+                />
+                <div>
+                  <label className="block text-xs font-semibold text-black mb-1">
+                    Coverage End Date (Auto: +{billingMonths * 30} days)
+                  </label>
+                  <div className="w-full rounded border border-slate-300 bg-slate-100 font-mono font-bold text-black px-3 py-2 text-xs flex items-center justify-between min-h-[36px]">
+                    <span>{validTo}</span>
+                    <span className="text-[10px] bg-purple-100 text-odoo-800 px-1.5 py-0.5 rounded font-sans font-semibold">
+                      {billingMonths} mo • {billingMonths * 30}d
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Date Range Inputs */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
-              <Input
-                label="Coverage Start Date (From Date)"
-                type="date"
-                value={validFrom}
-                onChange={(e) => handleValidFromChange(e.target.value)}
-                required
-              />
-              <div>
-                <label className="block text-xs font-semibold text-black mb-1">
-                  Coverage End Date (Auto-calculated: +{billingMonths * 30} days)
-                </label>
-                <div className="w-full rounded border border-slate-300 bg-slate-100 font-mono font-bold text-black px-3 py-2 text-xs flex items-center justify-between">
-                  <span>{validTo}</span>
-                  <span className="text-[10px] bg-indigo-100 text-indigo-800 px-1.5 py-0.5 rounded font-sans font-semibold">
-                    {billingMonths} mo • {billingMonths * 30}d
-                  </span>
-                </div>
+            {/* Items List */}
+            {items.length === 0 ? (
+              <div className="p-8 border-2 border-dashed border-slate-200 rounded-lg text-center space-y-2">
+                <p className="text-xs text-slate-600 font-medium">No subjects selected yet.</p>
+                <Button size="xs" variant="primary" icon={Plus} onClick={handleAddSubject}>
+                  Add First Subject
+                </Button>
               </div>
-            </div>
-          </div>
-
-          {/* Active Enrollment & Course Continuity Overview */}
-          {activeEnrollment && (
-            <div className="mt-3 bg-gradient-to-r from-indigo-50/70 via-slate-50 to-purple-50/60 border border-indigo-200 rounded-lg p-3 text-xs space-y-2.5">
-              <div className="flex items-center justify-between font-bold text-indigo-950">
-                <span className="flex items-center gap-1.5">
-                  <BookOpen className="w-4 h-4 text-indigo-600" />
-                  Student Active Course Enrollments
-                </span>
-                <span className="bg-white border border-indigo-200 px-2 py-0.5 rounded text-[11px] font-mono text-indigo-700 font-bold">
-                  {activeEnrollment.enrollment_number}
-                </span>
-              </div>
-
-              {activeEnrollment.active_green_card && (
-                <div className="p-2 bg-purple-100/70 border border-purple-200 rounded text-purple-950 flex items-center justify-between text-[11px]">
-                  <span className="font-bold flex items-center gap-1">
-                    <Award className="w-3.5 h-3.5 text-purple-700" />
-                    Active Green Card All-Access Pass
-                  </span>
-                  <span className="font-mono font-bold">
-                    Valid till: {activeEnrollment.active_green_card.valid_to} ({activeEnrollment.active_green_card.days_remaining}d remaining)
-                  </span>
-                </div>
-              )}
-
-              {activeEnrollment.active_subjects?.length > 0 ? (
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-[11px] text-slate-700 font-semibold">
-                    <span>Active Courses (Purchasing existing course will automatically renew for next cycle):</span>
-                    <span className="text-emerald-700 font-bold">{activeEnrollment.active_subjects.length} Currently Active</span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                    {activeEnrollment.active_subjects.map((sub) => (
-                      <div key={sub.id} className="p-2 bg-white border border-indigo-100 rounded-md flex items-center justify-between text-[11px] shadow-2xs">
-                        <div>
-                          <div className="font-bold text-black flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                            <span>{sub.subject_name}</span>
-                          </div>
-                          <span className="text-[10px] text-slate-500 block">Faculty: {sub.teacher_name || 'General'}</span>
-                        </div>
-                        <div className="text-right">
-                          <span className="font-mono text-indigo-950 font-bold block">{sub.valid_to}</span>
-                          <span className={`text-[10px] font-semibold ${sub.days_remaining <= 7 ? 'text-rose-600' : 'text-emerald-700'}`}>
-                            {sub.days_remaining}d remaining
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <p className="text-[11px] text-slate-500 italic">
-                  No active subjects currently. This purchase will begin a new active course cycle.
-                </p>
-              )}
-
-              {/* Past Purchases / Invoices Collapsible */}
-              {existingAdmissions.length > 0 && (
-                <details className="pt-1 border-t border-indigo-100 text-[11px] text-slate-600">
-                  <summary className="cursor-pointer font-semibold text-indigo-800 hover:text-indigo-950">
-                    View Previous Purchase Invoices ({existingAdmissions.length})
-                  </summary>
-                  <div className="divide-y divide-indigo-100 max-h-32 overflow-y-auto mt-1 pt-1">
-                    {existingAdmissions.map((adm) => (
-                      <div key={adm.id} className="py-1 flex items-center justify-between text-[11px]">
-                        <div>
-                          <span className="font-mono font-bold text-black">{adm.purchase_transaction_id || adm.admission_number}</span>
-                          <span className="text-slate-600 ml-2">({adm.admission_date})</span>
-                          <span className="text-slate-500 ml-2">
-                            {(adm.items || []).map((i) => i.item_name_snapshot).join(', ')}
-                          </span>
-                        </div>
-                        <div className="font-mono text-slate-700">
-                          Paid: <strong className="text-emerald-700">₹{Number(adm.amount_paid).toFixed(0)}</strong> · 
-                          Due: <strong className="text-rose-700">₹{Number(adm.balance_due).toFixed(0)}</strong>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </details>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Step 2: Enrolled Subjects & Individual Discounts */}
-        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2">
-            <div>
-              <h2 className="text-xs font-bold uppercase tracking-wider text-black">
-                2. Select Subjects & Combine at Purchase
-              </h2>
-              <p className="text-[11px] text-slate-500">
-                Select and combine multiple subjects under one unified admission & payment transaction
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Button
-                size="xs"
-                variant="primary"
-                icon={Plus}
-                onClick={handleAddSubject}
-              >
-                Add Subject
-              </Button>
-              <Button
-                size="xs"
-                variant="purple"
-                icon={Award}
-                onClick={handleAddGreenCard}
-              >
-                Add Green Card Pass
-              </Button>
-            </div>
-          </div>
-
-          {items.length === 0 ? (
-            <div className="p-8 border-2 border-dashed border-slate-200 rounded-lg text-center space-y-2">
-              <p className="text-xs text-slate-500">No subjects selected yet.</p>
-              <Button size="xs" variant="primary" onClick={handleAddSubject}>
-                Add First Subject
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {items.map((itm, index) => {
-                return (
+            ) : (
+              <div className="space-y-3">
+                {items.map((itm, index) => (
                   <div
                     key={itm.tempId}
-                    className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-2"
+                    className="p-3 bg-white border border-slate-300 rounded-lg text-xs space-y-2.5 shadow-xs"
                   >
+                    {/* Item Card Header */}
                     <div className="flex items-center justify-between">
-                      <span className="font-bold text-black flex items-center gap-1.5">
-                        <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold">
+                      <div className="flex items-center gap-2">
+                        <span className="w-5 h-5 rounded-full bg-odoo-600 text-white flex items-center justify-center text-[10px] font-bold">
                           {index + 1}
                         </span>
-                        {itm.item_type === 'GREEN_CARD' ? (
-                          <Badge variant="purple">Green Card All-Access Pass</Badge>
-                        ) : (
-                          <span>Subject Course</span>
+                        <span className="font-bold text-black text-xs">
+                          {itm.item_type === 'GREEN_CARD' ? 'Green Card All-Access Pass' : 'Coaching Subject'}
+                        </span>
+                        {itm.is_renewal && (
+                          <Badge variant="success" size="xs">NEXT CYCLE RENEWAL</Badge>
                         )}
-                      </span>
+                        {itm.is_subject_change && (
+                          <Badge variant="purple" size="xs">SUBJECT CHANGE</Badge>
+                        )}
+                      </div>
 
                       <button
                         type="button"
                         onClick={() => handleRemoveItem(itm.tempId)}
-                        className="text-slate-400 hover:text-rose-600 transition p-1"
-                        title="Remove Item"
+                        className="text-slate-400 hover:text-rose-600 p-1.5 rounded transition min-w-[32px] min-h-[32px] flex items-center justify-center"
+                        title="Remove Subject"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
 
                     {itm.item_type !== 'GREEN_CARD' ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
-                        {/* Select Subject */}
-                        <div className="sm:col-span-6">
-                          <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">
-                            Select Subject
-                          </label>
-                          <select
-                            value={itm.subject_id || ''}
-                            onChange={(e) => handleSubjectChangeForItem(itm.tempId, e.target.value)}
-                            className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-black focus:outline-none focus:border-indigo-600 font-medium"
-                          >
-                            {subjects.map((s) => {
-                              const activeMatch = activeEnrollment?.active_subjects?.find((as) => as.subject_id === s.id);
-                              return (
-                                <option key={s.id} value={s.id}>
-                                  {s.name} — ₹{Number(s.default_fee).toFixed(0)}/mo
-                                  {activeMatch ? ` • [Active till ${activeMatch.valid_to} — Renews Next Cycle]` : ''}
-                                  {s.teacher_name_snapshot ? ` (${s.teacher_name_snapshot})` : ''}
-                                  {s.schedule ? ` • [${s.schedule}]` : ''}
-                                </option>
-                              );
-                            })}
-                          </select>
-                        </div>
-
-                        {/* Whole Months Duration for this item */}
-                        <div className="sm:col-span-3">
-                          <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">
-                            Duration (Whole Months)
-                          </label>
-                          <div className="flex items-center gap-1.5">
-                            <input
-                              type="number"
-                              min="1"
-                              max="36"
-                              step="1"
-                              value={itm.months || billingMonths || 1}
-                              onChange={(e) => handleItemMonthsChange(itm.tempId, e.target.value)}
-                              className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-center font-bold text-black font-mono focus:outline-none focus:border-indigo-600"
-                            />
-                            <span className="text-[11px] text-slate-600 font-medium">mo</span>
+                      <div className="space-y-3">
+                        {/* Subject Select & Duration */}
+                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
+                          <div className="sm:col-span-6">
+                            <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">
+                              Subject & Monthly Fee
+                            </label>
+                            <select
+                              value={itm.subject_id || ''}
+                              onChange={(e) => handleSubjectChangeForItem(itm.tempId, e.target.value)}
+                              className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-black focus:outline-none focus:border-odoo-600 font-semibold min-h-[36px]"
+                            >
+                              {subjects.map((s) => {
+                                const activeMatch = activeEnrollment?.active_subjects?.find((as) => as.subject_id === s.id);
+                                return (
+                                  <option key={s.id} value={s.id}>
+                                    {s.name} — ₹{Number(s.default_fee).toFixed(0)}/mo
+                                    {activeMatch ? ` • [Active till ${activeMatch.valid_to} — Renews Next Cycle]` : ''}
+                                    {s.teacher_name_snapshot ? ` (${s.teacher_name_snapshot})` : ''}
+                                  </option>
+                                );
+                              })}
+                            </select>
                           </div>
-                        </div>
 
-                        {/* Calculated Price */}
-                        <div className="sm:col-span-3">
-                          <div className="flex items-center justify-between">
+                          <div className="sm:col-span-3">
+                            <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">
+                              Duration (Months)
+                            </label>
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="number"
+                                min="1"
+                                max="36"
+                                step="1"
+                                value={itm.months || billingMonths || 1}
+                                onChange={(e) => handleItemMonthsChange(itm.tempId, e.target.value)}
+                                className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-center font-bold text-black font-mono focus:outline-none focus:border-odoo-600 min-h-[36px]"
+                              />
+                              <span className="text-[11px] text-slate-600 font-medium">mo</span>
+                            </div>
+                          </div>
+
+                          <div className="sm:col-span-3">
                             <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">
                               Calculated Fee (₹)
                             </label>
-                            <span className="text-[10px] text-indigo-700 font-mono">
-                              ₹{(itm.base_monthly_fee !== undefined ? itm.base_monthly_fee : (Number(itm.original_price) / (itm.months || 1))).toFixed(0)}/mo
-                            </span>
+                            <input
+                              type="number"
+                              readOnly
+                              value={itm.original_price}
+                              className="w-full rounded border border-slate-300 bg-slate-100 font-mono font-bold text-black px-2 py-1.5 text-xs text-right min-h-[36px]"
+                            />
                           </div>
-                          <input
-                            type="number"
-                            readOnly
-                            value={itm.original_price}
-                            className="w-full rounded border border-slate-300 bg-slate-100 font-mono font-bold text-black px-2 py-1.5 text-xs text-right"
-                          />
                         </div>
 
-                        {/* Renewal Banner if continuing cycle */}
-                        {itm.is_renewal && (
-                          <div className="sm:col-span-12 p-2 bg-emerald-50 border border-emerald-300 rounded flex flex-wrap items-center justify-between gap-1 text-xs text-emerald-950">
-                            <div className="flex items-center gap-1.5 font-bold">
-                              <Badge variant="success" size="xs">NEXT CYCLE RENEWAL</Badge>
-                              <span>Continuing student's existing {(itm.item_name_snapshot || '').split(' (')[0]} course</span>
+                        {/* Subject Change / Replacement Options (if student has active subjects) */}
+                        {activeEnrollment?.active_subjects?.length > 0 && (
+                          <div className="p-2.5 bg-purple-50/70 border border-purple-200 rounded-md text-xs space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <label className="flex items-center gap-2 cursor-pointer font-bold text-odoo-900 text-xs">
+                                <input
+                                  type="checkbox"
+                                  checked={!!itm.is_subject_change}
+                                  onChange={(e) => {
+                                    const checked = e.target.checked;
+                                    const firstActive = activeEnrollment.active_subjects.find((as) => as.subject_id !== itm.subject_id) || activeEnrollment.active_subjects[0];
+                                    setItems((prev) =>
+                                      prev.map((i) =>
+                                        i.tempId === itm.tempId
+                                          ? {
+                                              ...i,
+                                              is_subject_change: checked,
+                                              change_from_item_id: checked ? (firstActive ? firstActive.id : null) : null,
+                                              replaced_subject_name: checked ? (firstActive ? firstActive.subject_name : null) : null,
+                                            }
+                                          : i
+                                      )
+                                    );
+                                  }}
+                                  className="rounded text-odoo-600 focus:ring-odoo-500 w-4 h-4"
+                                />
+                                <span>Change / Replace an Active Enrolled Subject</span>
+                              </label>
+                              {itm.is_subject_change && (
+                                <span className="text-[10px] text-purple-700 bg-purple-100 font-mono font-bold px-1.5 py-0.2 rounded border border-purple-200">
+                                  Archives Old Line to History
+                                </span>
+                              )}
                             </div>
-                            <span className="text-[11px] text-emerald-800 font-mono font-semibold">
-                              Previous cycle ended: <strong>{itm.prev_valid_to}</strong>
-                            </span>
+
+                            {itm.is_subject_change && (
+                              <div className="pt-1 flex flex-col sm:flex-row sm:items-center gap-1.5">
+                                <span className="text-[11px] text-slate-700 font-semibold shrink-0">
+                                  Active Subject Being Replaced:
+                                </span>
+                                <select
+                                  value={itm.change_from_item_id || ''}
+                                  onChange={(e) => handleItemChangeFromItemChange(itm.tempId, e.target.value)}
+                                  className="w-full rounded border border-purple-300 bg-white px-2 py-1 text-xs text-black font-semibold min-h-[32px]"
+                                >
+                                  {activeEnrollment.active_subjects.map((as) => (
+                                    <option key={as.id} value={as.id}>
+                                      {as.subject_name} (Valid: {as.valid_from} → {as.valid_to} • Invoice #{as.admission_number})
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
                           </div>
                         )}
 
-                        {/* Snapshot badge preview & dates */}
-                        <div className="sm:col-span-12 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-700 bg-white border border-slate-200 rounded p-2 font-medium">
-                          <div className="flex items-center gap-2">
-                            <span>Faculty: <strong className="text-indigo-900">{itm.teacher_name_snapshot || 'General Faculty'}</strong></span>
-                            <span>•</span>
-                            <span>Classroom: <strong className="text-black">{itm.hall_number_snapshot || 'Main Hall'}</strong></span>
-                            {(() => {
-                              const matched = subjects.find((s) => s.id === itm.subject_id);
-                              return matched?.schedule ? (
-                                <>
-                                  <span>•</span>
-                                  <span>Schedule: <strong className="text-indigo-700">{matched.schedule}</strong></span>
-                                </>
-                              ) : null;
-                            })()}
+                        {/* Combined Date Range & Faculty Section */}
+                        <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 text-xs">
+                            <span className="font-bold text-black text-[11px] flex items-center gap-1.5">
+                              <CalendarDays className="w-3.5 h-3.5 text-odoo-600" />
+                              Course Validity Period:
+                            </span>
+                            <div className="flex items-center gap-1">
+                              {[
+                                { m: 1, label: '1m (30d)' },
+                                { m: 2, label: '2m (60d)' },
+                                { m: 3, label: '3m (90d)' },
+                              ].map((pr) => (
+                                <button
+                                  key={pr.m}
+                                  type="button"
+                                  onClick={() => handleItemMonthsChange(itm.tempId, pr.m)}
+                                  className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${
+                                    (itm.months || 1) === pr.m
+                                      ? 'bg-odoo-600 text-white border-odoo-700 shadow-2xs'
+                                      : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                                  }`}
+                                >
+                                  {pr.label}
+                                </button>
+                              ))}
+                            </div>
                           </div>
 
-                          <div className="flex items-center gap-1.5 ml-auto">
-                            <span className="text-slate-600 font-medium">Course Period:</span>
-                            <input
-                              type="date"
-                              value={itm.valid_from || validFrom}
-                              onChange={(e) => handleItemValidFromChange(itm.tempId, e.target.value)}
-                              className="border border-slate-300 rounded px-1.5 py-0.5 text-xs text-black font-mono font-bold bg-white focus:outline-none focus:border-indigo-600"
-                              title="Start date for this course"
-                            />
-                            <span className="text-slate-400">&rarr;</span>
-                            <span className="font-mono text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-bold">
-                              {itm.valid_to || calculateEndDateFromMonths(itm.valid_from || validFrom, itm.months || billingMonths || 1)} ({itm.months || billingMonths || 1} Mo)
-                            </span>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                            <div>
+                              <label className="block text-[10px] font-semibold text-slate-700 mb-0.5">
+                                Valid From (Start Date) <span className="text-rose-600">*</span>
+                              </label>
+                              <input
+                                type="date"
+                                value={itm.valid_from || validFrom}
+                                onChange={(e) => handleItemValidFromChange(itm.tempId, e.target.value)}
+                                className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs text-black font-mono font-bold bg-white focus:outline-none focus:border-odoo-600 min-h-[34px]"
+                                required
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-semibold text-slate-700 mb-0.5">
+                                Valid To (End Date) <span className="text-rose-600">*</span>
+                              </label>
+                              <input
+                                type="date"
+                                value={itm.valid_to || calculateEndDateFromMonths(itm.valid_from || validFrom, itm.months || 1)}
+                                onChange={(e) => handleItemValidToChange(itm.tempId, e.target.value)}
+                                className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs text-black font-mono font-bold bg-white focus:outline-none focus:border-odoo-600 min-h-[34px]"
+                                required
+                              />
+                            </div>
+                          </div>
+
+                          {/* Faculty & Hall Strip */}
+                          <div className="pt-1.5 border-t border-slate-200/70 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] text-slate-700">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-semibold text-slate-600">Assigned Faculty:</span>
+                              <select
+                                value={itm.teacher_id || ''}
+                                onChange={(e) => handleItemTeacherChange(itm.tempId, e.target.value)}
+                                className="border border-slate-300 rounded px-2 py-0.5 text-[11px] text-black bg-white"
+                              >
+                                <option value="">{itm.teacher_name_snapshot || 'Default Faculty'}</option>
+                                {teachers.map((t) => (
+                                  <option key={t.id} value={t.id}>
+                                    {t.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <span className="text-slate-600">Hall: </span>
+                              <strong className="text-black font-mono">{itm.hall_number_snapshot || 'Main Hall'}</strong>
+                            </div>
                           </div>
                         </div>
                       </div>
                     ) : (
+                      /* Green Card Pass View */
                       <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
-                        {/* Select Green Card Tier */}
                         <div className="sm:col-span-8">
                           <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">
-                            Select Green Card Pass Tier
+                            Green Card Tier
                           </label>
                           <select
                             value={itm.green_card_id || ''}
                             onChange={(e) => handleGreenCardChangeForItem(itm.tempId, e.target.value)}
-                            className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-black focus:outline-none focus:border-indigo-600 font-medium"
+                            className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-black focus:outline-none focus:border-odoo-600 font-medium min-h-[36px]"
                           >
                             {greenCards.map((gc) => (
                               <option key={gc.id} value={gc.id}>
@@ -1226,431 +1505,444 @@ export default function NewAdmissionPage() {
                               </option>
                             ))}
                           </select>
-                          <span className="text-[11px] text-slate-500 mt-1 block">
-                            {(() => {
-                              const selectedGc = greenCards.find((c) => c.id === itm.green_card_id);
-                              return selectedGc?.description || 'Universal access to all eligible active coaching classes and batches';
-                            })()}
-                          </span>
                         </div>
 
-                        {/* Fee */}
                         <div className="sm:col-span-4">
                           <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">
-                            Membership Fee (₹)
+                            Pass Fee (₹)
                           </label>
                           <input
                             type="number"
                             readOnly
                             value={itm.original_price}
-                            className="w-full rounded border border-slate-300 bg-slate-100 font-mono font-bold text-black px-2 py-1.5 text-xs text-right"
+                            className="w-full rounded border border-slate-300 bg-slate-100 font-mono font-bold text-black px-2 py-1.5 text-xs text-right min-h-[36px]"
                           />
-                        </div>
-
-                        {/* Snapshot badge preview */}
-                        <div className="sm:col-span-12 flex flex-wrap items-center justify-between text-[11px] text-slate-700 bg-white border border-slate-200 rounded p-2 font-medium">
-                          <span>Access: <strong className="text-purple-900">All Subjects & Faculty Batches</strong></span>
-                          <span className="font-mono text-purple-800 bg-purple-50 px-2 py-0.5 rounded border border-purple-200 font-bold">
-                            Valid: {itm.valid_from || validFrom} &rarr; {itm.valid_to || validTo} ({formatValidityDuration(itm.validity_days || 365)})
-                          </span>
                         </div>
                       </div>
                     )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
-                    {/* Individual Discount Row for this item */}
-                    <div className="pt-2 border-t border-slate-200/80 grid grid-cols-1 sm:grid-cols-3 gap-2.5 items-center">
-                      <div className="text-[11px] text-slate-600 font-medium">
-                        Individual Item Discount:
-                      </div>
-                      <div>
-                        <select
-                          value={itm.discount_type}
-                          onChange={(e) => handleItemDiscountTypeChange(itm.tempId, e.target.value)}
-                          className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-black focus:outline-none"
-                        >
-                          <option value="NONE">No Discount</option>
-                          <option value="FIXED">Fixed Amount (₹)</option>
-                          <option value="PERCENTAGE">Percentage (%)</option>
-                        </select>
-                      </div>
-                      {itm.discount_type !== 'NONE' && (
-                        <div>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            placeholder={itm.discount_type === 'PERCENTAGE' ? 'Discount % (e.g. 10)' : 'Discount ₹'}
-                            value={itm.discount_value === 0 || itm.discount_value === '0' ? '' : itm.discount_value}
-                            onChange={(e) =>
-                              handleItemDiscountValueChange(itm.tempId, e.target.value)
-                            }
-                            onFocus={(e) => {
-                              if (e.target.value === '0') {
-                                handleItemDiscountValueChange(itm.tempId, '');
-                              }
-                            }}
-                            className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-black font-mono focus:outline-none focus:border-indigo-600"
-                          />
-                        </div>
+      {/* STEP 3: APPLY DISCOUNTS & GST */}
+      {currentStep === 3 && (
+        <div className="space-y-4">
+          <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs space-y-3.5">
+            <div className="border-b border-slate-100 pb-2.5">
+              <h2 className="text-sm font-bold text-black flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-odoo-600 text-white flex items-center justify-center text-xs">
+                  3
+                </span>
+                <span>Apply Discounts & Inclusive GST</span>
+              </h2>
+              <p className="text-[11px] text-slate-500">
+                Set individual subject discounts, overall admission discount, or inclusive tax
+              </p>
+            </div>
+
+            {/* Individual Item Discounts */}
+            <div className="space-y-2.5">
+              <span className="text-xs font-bold text-black uppercase tracking-wider block">
+                A. Individual Subject Discounts
+              </span>
+              <div className="space-y-2">
+                {items.map((itm) => (
+                  <div
+                    key={itm.tempId}
+                    className="p-3 bg-slate-50 border border-slate-200 rounded-lg grid grid-cols-1 sm:grid-cols-12 gap-2 items-center text-xs"
+                  >
+                    <div className="sm:col-span-5">
+                      <span className="font-bold text-black block">{itm.item_name_snapshot}</span>
+                      <span className="text-[11px] text-slate-500 font-mono">
+                        Base Fee: ₹{Number(itm.original_price).toFixed(2)}
+                      </span>
+                    </div>
+
+                    <div className="sm:col-span-4">
+                      <select
+                        value={itm.discount_type}
+                        onChange={(e) => handleItemDiscountTypeChange(itm.tempId, e.target.value)}
+                        className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-black min-h-[34px]"
+                      >
+                        <option value="NONE">No Discount</option>
+                        <option value="PERCENTAGE">Percentage (%)</option>
+                        <option value="FIXED">Fixed Amount (₹)</option>
+                      </select>
+                    </div>
+
+                    <div className="sm:col-span-3">
+                      {itm.discount_type !== 'NONE' ? (
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder={itm.discount_type === 'PERCENTAGE' ? 'Discount %' : 'Discount ₹'}
+                          value={itm.discount_value === 0 || itm.discount_value === '0' ? '' : itm.discount_value}
+                          onChange={(e) => handleItemDiscountValueChange(itm.tempId, e.target.value)}
+                          className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-black font-mono font-bold min-h-[34px]"
+                        />
+                      ) : (
+                        <span className="text-slate-400 font-mono text-center block text-[11px]">—</span>
                       )}
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Step 3: Overall Admission Discount & GST Settings */}
-        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs space-y-3">
-          <h2 className="text-xs font-bold uppercase tracking-wider text-black border-b border-slate-100 pb-2">
-            3. Overall Admission Discount & Inclusive GST
-          </h2>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Overall Discount */}
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
-              <label className="block text-xs font-semibold text-black">
-                Overall Admission Discount
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <select
-                  value={overallDiscountType}
-                  onChange={(e) => handleOverallDiscountTypeChange(e.target.value)}
-                  className="rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-black focus:outline-none focus:border-indigo-600"
-                >
-                  <option value="NONE">No Overall Discount</option>
-                  <option value="FIXED">Fixed Amount (₹)</option>
-                  <option value="PERCENTAGE">Percentage (%)</option>
-                </select>
-
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  disabled={overallDiscountType === 'NONE'}
-                  value={overallDiscountValue === '0' || overallDiscountValue === 0 ? '' : overallDiscountValue}
-                  onChange={(e) => setOverallDiscountValue(e.target.value)}
-                  onFocus={(e) => {
-                    if (e.target.value === '0') {
-                      setOverallDiscountValue('');
-                    }
-                  }}
-                  placeholder={overallDiscountType === 'PERCENTAGE' ? 'Discount % (e.g. 10)' : 'Discount ₹'}
-                  className="rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-black font-mono focus:outline-none focus:border-indigo-600 disabled:bg-slate-100"
-                />
+                ))}
               </div>
-              <p className="text-[10px] text-slate-500">
-                Applied after individual discounts across eligible items
-              </p>
             </div>
 
-            {/* GST (Inclusive Pricing) */}
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
-              <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-black">
-                <input
-                  type="checkbox"
-                  checked={gstEnabled}
-                  onChange={(e) => setGstEnabled(e.target.checked)}
-                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                />
-                <span>Apply GST (Inclusive Pricing)</span>
-              </label>
+            {/* Overall Discount & GST */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+              {/* Overall Discount */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
+                <label className="block text-xs font-semibold text-black">
+                  B. Overall Admission Discount
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <select
+                    value={overallDiscountType}
+                    onChange={(e) => handleOverallDiscountTypeChange(e.target.value)}
+                    className="rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-black min-h-[34px]"
+                  >
+                    <option value="NONE">No Overall Discount</option>
+                    <option value="PERCENTAGE">Percentage (%)</option>
+                    <option value="FIXED">Fixed Amount (₹)</option>
+                  </select>
 
-              {gstEnabled && (
-                <div className="flex items-center gap-2 pt-1">
-                  <span className="text-xs text-slate-600">GST Rate (%):</span>
                   <input
                     type="number"
-                    step="0.5"
+                    step="0.01"
                     min="0"
-                    value={gstRate}
-                    onChange={(e) => setGstRate(e.target.value)}
-                    className="w-24 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-black font-mono font-bold focus:outline-none focus:border-indigo-600"
+                    disabled={overallDiscountType === 'NONE'}
+                    value={overallDiscountValue === '0' || overallDiscountValue === 0 ? '' : overallDiscountValue}
+                    onChange={(e) => setOverallDiscountValue(e.target.value)}
+                    placeholder={overallDiscountType === 'PERCENTAGE' ? 'Discount %' : 'Discount ₹'}
+                    className="rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-black font-mono font-bold disabled:bg-slate-100 min-h-[34px]"
                   />
-                  <span className="text-[11px] text-slate-500 font-medium">
-                    (Formula: Base = Amount / (1 + Rate%))
+                </div>
+                <p className="text-[10px] text-slate-500">
+                  Applied proportionally across items after individual discounts
+                </p>
+              </div>
+
+              {/* GST Inclusive */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-black">
+                  <input
+                    type="checkbox"
+                    checked={gstEnabled}
+                    onChange={(e) => setGstEnabled(e.target.checked)}
+                    className="rounded border-slate-300 text-odoo-600 focus:ring-odoo-500 w-4 h-4"
+                  />
+                  <span>Apply GST (Inclusive Pricing)</span>
+                </label>
+
+                {gstEnabled && (
+                  <div className="flex items-center gap-2 pt-1">
+                    <span className="text-xs text-slate-600 font-medium">GST Rate (%):</span>
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="0"
+                      value={gstRate}
+                      onChange={(e) => setGstRate(e.target.value)}
+                      className="w-20 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-black font-mono font-bold"
+                    />
+                  </div>
+                )}
+                <p className="text-[10px] text-slate-500">
+                  Tax is inclusive within fee; total payable does NOT increase.
+                </p>
+              </div>
+            </div>
+
+            {/* Financial Breakdown Card */}
+            {calculation && (
+              <div className="bg-slate-100 border border-slate-300 rounded-lg p-3 space-y-2">
+                <div className="text-xs font-bold text-black flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Calculator className="w-4 h-4 text-odoo-600" />
+                    Itemized Net Pricing Preview
+                  </span>
+                  <span className="text-[11px] text-slate-600 font-normal">
+                    {calculation.items.length} Course Item(s)
                   </span>
                 </div>
-              )}
-              <p className="text-[10px] text-slate-500 leading-tight">
-                Tax is included within the entered price; total fee payable does NOT increase.
+
+                <div className="bg-white rounded border border-slate-200 divide-y divide-slate-100 text-xs">
+                  {calculation.items.map((ci, idx) => (
+                    <div key={idx} className="p-2 flex items-center justify-between">
+                      <div>
+                        <span className="font-bold text-black block">{ci.item_name_snapshot}</span>
+                        <span className="text-[11px] text-slate-500">
+                          ₹{ci.original_price.toFixed(2)} - (Disc: ₹{(ci.individual_discount + ci.overall_discount_share).toFixed(2)})
+                        </span>
+                      </div>
+                      <span className="font-mono font-bold text-black text-xs">
+                        ₹{ci.net_price.toFixed(2)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="bg-white rounded border border-slate-200 p-2.5 text-xs space-y-1">
+                  <div className="flex justify-between text-slate-600">
+                    <span>Gross Subtotal:</span>
+                    <span className="font-mono text-black font-semibold">₹{calculation.subtotal.toFixed(2)}</span>
+                  </div>
+                  {calculation.total_discount > 0 && (
+                    <div className="flex justify-between text-emerald-800 font-semibold">
+                      <span>Total Savings / Discount:</span>
+                      <span className="font-mono">-₹{calculation.total_discount.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {calculation.gst_enabled && (
+                    <div className="flex justify-between text-slate-600">
+                      <span>Inclusive GST ({calculation.gst_rate}%):</span>
+                      <span className="font-mono text-black">₹{calculation.gst_amount.toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between border-t border-slate-300 pt-1 text-sm font-bold text-black">
+                    <span>Total Fee Payable:</span>
+                    <span className="font-mono text-base font-black text-odoo-700">
+                      ₹{calculation.total_payable.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* STEP 4: CONFIRM & PAY */}
+      {currentStep === 4 && (
+        <div className="space-y-4">
+          <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs space-y-3.5">
+            <div className="border-b border-slate-100 pb-2.5">
+              <h2 className="text-sm font-bold text-black flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-odoo-600 text-white flex items-center justify-center text-xs">
+                  4
+                </span>
+                <span>Payment Settlement & Enrolment Confirmation</span>
+              </h2>
+              <p className="text-[11px] text-slate-500">
+                Select payment collection mode and review admission invoice before issuing slip
               </p>
             </div>
-          </div>
-        </div>
 
-        {/* Step 4: Transparent Financial Breakdown */}
-        {calculation && (
-          <div className="bg-slate-100 border border-slate-300 rounded-lg p-4 shadow-xs space-y-2.5">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-black flex items-center gap-1.5">
-              <Calculator className="w-4 h-4 text-indigo-600" />
-              Itemized Financial Breakdown & Net Pricing
-            </h2>
+            {/* Payment Method Cards */}
+            <div className="space-y-2">
+              <label className="block text-xs font-semibold text-black">
+                Payment Collection Method <span className="text-rose-600">*</span>
+              </label>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs bg-white rounded border border-slate-200">
-                <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
-                  <tr>
-                    <th className="p-2">Item</th>
-                    <th className="p-2 text-right">Fee (₹)</th>
-                    <th className="p-2 text-right">Indiv Disc</th>
-                    <th className="p-2 text-right">Overall Share</th>
-                    <th className="p-2 text-right">Net Price (₹)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {calculation.items.map((ci, idx) => (
-                    <tr key={idx}>
-                      <td className="p-2 text-black font-medium">{ci.item_name_snapshot}</td>
-                      <td className="p-2 text-right font-mono text-black">
-                        ₹{ci.original_price.toFixed(2)}
-                      </td>
-                      <td className="p-2 text-right font-mono text-slate-600">
-                        -₹{ci.individual_discount.toFixed(2)}
-                      </td>
-                      <td className="p-2 text-right font-mono text-slate-600">
-                        -₹{ci.overall_discount_share.toFixed(2)}
-                      </td>
-                      <td className="p-2 text-right font-mono font-bold text-black">
-                        ₹{ci.net_price.toFixed(2)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="bg-white border border-slate-200 rounded p-3 text-xs space-y-1.5">
-              <div className="flex justify-between">
-                <span className="text-slate-600">Subtotal:</span>
-                <span className="font-mono text-black">₹{calculation.subtotal.toFixed(2)}</span>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                {[
+                  { value: 'CASH', label: 'Cash', icon: DollarSign },
+                  { value: 'UPI', label: 'UPI / QR', icon: CreditCard },
+                  { value: 'BANK_TRANSFER', label: 'Bank Transfer', icon: ShieldCheck },
+                  { value: 'CARD', label: 'Card', icon: CreditCard },
+                  { value: 'OTHER', label: 'Other', icon: Tag },
+                ].map((mode) => {
+                  const isSelected = paymentMode === mode.value;
+                  const Icon = mode.icon;
+                  return (
+                    <button
+                      key={mode.value}
+                      type="button"
+                      onClick={() => setPaymentMode(mode.value)}
+                      className={`p-2.5 rounded-lg border text-xs font-bold transition flex flex-col items-center justify-center gap-1 min-h-[50px] ${
+                        isSelected
+                          ? 'bg-odoo-600 text-white border-odoo-700 shadow-xs'
+                          : 'bg-white text-slate-800 border-slate-300 hover:bg-slate-100 hover:border-slate-400'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4" />
+                      <span>{mode.label}</span>
+                    </button>
+                  );
+                })}
               </div>
-              {calculation.total_discount > 0 && (
-                <div className="flex justify-between text-emerald-800 font-medium">
-                  <span>Total Discount Applied:</span>
-                  <span className="font-mono">-₹{calculation.total_discount.toFixed(2)}</span>
+
+              {paymentMode !== 'CASH' ? (
+                <div className="pt-1">
+                  <Input
+                    label="Transaction Reference / UTR Number"
+                    value={paymentRef}
+                    onChange={(e) => setPaymentRef(e.target.value)}
+                    placeholder="e.g. UTR / UPI Ref / Cheque No"
+                  />
+                </div>
+              ) : (
+                <div className="pt-1">
+                  <Input
+                    label="Payment Notes"
+                    value={paymentNotes}
+                    onChange={(e) => setPaymentNotes(e.target.value)}
+                    placeholder="e.g. Cash collected by cashier at front desk"
+                  />
                 </div>
               )}
-              {calculation.gst_enabled && (
-                <>
-                  <div className="flex justify-between text-slate-600 border-t border-slate-100 pt-1">
-                    <span>Taxable Base Value:</span>
-                    <span className="font-mono text-black">
-                      ₹{calculation.taxable_base.toFixed(2)}
-                    </span>
+            </div>
+
+            {/* Internal Admission Notes */}
+            <div>
+              <Input
+                label="Internal Admission Notes (Optional)"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="e.g. Guardian accompanied, batch starts next Monday"
+              />
+            </div>
+
+            {/* Complete Admission Summary Review */}
+            <div className="bg-slate-50 border border-slate-300 rounded-lg p-3.5 text-xs space-y-3">
+              <span className="text-xs font-bold uppercase tracking-wider text-black block border-b border-slate-200 pb-1.5">
+                Summary Review Before Confirmation
+              </span>
+
+              {/* Student Summary */}
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-600">Student:</span>
+                <strong className="text-black text-sm">{selectedStudentObj?.name || 'Selected Student'} ({selectedStudentObj?.student_code})</strong>
+              </div>
+
+              {/* Items Summary */}
+              <div className="space-y-1">
+                <span className="text-[11px] font-semibold text-slate-600">Enrolled Subjects ({items.length}):</span>
+                <div className="bg-white rounded border border-slate-200 divide-y divide-slate-100">
+                  {items.map((itm, i) => (
+                    <div key={i} className="p-2 flex justify-between items-center text-xs">
+                      <div>
+                        <span className="font-bold text-black">{itm.item_name_snapshot}</span>
+                        {itm.is_subject_change && (
+                          <span className="text-[10px] text-purple-700 font-bold block">
+                            ↻ Replaces: {itm.replaced_subject_name || 'Active Subject'} (Archives old subject to history)
+                          </span>
+                        )}
+                        <span className="text-[10px] text-slate-500 block">
+                          Coverage: {itm.valid_from || validFrom} to {itm.valid_to || validTo} ({itm.months || 1} mo)
+                        </span>
+                      </div>
+                      <span className="font-mono font-bold text-black">
+                        ₹{Number(itm.original_price).toFixed(2)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Financial Review */}
+              <div className="bg-emerald-50 border border-emerald-200 rounded-md p-2.5 space-y-1.5 text-xs">
+                <div className="flex justify-between text-slate-700">
+                  <span>Gross Fee Subtotal:</span>
+                  <span className="font-mono font-semibold">₹{calculation?.subtotal.toFixed(2)}</span>
+                </div>
+                {calculation && calculation.total_discount > 0 && (
+                  <div className="flex justify-between text-emerald-800 font-bold">
+                    <span>Total Discounts:</span>
+                    <span className="font-mono">-₹{calculation.total_discount.toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between text-slate-600">
+                )}
+                {calculation?.gst_enabled && (
+                  <div className="flex justify-between text-slate-700">
                     <span>Inclusive GST ({calculation.gst_rate}%):</span>
-                    <span className="font-mono text-black">
-                      ₹{calculation.gst_amount.toFixed(2)}
-                    </span>
+                    <span className="font-mono">₹{calculation.gst_amount.toFixed(2)}</span>
                   </div>
-                </>
-              )}
-              <div className="flex justify-between border-t border-slate-300 pt-1.5 text-sm font-bold text-black">
-                <span className="text-black">Final Total Payable:</span>
-                <span className="font-mono text-base font-black text-indigo-700">
-                  ₹{calculation.total_payable.toFixed(2)}
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Step 5: Payment Mode Selection */}
-        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs space-y-3">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-black">
-              Payment Settlement Mode
-            </span>
-            <Badge size="xs" variant="success">
-              Full Payment
-            </Badge>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Select
-              label="Payment Mode"
-              value={paymentMode}
-              onChange={(e) => setPaymentMode(e.target.value)}
-              options={[
-                { value: 'CASH', label: 'Cash' },
-                { value: 'UPI', label: 'UPI / QR' },
-                { value: 'BANK_TRANSFER', label: 'Bank Transfer' },
-                { value: 'CARD', label: 'Card' },
-                { value: 'OTHER', label: 'Other' },
-              ]}
-            />
-
-            {paymentMode !== 'CASH' ? (
-              <Input
-                label="Transaction / Reference Ref (Optional)"
-                value={paymentRef}
-                onChange={(e) => setPaymentRef(e.target.value)}
-                placeholder="e.g. UTR / UPI Ref / Cheque No"
-              />
-            ) : (
-              <Input
-                label="Payment Notes (Optional)"
-                value={paymentNotes}
-                onChange={(e) => setPaymentNotes(e.target.value)}
-                placeholder="e.g. Cash collected by cashier"
-              />
-            )}
-          </div>
-        </div>
-
-        {/* Additional Notes */}
-        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs">
-          <Input
-            label="Internal Purchase Notes (Optional)"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="e.g. Batch starts next Monday / Guardian attended"
-          />
-        </div>
-
-        {/* Submit Actions */}
-        <div className="flex items-center justify-end gap-3 pt-2">
-          <Button
-            variant="secondary"
-            onClick={() => navigate('/admissions')}
-            disabled={submitting}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            variant="primary"
-            size="md"
-            loading={submitting}
-            icon={CheckCircle2}
-          >
-            Confirm & Complete Purchase
-          </Button>
-        </div>
-      </form>
-
-      {/* Course Purchase Confirmation Modal */}
-      <Modal
-        isOpen={showConfirmModal}
-        onClose={() => setShowConfirmModal(false)}
-        title="Confirm Course Purchase & Fee Settlement"
-        subtitle="Review enrollment details and fee settlement before issuing official invoice slip"
-        maxWidth="max-w-lg"
-      >
-        <div className="space-y-3.5 text-xs">
-          {/* Student Info Box */}
-          <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-1">
-            <div className="flex justify-between items-center">
-              <span className="text-slate-500">Student Name:</span>
-              <strong className="text-black text-sm">{selectedStudentObj?.name || 'Selected Student'}</strong>
-            </div>
-            {selectedStudentObj?.student_code && (
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500">Registration / Roll No:</span>
-                <span className="font-mono font-bold text-black">{selectedStudentObj.student_code}</span>
-              </div>
-            )}
-            {selectedStudentObj?.mobile && (
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500">Mobile Contact:</span>
-                <span className="font-mono text-slate-800">{selectedStudentObj.mobile}</span>
-              </div>
-            )}
-            <div className="flex justify-between items-center">
-              <span className="text-slate-500">Admission Date:</span>
-              <span className="font-medium text-black">{admissionDate}</span>
-            </div>
-          </div>
-
-          {/* Enrolled Items List */}
-          <div>
-            <span className="text-[10px] uppercase font-bold text-slate-700 block mb-1 tracking-wider">
-              Enrolled Courses & Batches ({items.length})
-            </span>
-            <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
-              {items.map((itm, i) => (
-                <div
-                  key={i}
-                  className="bg-white border border-slate-200 rounded p-2 flex justify-between items-center text-xs"
-                >
-                  <div>
-                    <span className="font-bold text-black block">{itm.item_name_snapshot}</span>
-                    <span className="text-[10px] text-slate-500">
-                      {itm.teacher_name_snapshot ? `Faculty: ${itm.teacher_name_snapshot} • ` : ''}
-                      Validity: {itm.valid_from || validFrom} to {itm.valid_to || validTo}
-                    </span>
-                  </div>
-                  <span className="font-mono font-bold text-black text-xs">
-                    ₹{Number(itm.original_price).toFixed(2)}
+                )}
+                <div className="flex justify-between border-t border-emerald-300 pt-1.5 text-sm font-black text-black">
+                  <span>Total Amount Paid:</span>
+                  <span className="font-mono text-base font-black text-emerald-900">
+                    ₹{calculation?.total_payable.toFixed(2)}
                   </span>
                 </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Fee & Payment Breakdown Card */}
-          <div className="bg-emerald-50/70 border border-emerald-300 rounded-lg p-3 space-y-1.5">
-            <div className="flex justify-between text-slate-600">
-              <span>Course Fee Subtotal:</span>
-              <span className="font-mono font-semibold text-black">
-                ₹{calculation?.subtotal.toFixed(2)}
-              </span>
-            </div>
-            {calculation && Number(calculation.total_discount) > 0 && (
-              <div className="flex justify-between text-emerald-800 font-medium">
-                <span>Total Discounts Applied:</span>
-                <span className="font-mono">-₹{calculation.total_discount.toFixed(2)}</span>
+                <div className="flex justify-between text-[11px] text-emerald-800 font-bold border-t border-emerald-200 pt-1">
+                  <span>Settlement Mode:</span>
+                  <span>{paymentMode} (Paid in Full • ₹0.00 Due)</span>
+                </div>
               </div>
-            )}
-            {calculation?.gst_enabled && (
-              <div className="flex justify-between text-slate-600">
-                <span>Inclusive GST ({calculation.gst_rate}%):</span>
-                <span className="font-mono text-black">₹{calculation.gst_amount.toFixed(2)}</span>
-              </div>
-            )}
-            <div className="flex justify-between border-t border-emerald-200 pt-1.5 text-sm font-black text-emerald-950">
-              <span className="uppercase text-xs font-bold">Total Amount to be Paid:</span>
-              <span className="font-mono text-base font-black text-emerald-900">
-                ₹{calculation?.total_payable.toFixed(2)}
-              </span>
             </div>
-            <div className="flex justify-between text-[11px] text-slate-700 border-t border-emerald-200 pt-1">
-              <span>Payment Mode:</span>
-              <span className="font-bold text-black uppercase">
-                {paymentMode} {paymentRef ? `(Ref: ${paymentRef})` : ''}
-              </span>
-            </div>
-            <div className="flex justify-between text-[11px] text-emerald-800 font-bold border-t border-emerald-200 pt-1">
-              <span>Settlement Status:</span>
-              <span>PAID IN FULL (₹0.00 Balance Due)</span>
-            </div>
-          </div>
-
-          {/* Confirmation Actions */}
-          <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
-            <Button
-              variant="secondary"
-              onClick={() => setShowConfirmModal(false)}
-              disabled={submitting}
-            >
-              Cancel & Edit
-            </Button>
-            <Button
-              variant="primary"
-              loading={submitting}
-              icon={CheckCircle2}
-              onClick={handleFinalExecutePurchase}
-            >
-              Confirm Purchase & Issue Slip
-            </Button>
           </div>
         </div>
-      </Modal>
+      )}
 
-      {/* Quick Student Modal with Reusable Enquiry Details */}
+      {/* ALWAYS VISIBLE BOTTOM STICKY BAR (Optimized for Mobile & Desktop) */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-300 shadow-2xl px-3 py-2.5 sm:px-6 sm:py-3">
+        <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
+          {/* Total Payable Box */}
+          <div className="min-w-0">
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              Total Payable
+            </span>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-lg sm:text-2xl font-black font-mono text-odoo-800 tracking-tight">
+                ₹{Number(currentPayable).toFixed(2)}
+              </span>
+              {currentDiscounts > 0 && (
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded-full hidden sm:inline">
+                  Save ₹{Number(currentDiscounts).toFixed(0)}
+                </span>
+              )}
+            </div>
+            <span className="text-[10px] text-slate-600 truncate block font-medium">
+              {items.length} Subject{items.length === 1 ? '' : 's'} • {selectedStudentObj?.name || 'No student selected'}
+            </span>
+          </div>
+
+          {/* Stepper Navigation Buttons */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {currentStep > 1 && (
+              <Button
+                type="button"
+                variant="secondary"
+                size="md"
+                onClick={handleGoToPrevStep}
+                className="min-h-[44px] px-3 text-xs"
+              >
+                <ChevronLeft className="w-4 h-4 mr-0.5" />
+                <span className="hidden sm:inline">Back</span>
+              </Button>
+            )}
+
+            {currentStep < 4 ? (
+              <Button
+                type="button"
+                variant="primary"
+                size="md"
+                onClick={handleGoToNextStep}
+                className="min-h-[44px] px-4 text-xs font-bold"
+              >
+                <span>
+                  {currentStep === 1
+                    ? 'Next: Subjects'
+                    : currentStep === 2
+                    ? 'Next: Discounts'
+                    : 'Next: Confirm & Pay'}
+                </span>
+                <ChevronRight className="w-4 h-4 ml-1" />
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="primary"
+                size="md"
+                loading={submitting}
+                icon={CheckCircle2}
+                onClick={handleFinalExecutePurchase}
+                className="min-h-[44px] px-4 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 border-emerald-700 text-white"
+              >
+                Confirm & Issue Slip
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Quick Student Registration Modal */}
       <QuickStudentModal
         isOpen={isQuickStudentOpen}
         onClose={() => setIsQuickStudentOpen(false)}

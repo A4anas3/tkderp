@@ -23,7 +23,7 @@ export default function Input({
       )}
       <input
         id={inputId}
-        className={`w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs sm:text-sm text-black placeholder:text-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 disabled:bg-slate-100 disabled:text-slate-500 shadow-sm ${
+        className={`w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs sm:text-sm min-h-[36px] sm:min-h-[34px] text-black placeholder:text-slate-400 focus:outline-none focus:border-odoo-600 focus:ring-1 focus:ring-odoo-600 disabled:bg-slate-100 disabled:text-slate-500 shadow-2xs transition-colors ${
           error ? 'border-rose-500 focus:border-rose-600 focus:ring-rose-500' : ''
         } ${className}`}
         {...props}

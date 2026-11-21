@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, CreditCard, Printer, Eye, Ban, ExternalLink } from 'lucide-react';
+import { Plus, CreditCard, Printer, Eye, Ban, ExternalLink, Search, RefreshCw, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import DataTable from '../../components/common/DataTable';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
@@ -65,10 +65,12 @@ export default function AdmissionsPage() {
     }
   };
 
+  const totalPages = Math.max(1, Math.ceil(total / 15));
+
   const columns = [
     {
       header: 'Purchase Transaction ID',
-      className: 'font-mono font-bold text-indigo-700 w-36',
+      className: 'font-mono font-bold text-odoo-700 w-36',
       render: (a) => (
         <div>
           <span>{a.purchase_transaction_id || a.admission_number}</span>
@@ -114,7 +116,7 @@ export default function AdmissionsPage() {
               {formatCycleLabel(vFrom, vTo)}
             </span>
             <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="text-[10px] text-indigo-700 font-semibold bg-indigo-50 border border-indigo-200 px-1 py-0.2 rounded">
+              <span className="text-[10px] text-odoo-700 font-semibold bg-purple-50 border border-odoo-200 px-1 py-0.2 rounded">
                 Day {vFrom ? parseInt(vFrom.split('-')[2], 10) : '—'}
               </span>
               <Badge size="xs" variant={cycle.variant}>
@@ -225,16 +227,16 @@ export default function AdmissionsPage() {
   return (
     <div className="space-y-4">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
           <h1 className="text-xl font-bold text-black tracking-tight">Course Purchases & Batch Invoices</h1>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-500 mt-0.5">
             Multi-batch course purchases, itemized discounts, inclusive GST, and fee settlement
           </p>
         </div>
 
-        <Button variant="primary" icon={Plus} onClick={() => navigate('/admissions/new')}>
-          New Course Purchase
+        <Button variant="primary" icon={Plus} onClick={() => navigate('/admissions/new')} className="w-full sm:w-auto min-h-[40px] text-xs font-bold">
+          + New Admission
         </Button>
       </div>
 
@@ -252,9 +254,9 @@ export default function AdmissionsPage() {
               setPaymentStatusFilter(tab.value);
               setPage(1);
             }}
-            className={`px-3 py-1 text-xs rounded-full border transition font-medium ${
+            className={`min-h-[34px] px-3.5 py-1.5 text-xs rounded-full border transition font-bold ${
               paymentStatusFilter === tab.value
-                ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                ? 'bg-odoo-600 text-white border-odoo-600 shadow-xs'
                 : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
             }`}
           >
@@ -263,24 +265,207 @@ export default function AdmissionsPage() {
         ))}
       </div>
 
-      <DataTable
-        columns={columns}
-        data={admissions}
-        total={total}
-        page={page}
-        pageSize={15}
-        onPageChange={(p) => setPage(p)}
-        searchValue={search}
-        onSearchChange={(val) => {
-          setSearch(val);
-          setPage(1);
-        }}
-        onRefresh={loadAdmissions}
-        loading={loading}
-        onRowClick={(row) => navigate(`/admissions/${row.id}`)}
-        searchPlaceholder="Search by purchase transaction ID or student name..."
-        emptyMessage="No course purchases found."
-      />
+      {/* Mobile Card View (Optimized for cashier phones) */}
+      <div className="sm:hidden space-y-3">
+        {/* Mobile Search Bar */}
+        <div className="relative">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            placeholder="Search student or ID..."
+            className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 rounded-md bg-white text-black placeholder:text-slate-400 focus:outline-none focus:border-odoo-600 min-h-[40px]"
+          />
+        </div>
+
+        {loading ? (
+          <div className="p-8 text-center bg-white rounded-lg border border-slate-200">
+            <Loader2 className="w-6 h-6 animate-spin text-odoo-600 mx-auto" />
+            <span className="text-xs text-slate-500 mt-2 block">Loading admissions...</span>
+          </div>
+        ) : admissions.length === 0 ? (
+          <div className="p-8 text-center bg-white rounded-lg border border-slate-200 text-xs text-slate-500">
+            No course purchases found.
+          </div>
+        ) : (
+          <div className="space-y-2.5">
+            {admissions.map((a) => {
+              const vFrom = a.valid_from || a.admission_date;
+              const vTo = a.valid_to;
+              const cycle = evaluateCycleStatus(vTo, a.balance_due);
+              const isCancelled = a.status === 'REVOKED' || a.status === 'CANCELLED';
+
+              return (
+                <div
+                  key={a.id}
+                  className="bg-white border border-slate-200 rounded-lg p-3 space-y-2.5 shadow-2xs"
+                >
+                  {/* Card Header: ID + Status */}
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono font-bold text-xs text-odoo-700">
+                      {a.purchase_transaction_id || a.admission_number}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {isCancelled ? (
+                        <Badge size="xs" variant="danger">CANCELLED</Badge>
+                      ) : (
+                        <Badge
+                          size="xs"
+                          variant={
+                            a.payment_status === 'PAID'
+                              ? 'success'
+                              : a.payment_status === 'PARTIALLY_PAID'
+                              ? 'warning'
+                              : 'danger'
+                          }
+                        >
+                          {a.payment_status}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Student Info */}
+                  <div>
+                    <div className="font-bold text-sm text-black">{a.student_name_snapshot}</div>
+                    <div className="text-[11px] text-slate-500 font-mono flex items-center justify-between mt-0.5">
+                      <span>Date: {a.admission_date}</span>
+                      <span className="text-odoo-800 font-medium">{formatCycleLabel(vFrom, vTo)}</span>
+                    </div>
+                  </div>
+
+                  {/* Purchased Items */}
+                  <div className="flex flex-wrap gap-1">
+                    {(a.items || []).map((itm, i) => (
+                      <span
+                        key={i}
+                        className="bg-slate-100 border border-slate-200 text-black px-1.5 py-0.5 rounded text-[10px] font-medium"
+                      >
+                        {itm.item_name_snapshot}
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* Financials Strip */}
+                  <div className="bg-slate-50 rounded-md p-2 flex items-center justify-between text-xs border border-slate-200/80">
+                    <div>
+                      <span className="text-[10px] text-slate-500 block uppercase">Total</span>
+                      <span className="font-mono font-bold text-black">₹{Number(a.total_payable).toFixed(0)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-500 block uppercase">Paid</span>
+                      <span className="font-mono font-bold text-emerald-700">₹{Number(a.amount_paid).toFixed(0)}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[10px] text-slate-500 block uppercase">Balance Due</span>
+                      <span className={`font-mono font-bold ${Number(a.balance_due) > 0 && !isCancelled ? 'text-rose-700' : 'text-slate-400'}`}>
+                        {isCancelled ? '₹0' : `₹${Number(a.balance_due).toFixed(0)}`}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Actions Row */}
+                  <div className="flex items-center gap-1.5 pt-1">
+                    <Button
+                      size="xs"
+                      variant="secondary"
+                      icon={Printer}
+                      onClick={() => setSlipToShow(a)}
+                      className="flex-1 min-h-[36px] justify-center text-xs font-semibold"
+                    >
+                      Slip
+                    </Button>
+
+                    {Number(a.balance_due) > 0 && a.status === 'ACTIVE' && (
+                      <Button
+                        size="xs"
+                        variant="success"
+                        onClick={() => setPayAdmissionId(a.id)}
+                        className="flex-1 min-h-[36px] justify-center text-xs font-bold"
+                      >
+                        Pay Due
+                      </Button>
+                    )}
+
+                    <Button
+                      size="xs"
+                      variant="secondary"
+                      icon={ExternalLink}
+                      onClick={() => navigate(`/admissions/${a.id}`)}
+                      className="flex-1 min-h-[36px] justify-center text-xs font-semibold"
+                    >
+                      Detail
+                    </Button>
+
+                    {isAdmin && a.status === 'ACTIVE' && (
+                      <button
+                        onClick={() => handleCancelAdmission(a)}
+                        title="Cancel Purchase"
+                        className="p-2 rounded text-slate-400 hover:text-rose-600 transition min-w-[36px] min-h-[36px] flex items-center justify-center border border-slate-200"
+                      >
+                        <Ban className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Mobile Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between bg-white border border-slate-200 rounded-lg p-2.5 text-xs">
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  className="min-h-[34px]"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5 mr-1" /> Prev
+                </Button>
+                <span className="font-semibold text-slate-700">
+                  Page {page} of {totalPages}
+                </span>
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  className="min-h-[34px]"
+                >
+                  Next <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Desktop Table View */}
+      <div className="hidden sm:block">
+        <DataTable
+          columns={columns}
+          data={admissions}
+          total={total}
+          page={page}
+          pageSize={15}
+          onPageChange={(p) => setPage(p)}
+          searchValue={search}
+          onSearchChange={(val) => {
+            setSearch(val);
+            setPage(1);
+          }}
+          onRefresh={loadAdmissions}
+          loading={loading}
+          onRowClick={(row) => navigate(`/admissions/${row.id}`)}
+          searchPlaceholder="Search by purchase transaction ID or student name..."
+          emptyMessage="No course purchases found."
+        />
+      </div>
 
       {/* Admission Detail Modal */}
       <AdmissionDetailModal

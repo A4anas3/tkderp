@@ -101,17 +101,17 @@ export default function GreenCardPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
           <h1 className="text-xl font-bold text-black tracking-tight">
             Green Card — All-Access Pass Product
           </h1>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-500 mt-0.5">
             Special purchasable institutional product granting unlimited access to all eligible active batches
           </p>
         </div>
 
-        <Button variant="primary" icon={Plus} onClick={handleOpenAdd}>
+        <Button variant="primary" icon={Plus} onClick={handleOpenAdd} className="w-full sm:w-auto">
           Create Green Card Tier
         </Button>
       </div>
@@ -166,7 +166,7 @@ export default function GreenCardPage() {
 
                   <div className="flex justify-between items-center">
                     <span className="text-slate-500">Access Scope:</span>
-                    <span className="font-semibold text-indigo-700">All Active Batches</span>
+                    <span className="font-semibold text-odoo-700">All Active Batches</span>
                   </div>
                 </div>
               </div>
@@ -259,7 +259,7 @@ export default function GreenCardPage() {
               type="checkbox"
               checked={formData.is_active}
               onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              className="rounded border-slate-300 text-odoo-600 focus:ring-odoo-500 focus:border-odoo-600"
             />
             <span>Active Product (Available for purchase in Admissions)</span>
           </label>

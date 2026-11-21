@@ -87,7 +87,7 @@ export default function AdmissionDetailModal({
         {/* Student Quick Bio Card */}
         <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-sm border border-indigo-200">
+            <div className="w-10 h-10 rounded-full bg-purple-100 text-odoo-700 font-bold flex items-center justify-center text-sm border border-odoo-200">
               {admission.student_name_snapshot ? admission.student_name_snapshot.slice(0, 2).toUpperCase() : 'ST'}
             </div>
             <div>
@@ -106,7 +106,7 @@ export default function AdmissionDetailModal({
                 onClose();
                 navigate(`/students/${admission.student_id}`);
               }}
-              className="px-2.5 py-1 text-xs font-semibold bg-white text-indigo-700 hover:bg-indigo-50 border border-indigo-300 rounded shadow-2xs flex items-center gap-1 self-start sm:self-auto cursor-pointer"
+              className="px-2.5 py-1 text-xs font-semibold bg-white text-odoo-700 hover:bg-purple-50 border border-odoo-300 rounded shadow-2xs flex items-center gap-1 self-start sm:self-auto cursor-pointer"
             >
               <ExternalLink className="w-3.5 h-3.5" />
               <span>View Profile</span>
@@ -115,10 +115,10 @@ export default function AdmissionDetailModal({
         </div>
 
         {/* Rolling Date-to-Date Fee Cycle Card */}
-        <div className="bg-indigo-50/60 p-3.5 rounded-lg border border-indigo-200 space-y-2">
+        <div className="bg-purple-50/60 p-3.5 rounded-lg border border-odoo-200 space-y-2">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-950 uppercase tracking-wider">
-              <Calendar className="w-4 h-4 text-indigo-700" />
+            <div className="flex items-center gap-1.5 text-xs font-bold text-odoo-900 uppercase tracking-wider">
+              <Calendar className="w-4 h-4 text-odoo-700" />
               <span>Rolling Date-to-Date Fee Cycle</span>
             </div>
             <Badge variant={cycleInfo.variant} size="xs">
@@ -127,19 +127,19 @@ export default function AdmissionDetailModal({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-xs">
-            <div className="bg-white p-2 rounded border border-indigo-100">
+            <div className="bg-white p-2 rounded border border-purple-100">
               <span className="text-[11px] text-slate-500 block">Cycle Period</span>
               <span className="font-mono font-bold text-black">
                 {formatCycleLabel(validFrom, validTo)}
               </span>
             </div>
-            <div className="bg-white p-2 rounded border border-indigo-100">
+            <div className="bg-white p-2 rounded border border-purple-100">
               <span className="text-[11px] text-slate-500 block">Billing Anchor Day</span>
-              <span className="font-semibold text-indigo-900">
+              <span className="font-semibold text-odoo-900">
                 Day {validFrom ? parseInt(validFrom.split('-')[2], 10) : '—'} of month
               </span>
             </div>
-            <div className="bg-white p-2 rounded border border-indigo-100">
+            <div className="bg-white p-2 rounded border border-purple-100">
               <span className="text-[11px] text-slate-500 block">Cycle Renewal Status</span>
               <span className="font-medium text-slate-800">
                 {cycleInfo.subtext}
@@ -155,8 +155,8 @@ export default function AdmissionDetailModal({
             <span>Purchased Items & Faculty Allocations</span>
           </h4>
 
-          <div className="overflow-x-auto rounded border border-slate-200">
-            <table className="w-full text-left text-xs">
+          <div className="overflow-x-auto rounded border border-slate-200 -webkit-overflow-scrolling-touch">
+            <table className="w-full text-left text-xs min-w-[550px]">
               <thead className="bg-slate-100 text-slate-800 font-semibold border-b border-slate-200">
                 <tr>
                   <th className="p-2">Item Name</th>
@@ -234,11 +234,12 @@ export default function AdmissionDetailModal({
         </div>
 
         {/* Modal Action Buttons */}
-        <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-3 border-t border-slate-200">
           <Button
             size="sm"
             variant="secondary"
             onClick={onClose}
+            className="w-full sm:w-auto"
           >
             Close
           </Button>
@@ -252,6 +253,7 @@ export default function AdmissionDetailModal({
                 onClose();
                 onPrintSlip(admission);
               }}
+              className="w-full sm:w-auto"
             >
               Print Receipt Slip
             </Button>
@@ -266,6 +268,7 @@ export default function AdmissionDetailModal({
                 onClose();
                 onCollectFee(admission.id);
               }}
+              className="w-full sm:w-auto"
             >
               Collect Remaining Fee
             </Button>

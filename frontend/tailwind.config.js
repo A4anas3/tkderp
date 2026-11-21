@@ -7,6 +7,22 @@ export default {
   theme: {
     extend: {
       colors: {
+        odoo: {
+          50: '#f8f4f7',
+          100: '#efe7ed',
+          200: '#dec4da',
+          300: '#c99ebf',
+          400: '#a46e96',
+          500: '#8a567c',
+          DEFAULT: '#714b67',
+          600: '#714b67',
+          700: '#5e3c55',
+          800: '#4b3044',
+          900: '#382433',
+          teal: '#017e84',
+          'teal-dark': '#006b70',
+          'teal-light': '#e6f4f4',
+        },
         brand: {
           50: '#eef2ff',
           100: '#e0e7ff',

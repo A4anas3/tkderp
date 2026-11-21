@@ -55,24 +55,25 @@ export default function AdminDashboard() {
 
   return (
     <div className="space-y-5">
-      {/* Title & Top Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+      {/* Odoo Control Panel Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-black tracking-tight">
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
             Institute Admin Overview
           </h1>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-500 mt-0.5">
             Real-time operations, financial health, and admission analytics
           </p>
         </div>
 
         {/* Quick Shortcut Buttons */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <Button
             size="xs"
             variant="primary"
             icon={Plus}
             onClick={() => navigate('/admissions/new')}
+            className="flex-1 sm:flex-initial"
             title="Purchase & Pay for Course Batches"
           >
             Course Paid
@@ -82,6 +83,7 @@ export default function AdminDashboard() {
             variant="success"
             icon={CreditCard}
             onClick={() => navigate('/payments')}
+            className="flex-1 sm:flex-initial"
           >
             Collect Fee
           </Button>
@@ -90,6 +92,7 @@ export default function AdminDashboard() {
             variant="secondary"
             icon={UserPlus}
             onClick={() => navigate('/students')}
+            className="w-full sm:w-auto"
             title="Admit / Register New Student"
           >
             New Admission
@@ -98,13 +101,13 @@ export default function AdminDashboard() {
       </div>
 
       {/* Primary KPI Metrics Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard
           title="Total Students"
           value={m.total_students ?? 0}
           subtext="Registered in institute"
           icon={GraduationCap}
-          color="indigo"
+          color="odoo"
           onClick={() => navigate('/students')}
         />
         <StatCard
@@ -128,55 +131,55 @@ export default function AdminDashboard() {
           value={m.pending_enquiries ?? 0}
           subtext={`${m.urgent_demo_deadlines ?? 0} urgent demo deadlines`}
           icon={ClipboardList}
-          color={m.urgent_demo_deadlines > 0 ? 'amber' : 'indigo'}
+          color={m.urgent_demo_deadlines > 0 ? 'amber' : 'odoo'}
           onClick={() => navigate('/enquiries')}
         />
       </div>
 
-      {/* Financial Health Row */}
+      {/* Financial Health Row - Odoo white cards */}
       <div className="bg-slate-100/70 border border-slate-200 rounded-lg p-3 sm:p-4">
-        <h2 className="text-xs font-bold uppercase tracking-wider text-black mb-3">
+        <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-3">
           Institute Cash Movement & Financial Position
         </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-          <div className="bg-white rounded-lg p-3 border border-slate-200 shadow-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="bg-white rounded-lg p-3 border border-slate-200 shadow-2xs hover:shadow-xs transition-shadow">
             <span className="text-[11px] font-semibold text-slate-500 uppercase">
               Total Billed Fees
             </span>
-            <div className="text-lg font-bold text-black mt-0.5">
+            <div className="text-lg font-bold text-slate-900 mt-0.5 break-all sm:break-normal">
               ₹{(m.total_revenue_booked || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
             </div>
             <span className="text-[10px] text-slate-500">Gross receivables from admissions</span>
           </div>
 
-          <div className="bg-white rounded-lg p-3 border border-emerald-200 border-l-4 border-l-emerald-600 shadow-xs">
+          <div className="bg-white rounded-lg p-3 border border-emerald-200 border-l-4 border-l-emerald-600 shadow-2xs hover:shadow-xs transition-shadow">
             <span className="text-[11px] font-semibold text-emerald-800 uppercase">
               Actual Collections
             </span>
-            <div className="text-lg font-bold text-emerald-800 mt-0.5">
+            <div className="text-lg font-bold text-emerald-800 mt-0.5 break-all sm:break-normal">
               ₹{(m.total_cash_collected || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
             </div>
-            <span className="text-[10px] text-emerald-700">Realized cash in bank & hand</span>
+            <span className="text-[10px] text-emerald-700 font-medium">Realized cash in bank & hand</span>
           </div>
 
-          <div className="bg-white rounded-lg p-3 border border-rose-200 border-l-4 border-l-rose-500 shadow-xs">
+          <div className="bg-white rounded-lg p-3 border border-rose-200 border-l-4 border-l-rose-500 shadow-2xs hover:shadow-xs transition-shadow">
             <span className="text-[11px] font-semibold text-rose-800 uppercase">
               Total Expenses & Salaries
             </span>
-            <div className="text-lg font-bold text-rose-800 mt-0.5">
+            <div className="text-lg font-bold text-rose-800 mt-0.5 break-all sm:break-normal">
               ₹{(m.total_expenses || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
             </div>
-            <span className="text-[10px] text-rose-700">Staff salaries + daily expenses</span>
+            <span className="text-[10px] text-rose-700 font-medium">Staff salaries + daily expenses</span>
           </div>
 
-          <div className="bg-white rounded-lg p-3 border border-indigo-200 border-l-4 border-l-indigo-600 shadow-xs">
-            <span className="text-[11px] font-semibold text-indigo-900 uppercase">
+          <div className="bg-white rounded-lg p-3 border border-purple-200 border-l-4 border-l-odoo-600 shadow-2xs hover:shadow-xs transition-shadow">
+            <span className="text-[11px] font-semibold text-odoo-800 uppercase">
               Net Operating Cash
             </span>
-            <div className="text-lg font-bold text-indigo-900 mt-0.5">
+            <div className="text-lg font-bold text-odoo-800 mt-0.5 break-all sm:break-normal">
               ₹{(m.net_operating_cash || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
             </div>
-            <span className="text-[10px] text-indigo-700">Net cash retained</span>
+            <span className="text-[10px] text-odoo-700 font-medium">Net cash retained</span>
           </div>
         </div>
       </div>
@@ -184,12 +187,12 @@ export default function AdminDashboard() {
       {/* Two Column Section: Recent Admissions & Recent Payments */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Recent Admissions */}
-        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm flex flex-col">
+        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-2xs flex flex-col">
           <div className="flex items-center justify-between pb-3 border-b border-slate-200">
             <h2 className="text-sm font-bold text-black">Recent Admissions</h2>
             <button
               onClick={() => navigate('/admissions')}
-              className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+              className="text-xs font-semibold text-odoo-600 hover:text-odoo-800 flex items-center gap-1"
             >
               View All <ArrowRight className="w-3.5 h-3.5" />
             </button>
@@ -200,14 +203,14 @@ export default function AdminDashboard() {
               <p className="py-6 text-center text-xs text-slate-500">No admissions recorded yet.</p>
             ) : (
               data.recent_admissions.map((adm) => (
-                <div key={adm.id} className="py-2.5 flex items-center justify-between text-xs">
-                  <div>
-                    <span className="font-bold text-black">{adm.student_name}</span>
-                    <div className="text-[11px] text-slate-500 font-mono">
+                <div key={adm.id} className="py-2.5 flex items-center justify-between gap-2 text-xs hover:bg-slate-50/80 px-1 rounded transition-colors">
+                  <div className="min-w-0 flex-1">
+                    <span className="font-bold text-black truncate block">{adm.student_name}</span>
+                    <div className="text-[11px] text-slate-500 font-mono truncate">
                       {adm.admission_number} • {adm.admission_date}
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right shrink-0">
                     <span className="font-mono font-bold text-black block">
                       ₹{adm.total_payable.toFixed(2)}
                     </span>
@@ -231,12 +234,12 @@ export default function AdminDashboard() {
         </div>
 
         {/* Recent Payments */}
-        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm flex flex-col">
+        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-2xs flex flex-col">
           <div className="flex items-center justify-between pb-3 border-b border-slate-200">
             <h2 className="text-sm font-bold text-black">Recent Fee Collections</h2>
             <button
               onClick={() => navigate('/payments')}
-              className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+              className="text-xs font-semibold text-odoo-600 hover:text-odoo-800 flex items-center gap-1"
             >
               View All <ArrowRight className="w-3.5 h-3.5" />
             </button>
@@ -247,14 +250,14 @@ export default function AdminDashboard() {
               <p className="py-6 text-center text-xs text-slate-500">No payments recorded yet.</p>
             ) : (
               data.recent_payments.map((p) => (
-                <div key={p.id} className="py-2.5 flex items-center justify-between text-xs">
-                  <div>
-                    <span className="font-bold text-black">{p.student_name}</span>
-                    <div className="text-[11px] text-slate-500 font-mono">
+                <div key={p.id} className="py-2.5 flex items-center justify-between gap-2 text-xs hover:bg-slate-50/80 px-1 rounded transition-colors">
+                  <div className="min-w-0 flex-1">
+                    <span className="font-bold text-black truncate block">{p.student_name}</span>
+                    <div className="text-[11px] text-slate-500 font-mono truncate">
                       {p.payment_number} • <span className="uppercase">{p.payment_mode}</span>
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right shrink-0">
                     <span className="font-mono font-bold text-emerald-800 text-sm block">
                       +₹{p.amount.toFixed(2)}
                     </span>

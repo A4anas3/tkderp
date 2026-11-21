@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Edit2, UserCheck, UserX, Phone, Mail, Award, BookOpen, ExternalLink, Camera, X, AlertTriangle } from 'lucide-react';
+import { Plus, Edit2, UserCheck, UserX, Phone, Mail, Award, BookOpen, ExternalLink, Camera, X, AlertTriangle, LayoutGrid, List } from 'lucide-react';
 import DataTable from '../../components/common/DataTable';
 import Modal from '../../components/common/Modal';
 import Input from '../../components/common/Input';
@@ -22,6 +22,7 @@ export default function TeachersPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState('table');
 
   // Modal State
   const [modalOpen, setModalOpen] = useState(false);
@@ -250,7 +251,7 @@ export default function TeachersPage() {
     {
       header: 'Code',
       accessor: 'teacher_code',
-      className: 'font-mono font-bold text-indigo-700 w-24',
+      className: 'font-mono font-bold text-odoo-700 w-24',
     },
     {
       header: 'Faculty Name',
@@ -327,37 +328,220 @@ export default function TeachersPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+      {/* Odoo Control Panel Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
-          <h1 className="text-xl font-bold text-black tracking-tight">Faculty & Teachers</h1>
-          <p className="text-xs text-slate-500">
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">Faculty & Teachers</h1>
+          <p className="text-xs text-slate-500 mt-0.5">
             Manage coaching teaching staff, credentials, and batch assignments
           </p>
         </div>
 
-        <Button variant="primary" icon={Plus} onClick={handleOpenAdd}>
-          Add Teacher
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* View Mode Toggle - Odoo style */}
+          <div className="inline-flex rounded-md border border-slate-300 bg-slate-100 p-0.5 shadow-2xs">
+            <button
+              onClick={() => setViewMode('table')}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded transition ${
+                viewMode === 'table'
+                  ? 'bg-white text-odoo-700 shadow-2xs'
+                  : 'text-slate-600 hover:text-black'
+              }`}
+            >
+              <List className="w-3.5 h-3.5" />
+              <span>List</span>
+            </button>
+            <button
+              onClick={() => setViewMode('kanban')}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded transition ${
+                viewMode === 'kanban'
+                  ? 'bg-white text-odoo-700 shadow-2xs'
+                  : 'text-slate-600 hover:text-black'
+              }`}
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span>Kanban</span>
+            </button>
+          </div>
+
+          <Button variant="primary" icon={Plus} onClick={handleOpenAdd} className="w-full sm:w-auto">
+            Add Teacher
+          </Button>
+        </div>
       </div>
 
-      <DataTable
-        columns={columns}
-        data={teachers}
-        total={total}
-        page={page}
-        pageSize={15}
-        onPageChange={(p) => setPage(p)}
-        searchValue={search}
-        onSearchChange={(val) => {
-          setSearch(val);
-          setPage(1);
-        }}
-        onRefresh={loadTeachers}
-        loading={loading}
-        onRowClick={(t) => navigate(`/teachers/${t.id}`)}
-        searchPlaceholder="Search teacher by name or mobile..."
-        emptyMessage="No faculty records found."
-      />
+      {viewMode === 'table' ? (
+        <DataTable
+          columns={columns}
+          data={teachers}
+          total={total}
+          page={page}
+          pageSize={15}
+          onPageChange={(p) => setPage(p)}
+          searchValue={search}
+          onSearchChange={(val) => {
+            setSearch(val);
+            setPage(1);
+          }}
+          onRefresh={loadTeachers}
+          loading={loading}
+          onRowClick={(t) => navigate(`/teachers/${t.id}`)}
+          searchPlaceholder="Search teacher by name or mobile..."
+          emptyMessage="No faculty records found."
+        />
+      ) : (
+        /* Odoo Kanban Card Grid View */
+        <div className="space-y-4">
+          <div className="bg-white border border-slate-200 rounded-lg p-3 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50/70">
+            <div className="w-full sm:max-w-md">
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                placeholder="Search teacher by name, specialization, or mobile..."
+                className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-xs text-black placeholder-slate-400 focus:outline-none focus:border-odoo-600 focus:ring-1 focus:ring-odoo-600 shadow-2xs"
+              />
+            </div>
+            <div className="text-xs text-slate-500 font-medium">
+              Showing <span className="font-semibold text-black">{teachers.length}</span> of <span className="font-semibold text-black">{total}</span> faculty members
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="p-12 text-center text-xs text-slate-500 animate-pulse bg-white border border-slate-200 rounded-lg">
+              Loading faculty cards...
+            </div>
+          ) : teachers.length === 0 ? (
+            <div className="p-12 text-center bg-white border border-slate-200 rounded-lg text-xs text-slate-500">
+              No faculty records found matching your criteria.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5">
+              {teachers.map((t) => (
+                <div
+                  key={t.id}
+                  className="bg-white border border-slate-200 hover:border-odoo-300 rounded-lg p-3.5 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-start gap-2.5">
+                      <Avatar
+                        src={t.photo_url}
+                        name={t.name}
+                        size="md"
+                        status={t.status}
+                        className="shrink-0"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <h3
+                          onClick={() => navigate(`/teachers/${t.id}`)}
+                          className="font-bold text-black text-sm hover:text-odoo-700 truncate cursor-pointer block"
+                          title={t.name}
+                        >
+                          {t.name}
+                        </h3>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="font-mono text-[10px] font-bold text-odoo-800 bg-purple-50 border border-odoo-200 px-1.5 py-0.2 rounded-full">
+                            {t.teacher_code}
+                          </span>
+                          <Badge size="xs" variant={t.status === 'ACTIVE' ? 'success' : 'neutral'}>
+                            {t.status}
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 space-y-1.5 text-xs border-t border-slate-100 pt-2.5">
+                      {t.specialization && (
+                        <div className="text-[11px] text-slate-700 font-medium truncate">
+                          <span className="text-slate-400">Subject:</span> {t.specialization}
+                        </div>
+                      )}
+
+                      {t.qualification && (
+                        <div className="text-[11px] text-slate-600 truncate">
+                          <span className="text-slate-400">Qualification:</span> {t.qualification}
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-400">Mobile:</span>
+                        {t.mobile ? (
+                          <a
+                            href={`tel:${t.mobile}`}
+                            className="font-mono font-semibold text-slate-800 hover:text-odoo-600 flex items-center gap-0.5"
+                          >
+                            <Phone className="w-2.5 h-2.5 text-slate-400" />
+                            {t.mobile}
+                          </a>
+                        ) : (
+                          <span className="text-slate-400 italic">None</span>
+                        )}
+                      </div>
+
+                      {t.email && (
+                        <div className="flex items-center justify-between text-[11px] truncate">
+                          <span className="text-slate-400">Email:</span>
+                          <span className="text-slate-600 truncate max-w-[140px]">{t.email}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-3.5 pt-2 border-t border-slate-100 flex items-center gap-1.5">
+                    <Button
+                      size="xs"
+                      variant="secondary"
+                      icon={Edit2}
+                      onClick={() => handleOpenEdit(t)}
+                      className="flex-1 justify-center"
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="secondary"
+                      icon={ExternalLink}
+                      onClick={() => navigate(`/teachers/${t.id}`)}
+                      className="flex-1 justify-center"
+                    >
+                      Detail ↗
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {Math.ceil(total / 15) > 1 && (
+            <div className="bg-white border border-slate-200 rounded-lg p-2.5 shadow-2xs flex items-center justify-between text-xs">
+              <span className="text-slate-600">
+                Page <span className="font-semibold text-black">{page}</span> of <span className="font-semibold text-black">{Math.ceil(total / 15)}</span>
+              </span>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  Previous
+                </Button>
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  disabled={page >= Math.ceil(total / 15)}
+                  onClick={() => setPage((p) => Math.min(Math.ceil(total / 15), p + 1))}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Add / Edit Teacher Modal */}
       <Modal
@@ -388,7 +572,7 @@ export default function TeachersPage() {
               )}
               <div className="flex items-center gap-2 pt-1">
                 <label className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 cursor-pointer shadow-2xs transition">
-                  <Camera className="w-3.5 h-3.5 text-indigo-700" />
+                  <Camera className="w-3.5 h-3.5 text-odoo-700" />
                   {compressing ? 'Compressing...' : photoPreview ? 'Change Photo' : 'Upload Photo'}
                   <input
                     type="file"

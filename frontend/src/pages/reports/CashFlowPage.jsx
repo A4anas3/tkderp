@@ -68,11 +68,11 @@ export default function CashFlowPage() {
         <>
           {/* Active Filter Notice */}
           {currentFilters.from_date && currentFilters.to_date && (
-            <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2 text-xs flex items-center justify-between text-indigo-900">
+            <div className="bg-purple-50 border border-odoo-200 rounded-lg px-3 py-2 text-xs flex items-center justify-between text-odoo-900">
               <span className="font-semibold">
                 Cash Flow Window: <span className="font-bold underline">{currentFilters.from_date}</span> to <span className="font-bold underline">{currentFilters.to_date}</span>
               </span>
-              <span className="text-[11px] bg-white px-2 py-0.5 rounded border border-indigo-200 font-bold">
+              <span className="text-[11px] bg-white px-2 py-0.5 rounded border border-odoo-200 font-bold">
                 {breakdown.length} Interval Periods
               </span>
             </div>
@@ -145,8 +145,8 @@ export default function CashFlowPage() {
               Detailed Cash Flow & Movement Ledger
             </h2>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+            <div className="overflow-x-auto -webkit-overflow-scrolling-touch">
+              <table className="w-full text-left text-xs min-w-[650px]">
                 <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
                   <tr>
                     <th className="p-2">Period</th>
@@ -181,7 +181,7 @@ export default function CashFlowPage() {
                         <span
                           className={
                             row.net_cash_flow >= 0
-                              ? 'text-indigo-900 font-black'
+                              ? 'text-odoo-900 font-black'
                               : 'text-rose-700 font-black'
                           }
                         >

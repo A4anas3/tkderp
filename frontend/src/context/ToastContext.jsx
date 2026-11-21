@@ -37,12 +37,12 @@ export function ToastProvider({ children }) {
                 ? 'bg-emerald-50 text-emerald-950 border-emerald-300'
                 : toast.type === 'error'
                 ? 'bg-rose-50 text-rose-950 border-rose-300'
-                : 'bg-indigo-50 text-indigo-950 border-indigo-300'
+                : 'bg-purple-50 text-odoo-900 border-odoo-300'
             }`}
           >
             {toast.type === 'success' && <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />}
             {toast.type === 'error' && <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />}
-            {toast.type === 'info' && <Info className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />}
+            {toast.type === 'info' && <Info className="w-5 h-5 text-odoo-600 shrink-0 mt-0.5" />}
             <div className="flex-1 font-medium">{toast.message}</div>
             <button
               onClick={() => removeToast(toast.id)}

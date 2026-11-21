@@ -153,7 +153,7 @@ export default function StaffUsersPage() {
     {
       header: 'Employee ID',
       accessor: 'employee_id',
-      className: 'font-mono font-bold text-indigo-700 w-28',
+      className: 'font-mono font-bold text-odoo-700 w-28',
     },
     {
       header: 'Staff Name',
@@ -218,15 +218,15 @@ export default function StaffUsersPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
           <h1 className="text-xl font-bold text-black tracking-tight">Staff & Role Permissions</h1>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-500 mt-0.5">
             Manage internal employees (Admin, Cashier, Faculty), role authorizations, and password credentials
           </p>
         </div>
 
-        <Button variant="primary" icon={Plus} onClick={handleOpenAdd}>
+        <Button variant="primary" icon={Plus} onClick={handleOpenAdd} className="w-full sm:w-auto">
           Add Staff Account
         </Button>
       </div>
@@ -306,11 +306,11 @@ export default function StaffUsersPage() {
             required
           />
 
-          <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
-            <Button variant="secondary" onClick={() => setAddModalOpen(false)} disabled={submitting}>
+          <div className="pt-3 flex flex-col-reverse sm:flex-row sm:justify-end gap-2 border-t border-slate-100">
+            <Button variant="secondary" onClick={() => setAddModalOpen(false)} disabled={submitting} className="w-full sm:w-auto">
               Cancel
             </Button>
-            <Button type="submit" variant="primary" loading={submitting}>
+            <Button type="submit" variant="primary" loading={submitting} className="w-full sm:w-auto">
               Create Account
             </Button>
           </div>
@@ -357,11 +357,11 @@ export default function StaffUsersPage() {
             />
           </div>
 
-          <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
-            <Button variant="secondary" onClick={() => setEditModalOpen(false)} disabled={submitting}>
+          <div className="pt-3 flex flex-col-reverse sm:flex-row sm:justify-end gap-2 border-t border-slate-100">
+            <Button variant="secondary" onClick={() => setEditModalOpen(false)} disabled={submitting} className="w-full sm:w-auto">
               Cancel
             </Button>
-            <Button type="submit" variant="primary" loading={submitting}>
+            <Button type="submit" variant="primary" loading={submitting} className="w-full sm:w-auto">
               Save Changes
             </Button>
           </div>
@@ -387,11 +387,11 @@ export default function StaffUsersPage() {
             autoFocus
           />
 
-          <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
-            <Button variant="secondary" onClick={() => setResetModalOpen(false)} disabled={submitting}>
+          <div className="pt-3 flex flex-col-reverse sm:flex-row sm:justify-end gap-2 border-t border-slate-100">
+            <Button variant="secondary" onClick={() => setResetModalOpen(false)} disabled={submitting} className="w-full sm:w-auto">
               Cancel
             </Button>
-            <Button type="submit" variant="danger" loading={submitting}>
+            <Button type="submit" variant="danger" loading={submitting} className="w-full sm:w-auto">
               Reset Password
             </Button>
           </div>

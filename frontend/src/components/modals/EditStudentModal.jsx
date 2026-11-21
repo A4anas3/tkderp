@@ -160,7 +160,7 @@ export default function EditStudentModal({ isOpen, onClose, student, onSuccess }
             )}
             <div className="flex items-center gap-2 pt-1">
               <label className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 cursor-pointer shadow-2xs transition">
-                <Camera className="w-3.5 h-3.5 text-indigo-700" />
+                <Camera className="w-3.5 h-3.5 text-odoo-700" />
                 {compressing ? 'Compressing...' : 'Change Photo'}
                 <input
                   type="file"
@@ -246,7 +246,7 @@ export default function EditStudentModal({ isOpen, onClose, student, onSuccess }
               name="status"
               value={formData.status}
               onChange={handleChange}
-              className="w-full text-xs font-semibold bg-white border border-slate-300 rounded-md px-3 py-2 text-black focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full text-xs font-semibold bg-white border border-slate-300 rounded-md px-3 py-2 text-black focus:outline-none focus:ring-2 focus:ring-odoo-500"
             >
               <option value="ACTIVE">ACTIVE</option>
               <option value="INACTIVE">INACTIVE</option>
@@ -272,14 +272,14 @@ export default function EditStudentModal({ isOpen, onClose, student, onSuccess }
               onChange={handleChange}
               rows={2}
               placeholder="Optional notes or remarks..."
-              className="w-full text-xs bg-white border border-slate-300 rounded-md p-2 text-black focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+              className="w-full text-xs bg-white border border-slate-300 rounded-md p-2 text-black focus:outline-none focus:ring-2 focus:ring-odoo-500 resize-none"
             />
           </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
-          <Button type="button" variant="secondary" onClick={onClose} disabled={loading}>
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-3 border-t border-slate-200">
+          <Button type="button" variant="secondary" onClick={onClose} disabled={loading} className="w-full sm:w-auto">
             Cancel
           </Button>
           <Button
@@ -288,6 +288,7 @@ export default function EditStudentModal({ isOpen, onClose, student, onSuccess }
             loading={loading}
             icon={Edit3}
             disabled={loading || (Boolean(formData.mobile) && formData.mobile.length !== 10)}
+            className="w-full sm:w-auto"
           >
             {formData.mobile && formData.mobile.length !== 10 ? 'Enter 10-Digit Mobile' : 'Save Changes'}
           </Button>

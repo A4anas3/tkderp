@@ -209,8 +209,8 @@ export default function IssueRefundModal({
           </>
         )}
 
-        <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
-          <Button variant="secondary" onClick={onClose} disabled={submitting}>
+        <div className="pt-3 flex flex-col-reverse sm:flex-row sm:justify-end gap-2 border-t border-slate-100">
+          <Button variant="secondary" onClick={onClose} disabled={submitting} className="w-full sm:w-auto">
             Cancel
           </Button>
           <Button
@@ -219,6 +219,7 @@ export default function IssueRefundModal({
             loading={submitting}
             disabled={maxRefundable <= 0}
             icon={RotateCcw}
+            className="w-full sm:w-auto"
           >
             {revokeAdmission ? 'Disburse Full Refund & Revoke' : 'Disburse Full Refund'}
           </Button>

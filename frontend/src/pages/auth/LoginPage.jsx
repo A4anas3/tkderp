@@ -41,13 +41,13 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col justify-center items-center p-4">
       <div className="w-full max-w-md bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-indigo-700 to-indigo-600 p-6 text-white text-center">
-          <div className="w-12 h-12 bg-white text-indigo-700 font-black text-2xl rounded-xl mx-auto flex items-center justify-center shadow-md mb-2">
+        {/* Header - Odoo ERP brand styling */}
+        <div className="bg-gradient-to-r from-odoo-700 via-odoo-600 to-odoo-800 p-6 text-white text-center">
+          <div className="w-12 h-12 bg-white text-odoo-700 font-black text-2xl rounded-xl mx-auto flex items-center justify-center shadow-md mb-2">
             T
           </div>
           <h1 className="text-xl font-bold tracking-tight">THAKURDWARA COACHING</h1>
-          <p className="text-xs text-indigo-100 uppercase tracking-widest font-semibold mt-1">
+          <p className="text-xs text-purple-200 uppercase tracking-widest font-semibold mt-1">
             Institute Management ERP
           </p>
         </div>
@@ -108,7 +108,7 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={() => handleQuickFill('ADM001', 'Admin@1234')}
-                className="p-2 text-left rounded-md border border-slate-200 bg-slate-50 hover:bg-indigo-50 hover:border-indigo-300 transition"
+                className="p-2 text-left rounded-md border border-slate-200 bg-slate-50 hover:bg-purple-50 hover:border-odoo-300 transition"
               >
                 <span className="block text-xs font-bold text-black">Admin</span>
                 <span className="block text-[10px] text-slate-500 font-mono">ADM001</span>

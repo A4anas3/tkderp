@@ -26,6 +26,7 @@ import ExpensesPage from '../pages/expenses/ExpensesPage';
 import SubjectRevenuePage from '../pages/reports/SubjectRevenuePage';
 import CashFlowPage from '../pages/reports/CashFlowPage';
 import StaffUsersPage from '../pages/users/StaffUsersPage';
+import AuditLogPage from '../pages/audit/AuditLogPage';
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { user, loading, role } = useAuth();
@@ -250,6 +251,22 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={['ADMIN']}>
               <StaffUsersPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="audit-logs"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN']}>
+              <AuditLogPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="audit"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN']}>
+              <AuditLogPage />
             </ProtectedRoute>
           }
         />

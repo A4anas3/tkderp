@@ -72,11 +72,11 @@ export default function EnquiryDetailModal({
               hasCourse
                 ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
                 : isConverted || hasStudent
-                ? 'bg-indigo-50 border-indigo-300 text-indigo-950'
+                ? 'bg-purple-50 border-odoo-300 text-odoo-900'
                 : isInterested
                 ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
                 : isActiveDemo && !isExpired
-                ? 'bg-indigo-50 border-indigo-300 text-indigo-950'
+                ? 'bg-purple-50 border-odoo-300 text-odoo-900'
                 : isPending
                 ? 'bg-amber-50 border-amber-300 text-amber-950'
                 : isNotInterested
@@ -88,7 +88,7 @@ export default function EnquiryDetailModal({
               {hasCourse || isInterested ? (
                 <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
               ) : isConverted || hasStudent || (isActiveDemo && !isExpired) ? (
-                <Clock className="w-5 h-5 text-indigo-600 shrink-0" />
+                <Clock className="w-5 h-5 text-odoo-600 shrink-0" />
               ) : isPending ? (
                 <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
               ) : isNotInterested ? (
@@ -144,7 +144,7 @@ export default function EnquiryDetailModal({
           {/* Bio Card */}
           <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-sm border border-indigo-200 shrink-0">
+              <div className="w-10 h-10 rounded-full bg-purple-100 text-odoo-700 font-bold flex items-center justify-center text-sm border border-odoo-200 shrink-0">
                 {enquiry.student_name ? enquiry.student_name.slice(0, 2).toUpperCase() : 'EN'}
               </div>
               <div>
@@ -152,7 +152,7 @@ export default function EnquiryDetailModal({
                 {enquiry.mobile ? (
                   <a
                     href={`tel:${enquiry.mobile}`}
-                    className="font-mono text-xs text-indigo-700 hover:underline font-semibold flex items-center gap-1"
+                    className="font-mono text-xs text-odoo-700 hover:underline font-semibold flex items-center gap-1"
                   >
                     <Phone className="w-3 h-3 text-slate-400" />
                     {enquiry.mobile}
@@ -184,7 +184,7 @@ export default function EnquiryDetailModal({
             <div className="bg-white p-3.5 rounded-lg border border-slate-200 space-y-2 text-xs">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-black uppercase tracking-wider flex items-center gap-1.5">
-                  <Hash className="w-4 h-4 text-indigo-600" />
+                  <Hash className="w-4 h-4 text-odoo-600" />
                   <span>Subject Demos & Tracking Codes ({demoItems.length})</span>
                 </span>
                 <Button
@@ -202,7 +202,7 @@ export default function EnquiryDetailModal({
                   <div key={item.id} className="p-2.5 flex items-center justify-between gap-2 hover:bg-slate-50">
                     <div>
                       <div className="flex items-center gap-1.5">
-                        <span className="font-mono font-bold text-indigo-800 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded text-[11px]">
+                        <span className="font-mono font-bold text-odoo-800 bg-purple-50 border border-odoo-200 px-1.5 py-0.5 rounded text-[11px]">
                           {item.demo_reference_number}
                         </span>
                         <span className="font-bold text-black text-xs">
@@ -232,7 +232,7 @@ export default function EnquiryDetailModal({
           {/* Demo Period & Deadline Card */}
           <div className="bg-white p-3.5 rounded-lg border border-slate-200 space-y-2 text-xs">
             <div className="flex items-center gap-1.5 text-xs font-bold text-black uppercase tracking-wider">
-              <Calendar className="w-4 h-4 text-indigo-600" />
+              <Calendar className="w-4 h-4 text-odoo-600" />
               <span>Overall Trial Window</span>
             </div>
 

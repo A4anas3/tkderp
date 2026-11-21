@@ -135,7 +135,7 @@ export default function EditPaymentModal({
             onChange={(e) => setEditReason(e.target.value)}
             placeholder="e.g. Cashier recorded ₹5000 instead of ₹4000; corrected amount after bank verification"
             rows={2}
-            className="w-full rounded border border-slate-300 px-3 py-1.5 text-xs text-black bg-white focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600"
+            className="w-full rounded border border-slate-300 px-3 py-1.5 text-xs text-black bg-white focus:outline-none focus:border-odoo-600 focus:ring-1 focus:ring-odoo-600"
             required
             autoFocus
           />
@@ -144,11 +144,11 @@ export default function EditPaymentModal({
           </span>
         </div>
 
-        <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
-          <Button variant="secondary" onClick={onClose} disabled={submitting}>
+        <div className="pt-3 flex flex-col-reverse sm:flex-row sm:justify-end gap-2 border-t border-slate-100">
+          <Button variant="secondary" onClick={onClose} disabled={submitting} className="w-full sm:w-auto">
             Cancel
           </Button>
-          <Button type="submit" variant="primary" loading={submitting} icon={Edit3}>
+          <Button type="submit" variant="primary" loading={submitting} icon={Edit3} className="w-full sm:w-auto">
             Save Changes
           </Button>
         </div>

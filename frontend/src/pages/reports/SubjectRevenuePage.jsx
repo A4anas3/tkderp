@@ -100,14 +100,14 @@ function StudentRosterSubtable({ students = [], contextType = 'subject', onColle
               setFilterText(e.target.value);
               setPage(1);
             }}
-            className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 text-black placeholder:text-slate-400 font-medium"
+            className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600 text-black placeholder:text-slate-400 font-medium"
           />
         </div>
       </div>
 
       {/* Roster Table */}
-      <div className="overflow-x-auto bg-white rounded border border-slate-200 shadow-sm">
-        <table className="w-full text-left text-xs">
+      <div className="overflow-x-auto bg-white rounded border border-slate-200 shadow-sm -webkit-overflow-scrolling-touch">
+        <table className="w-full text-left text-xs min-w-[750px]">
           <thead className="bg-slate-100 text-slate-800 font-semibold border-b border-slate-200">
             <tr>
               <th className="p-2.5">Student</th>
@@ -131,7 +131,7 @@ function StudentRosterSubtable({ students = [], contextType = 'subject', onColle
                   if (e.target.closest('button, a, input, [data-no-click]')) return;
                   navigate(`/students/${s.student_id}`);
                 }}
-                className="hover:bg-indigo-50/40 cursor-pointer transition-colors"
+                className="hover:bg-purple-50/40 cursor-pointer transition-colors"
                 title="Click to view student profile & enrollment ledger"
               >
                 {/* Student info */}
@@ -144,12 +144,12 @@ function StudentRosterSubtable({ students = [], contextType = 'subject', onColle
                         className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0"
                       />
                     ) : (
-                      <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-xs shrink-0 border border-indigo-200">
+                      <div className="w-8 h-8 rounded-full bg-purple-100 text-odoo-700 font-bold flex items-center justify-center text-xs shrink-0 border border-odoo-200">
                         {s.student_name ? s.student_name.slice(0, 2).toUpperCase() : 'ST'}
                       </div>
                     )}
                     <div>
-                      <div className="font-bold text-black hover:text-indigo-600 transition">
+                      <div className="font-bold text-black hover:text-odoo-600 transition">
                         {s.student_name}
                       </div>
                       <div className="font-mono text-[11px] text-slate-600 font-semibold">
@@ -189,7 +189,7 @@ function StudentRosterSubtable({ students = [], contextType = 'subject', onColle
                   <div className="font-mono font-bold text-black text-xs">
                     {s.cycle_label || formatCycleLabel(s.valid_from, s.valid_to)}
                   </div>
-                  <div className="text-[11px] text-indigo-700 font-semibold">
+                  <div className="text-[11px] text-odoo-700 font-semibold">
                     {s.billing_cycle_anchor || `Day ${s.billing_day || 1} cycle`}
                   </div>
                   <div className="text-[10px] text-slate-600 font-medium">
@@ -502,15 +502,15 @@ export default function SubjectRevenuePage() {
         <>
           {/* Active Range Notice */}
           {currentFilters.from_date && currentFilters.to_date && (
-            <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2 text-xs flex flex-wrap items-center justify-between gap-2 text-indigo-950 font-medium">
+            <div className="bg-purple-50 border border-odoo-200 rounded-lg px-3 py-2 text-xs flex flex-wrap items-center justify-between gap-2 text-odoo-900 font-medium">
               <span className="flex items-center gap-1.5">
-                <Calendar className="w-4 h-4 text-indigo-700" />
+                <Calendar className="w-4 h-4 text-odoo-700" />
                 Active Date Range: <span className="font-bold underline text-black">{currentFilters.from_date}</span> to <span className="font-bold underline text-black">{currentFilters.to_date}</span>
                 <span className="text-[11px] text-slate-600 font-normal">
                   (Showing students whose rolling cycle overlaps with this window)
                 </span>
               </span>
-              <span className="text-[11px] bg-white px-2.5 py-0.5 rounded border border-indigo-300 font-bold text-black">
+              <span className="text-[11px] bg-white px-2.5 py-0.5 rounded border border-odoo-300 font-bold text-black">
                 {rawItems.length} Subjects Active
               </span>
             </div>
@@ -585,12 +585,12 @@ export default function SubjectRevenuePage() {
           )}
 
           {/* Section Navigation Tabs */}
-          <div className="flex items-center gap-2 border-b border-slate-200 pb-1">
+          <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 pb-1">
             <button
               onClick={() => setActiveTab('all')}
-              className={`px-3 py-1.5 text-xs font-bold rounded-t-lg transition-colors cursor-pointer ${
+              className={`min-h-[36px] px-3 py-2 text-xs font-bold rounded-t-lg transition-colors cursor-pointer ${
                 activeTab === 'all'
-                  ? 'bg-indigo-600 text-white shadow-xs'
+                  ? 'bg-odoo-600 text-white shadow-xs'
                   : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
               }`}
             >
@@ -598,9 +598,9 @@ export default function SubjectRevenuePage() {
             </button>
             <button
               onClick={() => setActiveTab('subjects')}
-              className={`px-3 py-1.5 text-xs font-bold rounded-t-lg transition-colors cursor-pointer flex items-center gap-1.5 ${
+              className={`min-h-[36px] px-3 py-2 text-xs font-bold rounded-t-lg transition-colors cursor-pointer flex items-center gap-1.5 ${
                 activeTab === 'subjects'
-                  ? 'bg-indigo-600 text-white shadow-xs'
+                  ? 'bg-odoo-600 text-white shadow-xs'
                   : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
               }`}
             >
@@ -609,9 +609,9 @@ export default function SubjectRevenuePage() {
             </button>
             <button
               onClick={() => setActiveTab('teachers')}
-              className={`px-3 py-1.5 text-xs font-bold rounded-t-lg transition-colors cursor-pointer flex items-center gap-1.5 ${
+              className={`min-h-[36px] px-3 py-2 text-xs font-bold rounded-t-lg transition-colors cursor-pointer flex items-center gap-1.5 ${
                 activeTab === 'teachers'
-                  ? 'bg-indigo-600 text-white shadow-xs'
+                  ? 'bg-odoo-600 text-white shadow-xs'
                   : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
               }`}
             >
@@ -620,9 +620,9 @@ export default function SubjectRevenuePage() {
             </button>
             <button
               onClick={() => setActiveTab('batches')}
-              className={`px-3 py-1.5 text-xs font-bold rounded-t-lg transition-colors cursor-pointer flex items-center gap-1.5 ${
+              className={`min-h-[36px] px-3 py-2 text-xs font-bold rounded-t-lg transition-colors cursor-pointer flex items-center gap-1.5 ${
                 activeTab === 'batches'
-                  ? 'bg-indigo-600 text-white shadow-xs'
+                  ? 'bg-odoo-600 text-white shadow-xs'
                   : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
               }`}
             >
@@ -637,7 +637,7 @@ export default function SubjectRevenuePage() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-slate-200 gap-2">
                 <div>
                   <h2 className="text-sm font-bold text-black flex items-center gap-2">
-                    <BookOpen className="w-4 h-4 text-indigo-600" />
+                    <BookOpen className="w-4 h-4 text-odoo-600" />
                     <span>Subject Revenue & Enrolled Student Rosters</span>
                   </h2>
                   <p className="text-[11px] text-slate-500">
@@ -656,13 +656,13 @@ export default function SubjectRevenuePage() {
                       setSubjectSearch(e.target.value);
                       setSubjectPage(1);
                     }}
-                    className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 text-black placeholder:text-slate-400 font-medium"
+                    className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600 text-black placeholder:text-slate-400 font-medium"
                   />
                 </div>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
+              <div className="overflow-x-auto -webkit-overflow-scrolling-touch">
+                <table className="w-full text-left text-xs min-w-[700px]">
                   <thead className="bg-slate-100 text-slate-800 font-semibold border-b border-slate-200">
                     <tr>
                       <th className="p-2.5">Subject Name</th>
@@ -689,21 +689,21 @@ export default function SubjectRevenuePage() {
                           <React.Fragment key={idx}>
                             <tr
                               className={`hover:bg-slate-50 transition-colors cursor-pointer ${
-                                isExpanded ? 'bg-indigo-50/20' : ''
+                                isExpanded ? 'bg-purple-50/20' : ''
                               }`}
                               onClick={() => navigate(`/reports/subject/${s.subject_id}`)}
                               title="Click to open dedicated subject page with rolling cycle student roster"
                             >
                               <td className="p-2.5 font-bold text-black flex items-center gap-1.5">
                                 {isExpanded ? (
-                                  <ChevronDown className="w-4 h-4 text-indigo-600 shrink-0" />
+                                  <ChevronDown className="w-4 h-4 text-odoo-600 shrink-0" />
                                 ) : (
                                   <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
                                 )}
                                 {s.subject_code === 'GREEN-CARD' ? (
                                   <Award className="w-4 h-4 text-purple-600 shrink-0" />
                                 ) : null}
-                                <span className="hover:text-indigo-600">{s.subject_name}</span>
+                                <span className="hover:text-odoo-600">{s.subject_name}</span>
                               </td>
                               <td className="p-2.5 font-mono text-slate-700 font-semibold">{s.subject_code}</td>
                               <td className="p-2.5 text-right font-mono text-slate-800 font-semibold">
@@ -713,9 +713,9 @@ export default function SubjectRevenuePage() {
                                 <span
                                   className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold transition-all ${
                                     isExpanded
-                                      ? 'bg-indigo-600 text-white shadow-xs'
+                                      ? 'bg-odoo-600 text-white shadow-xs'
                                       : s.enrolled_count > 0
-                                      ? 'bg-indigo-100 text-indigo-900 border border-indigo-200'
+                                      ? 'bg-purple-100 text-odoo-900 border border-odoo-200'
                                       : 'bg-slate-100 text-slate-700'
                                   }`}
                                 >
@@ -737,9 +737,9 @@ export default function SubjectRevenuePage() {
                                   <button
                                     onClick={() => navigate(`/reports/subject/${s.subject_id}`)}
                                     title="Open Dedicated Subject Roster Page"
-                                    className="px-2 py-0.5 text-[11px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded border border-indigo-200 flex items-center gap-1 cursor-pointer transition-colors"
+                                    className="px-2 py-0.5 text-[11px] font-bold bg-purple-50 hover:bg-purple-100 text-odoo-700 rounded border border-odoo-200 flex items-center gap-1 cursor-pointer transition-colors"
                                   >
-                                    <ExternalLink className="w-3 h-3 text-indigo-600" />
+                                    <ExternalLink className="w-3 h-3 text-odoo-600" />
                                     <span>Detail / Roster ↗</span>
                                   </button>
                                   <button
@@ -756,8 +756,8 @@ export default function SubjectRevenuePage() {
                             {/* Expanded Student Roster Accordion */}
                             {isExpanded && (
                               <tr>
-                                <td colSpan={8} className="p-0 border-b border-indigo-200 bg-indigo-50/20">
-                                  <div className="p-3 border-l-4 border-indigo-600">
+                                <td colSpan={8} className="p-0 border-b border-odoo-200 bg-purple-50/20">
+                                  <div className="p-3 border-l-4 border-odoo-600">
                                     <StudentRosterSubtable
                                       students={s.students}
                                       contextType="subject"
@@ -831,7 +831,7 @@ export default function SubjectRevenuePage() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-slate-200 gap-2">
                 <div>
                   <h2 className="text-sm font-bold text-black flex items-center gap-2">
-                    <GraduationCap className="w-4 h-4 text-indigo-600" />
+                    <GraduationCap className="w-4 h-4 text-odoo-600" />
                     <span>Teacher-Wise Revenue & Student Rosters</span>
                   </h2>
                   <p className="text-[11px] text-slate-500">
@@ -850,13 +850,13 @@ export default function SubjectRevenuePage() {
                       setTeacherSearch(e.target.value);
                       setTeacherPage(1);
                     }}
-                    className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 text-black placeholder:text-slate-400 font-medium"
+                    className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600 text-black placeholder:text-slate-400 font-medium"
                   />
                 </div>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
+              <div className="overflow-x-auto -webkit-overflow-scrolling-touch">
+                <table className="w-full text-left text-xs min-w-[700px]">
                   <thead className="bg-slate-100 text-slate-800 font-semibold border-b border-slate-200">
                     <tr>
                       <th className="p-2.5">Teacher Code</th>
@@ -884,15 +884,15 @@ export default function SubjectRevenuePage() {
                           <React.Fragment key={idx}>
                             <tr
                               className={`hover:bg-slate-50 transition-colors cursor-pointer ${
-                                isExpanded ? 'bg-indigo-50/20' : ''
+                                isExpanded ? 'bg-purple-50/20' : ''
                               }`}
                               onClick={() => navigate(`/teachers/${t.teacher_id}`)}
                               title="Click to open dedicated faculty page with student roster"
                             >
-                              <td className="p-2.5 font-mono font-bold text-indigo-700">{t.teacher_code}</td>
+                              <td className="p-2.5 font-mono font-bold text-odoo-700">{t.teacher_code}</td>
                               <td className="p-2.5 font-bold text-black flex items-center gap-1.5">
                                 {isExpanded ? (
-                                  <ChevronDown className="w-4 h-4 text-indigo-600 shrink-0" />
+                                  <ChevronDown className="w-4 h-4 text-odoo-600 shrink-0" />
                                 ) : (
                                   <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
                                 )}
@@ -904,9 +904,9 @@ export default function SubjectRevenuePage() {
                                 <span
                                   className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold transition-all ${
                                     isExpanded
-                                      ? 'bg-indigo-600 text-white shadow-xs'
+                                      ? 'bg-odoo-600 text-white shadow-xs'
                                       : t.enrolled_count > 0
-                                      ? 'bg-indigo-100 text-indigo-900 border border-indigo-200'
+                                      ? 'bg-purple-100 text-odoo-900 border border-odoo-200'
                                       : 'bg-slate-100 text-slate-700'
                                   }`}
                                 >
@@ -928,9 +928,9 @@ export default function SubjectRevenuePage() {
                                   <button
                                     onClick={() => navigate(`/teachers/${t.teacher_id}`)}
                                     title="Open Dedicated Faculty Roster Page"
-                                    className="px-2 py-0.5 text-[11px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded border border-indigo-200 flex items-center gap-1 cursor-pointer transition-colors"
+                                    className="px-2 py-0.5 text-[11px] font-bold bg-purple-50 hover:bg-purple-100 text-odoo-700 rounded border border-odoo-200 flex items-center gap-1 cursor-pointer transition-colors"
                                   >
-                                    <ExternalLink className="w-3 h-3 text-indigo-600" />
+                                    <ExternalLink className="w-3 h-3 text-odoo-600" />
                                     <span>Detail / Roster ↗</span>
                                   </button>
                                   <button
@@ -947,8 +947,8 @@ export default function SubjectRevenuePage() {
                             {/* Expanded Teacher Student Roster */}
                             {isExpanded && (
                               <tr>
-                                <td colSpan={9} className="p-0 border-b border-indigo-200 bg-indigo-50/20">
-                                  <div className="p-3 border-l-4 border-indigo-600">
+                                <td colSpan={9} className="p-0 border-b border-odoo-200 bg-purple-50/20">
+                                  <div className="p-3 border-l-4 border-odoo-600">
                                     <StudentRosterSubtable
                                       students={t.students}
                                       contextType="teacher"
@@ -1022,7 +1022,7 @@ export default function SubjectRevenuePage() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-slate-200 gap-2">
                 <div>
                   <h2 className="text-sm font-bold text-black flex items-center gap-2">
-                    <Users className="w-4 h-4 text-indigo-600" />
+                    <Users className="w-4 h-4 text-odoo-600" />
                     <span>Batch-Wise Collections & Realized Revenue</span>
                   </h2>
                   <p className="text-[11px] text-slate-500">
@@ -1041,13 +1041,13 @@ export default function SubjectRevenuePage() {
                       setBatchSearch(e.target.value);
                       setBatchPage(1);
                     }}
-                    className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 text-black placeholder:text-slate-400 font-medium"
+                    className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600 text-black placeholder:text-slate-400 font-medium"
                   />
                 </div>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
+              <div className="overflow-x-auto -webkit-overflow-scrolling-touch">
+                <table className="w-full text-left text-xs min-w-[700px]">
                   <thead className="bg-slate-100 text-slate-800 font-semibold border-b border-slate-200">
                     <tr>
                       <th className="p-2.5">Batch Code</th>
@@ -1076,15 +1076,15 @@ export default function SubjectRevenuePage() {
                           <React.Fragment key={idx}>
                             <tr
                               className={`hover:bg-slate-50 transition-colors cursor-pointer ${
-                                isExpanded ? 'bg-indigo-50/20' : ''
+                                isExpanded ? 'bg-purple-50/20' : ''
                               }`}
                               onClick={() => navigate(`/batches/${b.batch_id}`)}
                               title="Click to open dedicated batch page with student roster"
                             >
-                              <td className="p-2.5 font-mono font-bold text-indigo-700">{b.batch_code}</td>
+                              <td className="p-2.5 font-mono font-bold text-odoo-700">{b.batch_code}</td>
                               <td className="p-2.5 font-bold text-black flex items-center gap-1.5">
                                 {isExpanded ? (
-                                  <ChevronDown className="w-4 h-4 text-indigo-600 shrink-0" />
+                                  <ChevronDown className="w-4 h-4 text-odoo-600 shrink-0" />
                                 ) : (
                                   <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
                                 )}
@@ -1096,9 +1096,9 @@ export default function SubjectRevenuePage() {
                                 <span
                                   className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold transition-all ${
                                     isExpanded
-                                      ? 'bg-indigo-600 text-white shadow-xs'
+                                      ? 'bg-odoo-600 text-white shadow-xs'
                                       : b.enrolled_count > 0
-                                      ? 'bg-indigo-100 text-indigo-900 border border-indigo-200'
+                                      ? 'bg-purple-100 text-odoo-900 border border-odoo-200'
                                       : 'bg-slate-100 text-slate-700'
                                   }`}
                                 >
@@ -1125,9 +1125,9 @@ export default function SubjectRevenuePage() {
                                   <button
                                     onClick={() => navigate(`/batches/${b.batch_id}`)}
                                     title="Open Dedicated Batch Roster Page"
-                                    className="px-2 py-0.5 text-[11px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded border border-indigo-200 flex items-center gap-1 cursor-pointer transition-colors"
+                                    className="px-2 py-0.5 text-[11px] font-bold bg-purple-50 hover:bg-purple-100 text-odoo-700 rounded border border-odoo-200 flex items-center gap-1 cursor-pointer transition-colors"
                                   >
-                                    <ExternalLink className="w-3 h-3 text-indigo-600" />
+                                    <ExternalLink className="w-3 h-3 text-odoo-600" />
                                     <span>Detail / Roster ↗</span>
                                   </button>
                                   <button
@@ -1144,8 +1144,8 @@ export default function SubjectRevenuePage() {
                             {/* Expanded Batch Student Roster */}
                             {isExpanded && (
                               <tr>
-                                <td colSpan={10} className="p-0 border-b border-indigo-200 bg-indigo-50/20">
-                                  <div className="p-3 border-l-4 border-indigo-600">
+                                <td colSpan={10} className="p-0 border-b border-odoo-200 bg-purple-50/20">
+                                  <div className="p-3 border-l-4 border-odoo-600">
                                     <StudentRosterSubtable
                                       students={b.students}
                                       contextType="batch"

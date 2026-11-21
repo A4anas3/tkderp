@@ -18,6 +18,7 @@ import {
   AlertTriangle,
   Camera,
   RefreshCw,
+  ArrowLeftRight,
   Receipt,
   CheckCircle2,
   Clock,
@@ -38,7 +39,13 @@ import {
   BookOpen,
   Layers,
   Sparkles,
+  ShieldCheck,
+  Eye,
+  Copy,
+  Check,
 } from 'lucide-react';
+import Modal from '../../components/common/Modal';
+import { getActionMeta, formatDateTime, AuditDetailsSummary } from '../audit/AuditLogPage';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
 import StatCard from '../../components/common/StatCard';
@@ -59,6 +66,7 @@ import EditStudentModal from '../../components/modals/EditStudentModal';
 import EditValidityModal from '../../components/modals/EditValidityModal';
 import SuspendDiscontinueModal from '../../components/modals/SuspendDiscontinueModal';
 import RenewSubjectModal from '../../components/modals/RenewSubjectModal';
+import ChangeSubjectModal from '../../components/modals/ChangeSubjectModal';
 
 function getValidityStatus(adm) {
   if (adm.status === 'SUSPENDED') {
@@ -177,6 +185,10 @@ export default function StudentDetailPage() {
   const [renewModalOpen, setRenewModalOpen] = useState(false);
   const [selectedItemForRenew, setSelectedItemForRenew] = useState(null);
 
+  // Subject Change Modal
+  const [changeModalOpen, setChangeModalOpen] = useState(false);
+  const [selectedItemForChange, setSelectedItemForChange] = useState(null);
+
   // Item-level Validity & Lifecycle Actions
   const [selectedItemForValidity, setSelectedItemForValidity] = useState(null);
   const [selectedItemForSuspend, setSelectedItemForSuspend] = useState(null);
@@ -224,6 +236,18 @@ export default function StudentDetailPage() {
   const [txnTotal, setTxnTotal] = useState(0);
   const [txnTotalPages, setTxnTotalPages] = useState(1);
   const [txnsLoading, setTxnsLoading] = useState(false);
+
+  // Student Audit Tab State
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [auditTotal, setAuditTotal] = useState(0);
+  const [auditTotalPages, setAuditTotalPages] = useState(1);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditPageSize, setAuditPageSize] = useState(10);
+  const [auditSearch, setAuditSearch] = useState('');
+  const [auditActionFilter, setAuditActionFilter] = useState('ALL');
+  const [selectedAuditForInspection, setSelectedAuditForInspection] = useState(null);
+  const [auditCopied, setAuditCopied] = useState(false);
 
   // All Slips Modal
   const [allSlipsModalOpen, setAllSlipsModalOpen] = useState(false);
@@ -326,6 +350,41 @@ export default function StudentDetailPage() {
     }
   };
 
+  const fetchStudentAuditLogs = async (
+    page = auditPage,
+    pageSize = auditPageSize,
+    search = auditSearch,
+    action = auditActionFilter
+  ) => {
+    if (!id) return;
+    setAuditLoading(true);
+    try {
+      const params = {
+        page,
+        page_size: pageSize,
+      };
+      if (search?.trim()) params.search = search.trim();
+      if (action && action !== 'ALL') params.action = action;
+
+      const res = await studentApi.getAudit(id, params);
+      setAuditLogs(res.items || []);
+      setAuditTotal(res.total || 0);
+      setAuditTotalPages(res.total_pages || 1);
+    } catch (e) {
+      console.warn('Failed to load student audit logs', e);
+    } finally {
+      setAuditLoading(false);
+    }
+  };
+
+  const handleCopyAuditJson = () => {
+    if (!selectedAuditForInspection) return;
+    navigator.clipboard.writeText(JSON.stringify(selectedAuditForInspection, null, 2));
+    setAuditCopied(true);
+    setTimeout(() => setAuditCopied(false), 2000);
+    success('Copied audit event JSON to clipboard');
+  };
+
   const fetchStudentData = async () => {
     setLoading(true);
     try {
@@ -334,6 +393,7 @@ export default function StudentDetailPage() {
         fetchEnrollmentData(),
         fetchAdmissionsData(admPage, admPageSize, admSearch, admStatusFilter),
         fetchTransactionsData(txnPage, txnPageSize, txnSearch, txnModeFilter, txnTypeFilter),
+        fetchStudentAuditLogs(auditPage, auditPageSize, auditSearch, auditActionFilter),
       ]);
     } finally {
       setLoading(false);
@@ -352,6 +412,10 @@ export default function StudentDetailPage() {
   useEffect(() => {
     fetchTransactionsData(txnPage, txnPageSize, txnSearch, txnModeFilter, txnTypeFilter);
   }, [id, txnPage, txnPageSize, txnModeFilter, txnTypeFilter]);
+
+  useEffect(() => {
+    fetchStudentAuditLogs(auditPage, auditPageSize, auditSearch, auditActionFilter);
+  }, [id, auditPage, auditPageSize, auditActionFilter]);
 
   const handleViewReceipt = async (txn) => {
     if (txn.type === 'PAYMENT') {
@@ -427,7 +491,7 @@ export default function StudentDetailPage() {
   if (loading && !student) {
     return (
       <div className="p-12 text-center text-xs text-slate-500 space-y-2">
-        <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+        <div className="w-6 h-6 border-2 border-odoo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
         <p className="font-medium text-slate-600">Loading Student Profile...</p>
       </div>
     );
@@ -458,20 +522,20 @@ export default function StudentDetailPage() {
   const activeTotalDue = activeAdmissions.reduce((acc, a) => acc + Number(a.balance_due || 0), 0);
 
   return (
-    <div className="space-y-4">
+    <div className="w-full min-w-0 max-w-full space-y-4">
       {/* Revocation Alert Banner */}
       {isRevoked && (
-        <div className="bg-rose-50 border-2 border-rose-300 rounded-lg p-3 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+        <div className="bg-rose-50 border-2 border-rose-300 rounded-xl p-3 sm:p-4 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
             <div>
-              <span className="font-bold text-rose-950 uppercase tracking-wider block">
+              <span className="font-bold text-rose-950 uppercase tracking-wider block text-xs">
                 STUDENT ADMISSION REVOKED — ALL ACTIVE ENROLLMENTS CANCELLED
               </span>
-              <p className="text-rose-800">
+              <p className="text-rose-900 mt-0.5">
                 Reason: <strong className="text-black italic">{student.revoke_reason || 'Administrative action'}</strong>
                 {student.revoked_at && (
-                  <span className="text-slate-500 ml-2 font-mono">
+                  <span className="text-slate-700 ml-2 font-mono">
                     (Revoked on {new Date(student.revoked_at).toLocaleDateString('en-IN')})
                   </span>
                 )}
@@ -485,251 +549,268 @@ export default function StudentDetailPage() {
             loading={restoring}
             onClick={handleRestore}
             icon={RotateCcw}
+            className="w-full sm:w-auto shrink-0 justify-center"
           >
             Restore Student
           </Button>
         </div>
       )}
 
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate('/students')}
-            className="p-1.5 rounded-md border border-slate-300 text-slate-600 hover:text-black hover:bg-slate-100 transition"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </button>
-
-          {/* Student Profile Picture with Direct Upload (< 20 KB) */}
-          <div className="relative group">
-            <Avatar
-              src={student.photo_url}
-              name={student.name}
-              size="lg"
-              status={student.status}
-            />
-            <label
-              className="absolute -bottom-1 -right-1 p-1 bg-white border border-slate-300 rounded-full shadow-xs cursor-pointer hover:bg-indigo-50 hover:border-indigo-400 transition"
-              title="Change Profile Photo (auto-compressed to <= 20 KB)"
+      {/* Top Header Card */}
+      <div className="bg-white border border-slate-200 rounded-xl p-3.5 sm:p-4 shadow-xs space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <button
+              onClick={() => navigate('/students')}
+              className="p-2 rounded-lg border border-slate-300 text-slate-700 hover:text-black hover:bg-slate-100 active:bg-slate-200 transition shrink-0 min-h-[38px] min-w-[38px] flex items-center justify-center"
+              title="Back to Students list"
             >
-              <Camera className="w-3.5 h-3.5 text-indigo-700" />
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handlePhotoUpload}
-                disabled={uploadingPhoto}
-                className="hidden"
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+
+            {/* Student Profile Picture with Direct Upload (< 20 KB) */}
+            <div className="relative group shrink-0">
+              <Avatar
+                src={student.photo_url}
+                name={student.name}
+                size="lg"
+                status={student.status}
               />
-            </label>
-          </div>
-
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-black">{student.name}</h1>
-              <span className="font-mono text-xs px-2 py-0.5 rounded bg-slate-100 text-indigo-700 font-bold border border-slate-300">
-                {student.student_code}
-              </span>
-              <Badge variant={isRevoked ? 'danger' : student.status === 'ACTIVE' ? 'success' : 'neutral'}>
-                {student.status}
-              </Badge>
+              <label
+                className="absolute -bottom-1 -right-1 p-1 bg-white border border-slate-300 rounded-full shadow-xs cursor-pointer hover:bg-purple-50 hover:border-odoo-400 transition"
+                title="Change Profile Photo (auto-compressed to <= 20 KB)"
+              >
+                <Camera className="w-3.5 h-3.5 text-odoo-700" />
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePhotoUpload}
+                  disabled={uploadingPhoto}
+                  className="hidden"
+                />
+              </label>
             </div>
-            {student.father_name && (
-              <p className="text-xs text-slate-500">Father: {student.father_name}</p>
-            )}
+
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <h1 className="text-base sm:text-xl font-bold text-black break-words leading-tight">{student.name}</h1>
+                <span className="font-mono text-xs px-2 py-0.5 rounded bg-slate-100 text-odoo-800 font-bold border border-slate-300 shrink-0">
+                  {student.student_code}
+                </span>
+                <Badge variant={isRevoked ? 'danger' : student.status === 'ACTIVE' ? 'success' : 'neutral'}>
+                  {student.status}
+                </Badge>
+              </div>
+              {student.father_name && (
+                <p className="text-xs text-slate-700 font-medium truncate mt-0.5">Father: {student.father_name}</p>
+              )}
+            </div>
           </div>
-        </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Edit Student Profile Button */}
-          <Button
-            size="xs"
-            variant="secondary"
-            icon={Edit2}
-            onClick={() => setEditModalOpen(true)}
-            title="Edit Student Information"
-          >
-            Edit Profile
-          </Button>
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            {/* Edit Student Profile Button */}
+            <Button
+              size="xs"
+              variant="secondary"
+              icon={Edit2}
+              onClick={() => setEditModalOpen(true)}
+              title="Edit Student Information"
+              className="flex-1 sm:flex-initial justify-center"
+            >
+              Edit Profile
+            </Button>
 
-          {/* Revoke / Restore Button (Admin Only) */}
-          {isAdmin && (
-            isRevoked ? (
-              <Button size="xs" variant="secondary" onClick={handleRestore} loading={restoring}>
-                Restore Status
-              </Button>
-            ) : (
+            {/* Revoke / Restore Button (Admin Only) */}
+            {isAdmin && (
+              isRevoked ? (
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  onClick={handleRestore}
+                  loading={restoring}
+                  className="flex-1 sm:flex-initial justify-center"
+                >
+                  Restore Status
+                </Button>
+              ) : (
+                <Button
+                  size="xs"
+                  variant="danger"
+                  icon={UserX}
+                  onClick={() => setRevokeModalOpen(true)}
+                  className="flex-1 sm:flex-initial justify-center"
+                >
+                  Revoke Student
+                </Button>
+              )
+            )}
+
+            {/* Collect Due Fee Button */}
+            {!isRevoked && Number(student.total_balance_due) > 0 && (
               <Button
                 size="xs"
-                variant="danger"
-                icon={UserX}
-                onClick={() => setRevokeModalOpen(true)}
+                variant="success"
+                icon={CreditCard}
+                onClick={() => {
+                  const firstDue = admissions.find((a) => Number(a.balance_due) > 0);
+                  setTargetAdmissionId(firstDue ? firstDue.id : null);
+                  setPayModalOpen(true);
+                }}
+                className="flex-1 sm:flex-initial justify-center"
               >
-                Revoke Student
+                Collect Due Fee
               </Button>
-            )
-          )}
+            )}
 
-          {/* Collect Due Fee Button */}
-          {!isRevoked && Number(student.total_balance_due) > 0 && (
-            <Button
-              variant="success"
-              icon={CreditCard}
-              onClick={() => {
-                const firstDue = admissions.find((a) => Number(a.balance_due) > 0);
-                setTargetAdmissionId(firstDue ? firstDue.id : null);
-                setPayModalOpen(true);
-              }}
-            >
-              Collect Due Fee
-            </Button>
-          )}
-
-          {/* Purchase Another Course / Batch Shortcut */}
-          {!isRevoked && (
-            <Button
-              variant="primary"
-              icon={Plus}
-              onClick={() =>
-                navigate(
-                  `/admissions/new?student_id=${student.id}&name=${encodeURIComponent(
-                    student.name
-                  )}`
-                )
-              }
-            >
-              Purchase Another Course / Batch
-            </Button>
-          )}
+            {/* Purchase Another Course / Batch Shortcut */}
+            {!isRevoked && (
+              <Button
+                size="xs"
+                variant="primary"
+                icon={Plus}
+                onClick={() =>
+                  navigate(
+                    `/admissions/new?student_id=${student.id}&name=${encodeURIComponent(
+                      student.name
+                    )}`
+                  )
+                }
+                className="w-full sm:w-auto justify-center"
+              >
+                <span className="hidden sm:inline">Purchase Another Course / Batch</span>
+                <span className="sm:hidden">Purchase Batch / Course</span>
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Financial Overview Cards */}
-      <div className={`grid grid-cols-2 ${Number(student.total_refunded) > 0 ? 'sm:grid-cols-5' : 'sm:grid-cols-4'} gap-3`}>
-        <div className="bg-white rounded-lg border border-slate-200 p-3 shadow-xs">
-          <span className="text-[11px] font-semibold text-slate-500 uppercase">
+      <div className={`grid grid-cols-2 ${Number(student.total_refunded) > 0 ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-2.5 sm:gap-3`}>
+        <div className="bg-white rounded-xl border border-slate-200 p-3 sm:p-3.5 shadow-xs">
+          <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">
             Total Purchases
           </span>
-          <div className="text-xl font-bold text-black mt-0.5">{student.admissions_count || 0}</div>
-          <div className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5 font-medium">
-            <span className="text-emerald-700">{student.active_admissions_count || 0} Active</span>
+          <div className="text-lg sm:text-xl font-bold text-black mt-0.5">{student.admissions_count || 0}</div>
+          <div className="text-[10px] sm:text-[11px] text-slate-700 flex items-center gap-1 mt-0.5 font-medium flex-wrap">
+            <span className="text-emerald-700 font-bold">{student.active_admissions_count || 0} Active</span>
             {Number(student.revoked_admissions_count) > 0 && (
               <>
-                <span>•</span>
-                <span className="text-rose-600">{student.revoked_admissions_count} Cancelled</span>
+                <span className="text-slate-400">•</span>
+                <span className="text-rose-700 font-bold">{student.revoked_admissions_count} Cancelled</span>
               </>
             )}
           </div>
         </div>
 
-        <div className="bg-white rounded-lg border border-slate-200 p-3 shadow-xs">
-          <span className="text-[11px] font-semibold text-slate-500 uppercase">
+        <div className="bg-white rounded-xl border border-slate-200 p-3 sm:p-3.5 shadow-xs">
+          <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">
             Active Billed Fees
           </span>
-          <div className="text-xl font-bold text-black mt-0.5">
+          <div className="text-lg sm:text-xl font-bold text-black mt-0.5 break-all sm:break-normal">
             ₹{Number(student.total_billed).toFixed(2)}
           </div>
-          <span className="text-[10px] text-slate-500">
+          <span className="text-[10px] sm:text-[11px] text-slate-700 font-medium block truncate">
             {Number(student.active_admissions_count) > 0 ? 'Active courses fee' : 'No active courses'}
           </span>
         </div>
 
-        <div className="bg-white rounded-lg border border-emerald-200 border-l-4 border-l-emerald-600 p-3 shadow-xs">
-          <span className="text-[11px] font-semibold text-emerald-800 uppercase">
+        <div className="bg-white rounded-xl border border-emerald-200 border-l-4 border-l-emerald-600 p-3 sm:p-3.5 shadow-xs">
+          <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider block">
             Total Fees Paid
           </span>
-          <div className="text-xl font-bold text-emerald-800 mt-0.5">
+          <div className="text-lg sm:text-xl font-bold text-emerald-800 mt-0.5 break-all sm:break-normal">
             ₹{Number(student.total_paid).toFixed(2)}
           </div>
-          <span className="text-[10px] text-emerald-700 block truncate">
+          <span className="text-[10px] sm:text-[11px] text-emerald-700 font-medium block truncate">
             {Number(student.total_refunded) > 0
-              ? `Gross collected (Net: ₹${Number(student.net_paid !== undefined ? student.net_paid : student.total_paid - student.total_refunded).toFixed(2)})`
-              : 'Total receipts collected'}
+              ? `Net: ₹${Number(student.net_paid !== undefined ? student.net_paid : student.total_paid - student.total_refunded).toFixed(2)}`
+              : 'Total collected'}
           </span>
         </div>
 
         {Number(student.total_refunded) > 0 && (
-          <div className="bg-white rounded-lg border border-rose-200 border-l-4 border-l-rose-500 p-3 shadow-xs">
-            <span className="text-[11px] font-semibold text-rose-800 uppercase">
+          <div className="bg-white rounded-xl border border-rose-200 border-l-4 border-l-rose-500 p-3 sm:p-3.5 shadow-xs">
+            <span className="text-[11px] font-bold text-rose-800 uppercase tracking-wider block">
               Total Refunded
             </span>
-            <div className="text-xl font-bold text-rose-800 mt-0.5">
+            <div className="text-lg sm:text-xl font-bold text-rose-800 mt-0.5 break-all sm:break-normal">
               ₹{Number(student.total_refunded).toFixed(2)}
             </div>
-            <span className="text-[10px] text-rose-700">Returned to student</span>
+            <span className="text-[10px] sm:text-[11px] text-rose-700 font-medium block">Returned to student</span>
           </div>
         )}
 
-        <div className={`bg-white rounded-lg border ${Number(student.total_balance_due) > 0 ? 'border-rose-300 border-l-4 border-l-rose-600' : 'border-slate-200 border-l-4 border-l-slate-400'} p-3 shadow-xs`}>
-          <span className={`text-[11px] font-semibold uppercase ${Number(student.total_balance_due) > 0 ? 'text-rose-900' : 'text-slate-500'}`}>
+        <div className={`bg-white rounded-xl border ${Number(student.total_balance_due) > 0 ? 'border-rose-300 border-l-4 border-l-rose-600' : 'border-slate-200 border-l-4 border-l-slate-400'} p-3 sm:p-3.5 shadow-xs ${Number(student.total_refunded) > 0 ? 'col-span-2 sm:col-span-1' : 'col-span-2 sm:col-span-1 lg:col-span-1'}`}>
+          <span className={`text-[11px] font-bold uppercase tracking-wider block ${Number(student.total_balance_due) > 0 ? 'text-rose-900' : 'text-slate-700'}`}>
             Current Balance Due
           </span>
-          <div className={`text-xl font-bold mt-0.5 ${Number(student.total_balance_due) > 0 ? 'text-rose-700' : 'text-black'}`}>
+          <div className={`text-lg sm:text-xl font-bold mt-0.5 break-all sm:break-normal ${Number(student.total_balance_due) > 0 ? 'text-rose-700' : 'text-black'}`}>
             ₹{Number(student.total_balance_due).toFixed(2)}
           </div>
-          <span className={`text-[10px] ${Number(student.total_balance_due) > 0 ? 'text-rose-600 font-semibold' : 'text-slate-500'}`}>
+          <span className={`text-[10px] sm:text-[11px] font-medium block ${Number(student.total_balance_due) > 0 ? 'text-rose-700 font-semibold' : 'text-slate-700'}`}>
             {Number(student.total_balance_due) > 0 ? 'Pending payment • Due' : 'All active fees cleared ✓'}
           </span>
         </div>
       </div>
 
       {/* Two Column Section: Profile Details + Green Card Pass info */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
         {/* Student Bio Card */}
-        <div className="md:col-span-2 bg-white border border-slate-200 rounded-lg p-4 shadow-xs space-y-3">
+        <div className="md:col-span-2 bg-white border border-slate-200 rounded-xl p-3.5 sm:p-4 shadow-xs space-y-3">
           <h2 className="text-xs font-bold uppercase tracking-wider text-black border-b border-slate-100 pb-2">
             Personal & Contact Information
           </h2>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 text-xs">
             <div>
-              <span className="text-slate-500 block">Contact Phone:</span>
-              <span className="font-mono font-semibold text-black">
+              <span className="text-slate-700 font-semibold block text-[11px]">Contact Phone:</span>
+              <span className="font-mono font-bold text-black text-xs sm:text-sm">
                 {student.mobile || 'Not provided'}
               </span>
             </div>
             <div>
-              <span className="text-slate-500 block">Email Address:</span>
-              <span className="text-black">{student.email || 'Not provided (optional)'}</span>
+              <span className="text-slate-700 font-semibold block text-[11px]">Email Address:</span>
+              <span className="text-black font-semibold text-xs sm:text-sm break-all">{student.email || 'Not provided (optional)'}</span>
             </div>
             <div>
-              <span className="text-slate-500 block">Date of Birth:</span>
-              <span className="text-black">{student.dob || '—'}</span>
+              <span className="text-slate-700 font-semibold block text-[11px]">Date of Birth:</span>
+              <span className="text-black font-semibold text-xs sm:text-sm">{student.dob || '—'}</span>
             </div>
             <div>
-              <span className="text-slate-500 block">Registration Date:</span>
-              <span className="text-black">{student.registration_date}</span>
+              <span className="text-slate-700 font-semibold block text-[11px]">Registration Date:</span>
+              <span className="text-black font-semibold text-xs sm:text-sm">{student.registration_date}</span>
             </div>
             <div className="sm:col-span-2">
-              <span className="text-slate-500 block">Residential Address:</span>
-              <span className="text-black">{student.address || '—'}</span>
+              <span className="text-slate-700 font-semibold block text-[11px]">Residential Address:</span>
+              <span className="text-black font-semibold text-xs sm:text-sm">{student.address || '—'}</span>
             </div>
           </div>
         </div>
 
         {/* Green Card Membership Box */}
-        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs flex flex-col justify-between">
+        <div className="bg-white border border-slate-200 rounded-xl p-3.5 sm:p-4 shadow-xs flex flex-col justify-between">
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <Award className="w-5 h-5 text-purple-600" />
+              <Award className="w-5 h-5 text-purple-600 shrink-0" />
               <h2 className="text-xs font-bold uppercase tracking-wider text-black">
                 Green Card Pass Status
               </h2>
             </div>
 
             {student.has_green_card ? (
-              <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg space-y-1 text-xs">
+              <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg space-y-1.5 text-xs">
                 <Badge variant="purple">ACTIVE ALL-ACCESS PASS</Badge>
-                <p className="text-purple-950 font-medium pt-1">
+                <p className="text-purple-950 font-semibold pt-0.5">
                   Student is entitled to attend all active batches & subjects.
                 </p>
-                <p className="text-slate-600 text-[11px]">
+                <p className="text-slate-800 text-[11px]">
                   Pass Valid Till: <strong className="text-black font-mono">{student.green_card_expiry || 'Permanent'}</strong>
                 </p>
               </div>
             ) : (
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-600 space-y-2">
-                <p>No active Green Card membership.</p>
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 space-y-2">
+                <p className="font-medium">No active Green Card membership.</p>
                 {!isRevoked && (
                   <Button
                     size="xs"
@@ -739,6 +820,7 @@ export default function StudentDetailPage() {
                         `/admissions/new?student_id=${student.id}&item_type=GREEN_CARD`
                       )
                     }
+                    className="w-full justify-center"
                   >
                     Purchase Green Card
                   </Button>
@@ -750,23 +832,23 @@ export default function StudentDetailPage() {
       </div>
 
       {/* 1. Prominent Current Enrollment Card */}
-      <div className="bg-white border-2 border-indigo-200 rounded-xl p-5 shadow-xs space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-indigo-100 gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-700">
+      <div className="bg-white border-2 border-purple-200 rounded-xl p-3.5 sm:p-5 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-purple-100 gap-3">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-purple-50 border border-purple-200 flex items-center justify-center text-odoo-700 shrink-0 mt-0.5 sm:mt-0">
               <Layers className="w-5 h-5" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-black">Current Institute Enrollment</h2>
-                <span className="font-mono text-xs font-bold bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded border border-indigo-200">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-sm sm:text-base font-bold text-black break-words">Current Institute Enrollment</h2>
+                <span className="font-mono text-xs font-bold bg-purple-100 text-odoo-800 px-2 py-0.5 rounded border border-purple-200 shrink-0">
                   {enrollmentData?.enrollment_number || `ENR-${student?.student_code}`}
                 </span>
                 <Badge variant={enrollmentData?.is_student_active ? 'success' : 'neutral'}>
                   {enrollmentData?.is_student_active ? 'Active Enrollment' : 'Inactive / Between Cycles'}
                 </Badge>
               </div>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-700 font-medium mt-0.5">
                 Active subjects currently attended by the student with independent fee validity periods
               </p>
             </div>
@@ -775,7 +857,7 @@ export default function StudentDetailPage() {
           {!isRevoked && (
             <div className="flex items-center gap-2">
               <Button
-                size="sm"
+                size="xs"
                 variant="primary"
                 icon={Plus}
                 onClick={() =>
@@ -785,6 +867,7 @@ export default function StudentDetailPage() {
                     )}`
                   )
                 }
+                className="w-full sm:w-auto justify-center"
               >
                 Add / Enroll Subject
               </Button>
@@ -792,32 +875,32 @@ export default function StudentDetailPage() {
           )}
         </div>
 
-        {/* Active Green Card Pass Banner (if student holds an active all-access membership) */}
+        {/* Active Green Card Pass Banner */}
         {enrollmentData?.active_green_card && (
-          <div className="bg-gradient-to-r from-purple-50 via-indigo-50 to-purple-50 border border-purple-200 rounded-lg p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
-            <div className="flex items-center gap-3">
+          <div className="bg-gradient-to-r from-purple-50 via-indigo-50 to-purple-50 border border-purple-200 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+            <div className="flex items-start sm:items-center gap-3">
               <div className="w-9 h-9 rounded-full bg-purple-100 border border-purple-300 flex items-center justify-center text-purple-700 shrink-0">
                 <Award className="w-5 h-5" />
               </div>
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-bold text-xs text-purple-950">Active Green Card All-Access Pass</span>
                   <Badge variant="purple" size="xs">ALL ACCESS</Badge>
                 </div>
-                <p className="text-[11px] text-purple-800 mt-0.5">
+                <p className="text-[11px] text-purple-900 font-medium mt-0.5">
                   Entitled to attend all classes & batches • Pass validity:{' '}
                   <span className="font-mono font-bold text-purple-950">
                     {enrollmentData.active_green_card.valid_from} → {enrollmentData.active_green_card.valid_to}
                   </span>
                   {enrollmentData.active_green_card.days_remaining !== null && (
-                    <span className="ml-1.5 px-1.5 py-0.2 rounded bg-purple-200/70 text-purple-900 font-semibold font-mono text-[10px]">
+                    <span className="ml-1.5 px-1.5 py-0.2 rounded bg-purple-200/70 text-purple-900 font-bold font-mono text-[10px]">
                       {enrollmentData.active_green_card.days_remaining}d remaining
                     </span>
                   )}
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-3 text-right text-xs">
+            <div className="flex items-center justify-between sm:justify-end gap-3 text-left sm:text-right text-xs">
               <div>
                 <span className="font-mono font-bold text-purple-950 block">
                   ₹{Number(enrollmentData.active_green_card.net_price).toFixed(2)}
@@ -827,11 +910,11 @@ export default function StudentDetailPage() {
                     Due: ₹{Number(enrollmentData.active_green_card.balance_due).toFixed(2)}
                   </span>
                 ) : (
-                  <span className="text-[10px] text-emerald-700 font-bold block">
+                  <span className="text-[10px] text-emerald-800 font-bold block">
                     ✓ Fully Paid
                   </span>
                 )}
-                <span className="text-[10px] text-purple-600 font-mono block">
+                <span className="text-[10px] text-purple-700 font-mono block">
                   Invoice #{enrollmentData.active_green_card.admission_number}
                 </span>
               </div>
@@ -853,13 +936,13 @@ export default function StudentDetailPage() {
           </div>
         )}
 
-        {/* Active Subjects Table / Empty State */}
+        {/* Active Subjects Content: Mobile Cards + Desktop Table */}
         {!enrollmentData?.active_subjects || enrollmentData.active_subjects.length === 0 ? (
-          <div className="p-6 bg-slate-50 border border-dashed border-slate-200 rounded-lg text-center space-y-2">
-            <p className="text-xs text-slate-600 font-medium">
+          <div className="p-6 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-center space-y-2">
+            <p className="text-xs text-slate-800 font-semibold">
               No currently active subjects. The student is inactive or between validity cycles.
             </p>
-            <p className="text-[11px] text-slate-400">
+            <p className="text-[11px] text-slate-600">
               Past subject history, marks, and invoices are preserved below. Renew any previous subject or add a new subject to reactivate enrollment.
             </p>
             {!isRevoked && (
@@ -877,163 +960,334 @@ export default function StudentDetailPage() {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-indigo-50/70 text-indigo-950 font-semibold border-y border-indigo-100">
-                <tr>
-                  <th className="py-2.5 px-3">Subject / Course</th>
-                  <th className="py-2.5 px-3">Assigned Faculty</th>
-                  <th className="py-2.5 px-3">Validity Coverage</th>
-                  <th className="py-2.5 px-3 text-right">Fee</th>
-                  <th className="py-2.5 px-3 text-right">Paid</th>
-                  <th className="py-2.5 px-3 text-right">Balance Due</th>
-                  <th className="py-2.5 px-3 text-center">Lifecycle Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {enrollmentData.active_subjects.map((item) => (
-                  <tr key={item.id} className="hover:bg-indigo-50/30 transition">
-                    <td className="py-2.5 px-3">
-                      <div className="font-bold text-black flex items-center gap-1.5 flex-wrap">
-                        <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <div className="space-y-3">
+            {/* Mobile Cards (Phone View) */}
+            <div className="block sm:hidden space-y-2.5">
+              {enrollmentData.active_subjects.map((item) => (
+                <div key={item.id} className="bg-slate-50/80 border border-purple-200 rounded-xl p-3 space-y-2.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-bold text-black text-xs leading-snug flex items-center gap-1.5 flex-wrap">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
                         <span>{item.subject_name}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                        <span className="text-[10px] text-odoo-800 bg-purple-100/70 border border-purple-200 px-1.5 py-0.2 rounded font-mono font-bold">
+                          #{item.admission_number}
+                        </span>
                         {item.is_renewed && (
                           <Badge variant="success" size="xs">
-                            Renewed ({item.cycle_count} Months)
+                            Renewed ({item.cycle_count} Mo)
                           </Badge>
                         )}
                       </div>
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <span className="text-[10px] text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.2 rounded font-mono font-medium">
-                          Invoice #{item.admission_number}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-2.5 px-3">
-                      <div className="text-slate-800 font-medium">
-                        {item.teacher_name || 'Unassigned / General'}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs bg-white p-2.5 rounded-lg border border-slate-200">
+                    <div>
+                      <span className="text-[10px] text-slate-700 font-semibold block uppercase">Faculty / Hall</span>
+                      <div className="text-black font-semibold truncate mt-0.5">
+                        {item.teacher_name || 'General / Unassigned'}
                       </div>
                       {item.hall_number && (
-                        <span className="text-[10px] text-slate-500 block">Hall: {item.hall_number}</span>
+                        <span className="text-[10px] text-slate-700 block font-mono">{item.hall_number}</span>
                       )}
-                    </td>
-                    <td className="py-2.5 px-3">
-                      <div className="font-mono text-slate-700 font-semibold">
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] text-slate-700 font-semibold block uppercase">Validity</span>
+                      <div className="font-mono text-black font-semibold text-[11px] mt-0.5">
                         {item.valid_from} → {item.valid_to}
                       </div>
-                      <div className="text-[10px] mt-0.5">
-                        {item.days_remaining !== null && (
-                          <span className={`px-1.5 py-0.2 rounded font-semibold ${
-                            item.days_remaining <= 3 ? 'bg-rose-100 text-rose-800' :
-                            item.days_remaining <= 7 ? 'bg-amber-100 text-amber-800' :
-                            'bg-emerald-100 text-emerald-800'
-                          }`}>
-                            {item.days_remaining}d remaining
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="py-2.5 px-3 text-right font-mono font-bold text-black">
-                      ₹{Number(item.net_price).toFixed(2)}
-                    </td>
-                    <td className="py-2.5 px-3 text-right font-mono text-emerald-700 font-semibold">
-                      ₹{Number(item.amount_collected).toFixed(2)}
-                    </td>
-                    <td className="py-2.5 px-3 text-right font-mono font-bold">
-                      <span className={Number(item.balance_due) > 0 ? 'text-rose-600' : 'text-slate-400'}>
+                      {item.days_remaining !== null && (
+                        <span className={`inline-block mt-0.5 px-1.5 py-0.2 rounded font-bold text-[10px] ${
+                          item.days_remaining <= 3 ? 'bg-rose-100 text-rose-800 border border-rose-200' :
+                          item.days_remaining <= 7 ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                          'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                        }`}>
+                          {item.days_remaining}d remaining
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Financials Strip */}
+                  <div className="flex items-center justify-between bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-mono">
+                    <div>
+                      <span className="text-[10px] text-slate-700 block font-sans font-semibold">Fee</span>
+                      <span className="font-bold text-black">₹{Number(item.net_price).toFixed(2)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-700 block font-sans font-semibold">Paid</span>
+                      <span className="font-bold text-emerald-800">₹{Number(item.amount_collected).toFixed(2)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-700 block font-sans font-semibold">Due</span>
+                      <span className={`font-bold ${Number(item.balance_due) > 0 ? 'text-rose-700' : 'text-slate-600'}`}>
                         ₹{Number(item.balance_due).toFixed(2)}
                       </span>
-                    </td>
-                    <td className="py-2.5 px-3 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        {Number(item.balance_due) > 0 && !isRevoked && (
-                          <Button
-                            size="xs"
-                            variant="success"
-                            icon={CreditCard}
-                            onClick={() => {
-                              setTargetAdmissionId(item.admission_id);
-                              setPayModalOpen(true);
-                            }}
-                            title={`Pay pending due fee of ₹${Number(item.balance_due).toFixed(0)}`}
-                          >
-                            Pay Due
-                          </Button>
-                        )}
+                    </div>
+                  </div>
+
+                  {/* Actions Grid */}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    {Number(item.balance_due) > 0 && !isRevoked && (
+                      <Button
+                        size="xs"
+                        variant="success"
+                        icon={CreditCard}
+                        onClick={() => {
+                          setTargetAdmissionId(item.admission_id);
+                          setPayModalOpen(true);
+                        }}
+                        className="flex-1 justify-center"
+                      >
+                        Pay Due
+                      </Button>
+                    )}
+                    <Button
+                      size="xs"
+                      variant="secondary"
+                      icon={RefreshCw}
+                      onClick={() => {
+                        setSelectedItemForRenew(item);
+                        setRenewModalOpen(true);
+                      }}
+                      className="flex-1 justify-center"
+                    >
+                      Renew
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="secondary"
+                      icon={ArrowLeftRight}
+                      onClick={() => {
+                        setSelectedItemForChange(item);
+                        setChangeModalOpen(true);
+                      }}
+                      className="flex-1 justify-center text-odoo-800 border-purple-200 hover:bg-purple-50"
+                      title="Change Subject"
+                    >
+                      Change
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      icon={Calendar}
+                      onClick={() => {
+                        setSelectedItemForValidity(item);
+                        setValidityModalOpen(true);
+                      }}
+                      className="flex-1 justify-center border border-slate-200"
+                    >
+                      Dates
+                    </Button>
+                    {isAdmin && (
+                      <>
                         <Button
                           size="xs"
-                          variant="secondary"
-                          icon={RefreshCw}
+                          variant="ghost"
+                          className="text-amber-800 hover:bg-amber-50 flex-1 justify-center border border-slate-200"
                           onClick={() => {
-                            setSelectedItemForRenew(item);
-                            setRenewModalOpen(true);
+                            setSelectedItemForSuspend(item);
+                            setSuspendMode('SUSPEND');
+                            setSuspendModalOpen(true);
                           }}
-                          title="Renew Subject Validity"
                         >
-                          Renew
+                          Suspend
                         </Button>
                         <Button
                           size="xs"
                           variant="ghost"
-                          icon={Calendar}
+                          className="text-rose-700 hover:bg-rose-50 flex-1 justify-center border border-slate-200"
                           onClick={() => {
-                            setSelectedItemForValidity(item);
-                            setValidityModalOpen(true);
+                            setSelectedItemForSuspend(item);
+                            setSuspendMode('DISCONTINUE');
+                            setSuspendModalOpen(true);
                           }}
-                          title="Adjust Validity Dates"
                         >
-                          Dates
+                          Stop
                         </Button>
-                        {isAdmin && (
-                          <>
-                            <Button
-                              size="xs"
-                              variant="ghost"
-                              className="text-amber-700 hover:bg-amber-50"
-                              onClick={() => {
-                                setSelectedItemForSuspend(item);
-                                setSuspendMode('SUSPEND');
-                                setSuspendModalOpen(true);
-                              }}
-                              title="Suspend Subject Temporarily"
-                            >
-                              Suspend
-                            </Button>
-                            <Button
-                              size="xs"
-                              variant="ghost"
-                              className="text-rose-600 hover:bg-rose-50"
-                              onClick={() => {
-                                setSelectedItemForSuspend(item);
-                                setSuspendMode('DISCONTINUE');
-                                setSuspendModalOpen(true);
-                              }}
-                              title="Discontinue Subject"
-                            >
-                              Stop
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </td>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table (Tablet / Desktop View) */}
+            <div className="hidden sm:block overflow-x-auto rounded-lg border border-purple-200">
+              <table className="w-full text-left text-xs min-w-[700px]">
+                <thead className="bg-purple-50/70 text-odoo-900 font-bold border-b border-purple-200">
+                  <tr>
+                    <th className="py-2.5 px-3">Subject / Course</th>
+                    <th className="py-2.5 px-3">Assigned Faculty</th>
+                    <th className="py-2.5 px-3">Validity Coverage</th>
+                    <th className="py-2.5 px-3 text-right">Fee</th>
+                    <th className="py-2.5 px-3 text-right">Paid</th>
+                    <th className="py-2.5 px-3 text-right">Balance Due</th>
+                    <th className="py-2.5 px-3 text-center">Lifecycle Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {enrollmentData.active_subjects.map((item) => (
+                    <tr key={item.id} className="hover:bg-purple-50/30 transition">
+                      <td className="py-2.5 px-3">
+                        <div className="font-bold text-black flex items-center gap-1.5 flex-wrap">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                          <span>{item.subject_name}</span>
+                          {item.is_renewed && (
+                            <Badge variant="success" size="xs">
+                              Renewed ({item.cycle_count} Months)
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <span className="text-[10px] text-odoo-800 bg-purple-50 border border-purple-200 px-1.5 py-0.2 rounded font-mono font-bold">
+                            Invoice #{item.admission_number}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <div className="text-slate-900 font-semibold">
+                          {item.teacher_name || 'Unassigned / General'}
+                        </div>
+                        {item.hall_number && (
+                          <span className="text-[10px] text-slate-700 block font-mono">Hall: {item.hall_number}</span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <div className="font-mono text-slate-900 font-bold">
+                          {item.valid_from} → {item.valid_to}
+                        </div>
+                        <div className="text-[10px] mt-0.5">
+                          {item.days_remaining !== null && (
+                            <span className={`px-1.5 py-0.2 rounded font-bold ${
+                              item.days_remaining <= 3 ? 'bg-rose-100 text-rose-800' :
+                              item.days_remaining <= 7 ? 'bg-amber-100 text-amber-800' :
+                              'bg-emerald-100 text-emerald-800'
+                            }`}>
+                              {item.days_remaining}d remaining
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono font-bold text-black">
+                        ₹{Number(item.net_price).toFixed(2)}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono text-emerald-800 font-bold">
+                        ₹{Number(item.amount_collected).toFixed(2)}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono font-bold">
+                        <span className={Number(item.balance_due) > 0 ? 'text-rose-700' : 'text-slate-500'}>
+                          ₹{Number(item.balance_due).toFixed(2)}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          {Number(item.balance_due) > 0 && !isRevoked && (
+                            <Button
+                              size="xs"
+                              variant="success"
+                              icon={CreditCard}
+                              onClick={() => {
+                                setTargetAdmissionId(item.admission_id);
+                                setPayModalOpen(true);
+                              }}
+                              title={`Pay pending due fee of ₹${Number(item.balance_due).toFixed(0)}`}
+                            >
+                              Pay Due
+                            </Button>
+                          )}
+                          <Button
+                            size="xs"
+                            variant="secondary"
+                            icon={RefreshCw}
+                            onClick={() => {
+                              setSelectedItemForRenew(item);
+                              setRenewModalOpen(true);
+                            }}
+                            title="Renew Subject Validity"
+                          >
+                            Renew
+                          </Button>
+                          <Button
+                            size="xs"
+                            variant="secondary"
+                            icon={ArrowLeftRight}
+                            onClick={() => {
+                              setSelectedItemForChange(item);
+                              setChangeModalOpen(true);
+                            }}
+                            title="Change to another subject"
+                            className="text-odoo-800 border-purple-200 hover:bg-purple-50"
+                          >
+                            Change
+                          </Button>
+                          <Button
+                            size="xs"
+                            variant="ghost"
+                            icon={Calendar}
+                            onClick={() => {
+                              setSelectedItemForValidity(item);
+                              setValidityModalOpen(true);
+                            }}
+                            title="Adjust Validity Dates"
+                          >
+                            Dates
+                          </Button>
+                          {isAdmin && (
+                            <>
+                              <Button
+                                size="xs"
+                                variant="ghost"
+                                className="text-amber-800 hover:bg-amber-50"
+                                onClick={() => {
+                                  setSelectedItemForSuspend(item);
+                                  setSuspendMode('SUSPEND');
+                                  setSuspendModalOpen(true);
+                                }}
+                                title="Suspend Subject Temporarily"
+                              >
+                                Suspend
+                              </Button>
+                              <Button
+                                size="xs"
+                                variant="ghost"
+                                className="text-rose-700 hover:bg-rose-50"
+                                onClick={() => {
+                                  setSelectedItemForSuspend(item);
+                                  setSuspendMode('DISCONTINUE');
+                                  setSuspendModalOpen(true);
+                                }}
+                                title="Discontinue Subject"
+                              >
+                                Stop
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
             {/* Active Totals Footer */}
-            <div className="bg-indigo-50/50 border-t border-indigo-100 p-3 rounded-b-lg flex flex-wrap items-center justify-between text-xs">
-              <span className="font-semibold text-indigo-950">
+            <div className="bg-purple-50/70 border border-purple-200 p-3 sm:p-3.5 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+              <span className="font-bold text-odoo-900">
                 Active Subjects Summary ({enrollmentData.active_subjects.length} active)
               </span>
-              <div className="flex items-center gap-4 font-mono font-bold">
-                <span className="text-slate-700">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-4 font-mono font-bold text-xs">
+                <span className="text-black bg-white px-2 py-0.5 rounded border border-purple-200">
                   Total Fee: ₹{Number(enrollmentData.active_totals.total_fee).toFixed(2)}
                 </span>
-                <span className="text-emerald-700">
+                <span className="text-emerald-800 bg-white px-2 py-0.5 rounded border border-emerald-200">
                   Total Paid: ₹{Number(enrollmentData.active_totals.total_paid).toFixed(2)}
                 </span>
-                <span className={Number(enrollmentData.active_totals.total_due) > 0 ? 'text-rose-600' : 'text-slate-500'}>
+                <span className={`bg-white px-2 py-0.5 rounded border ${Number(enrollmentData.active_totals.total_due) > 0 ? 'text-rose-700 border-rose-200' : 'text-slate-700 border-slate-200'}`}>
                   Outstanding Due: ₹{Number(enrollmentData.active_totals.total_due).toFixed(2)}
                 </span>
               </div>
@@ -1043,19 +1297,21 @@ export default function StudentDetailPage() {
       </div>
 
       {/* 2. Main Navigation Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-200">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 p-1 bg-slate-100 rounded-xl sm:bg-transparent sm:p-0 sm:border-b sm:border-slate-200 sm:flex sm:items-center sm:gap-2 sm:rounded-none">
         <button
           onClick={() => setActiveMainTab('HISTORY')}
-          className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold border-b-2 transition ${
+          className={`flex items-center justify-center gap-1.5 px-2.5 sm:px-4 py-2 text-xs font-bold rounded-lg sm:rounded-none sm:border-b-2 transition ${
             activeMainTab === 'HISTORY'
-              ? 'border-indigo-600 text-indigo-700 bg-white'
-              : 'border-transparent text-slate-500 hover:text-black'
+              ? 'bg-white shadow-xs text-odoo-800 sm:bg-transparent sm:shadow-none sm:border-odoo-600 sm:text-odoo-700'
+              : 'text-slate-700 hover:text-black sm:border-transparent'
           }`}
         >
-          <History className="w-3.5 h-3.5" />
-          <span>Subject & Enrollment History</span>
+          <History className="w-3.5 h-3.5 shrink-0 text-odoo-600" />
+          <span>
+            <span className="hidden sm:inline">Subject & Enrollment </span>History
+          </span>
           {enrollmentData?.historical_subjects?.length > 0 && (
-            <span className="px-1.5 py-0.2 text-[10px] rounded-full bg-slate-100 text-slate-700">
+            <span className="px-1.5 py-0.2 text-[10px] rounded-full bg-slate-200 text-black font-mono font-bold">
               {enrollmentData.historical_subjects.length}
             </span>
           )}
@@ -1063,45 +1319,68 @@ export default function StudentDetailPage() {
 
         <button
           onClick={() => setActiveMainTab('INVOICES')}
-          className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold border-b-2 transition ${
+          className={`flex items-center justify-center gap-1.5 px-2.5 sm:px-4 py-2 text-xs font-bold rounded-lg sm:rounded-none sm:border-b-2 transition ${
             activeMainTab === 'INVOICES'
-              ? 'border-indigo-600 text-indigo-700 bg-white'
-              : 'border-transparent text-slate-500 hover:text-black'
+              ? 'bg-white shadow-xs text-odoo-800 sm:bg-transparent sm:shadow-none sm:border-odoo-600 sm:text-odoo-700'
+              : 'text-slate-700 hover:text-black sm:border-transparent'
           }`}
         >
-          <FileText className="w-3.5 h-3.5" />
-          <span>Invoices & Purchases</span>
-          <span className="px-1.5 py-0.2 text-[10px] rounded-full bg-slate-100 text-slate-700">
+          <FileText className="w-3.5 h-3.5 shrink-0 text-odoo-600" />
+          <span>
+            Invoices<span className="hidden sm:inline"> & Purchases</span>
+          </span>
+          <span className="px-1.5 py-0.2 text-[10px] rounded-full bg-slate-200 text-black font-mono font-bold">
             {admTotal}
           </span>
         </button>
 
         <button
           onClick={() => setActiveMainTab('LEDGER')}
-          className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold border-b-2 transition ${
+          className={`flex items-center justify-center gap-1.5 px-2.5 sm:px-4 py-2 text-xs font-bold rounded-lg sm:rounded-none sm:border-b-2 transition ${
             activeMainTab === 'LEDGER'
-              ? 'border-indigo-600 text-indigo-700 bg-white'
-              : 'border-transparent text-slate-500 hover:text-black'
+              ? 'bg-white shadow-xs text-odoo-800 sm:bg-transparent sm:shadow-none sm:border-odoo-600 sm:text-odoo-700'
+              : 'text-slate-700 hover:text-black sm:border-transparent'
           }`}
         >
-          <Receipt className="w-3.5 h-3.5" />
-          <span>Receipts & Financial Ledger</span>
-          <span className="px-1.5 py-0.2 text-[10px] rounded-full bg-slate-100 text-slate-700">
+          <Receipt className="w-3.5 h-3.5 shrink-0 text-odoo-600" />
+          <span>
+            Ledger<span className="hidden sm:inline"> & Receipts</span>
+          </span>
+          <span className="px-1.5 py-0.2 text-[10px] rounded-full bg-slate-200 text-black font-mono font-bold">
             {txnTotal}
           </span>
+        </button>
+
+        <button
+          onClick={() => setActiveMainTab('AUDIT')}
+          className={`flex items-center justify-center gap-1.5 px-2.5 sm:px-4 py-2 text-xs font-bold rounded-lg sm:rounded-none sm:border-b-2 transition ${
+            activeMainTab === 'AUDIT'
+              ? 'bg-white shadow-xs text-odoo-800 sm:bg-transparent sm:shadow-none sm:border-odoo-600 sm:text-odoo-700'
+              : 'text-slate-700 hover:text-black sm:border-transparent'
+          }`}
+        >
+          <ShieldCheck className="w-3.5 h-3.5 shrink-0 text-odoo-600" />
+          <span>
+            <span className="hidden sm:inline">Student </span>Audit Trail
+          </span>
+          {auditTotal > 0 && (
+            <span className="px-1.5 py-0.2 text-[10px] rounded-full bg-slate-200 text-black font-mono font-bold">
+              {auditTotal}
+            </span>
+          )}
         </button>
       </div>
 
       {/* TAB 1: Subject & Enrollment History */}
       {activeMainTab === 'HISTORY' && (
-        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs space-y-3">
+        <div className="bg-white border border-slate-200 rounded-xl p-3.5 sm:p-4 shadow-xs space-y-3">
           <div className="pb-3 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
               <div className="flex items-center gap-2">
-                <History className="w-4 h-4 text-indigo-600" />
+                <History className="w-4 h-4 text-odoo-600" />
                 <h2 className="text-sm font-bold text-black">Subject & Enrollment History</h2>
               </div>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-700 font-medium mt-0.5">
                 Preserved record of all historical, expired, suspended, discontinued, or revoked subjects
               </p>
             </div>
@@ -1118,6 +1397,7 @@ export default function StudentDetailPage() {
                     )}`
                   )
                 }
+                className="w-full sm:w-auto justify-center"
               >
                 Enroll Another Subject
               </Button>
@@ -1125,97 +1405,194 @@ export default function StudentDetailPage() {
           </div>
 
           {!enrollmentData?.historical_subjects || enrollmentData.historical_subjects.length === 0 ? (
-            <div className="py-8 text-center text-xs text-slate-500">
+            <div className="py-8 text-center text-xs text-slate-700 font-medium">
               No past or inactive subject records. All current subjects (if any) are active.
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
-                  <tr>
-                    <th className="py-2.5 px-3">Subject</th>
-                    <th className="py-2.5 px-3">Faculty</th>
-                    <th className="py-2.5 px-3">Validity Period</th>
-                    <th className="py-2.5 px-3">Status</th>
-                    <th className="py-2.5 px-3">Reason / Details</th>
-                    <th className="py-2.5 px-3 text-right">Fee / Due</th>
-                    <th className="py-2.5 px-3 text-center">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {enrollmentData.historical_subjects.map((item) => {
-                    const isSuspended = item.status === 'SUSPENDED';
-                    const isDiscontinued = item.status === 'DISCONTINUED';
-                    const isCancelled = item.status === 'REVOKED' || item.status === 'CANCELLED';
-                    const isExpired = item.is_expired;
+            <div className="space-y-3">
+              {/* Mobile Cards for History */}
+              <div className="block sm:hidden space-y-2.5">
+                {enrollmentData.historical_subjects.map((item) => {
+                  const isSuspended = item.status === 'SUSPENDED';
+                  const isDiscontinued = item.status === 'DISCONTINUED';
+                  const isCancelled = item.status === 'REVOKED' || item.status === 'CANCELLED';
+                  const isExpired = item.is_expired;
 
-                    let statusBadge = (
-                      <Badge variant="neutral">{item.status}</Badge>
-                    );
-                    if (isSuspended) statusBadge = <Badge variant="warning">Suspended</Badge>;
-                    else if (isDiscontinued) statusBadge = <Badge variant="neutral">Discontinued</Badge>;
-                    else if (isCancelled) statusBadge = <Badge variant="danger">Cancelled</Badge>;
-                    else if (isExpired) statusBadge = <Badge variant="danger">Expired</Badge>;
+                  let statusBadge = (
+                    <Badge variant="neutral">{item.status}</Badge>
+                  );
+                  if (isSuspended) statusBadge = <Badge variant="warning">Suspended</Badge>;
+                  else if (isDiscontinued) statusBadge = <Badge variant="neutral">Discontinued</Badge>;
+                  else if (isCancelled) statusBadge = <Badge variant="danger">Cancelled</Badge>;
+                  else if (isExpired) statusBadge = <Badge variant="danger">Expired</Badge>;
 
-                    return (
-                      <tr key={item.id} className="hover:bg-slate-50 transition">
-                        <td className="py-2.5 px-3 font-semibold text-black">
-                          {item.subject_name}
-                          <span className="block text-[10px] text-slate-400 font-mono">
+                  return (
+                    <div key={item.id} className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="font-bold text-black text-xs">{item.subject_name}</div>
+                          <span className="text-[10px] text-slate-700 font-mono block">
                             #{item.admission_number}
                           </span>
-                        </td>
-                        <td className="py-2.5 px-3 text-slate-600">
-                          {item.teacher_name || '—'}
-                        </td>
-                        <td className="py-2.5 px-3 font-mono text-slate-600">
-                          {item.valid_from || '—'} → {item.valid_to || '—'}
-                        </td>
-                        <td className="py-2.5 px-3">{statusBadge}</td>
-                        <td className="py-2.5 px-3 text-slate-600 max-w-xs truncate">
-                          {item.lifecycle_reason || '—'}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono">
-                          <span className="text-black font-semibold">₹{Number(item.net_price).toFixed(2)}</span>
-                          {Number(item.balance_due) > 0 && (
-                            <span className="block text-[10px] text-rose-600 font-bold">
-                              Due: ₹{Number(item.balance_due).toFixed(2)}
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-3 text-center">
-                          <div className="flex items-center justify-center gap-1.5">
-                            {isSuspended && isAdmin && (
-                              <Button
-                                size="xs"
-                                variant="success"
-                                icon={PlayCircle}
-                                loading={resumingItemId === item.id}
-                                onClick={() => handleResumeItem(item)}
-                              >
-                                Resume
-                              </Button>
-                            )}
-                            {!isCancelled && (
-                              <Button
-                                size="xs"
-                                variant="secondary"
-                                icon={RefreshCw}
-                                onClick={() => {
-                                  setSelectedItemForRenew(item);
-                                  setRenewModalOpen(true);
-                                }}
-                              >
-                                Renew
-                              </Button>
-                            )}
+                        </div>
+                        <div>{statusBadge}</div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-xs bg-white p-2 rounded-lg border border-slate-200">
+                        <div>
+                          <span className="text-[10px] text-slate-700 font-semibold block uppercase">Faculty</span>
+                          <span className="text-black font-semibold truncate block">{item.teacher_name || '—'}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-700 font-semibold block uppercase">Validity</span>
+                          <span className="font-mono text-black font-semibold text-[11px] block">
+                            {item.valid_from || '—'} → {item.valid_to || '—'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {item.lifecycle_reason && (
+                        <div className="text-[11px] text-slate-700 bg-white p-2 rounded-lg border border-slate-200">
+                          <span className="font-semibold block text-[10px] uppercase text-slate-700">Reason / Notes</span>
+                          {item.lifecycle_reason}
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between text-xs font-mono bg-white p-2 rounded-lg border border-slate-200">
+                        <div>
+                          <span className="text-[10px] text-slate-700 font-sans font-semibold block">Fee</span>
+                          <span className="font-bold text-black">₹{Number(item.net_price).toFixed(2)}</span>
+                        </div>
+                        {Number(item.balance_due) > 0 && (
+                          <div className="text-right">
+                            <span className="text-[10px] text-slate-700 font-sans font-semibold block">Due</span>
+                            <span className="font-bold text-rose-700">₹{Number(item.balance_due).toFixed(2)}</span>
                           </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5 pt-1">
+                        {isSuspended && isAdmin && (
+                          <Button
+                            size="xs"
+                            variant="success"
+                            icon={PlayCircle}
+                            loading={resumingItemId === item.id}
+                            onClick={() => handleResumeItem(item)}
+                            className="flex-1 justify-center"
+                          >
+                            Resume
+                          </Button>
+                        )}
+                        {!isCancelled && (
+                          <Button
+                            size="xs"
+                            variant="secondary"
+                            icon={RefreshCw}
+                            onClick={() => {
+                              setSelectedItemForRenew(item);
+                              setRenewModalOpen(true);
+                            }}
+                            className="flex-1 justify-center"
+                          >
+                            Renew
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Desktop Table for History */}
+              <div className="hidden sm:block overflow-x-auto rounded-lg border border-slate-200">
+                <table className="w-full text-left text-xs min-w-[700px]">
+                  <thead className="bg-slate-100 text-slate-800 font-bold border-b border-slate-200">
+                    <tr>
+                      <th className="py-2.5 px-3">Subject</th>
+                      <th className="py-2.5 px-3">Faculty</th>
+                      <th className="py-2.5 px-3">Validity Period</th>
+                      <th className="py-2.5 px-3">Status</th>
+                      <th className="py-2.5 px-3">Reason / Details</th>
+                      <th className="py-2.5 px-3 text-right">Fee / Due</th>
+                      <th className="py-2.5 px-3 text-center">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {enrollmentData.historical_subjects.map((item) => {
+                      const isSuspended = item.status === 'SUSPENDED';
+                      const isDiscontinued = item.status === 'DISCONTINUED';
+                      const isCancelled = item.status === 'REVOKED' || item.status === 'CANCELLED';
+                      const isExpired = item.is_expired;
+
+                      let statusBadge = (
+                        <Badge variant="neutral">{item.status}</Badge>
+                      );
+                      if (isSuspended) statusBadge = <Badge variant="warning">Suspended</Badge>;
+                      else if (isDiscontinued) statusBadge = <Badge variant="neutral">Discontinued</Badge>;
+                      else if (isCancelled) statusBadge = <Badge variant="danger">Cancelled</Badge>;
+                      else if (isExpired) statusBadge = <Badge variant="danger">Expired</Badge>;
+
+                      return (
+                        <tr key={item.id} className="hover:bg-slate-50 transition">
+                          <td className="py-2.5 px-3 font-bold text-black">
+                            {item.subject_name}
+                            <span className="block text-[10px] text-slate-700 font-mono">
+                              #{item.admission_number}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-800 font-medium">
+                            {item.teacher_name || '—'}
+                          </td>
+                          <td className="py-2.5 px-3 font-mono text-slate-800 font-medium">
+                            {item.valid_from || '—'} → {item.valid_to || '—'}
+                          </td>
+                          <td className="py-2.5 px-3">{statusBadge}</td>
+                          <td className="py-2.5 px-3 text-slate-700 max-w-xs truncate">
+                            {item.lifecycle_reason || '—'}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono">
+                            <span className="text-black font-bold">₹{Number(item.net_price).toFixed(2)}</span>
+                            {Number(item.balance_due) > 0 && (
+                              <span className="block text-[10px] text-rose-700 font-bold">
+                                Due: ₹{Number(item.balance_due).toFixed(2)}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              {isSuspended && isAdmin && (
+                                <Button
+                                  size="xs"
+                                  variant="success"
+                                  icon={PlayCircle}
+                                  loading={resumingItemId === item.id}
+                                  onClick={() => handleResumeItem(item)}
+                                >
+                                  Resume
+                                </Button>
+                              )}
+                              {!isCancelled && (
+                                <Button
+                                  size="xs"
+                                  variant="secondary"
+                                  icon={RefreshCw}
+                                  onClick={() => {
+                                    setSelectedItemForRenew(item);
+                                    setRenewModalOpen(true);
+                                  }}
+                                >
+                                  Renew
+                                </Button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
@@ -1223,11 +1600,11 @@ export default function StudentDetailPage() {
 
       {/* TAB 2: Invoices & Billing History */}
       {activeMainTab === 'INVOICES' && (
-      <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs space-y-3">
+      <div className="bg-white border border-slate-200 rounded-xl p-3.5 sm:p-4 shadow-xs space-y-3">
         <div className="pb-3 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <h2 className="text-sm font-bold text-black">Invoices & Billing History</h2>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-700 font-medium mt-0.5">
               Permanent financial ledger of all admission invoices, fee payments, and printable receipts
             </p>
           </div>
@@ -1244,6 +1621,7 @@ export default function StudentDetailPage() {
                   )}`
                 )
               }
+              className="w-full sm:w-auto justify-center"
             >
               New Admission / Invoice
             </Button>
@@ -1252,9 +1630,9 @@ export default function StudentDetailPage() {
 
         {/* Admissions Search & Filter Controls */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-1">
-          <div className="flex items-center gap-2 flex-1 max-w-md">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-1 max-w-lg">
             <div className="relative flex-1">
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
               <input
                 type="text"
                 placeholder="Search purchase #, course, or teacher..."
@@ -1266,7 +1644,7 @@ export default function StudentDetailPage() {
                     fetchAdmissionsData(1, admPageSize, admSearch, admStatusFilter);
                   }
                 }}
-                className="w-full pl-8 pr-7 py-1 text-xs border border-slate-300 rounded-md bg-white text-black placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="w-full pl-8 pr-7 py-1.5 text-xs border border-slate-300 rounded-lg bg-white text-black placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600"
               />
               {admSearch && (
                 <button
@@ -1275,7 +1653,7 @@ export default function StudentDetailPage() {
                     setAdmPage(1);
                     fetchAdmissionsData(1, admPageSize, '', admStatusFilter);
                   }}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-black"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-black"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -1288,7 +1666,7 @@ export default function StudentDetailPage() {
                 setAdmStatusFilter(e.target.value);
                 setAdmPage(1);
               }}
-              className="text-xs border border-slate-300 rounded-md px-2 py-1 bg-white text-black focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="text-xs border border-slate-300 rounded-lg px-2.5 py-1.5 bg-white text-black font-medium focus:outline-none focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600"
             >
               <option value="ALL">All Statuses</option>
               <option value="PAID">Fully Paid</option>
@@ -1298,266 +1676,457 @@ export default function StudentDetailPage() {
             </select>
           </div>
 
-          <div className="text-xs text-slate-500">
-            Total Purchases: <strong className="text-black font-mono">{admTotal}</strong>
+          <div className="text-xs text-slate-700 font-medium">
+            Total Purchases: <strong className="text-black font-mono font-bold">{admTotal}</strong>
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          {admLoading ? (
-            <div className="py-8 text-center text-xs text-slate-500 space-y-2">
-              <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-              <p>Loading course purchases...</p>
-            </div>
-          ) : admissions.length === 0 ? (
-            <div className="py-8 text-center text-xs text-slate-500">
-              No course purchases found matching your filter criteria.
-            </div>
-          ) : (
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
-                <tr>
-                  <th className="p-2">Invoice / Admission ID</th>
-                  <th className="p-2">Invoice Date</th>
-                  <th className="p-2">Billed Courses & Items</th>
-                  <th className="p-2 text-right">Total Payable</th>
-                  <th className="p-2 text-right">Paid</th>
-                  <th className="p-2 text-right text-rose-700">Due</th>
-                  <th className="p-2 text-center">Payment Status</th>
-                  <th className="p-2 text-right">Slips & Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {admissions.map((adm) => {
-                  const isBatchCancelled = adm.status === 'REVOKED' || adm.status === 'CANCELLED';
-                  const validity = getValidityStatus(adm);
-                  return (
-                    <tr key={adm.id} className={`hover:bg-slate-50 ${isBatchCancelled ? 'bg-rose-50/40 opacity-85' : ''}`}>
-                      <td className="p-2 font-mono font-bold text-black">
-                        <div>{adm.purchase_transaction_id || adm.admission_number}</div>
-                        {isBatchCancelled && (
-                          <span className="text-[10px] text-rose-700 font-normal block">
-                            (Batch Cancelled)
-                          </span>
-                        )}
-                      </td>
-                      <td className="p-2 text-slate-600">
-                        <span className="font-semibold text-black block">{adm.admission_date}</span>
+        {admLoading ? (
+          <div className="py-8 text-center text-xs text-slate-700 space-y-2">
+            <div className="w-5 h-5 border-2 border-odoo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+            <p className="font-semibold">Loading course purchases...</p>
+          </div>
+        ) : admissions.length === 0 ? (
+          <div className="py-8 text-center text-xs text-slate-700 font-medium">
+            No course purchases found matching your filter criteria.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {/* Mobile Cards for Invoices */}
+            <div className="block sm:hidden space-y-3">
+              {admissions.map((adm) => {
+                const isBatchCancelled = adm.status === 'REVOKED' || adm.status === 'CANCELLED';
+                const validity = getValidityStatus(adm);
+                return (
+                  <div
+                    key={adm.id}
+                    className={`border rounded-xl p-3 space-y-2.5 ${
+                      isBatchCancelled ? 'bg-rose-50/50 border-rose-200' : 'bg-slate-50 border-slate-200'
+                    }`}
+                  >
+                    {/* Header */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <span className="font-mono font-bold text-black text-xs block">
+                          {adm.purchase_transaction_id || adm.admission_number}
+                        </span>
+                        <span className="text-[11px] text-slate-700 font-medium block">
+                          {adm.admission_date}
+                        </span>
+                      </div>
+                      <div className="text-right space-y-1">
                         {isBatchCancelled ? (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-rose-50 text-rose-800 border-rose-200 mt-1">
-                            {validity.subtext}
-                          </span>
-                        ) : adm.valid_from && adm.valid_to ? (
-                          <div className="mt-1 space-y-0.5">
-                            <span className="text-[10px] text-slate-700 font-mono block">
-                              {adm.valid_from} &rarr; {adm.valid_to}
-                            </span>
-                            <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.2 rounded border ${
-                              validity.badgeVariant === 'success'
-                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                                : validity.badgeVariant === 'warning'
-                                ? 'bg-amber-50 text-amber-800 border-amber-300'
-                                : 'bg-rose-50 text-rose-800 border-rose-200'
-                            }`}>
-                              {validity.badgeVariant === 'warning' && <Clock className="w-2.5 h-2.5" />}
-                              {validity.subtext}
-                            </span>
-                          </div>
+                          <Badge size="xs" variant="danger">
+                            CANCELLED
+                          </Badge>
                         ) : (
-                          <span className="text-[10px] text-slate-500 font-mono">Standard Validity</span>
-                        )}
-                      </td>
-                      <td className="p-2">
-                        <div className="space-y-1">
-                          {(adm.items || []).map((itm, i) => (
-                            <div
-                              key={i}
-                              className="bg-slate-50 border border-slate-200 text-black px-2 py-0.5 rounded text-[11px]"
-                            >
-                              <span className="font-semibold text-indigo-950 block">{itm.item_name_snapshot}</span>
-                              {(itm.teacher_name_snapshot || itm.hall_number_snapshot) && (
-                                <span className="text-[10px] text-slate-600 block">
-                                  {itm.teacher_name_snapshot && `Faculty: ${itm.teacher_name_snapshot}`}
-                                  {itm.teacher_name_snapshot && itm.hall_number_snapshot && ' • '}
-                                  {itm.hall_number_snapshot && `Hall: ${itm.hall_number_snapshot}`}
-                                </span>
-                              )}
-                              {itm.valid_from && itm.valid_to && (
-                                <span className="text-[10px] text-emerald-800 font-mono block">
-                                  Period: {itm.valid_from} to {itm.valid_to}
-                                </span>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </td>
-                      <td className="p-2 text-right font-mono font-bold text-black">
-                        ₹{Number(adm.total_payable).toFixed(2)}
-                      </td>
-                      <td className="p-2 text-right font-mono text-emerald-800 font-semibold">
-                        ₹{Number(adm.amount_paid).toFixed(2)}
-                      </td>
-                      <td className="p-2 text-right font-mono text-rose-700 font-bold">
-                        {isBatchCancelled ? (
-                          <span className="line-through text-slate-400">₹0.00</span>
-                        ) : (
-                          `₹${Number(adm.balance_due).toFixed(2)}`
-                        )}
-                      </td>
-                      <td className="p-2 text-center">
-                        {isBatchCancelled ? (
-                          <div className="space-y-0.5">
-                            <Badge size="xs" variant="danger">
-                              CANCELLED
-                            </Badge>
-                            {adm.revocation_reason && (
-                              <div
-                                className="text-[10px] text-rose-700 italic max-w-[120px] truncate mx-auto"
-                                title={adm.revocation_reason}
-                              >
-                                {adm.revocation_reason}
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="space-y-1">
-                            <Badge
-                              size="xs"
-                              variant={
-                                adm.payment_status === 'PAID'
-                                  ? 'success'
-                                  : adm.payment_status === 'PARTIALLY_PAID'
-                                  ? 'warning'
-                                  : 'danger'
-                              }
-                            >
-                              {adm.payment_status === 'PARTIALLY_PAID' ? 'PARTIAL PAID' : adm.payment_status}
-                            </Badge>
-                            {validity.isExpired ? (
-                              <Badge size="xs" variant="danger">
-                                EXPIRED
-                              </Badge>
-                            ) : validity.isExpiringSoon ? (
-                              <Badge size="xs" variant="warning">
-                                EXPIRING
-                              </Badge>
-                            ) : null}
-                          </div>
-                        )}
-                      </td>
-                      <td className="p-2 text-right">
-                        <div className="flex flex-wrap items-center justify-end gap-1">
-                          {/* All Slips (Multi-Slip Picker & Full Statement) */}
-                          <Button
+                          <Badge
                             size="xs"
-                            variant="secondary"
-                            icon={FileText}
-                            onClick={() => {
-                              setSelectedAdmissionForSlips(adm);
-                              setAllSlipsModalOpen(true);
-                            }}
-                            title="View all admission invoices, payment receipts and refund vouchers"
+                            variant={
+                              adm.payment_status === 'PAID'
+                                ? 'success'
+                                : adm.payment_status === 'PARTIALLY_PAID'
+                                ? 'warning'
+                                : 'danger'
+                            }
                           >
-                            All Slips ▾
-                          </Button>
+                            {adm.payment_status === 'PARTIALLY_PAID' ? 'PARTIAL PAID' : adm.payment_status}
+                          </Badge>
+                        )}
+                        {validity.subtext && !isBatchCancelled && (
+                          <div className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${
+                            validity.badgeVariant === 'success'
+                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                              : validity.badgeVariant === 'warning'
+                              ? 'bg-amber-50 text-amber-800 border-amber-300'
+                              : 'bg-rose-50 text-rose-800 border-rose-200'
+                          }`}>
+                            {validity.subtext}
+                          </div>
+                        )}
+                      </div>
+                    </div>
 
-                          {/* Collect Due Fee (2nd Payment) if pending */}
-                          {Number(adm.balance_due) > 0 && !isBatchCancelled && !isRevoked && (
+                    {/* Courses / Items */}
+                    <div className="space-y-1.5">
+                      {(adm.items || []).map((itm, i) => (
+                        <div
+                          key={i}
+                          className="bg-white border border-slate-200 text-black p-2 rounded-lg text-xs"
+                        >
+                          <span className="font-bold text-odoo-900 block">{itm.item_name_snapshot}</span>
+                          {(itm.teacher_name_snapshot || itm.hall_number_snapshot) && (
+                            <span className="text-[11px] text-slate-700 font-medium block mt-0.5">
+                              {itm.teacher_name_snapshot && `Faculty: ${itm.teacher_name_snapshot}`}
+                              {itm.teacher_name_snapshot && itm.hall_number_snapshot && ' • '}
+                              {itm.hall_number_snapshot && `Hall: ${itm.hall_number_snapshot}`}
+                            </span>
+                          )}
+                          {itm.valid_from && itm.valid_to && (
+                            <span className="text-[10px] text-emerald-800 font-mono font-bold block mt-0.5">
+                              Period: {itm.valid_from} to {itm.valid_to}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Financial Summary */}
+                    <div className="flex items-center justify-between bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-mono">
+                      <div>
+                        <span className="text-[10px] text-slate-700 font-sans font-semibold block">Payable</span>
+                        <span className="font-bold text-black">₹{Number(adm.total_payable).toFixed(2)}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-700 font-sans font-semibold block">Paid</span>
+                        <span className="font-bold text-emerald-800">₹{Number(adm.amount_paid).toFixed(2)}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-700 font-sans font-semibold block">Due</span>
+                        <span className={`font-bold ${isBatchCancelled ? 'line-through text-slate-400' : Number(adm.balance_due) > 0 ? 'text-rose-700' : 'text-slate-600'}`}>
+                          ₹{isBatchCancelled ? '0.00' : Number(adm.balance_due).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                      <Button
+                        size="xs"
+                        variant="secondary"
+                        icon={FileText}
+                        onClick={() => {
+                          setSelectedAdmissionForSlips(adm);
+                          setAllSlipsModalOpen(true);
+                        }}
+                        className="flex-1 justify-center"
+                      >
+                        All Slips ▾
+                      </Button>
+
+                      {Number(adm.balance_due) > 0 && !isBatchCancelled && !isRevoked && (
+                        <Button
+                          size="xs"
+                          variant="success"
+                          icon={CreditCard}
+                          onClick={() => {
+                            setTargetAdmissionId(adm.id);
+                            setPayModalOpen(true);
+                          }}
+                          className="flex-1 justify-center"
+                        >
+                          Pay Due (₹{Number(adm.balance_due).toFixed(0)})
+                        </Button>
+                      )}
+
+                      {isBatchCancelled ? (
+                        <>
+                          {isAdmin && Number(adm.amount_paid) > 0 && (
                             <Button
                               size="xs"
-                              variant="success"
-                              icon={CreditCard}
+                              variant="danger"
                               onClick={() => {
-                                setTargetAdmissionId(adm.id);
-                                setPayModalOpen(true);
+                                setSelectedAdmissionForRefund(adm);
+                                setRefundModalOpen(true);
                               }}
-                              title="Collect outstanding balance (2nd Payment)"
+                              className="flex-1 justify-center"
                             >
-                              Pay Due (₹{Number(adm.balance_due).toFixed(0)})
+                              Refund
                             </Button>
                           )}
-
-                          {/* If Cancelled: Offer Refund (if paid) and Restore Batch */}
-                          {isBatchCancelled ? (
-                            <>
-                              {isAdmin && Number(adm.amount_paid) > 0 && (
-                                <Button
-                                  size="xs"
-                                  variant="danger"
-                                  onClick={() => {
-                                    setSelectedAdmissionForRefund(adm);
-                                    setRefundModalOpen(true);
-                                  }}
-                                  title="Issue refund on cancelled batch"
-                                >
-                                  Refund
-                                </Button>
-                              )}
-                              {isAdmin && (
-                                <Button
-                                  size="xs"
-                                  variant="primary"
-                                  icon={RotateCcw}
-                                  loading={restoringBatchId === adm.id}
-                                  onClick={() => handleRestoreBatch(adm)}
-                                  title="Restore cancelled batch to Active"
-                                >
-                                  Restore Batch
-                                </Button>
-                              )}
-                            </>
-                          ) : (
-                            <>
-                              {/* Cancel Batch Button (Admin Only) */}
-                              {isAdmin && (
-                                <Button
-                                  size="xs"
-                                  variant="danger"
-                                  onClick={() => {
-                                    setSelectedAdmissionForBatchRevoke(adm);
-                                    setRevokeBatchModalOpen(true);
-                                  }}
-                                  title="Cancel student batch enrollment"
-                                >
-                                  Cancel Batch
-                                </Button>
-                              )}
-
-                              {/* Issue Refund Button (Admin Only) */}
-                              {isAdmin && Number(adm.amount_paid) > 0 && (
-                                <Button
-                                  size="xs"
-                                  variant="secondary"
-                                  onClick={() => {
-                                    setSelectedAdmissionForRefund(adm);
-                                    setRefundModalOpen(true);
-                                  }}
-                                  title="Issue refund"
-                                >
-                                  Refund
-                                </Button>
-                              )}
-                            </>
+                          {isAdmin && (
+                            <Button
+                              size="xs"
+                              variant="primary"
+                              icon={RotateCcw}
+                              loading={restoringBatchId === adm.id}
+                              onClick={() => handleRestoreBatch(adm)}
+                              className="flex-1 justify-center"
+                            >
+                              Restore
+                            </Button>
                           )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
+                        </>
+                      ) : (
+                        <>
+                          {isAdmin && (
+                            <Button
+                              size="xs"
+                              variant="danger"
+                              onClick={() => {
+                                setSelectedAdmissionForBatchRevoke(adm);
+                                setRevokeBatchModalOpen(true);
+                              }}
+                              className="flex-1 justify-center"
+                            >
+                              Cancel Batch
+                            </Button>
+                          )}
+                          {isAdmin && Number(adm.amount_paid) > 0 && (
+                            <Button
+                              size="xs"
+                              variant="secondary"
+                              onClick={() => {
+                                setSelectedAdmissionForRefund(adm);
+                                setRefundModalOpen(true);
+                              }}
+                              className="flex-1 justify-center"
+                            >
+                              Refund
+                            </Button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop Table for Invoices */}
+            <div className="hidden sm:block overflow-x-auto rounded-lg border border-slate-200">
+              <table className="w-full text-left text-xs min-w-[750px]">
+                <thead className="bg-slate-100 text-slate-800 font-bold border-b border-slate-200">
+                  <tr>
+                    <th className="p-2.5">Invoice / Admission ID</th>
+                    <th className="p-2.5">Invoice Date</th>
+                    <th className="p-2.5">Billed Courses & Items</th>
+                    <th className="p-2.5 text-right">Total Payable</th>
+                    <th className="p-2.5 text-right">Paid</th>
+                    <th className="p-2.5 text-right text-rose-700">Due</th>
+                    <th className="p-2.5 text-center">Payment Status</th>
+                    <th className="p-2.5 text-right">Slips & Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {admissions.map((adm) => {
+                    const isBatchCancelled = adm.status === 'REVOKED' || adm.status === 'CANCELLED';
+                    const validity = getValidityStatus(adm);
+                    return (
+                      <tr key={adm.id} className={`hover:bg-slate-50 transition ${isBatchCancelled ? 'bg-rose-50/40 opacity-85' : ''}`}>
+                        <td className="p-2.5 font-mono font-bold text-black">
+                          <div>{adm.purchase_transaction_id || adm.admission_number}</div>
+                          {isBatchCancelled && (
+                            <span className="text-[10px] text-rose-700 font-semibold block">
+                              (Batch Cancelled)
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-2.5 text-slate-800">
+                          <span className="font-bold text-black block">{adm.admission_date}</span>
+                          {isBatchCancelled ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded border bg-rose-50 text-rose-800 border-rose-200 mt-1">
+                              {validity.subtext}
+                            </span>
+                          ) : adm.valid_from && adm.valid_to ? (
+                            <div className="mt-1 space-y-0.5">
+                              <span className="text-[10px] text-slate-800 font-mono font-semibold block">
+                                {adm.valid_from} &rarr; {adm.valid_to}
+                              </span>
+                              <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.2 rounded border ${
+                                validity.badgeVariant === 'success'
+                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                  : validity.badgeVariant === 'warning'
+                                  ? 'bg-amber-50 text-amber-800 border-amber-300'
+                                  : 'bg-rose-50 text-rose-800 border-rose-200'
+                              }`}>
+                                {validity.badgeVariant === 'warning' && <Clock className="w-2.5 h-2.5" />}
+                                {validity.subtext}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-slate-700 font-mono font-medium">Standard Validity</span>
+                          )}
+                        </td>
+                        <td className="p-2.5">
+                          <div className="space-y-1">
+                            {(adm.items || []).map((itm, i) => (
+                              <div
+                                key={i}
+                                className="bg-slate-50 border border-slate-200 text-black px-2 py-0.5 rounded text-[11px]"
+                              >
+                                <span className="font-bold text-odoo-900 block">{itm.item_name_snapshot}</span>
+                                {(itm.teacher_name_snapshot || itm.hall_number_snapshot) && (
+                                  <span className="text-[10px] text-slate-700 font-medium block">
+                                    {itm.teacher_name_snapshot && `Faculty: ${itm.teacher_name_snapshot}`}
+                                    {itm.teacher_name_snapshot && itm.hall_number_snapshot && ' • '}
+                                    {itm.hall_number_snapshot && `Hall: ${itm.hall_number_snapshot}`}
+                                  </span>
+                                )}
+                                {itm.valid_from && itm.valid_to && (
+                                  <span className="text-[10px] text-emerald-800 font-mono font-bold block">
+                                    Period: {itm.valid_from} to {itm.valid_to}
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="p-2.5 text-right font-mono font-bold text-black">
+                          ₹{Number(adm.total_payable).toFixed(2)}
+                        </td>
+                        <td className="p-2.5 text-right font-mono text-emerald-800 font-bold">
+                          ₹{Number(adm.amount_paid).toFixed(2)}
+                        </td>
+                        <td className="p-2.5 text-right font-mono text-rose-700 font-bold">
+                          {isBatchCancelled ? (
+                            <span className="line-through text-slate-400">₹0.00</span>
+                          ) : (
+                            `₹${Number(adm.balance_due).toFixed(2)}`
+                          )}
+                        </td>
+                        <td className="p-2.5 text-center">
+                          {isBatchCancelled ? (
+                            <div className="space-y-0.5">
+                              <Badge size="xs" variant="danger">
+                                CANCELLED
+                              </Badge>
+                              {adm.revocation_reason && (
+                                <div
+                                  className="text-[10px] text-rose-700 italic max-w-[120px] truncate mx-auto"
+                                  title={adm.revocation_reason}
+                                >
+                                  {adm.revocation_reason}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="space-y-1">
+                              <Badge
+                                size="xs"
+                                variant={
+                                  adm.payment_status === 'PAID'
+                                    ? 'success'
+                                    : adm.payment_status === 'PARTIALLY_PAID'
+                                    ? 'warning'
+                                    : 'danger'
+                                }
+                              >
+                                {adm.payment_status === 'PARTIALLY_PAID' ? 'PARTIAL PAID' : adm.payment_status}
+                              </Badge>
+                              {validity.isExpired ? (
+                                <Badge size="xs" variant="danger">
+                                  EXPIRED
+                                </Badge>
+                              ) : validity.isExpiringSoon ? (
+                                <Badge size="xs" variant="warning">
+                                  EXPIRING
+                                </Badge>
+                              ) : null}
+                            </div>
+                          )}
+                        </td>
+                        <td className="p-2.5 text-right">
+                          <div className="flex flex-wrap items-center justify-end gap-1">
+                            {/* All Slips */}
+                            <Button
+                              size="xs"
+                              variant="secondary"
+                              icon={FileText}
+                              onClick={() => {
+                                setSelectedAdmissionForSlips(adm);
+                                setAllSlipsModalOpen(true);
+                              }}
+                              title="View all admission invoices, payment receipts and refund vouchers"
+                            >
+                              All Slips ▾
+                            </Button>
+
+                            {/* Collect Due Fee if pending */}
+                            {Number(adm.balance_due) > 0 && !isBatchCancelled && !isRevoked && (
+                              <Button
+                                size="xs"
+                                variant="success"
+                                icon={CreditCard}
+                                onClick={() => {
+                                  setTargetAdmissionId(adm.id);
+                                  setPayModalOpen(true);
+                                }}
+                                title="Collect outstanding balance (2nd Payment)"
+                              >
+                                Pay Due (₹{Number(adm.balance_due).toFixed(0)})
+                              </Button>
+                            )}
+
+                            {/* If Cancelled: Offer Refund and Restore Batch */}
+                            {isBatchCancelled ? (
+                              <>
+                                {isAdmin && Number(adm.amount_paid) > 0 && (
+                                  <Button
+                                    size="xs"
+                                    variant="danger"
+                                    onClick={() => {
+                                      setSelectedAdmissionForRefund(adm);
+                                      setRefundModalOpen(true);
+                                    }}
+                                    title="Issue refund on cancelled batch"
+                                  >
+                                    Refund
+                                  </Button>
+                                )}
+                                {isAdmin && (
+                                  <Button
+                                    size="xs"
+                                    variant="primary"
+                                    icon={RotateCcw}
+                                    loading={restoringBatchId === adm.id}
+                                    onClick={() => handleRestoreBatch(adm)}
+                                    title="Restore cancelled batch to Active"
+                                  >
+                                    Restore Batch
+                                  </Button>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                {isAdmin && (
+                                  <Button
+                                    size="xs"
+                                    variant="danger"
+                                    onClick={() => {
+                                      setSelectedAdmissionForBatchRevoke(adm);
+                                      setRevokeBatchModalOpen(true);
+                                    }}
+                                    title="Cancel student batch enrollment"
+                                  >
+                                    Cancel Batch
+                                  </Button>
+                                )}
+                                {isAdmin && Number(adm.amount_paid) > 0 && (
+                                  <Button
+                                    size="xs"
+                                    variant="secondary"
+                                    onClick={() => {
+                                      setSelectedAdmissionForRefund(adm);
+                                      setRefundModalOpen(true);
+                                    }}
+                                    title="Issue refund"
+                                  >
+                                    Refund
+                                  </Button>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* Admissions Backend Pagination Controls */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-2 pt-3 border-t border-slate-200 text-xs">
-          <div className="flex items-center gap-2 text-slate-600">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-3 border-t border-slate-200 text-xs">
+          <div className="flex items-center gap-2 text-slate-700 font-medium">
             <span>
               Showing {admTotal === 0 ? 0 : (admPage - 1) * admPageSize + 1} to{' '}
-              {Math.min(admPage * admPageSize, admTotal)} of {admTotal} course purchases
+              {Math.min(admPage * admPageSize, admTotal)} of {admTotal}
             </span>
             <span className="text-slate-300">•</span>
-            <label className="flex items-center gap-1 text-slate-500 text-[11px]">
+            <label className="flex items-center gap-1 text-slate-700 text-[11px] font-semibold">
               Per page:
               <select
                 value={admPageSize}
@@ -1565,7 +2134,7 @@ export default function StudentDetailPage() {
                   setAdmPageSize(Number(e.target.value));
                   setAdmPage(1);
                 }}
-                className="border border-slate-200 rounded px-1.5 py-0.5 bg-white text-black font-semibold text-xs"
+                className="border border-slate-300 rounded px-1.5 py-0.5 bg-white text-black font-bold text-xs"
               >
                 <option value={5}>5</option>
                 <option value={10}>10</option>
@@ -1578,7 +2147,7 @@ export default function StudentDetailPage() {
             <button
               onClick={() => setAdmPage(1)}
               disabled={admPage <= 1 || admLoading}
-              className="p-1 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="p-1 rounded-md border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
               title="First Page"
             >
               <ChevronsLeft className="w-3.5 h-3.5 text-slate-700" />
@@ -1586,18 +2155,18 @@ export default function StudentDetailPage() {
             <button
               onClick={() => setAdmPage((p) => Math.max(1, p - 1))}
               disabled={admPage <= 1 || admLoading}
-              className="p-1 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="p-1 rounded-md border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
               title="Previous Page"
             >
               <ChevronLeft className="w-3.5 h-3.5 text-slate-700" />
             </button>
-            <span className="px-2 font-bold text-black">
+            <span className="px-2 font-bold text-black text-xs">
               Page {admPage} of {Math.max(1, admTotalPages)}
             </span>
             <button
               onClick={() => setAdmPage((p) => Math.min(admTotalPages, p + 1))}
               disabled={admPage >= admTotalPages || admLoading}
-              className="p-1 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="p-1 rounded-md border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
               title="Next Page"
             >
               <ChevronRight className="w-3.5 h-3.5 text-slate-700" />
@@ -1605,7 +2174,7 @@ export default function StudentDetailPage() {
             <button
               onClick={() => setAdmPage(admTotalPages)}
               disabled={admPage >= admTotalPages || admLoading}
-              className="p-1 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="p-1 rounded-md border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
               title="Last Page"
             >
               <ChevronsRight className="w-3.5 h-3.5 text-slate-700" />
@@ -1617,26 +2186,26 @@ export default function StudentDetailPage() {
 
       {/* TAB 3: Financial Transactions & Receipts Ledger */}
       {activeMainTab === 'LEDGER' && (
-      <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs space-y-3">
+      <div className="bg-white border border-slate-200 rounded-xl p-3.5 sm:p-4 shadow-xs space-y-3">
         <div className="pb-3 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <div className="flex items-center gap-2">
-              <Receipt className="w-4 h-4 text-indigo-600" />
+              <Receipt className="w-4 h-4 text-odoo-600" />
               <h2 className="text-sm font-bold text-black">
                 Financial Transactions & Receipts Ledger
               </h2>
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-700 font-medium mt-0.5">
               Audit trail of all receipts collected (initial payment, 2nd payments / due settlement) and refund vouchers with official slips
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="font-mono bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded font-bold">
+            <span className="font-mono bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-0.5 rounded-lg font-bold">
               Total Receipts: ₹{transactions.filter((t) => t.type === 'PAYMENT').reduce((acc, t) => acc + (Number(t.amount) || 0), 0).toFixed(2)}
             </span>
             {transactions.some((t) => t.type === 'REFUND') && (
-              <span className="font-mono bg-rose-50 text-rose-800 border border-rose-200 px-2 py-0.5 rounded font-bold">
+              <span className="font-mono bg-rose-50 text-rose-800 border border-rose-200 px-2.5 py-0.5 rounded-lg font-bold">
                 Total Refunded: ₹{Math.abs(transactions.filter((t) => t.type === 'REFUND').reduce((acc, t) => acc + (Number(t.amount) || 0), 0)).toFixed(2)}
               </span>
             )}
@@ -1644,13 +2213,13 @@ export default function StudentDetailPage() {
         </div>
 
         {/* Search and Filters for Financial Transactions Ledger */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 bg-slate-50/70 p-2.5 rounded-lg border border-slate-200">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
           <div className="flex items-center gap-2 flex-1 max-w-md">
             <div className="relative flex-1">
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
               <input
                 type="text"
-                placeholder="Search receipts by #, note, mode, cashier, or ref..."
+                placeholder="Search receipts by #, note, mode, cashier..."
                 value={txnSearch}
                 onChange={(e) => setTxnSearch(e.target.value)}
                 onKeyDown={(e) => {
@@ -1659,7 +2228,7 @@ export default function StudentDetailPage() {
                     fetchTransactionsData(1, txnPageSize, txnSearch, txnModeFilter, txnTypeFilter);
                   }
                 }}
-                className="w-full pl-8 pr-7 py-1 text-xs border border-slate-300 rounded-md bg-white text-black placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="w-full pl-8 pr-7 py-1.5 text-xs border border-slate-300 rounded-lg bg-white text-black placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600"
               />
               {txnSearch && (
                 <button
@@ -1668,7 +2237,7 @@ export default function StudentDetailPage() {
                     setTxnPage(1);
                     fetchTransactionsData(1, txnPageSize, '', txnModeFilter, txnTypeFilter);
                   }}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-black"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-black"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -1683,7 +2252,7 @@ export default function StudentDetailPage() {
                 setTxnTypeFilter(e.target.value);
                 setTxnPage(1);
               }}
-              className="text-xs border border-slate-300 rounded-md px-2 py-1 bg-white text-black focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="text-xs border border-slate-300 rounded-lg px-2.5 py-1.5 bg-white text-black font-medium focus:outline-none focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600"
             >
               <option value="ALL">All Types</option>
               <option value="PAYMENT">Fee Payments (+₹)</option>
@@ -1696,7 +2265,7 @@ export default function StudentDetailPage() {
                 setTxnModeFilter(e.target.value);
                 setTxnPage(1);
               }}
-              className="text-xs border border-slate-300 rounded-md px-2 py-1 bg-white text-black focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="text-xs border border-slate-300 rounded-lg px-2.5 py-1.5 bg-white text-black font-medium focus:outline-none focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600"
             >
               <option value="ALL">All Modes</option>
               <option value="CASH">Cash</option>
@@ -1718,146 +2287,241 @@ export default function StudentDetailPage() {
                   fetchTransactionsData(1, txnPageSize, '', 'ALL', 'ALL');
                 }}
               >
-                Clear Filters
+                Clear
               </Button>
             )}
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          {txnsLoading ? (
-            <div className="py-8 text-center text-xs text-slate-500 space-y-2">
-              <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-              <p>Loading financial transactions...</p>
-            </div>
-          ) : transactions.length === 0 ? (
-            <div className="py-8 text-center text-xs text-slate-500">
-              No payment transactions or refund vouchers found matching your filter criteria.
-            </div>
-          ) : (
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
-                <tr>
-                  <th className="p-2">Receipt / Voucher #</th>
-                  <th className="p-2">Date & Time</th>
-                  <th className="p-2">Type & Purpose</th>
-                  <th className="p-2">Course Ref</th>
-                  <th className="p-2">Payment Mode</th>
-                  <th className="p-2">Handled By</th>
-                  <th className="p-2 text-right">Amount</th>
-                  <th className="p-2 text-right">Slip</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {transactions.map((txn) => {
-                  const isRefund = txn.type === 'REFUND';
-                  return (
-                    <tr
-                      key={txn.id}
-                      className={`hover:bg-slate-50 ${isRefund ? 'bg-rose-50/30' : ''}`}
-                    >
-                      <td className="p-2 font-mono font-bold">
-                        <span className="flex items-center gap-1.5">
-                          {isRefund ? (
-                            <ArrowDownLeft className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                          ) : (
-                            <ArrowUpRight className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                          )}
-                          <span className={isRefund ? 'text-rose-700' : 'text-indigo-900'}>
-                            {txn.number}
-                          </span>
+        {txnsLoading ? (
+          <div className="py-8 text-center text-xs text-slate-700 space-y-2">
+            <div className="w-5 h-5 border-2 border-odoo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+            <p className="font-semibold">Loading financial transactions...</p>
+          </div>
+        ) : transactions.length === 0 ? (
+          <div className="py-8 text-center text-xs text-slate-700 font-medium">
+            No payment transactions or refund vouchers found matching your filter criteria.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {/* Mobile Cards for Ledger */}
+            <div className="block sm:hidden space-y-2.5">
+              {transactions.map((txn) => {
+                const isRefund = txn.type === 'REFUND';
+                return (
+                  <div
+                    key={txn.id}
+                    className={`border rounded-xl p-3 space-y-2 ${
+                      isRefund ? 'bg-rose-50/50 border-rose-200' : 'bg-slate-50 border-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-1.5 font-mono font-bold text-xs">
+                        {isRefund ? (
+                          <ArrowDownLeft className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                        ) : (
+                          <ArrowUpRight className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        )}
+                        <span className={isRefund ? 'text-rose-700' : 'text-odoo-900'}>
+                          {txn.number}
                         </span>
-                      </td>
-                      <td className="p-2 text-slate-600">
+                      </div>
+                      <div className="text-right">
+                        <span className={`font-mono font-bold text-sm block ${isRefund ? 'text-rose-700' : 'text-emerald-800'}`}>
+                          {isRefund ? '-' : '+'}₹{Math.abs(Number(txn.amount) || 0).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap text-xs">
+                      {isRefund ? (
+                        <span className="inline-block px-1.5 py-0.2 rounded text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                          Refund Voucher
+                        </span>
+                      ) : (
+                        <span className="inline-block px-1.5 py-0.2 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          Fee Payment
+                        </span>
+                      )}
+                      <span className="bg-white border border-slate-200 text-black px-1.5 py-0.2 rounded text-[11px] font-semibold">
+                        {txn.mode}
+                      </span>
+                      {txn.ref && (
+                        <span className="text-[10px] text-slate-700 font-mono">
+                          Ref: {txn.ref}
+                        </span>
+                      )}
+                    </div>
+
+                    {txn.course_name && (
+                      <div className="text-xs bg-white p-2 rounded-lg border border-slate-200">
+                        <span className="text-[10px] text-slate-700 font-semibold uppercase block">Course Ref</span>
+                        <div className="font-bold text-black">{txn.course_name}</div>
+                        {txn.admission_number && (
+                          <span className="font-mono text-[10px] text-odoo-800 font-semibold block">
+                            #{txn.admission_number}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {txn.notes && (
+                      <div className="text-[11px] text-slate-700 italic bg-white p-2 rounded-lg border border-slate-200">
+                        {txn.notes}
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-200">
+                      <div className="text-[11px] text-slate-700">
+                        <span className="font-medium">Date: </span>
                         {txn.date
-                          ? new Date(txn.date).toLocaleString('en-IN', {
+                          ? new Date(txn.date).toLocaleDateString('en-IN', {
                               dateStyle: 'medium',
-                              timeStyle: 'short',
                             })
                           : '—'}
-                      </td>
-                      <td className="p-2">
-                        {isRefund ? (
-                          <span className="inline-block px-1.5 py-0.5 rounded text-[11px] font-semibold bg-rose-100 text-rose-800">
-                            Refund Voucher
-                          </span>
-                        ) : (
-                          <span className="inline-block px-1.5 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-800">
-                            Fee Payment
-                          </span>
-                        )}
-                        {txn.notes && (
-                          <span className="block text-[10px] text-slate-500 italic truncate max-w-[200px]">
-                            {txn.notes}
-                          </span>
-                        )}
-                      </td>
-                      <td className="p-2">
-                        {txn.admission_number ? (
-                          <div>
-                            <span className="font-mono font-bold text-indigo-700 block">
-                              {txn.admission_number}
-                            </span>
-                            {txn.course_name && (
-                              <span
-                                className="text-[11px] text-slate-600 block line-clamp-1 max-w-[200px]"
-                                title={txn.course_name}
-                              >
-                                {txn.course_name}
-                              </span>
+                        <span className="ml-1 text-slate-500">by {txn.collector || 'Admin'}</span>
+                      </div>
+
+                      <Button
+                        size="xs"
+                        variant="secondary"
+                        icon={Printer}
+                        onClick={() => handleViewReceipt(txn)}
+                      >
+                        Print Slip
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop Table for Ledger */}
+            <div className="hidden sm:block overflow-x-auto rounded-lg border border-slate-200">
+              <table className="w-full text-left text-xs min-w-[750px]">
+                <thead className="bg-slate-100 text-slate-800 font-bold border-b border-slate-200">
+                  <tr>
+                    <th className="p-2.5">Receipt / Voucher #</th>
+                    <th className="p-2.5">Date & Time</th>
+                    <th className="p-2.5">Type & Purpose</th>
+                    <th className="p-2.5">Course Ref</th>
+                    <th className="p-2.5">Payment Mode</th>
+                    <th className="p-2.5">Handled By</th>
+                    <th className="p-2.5 text-right">Amount</th>
+                    <th className="p-2.5 text-right">Slip</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {transactions.map((txn) => {
+                    const isRefund = txn.type === 'REFUND';
+                    return (
+                      <tr
+                        key={txn.id}
+                        className={`hover:bg-slate-50 transition ${isRefund ? 'bg-rose-50/30' : ''}`}
+                      >
+                        <td className="p-2.5 font-mono font-bold">
+                          <span className="flex items-center gap-1.5">
+                            {isRefund ? (
+                              <ArrowDownLeft className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                            ) : (
+                              <ArrowUpRight className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                             )}
-                          </div>
-                        ) : (
-                          <span className="text-slate-400 font-mono">—</span>
-                        )}
-                      </td>
-                      <td className="p-2 font-semibold text-slate-800">
-                        <span className="bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-[11px]">
-                          {txn.mode}
-                        </span>
-                        {txn.ref && (
-                          <span className="block text-[10px] text-slate-500 font-mono">
-                            Ref: {txn.ref}
+                            <span className={isRefund ? 'text-rose-700' : 'text-odoo-900'}>
+                              {txn.number}
+                            </span>
                           </span>
-                        )}
-                      </td>
-                      <td className="p-2 text-slate-600">
-                        {txn.collector || 'Admin'}
-                      </td>
-                      <td className="p-2 text-right font-mono font-bold text-sm">
-                        {isRefund ? (
-                          <span className="text-rose-700">-₹{Math.abs(Number(txn.amount) || 0).toFixed(2)}</span>
-                        ) : (
-                          <span className="text-emerald-700">+₹{(Number(txn.amount) || 0).toFixed(2)}</span>
-                        )}
-                      </td>
-                      <td className="p-2 text-right">
-                        <Button
-                          size="xs"
-                          variant="secondary"
-                          icon={Printer}
-                          onClick={() => handleViewReceipt(txn)}
-                        >
-                          Print Slip
-                        </Button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
+                        </td>
+                        <td className="p-2.5 text-slate-800 font-medium">
+                          {txn.date
+                            ? new Date(txn.date).toLocaleString('en-IN', {
+                                dateStyle: 'medium',
+                                timeStyle: 'short',
+                              })
+                            : '—'}
+                        </td>
+                        <td className="p-2.5">
+                          {isRefund ? (
+                            <span className="inline-block px-1.5 py-0.5 rounded text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                              Refund Voucher
+                            </span>
+                          ) : (
+                            <span className="inline-block px-1.5 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                              Fee Payment
+                            </span>
+                          )}
+                          {txn.notes && (
+                            <span className="block text-[10px] text-slate-700 font-medium italic truncate max-w-[200px]">
+                              {txn.notes}
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-2.5">
+                          {txn.admission_number ? (
+                            <div>
+                              <span className="font-mono font-bold text-odoo-800 block">
+                                {txn.admission_number}
+                              </span>
+                              {txn.course_name && (
+                                <span
+                                  className="text-[11px] text-slate-800 font-medium block line-clamp-1 max-w-[200px]"
+                                  title={txn.course_name}
+                                >
+                                  {txn.course_name}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 font-mono">—</span>
+                          )}
+                        </td>
+                        <td className="p-2.5 font-semibold text-slate-800">
+                          <span className="bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-[11px]">
+                            {txn.mode}
+                          </span>
+                          {txn.ref && (
+                            <span className="block text-[10px] text-slate-700 font-mono">
+                              Ref: {txn.ref}
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-2.5 text-slate-800 font-medium">
+                          {txn.collector || 'Admin'}
+                        </td>
+                        <td className="p-2.5 text-right font-mono font-bold text-sm">
+                          {isRefund ? (
+                            <span className="text-rose-700">-₹{Math.abs(Number(txn.amount) || 0).toFixed(2)}</span>
+                          ) : (
+                            <span className="text-emerald-800">+₹{(Number(txn.amount) || 0).toFixed(2)}</span>
+                          )}
+                        </td>
+                        <td className="p-2.5 text-right">
+                          <Button
+                            size="xs"
+                            variant="secondary"
+                            icon={Printer}
+                            onClick={() => handleViewReceipt(txn)}
+                          >
+                            Print Slip
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* Transactions Backend Pagination Controls */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-2 pt-3 border-t border-slate-200 text-xs">
-          <div className="flex items-center gap-2 text-slate-600">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-3 border-t border-slate-200 text-xs">
+          <div className="flex items-center gap-2 text-slate-700 font-medium">
             <span>
               Showing {txnTotal === 0 ? 0 : (txnPage - 1) * txnPageSize + 1} to{' '}
-              {Math.min(txnPage * txnPageSize, txnTotal)} of {txnTotal} transactions
+              {Math.min(txnPage * txnPageSize, txnTotal)} of {txnTotal}
             </span>
             <span className="text-slate-300">•</span>
-            <label className="flex items-center gap-1 text-slate-500 text-[11px]">
+            <label className="flex items-center gap-1 text-slate-700 text-[11px] font-semibold">
               Per page:
               <select
                 value={txnPageSize}
@@ -1865,7 +2529,7 @@ export default function StudentDetailPage() {
                   setTxnPageSize(Number(e.target.value));
                   setTxnPage(1);
                 }}
-                className="border border-slate-200 rounded px-1.5 py-0.5 bg-white text-black font-semibold text-xs"
+                className="border border-slate-300 rounded px-1.5 py-0.5 bg-white text-black font-bold text-xs"
               >
                 <option value={5}>5</option>
                 <option value={10}>10</option>
@@ -1878,7 +2542,7 @@ export default function StudentDetailPage() {
             <button
               onClick={() => setTxnPage(1)}
               disabled={txnPage <= 1 || txnsLoading}
-              className="p-1 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="p-1 rounded-md border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
               title="First Page"
             >
               <ChevronsLeft className="w-3.5 h-3.5 text-slate-700" />
@@ -1886,18 +2550,18 @@ export default function StudentDetailPage() {
             <button
               onClick={() => setTxnPage((p) => Math.max(1, p - 1))}
               disabled={txnPage <= 1 || txnsLoading}
-              className="p-1 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="p-1 rounded-md border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
               title="Previous Page"
             >
               <ChevronLeft className="w-3.5 h-3.5 text-slate-700" />
             </button>
-            <span className="px-2 font-bold text-black">
+            <span className="px-2 font-bold text-black text-xs">
               Page {txnPage} of {Math.max(1, txnTotalPages)}
             </span>
             <button
               onClick={() => setTxnPage((p) => Math.min(txnTotalPages, p + 1))}
               disabled={txnPage >= txnTotalPages || txnsLoading}
-              className="p-1 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="p-1 rounded-md border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
               title="Next Page"
             >
               <ChevronRight className="w-3.5 h-3.5 text-slate-700" />
@@ -1905,7 +2569,7 @@ export default function StudentDetailPage() {
             <button
               onClick={() => setTxnPage(txnTotalPages)}
               disabled={txnPage >= txnTotalPages || txnsLoading}
-              className="p-1 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="p-1 rounded-md border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
               title="Last Page"
             >
               <ChevronsRight className="w-3.5 h-3.5 text-slate-700" />
@@ -1913,6 +2577,353 @@ export default function StudentDetailPage() {
           </div>
         </div>
       </div>
+      )}
+
+      {/* TAB 4: Student Audit Trail */}
+      {activeMainTab === 'AUDIT' && (
+        <div className="bg-white border border-slate-200 rounded-xl p-3.5 sm:p-4 shadow-xs space-y-3">
+          <div className="pb-3 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-odoo-600" />
+                <h2 className="text-sm font-bold text-black">Student Lifecycle & Activity Audit Trail</h2>
+              </div>
+              <p className="text-xs text-slate-700 font-medium mt-0.5">
+                Complete, immutable log of admissions, fee collections, receipts, renewals, status changes, and staff interactions for this student.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                size="xs"
+                icon={RefreshCw}
+                loading={auditLoading}
+                onClick={() => fetchStudentAuditLogs(auditPage, auditPageSize, auditSearch, auditActionFilter)}
+              >
+                Refresh
+              </Button>
+            </div>
+          </div>
+
+          {/* Filter / Search Bar */}
+          <div className="flex flex-col sm:flex-row items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200">
+            <div className="relative flex-1 w-full">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search audit events, reference numbers, or notes..."
+                value={auditSearch}
+                onChange={(e) => setAuditSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    setAuditPage(1);
+                    fetchStudentAuditLogs(1, auditPageSize, auditSearch, auditActionFilter);
+                  }
+                }}
+                className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-300 rounded-md text-black font-medium focus:outline-none focus:ring-1 focus:ring-odoo-500 placeholder:text-slate-400"
+              />
+            </div>
+
+            <div className="w-full sm:w-auto flex items-center gap-2">
+              <select
+                value={auditActionFilter}
+                onChange={(e) => {
+                  setAuditActionFilter(e.target.value);
+                  setAuditPage(1);
+                }}
+                className="w-full sm:w-auto px-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded-md text-black font-semibold focus:outline-none"
+              >
+                <option value="ALL">All Event Types</option>
+                <option value="STUDENT_CREATED">Student Registered</option>
+                <option value="STUDENT_UPDATED">Profile Updated</option>
+                <option value="ADMISSION_CREATED">Course Admission</option>
+                <option value="PAYMENT_RECORDED">Payment Collected</option>
+                <option value="PAYMENT_EDITED">Payment Edited</option>
+                <option value="REFUND_PROCESSED">Refund Issued</option>
+                <option value="SUBJECT_RENEWED">Subject Renewed</option>
+                <option value="ADMISSION_ITEM_VALIDITY_UPDATED">Validity Adjusted</option>
+                <option value="REVOKE_STUDENT">Student Revoked</option>
+                <option value="RESTORE_STUDENT">Student Restored</option>
+                <option value="BATCH_PURCHASE_REVOKED">Purchase Revoked</option>
+                <option value="BATCH_PURCHASE_RESTORED">Purchase Restored</option>
+                <option value="ADMISSION_ITEM_SUSPENDED">Subject Suspended</option>
+                <option value="ADMISSION_ITEM_RESUMED">Subject Resumed</option>
+                <option value="ADMISSION_ITEM_DISCONTINUED">Subject Discontinued</option>
+              </select>
+
+              {(auditSearch || auditActionFilter !== 'ALL') && (
+                <button
+                  onClick={() => {
+                    setAuditSearch('');
+                    setAuditActionFilter('ALL');
+                    setAuditPage(1);
+                    fetchStudentAuditLogs(1, auditPageSize, '', 'ALL');
+                  }}
+                  className="text-xs font-semibold text-rose-600 hover:text-rose-800 whitespace-nowrap px-1"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Audit Logs Content */}
+          {auditLoading ? (
+            <div className="py-12 text-center space-y-2">
+              <RefreshCw className="w-5 h-5 animate-spin text-odoo-600 mx-auto" />
+              <p className="text-xs text-slate-600 font-semibold">Loading student audit history...</p>
+            </div>
+          ) : auditLogs.length === 0 ? (
+            <div className="py-12 text-center space-y-2">
+              <History className="w-8 h-8 text-slate-300 mx-auto" />
+              <p className="text-xs font-bold text-black">No Audit Events Found</p>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                No activity logs matched the specified filters for this student.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {/* Desktop Table View */}
+              <div className="hidden sm:block overflow-x-auto border border-slate-200 rounded-lg">
+                <table className="w-full text-left text-xs min-w-[700px]">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-black font-bold uppercase text-[11px] tracking-wider">
+                      <th className="py-2.5 px-3">Date & Time</th>
+                      <th className="py-2.5 px-3">Action</th>
+                      <th className="py-2.5 px-3">Acting Staff</th>
+                      <th className="py-2.5 px-3">Activity Summary</th>
+                      <th className="py-2.5 px-3 text-right">Details</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium">
+                    {auditLogs.map((log) => {
+                      const meta = getActionMeta(log.action);
+                      const ActionIcon = meta.icon;
+                      return (
+                        <tr
+                          key={log.id}
+                          className="hover:bg-slate-50/80 transition-colors cursor-pointer"
+                          onClick={() => setSelectedAuditForInspection(log)}
+                        >
+                          <td className="py-2.5 px-3 whitespace-nowrap">
+                            <span className="font-bold text-black">{formatDateTime(log.created_at)}</span>
+                          </td>
+                          <td className="py-2.5 px-3 whitespace-nowrap">
+                            <Badge variant={meta.variant} size="xs" className="font-bold">
+                              <ActionIcon className="w-3 h-3 shrink-0" />
+                              {meta.label}
+                            </Badge>
+                          </td>
+                          <td className="py-2.5 px-3 whitespace-nowrap">
+                            <div className="font-bold text-black">{log.user_name || 'System'}</div>
+                            {log.user_role && (
+                              <span className="text-[10px] text-slate-500 uppercase font-semibold">
+                                {log.user_role}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <AuditDetailsSummary audit={log} />
+                          </td>
+                          <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedAuditForInspection(log);
+                              }}
+                              className="p-1 rounded text-slate-500 hover:text-black hover:bg-slate-200 transition"
+                              title="Inspect Details"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Card View */}
+              <div className="sm:hidden space-y-2">
+                {auditLogs.map((log) => {
+                  const meta = getActionMeta(log.action);
+                  const ActionIcon = meta.icon;
+                  return (
+                    <div
+                      key={log.id}
+                      onClick={() => setSelectedAuditForInspection(log)}
+                      className="p-3 bg-slate-50/70 border border-slate-200 rounded-lg space-y-2 cursor-pointer hover:bg-slate-100/70 transition"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <Badge variant={meta.variant} size="xs" className="font-bold">
+                          <ActionIcon className="w-3 h-3 shrink-0" />
+                          {meta.label}
+                        </Badge>
+                        <span className="text-[10px] text-slate-500 font-medium">
+                          {formatDateTime(log.created_at)}
+                        </span>
+                      </div>
+                      <div className="text-xs">
+                        <AuditDetailsSummary audit={log} />
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-slate-600 pt-1 border-t border-slate-200">
+                        <div className="flex items-center gap-1">
+                          <User className="w-3 h-3 text-slate-400" />
+                          <span className="font-bold text-black">{log.user_name || 'System'}</span>
+                        </div>
+                        <button
+                          type="button"
+                          className="text-[10px] text-odoo-700 font-bold hover:underline flex items-center gap-0.5"
+                        >
+                          <Eye className="w-3 h-3" /> Inspect
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Audit Pagination Controls */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-3 border-t border-slate-200 text-xs">
+                <div className="flex items-center gap-2 text-slate-700 font-medium">
+                  <span>
+                    Showing {auditTotal === 0 ? 0 : (auditPage - 1) * auditPageSize + 1} to{' '}
+                    {Math.min(auditPage * auditPageSize, auditTotal)} of {auditTotal}
+                  </span>
+                  <span className="text-slate-300">•</span>
+                  <label className="flex items-center gap-1 text-slate-700 text-[11px] font-semibold">
+                    Per page:
+                    <select
+                      value={auditPageSize}
+                      onChange={(e) => {
+                        setAuditPageSize(Number(e.target.value));
+                        setAuditPage(1);
+                      }}
+                      className="border border-slate-300 rounded px-1.5 py-0.5 bg-white text-black font-bold text-xs"
+                    >
+                      <option value={5}>5</option>
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setAuditPage(1)}
+                    disabled={auditPage <= 1 || auditLoading}
+                    className="p-1 rounded-md border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="First Page"
+                  >
+                    <ChevronsLeft className="w-3.5 h-3.5 text-slate-700" />
+                  </button>
+                  <button
+                    onClick={() => setAuditPage((p) => Math.max(1, p - 1))}
+                    disabled={auditPage <= 1 || auditLoading}
+                    className="p-1 rounded-md border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Previous Page"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5 text-slate-700" />
+                  </button>
+                  <span className="px-2 font-bold text-black text-xs">
+                    Page {auditPage} of {Math.max(1, auditTotalPages)}
+                  </span>
+                  <button
+                    onClick={() => setAuditPage((p) => Math.min(auditTotalPages, p + 1))}
+                    disabled={auditPage >= auditTotalPages || auditLoading}
+                    className="p-1 rounded-md border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Next Page"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5 text-slate-700" />
+                  </button>
+                  <button
+                    onClick={() => setAuditPage(auditTotalPages)}
+                    disabled={auditPage >= auditTotalPages || auditLoading}
+                    className="p-1 rounded-md border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Last Page"
+                  >
+                    <ChevronsRight className="w-3.5 h-3.5 text-slate-700" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Student Audit Event Inspector Modal */}
+      {selectedAuditForInspection && (
+        <Modal
+          isOpen={Boolean(selectedAuditForInspection)}
+          onClose={() => setSelectedAuditForInspection(null)}
+          title={`Audit Event: ${getActionMeta(selectedAuditForInspection.action).label}`}
+          subtitle={`Recorded on ${formatDateTime(selectedAuditForInspection.created_at)}`}
+          maxWidth="max-w-xl"
+        >
+          <div className="p-4 space-y-3.5 text-xs">
+            <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+              <div>
+                <span className="text-[10px] font-bold text-slate-500 uppercase">Action Code</span>
+                <div className="font-mono font-bold text-black text-xs break-all">
+                  {selectedAuditForInspection.action}
+                </div>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-slate-500 uppercase">Staff / Actor</span>
+                <div className="font-bold text-black text-xs">
+                  {selectedAuditForInspection.user_name || 'System'}
+                </div>
+                {selectedAuditForInspection.user_role && (
+                  <span className="text-[10px] text-slate-500 uppercase font-semibold">
+                    {selectedAuditForInspection.user_role}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {selectedAuditForInspection.parsed_details && (
+              <div className="space-y-1">
+                <h4 className="font-bold text-black text-xs uppercase tracking-wider">Event Details</h4>
+                <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100 overflow-hidden">
+                  {Object.entries(selectedAuditForInspection.parsed_details).map(([k, v]) => (
+                    <div key={k} className="flex flex-col sm:flex-row sm:items-center justify-between p-2 gap-1">
+                      <span className="font-mono text-slate-700 font-semibold uppercase text-[11px]">{k}</span>
+                      <span className="font-medium text-black break-all">
+                        {typeof v === 'object' ? JSON.stringify(v) : String(v)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <h4 className="font-bold text-black text-xs uppercase tracking-wider">Raw Payload</h4>
+                <button
+                  type="button"
+                  onClick={handleCopyAuditJson}
+                  className="flex items-center gap-1 text-[11px] font-semibold text-odoo-700 hover:text-odoo-900 bg-odoo-50 px-2 py-0.5 rounded border border-odoo-200 transition"
+                >
+                  {auditCopied ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                  {auditCopied ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+              <pre className="p-2.5 bg-slate-900 text-slate-100 rounded-lg overflow-x-auto text-[11px] font-mono leading-relaxed max-h-48">
+                {JSON.stringify(selectedAuditForInspection, null, 2)}
+              </pre>
+            </div>
+
+            <div className="pt-1 flex justify-end">
+              <Button variant="secondary" size="xs" onClick={() => setSelectedAuditForInspection(null)}>
+                Close
+              </Button>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {/* All Slips (Multi-Slip Picker & Comprehensive Statement Modal) */}
@@ -2027,6 +3038,18 @@ export default function StudentDetailPage() {
         }}
         student={student}
         item={selectedItemForRenew}
+        onSuccess={() => fetchStudentData()}
+      />
+
+      {/* Change Subject Modal */}
+      <ChangeSubjectModal
+        isOpen={changeModalOpen}
+        onClose={() => {
+          setChangeModalOpen(false);
+          setSelectedItemForChange(null);
+        }}
+        student={student}
+        item={selectedItemForChange}
         onSuccess={() => fetchStudentData()}
       />
 

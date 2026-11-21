@@ -65,11 +65,11 @@ export default function SubjectDetailModal({
 
         {/* Bio Card */}
         <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 flex items-center gap-3">
-          <div className="w-12 h-12 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-base border border-indigo-200 shrink-0">
+          <div className="w-12 h-12 rounded-full bg-purple-100 text-odoo-700 font-bold flex items-center justify-center text-base border border-odoo-200 shrink-0">
             {subject.subject_code === 'GREEN-CARD' ? (
               <Award className="w-6 h-6 text-purple-600" />
             ) : (
-              <BookOpen className="w-6 h-6 text-indigo-600" />
+              <BookOpen className="w-6 h-6 text-odoo-600" />
             )}
           </div>
           <div className="min-w-0 flex-1">
@@ -107,8 +107,8 @@ export default function SubjectDetailModal({
         </div>
 
         {/* Actions */}
-        <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
-          <Button size="sm" variant="secondary" onClick={onClose}>
+        <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 pt-2 border-t border-slate-200">
+          <Button size="sm" variant="secondary" onClick={onClose} className="w-full sm:w-auto">
             Close
           </Button>
 
@@ -117,6 +117,7 @@ export default function SubjectDetailModal({
               size="sm"
               variant="primary"
               icon={Users}
+              className="w-full sm:w-auto"
               onClick={() => {
                 onClose();
                 onToggleRoster(subject.subject_id);

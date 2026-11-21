@@ -64,13 +64,13 @@ export default function BatchDetailModal({
 
         {/* Bio Card */}
         <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 flex items-center gap-3">
-          <div className="w-12 h-12 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-base border border-indigo-200 shrink-0">
-            <Users className="w-6 h-6 text-indigo-600" />
+          <div className="w-12 h-12 rounded-full bg-purple-100 text-odoo-700 font-bold flex items-center justify-center text-base border border-odoo-200 shrink-0">
+            <Users className="w-6 h-6 text-odoo-600" />
           </div>
           <div className="min-w-0 flex-1">
             <h3 className="font-bold text-black text-base truncate">{batch.batch_name}</h3>
             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 font-medium mt-0.5">
-              <span className="font-mono text-indigo-700 font-bold">{batch.batch_code}</span>
+              <span className="font-mono text-odoo-700 font-bold">{batch.batch_code}</span>
               <span>•</span>
               <span className="flex items-center gap-1 text-slate-700">
                 <GraduationCap className="w-3.5 h-3.5 text-slate-400" />
@@ -110,8 +110,8 @@ export default function BatchDetailModal({
         </div>
 
         {/* Actions */}
-        <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
-          <Button size="sm" variant="secondary" onClick={onClose}>
+        <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 pt-2 border-t border-slate-200">
+          <Button size="sm" variant="secondary" onClick={onClose} className="w-full sm:w-auto">
             Close
           </Button>
 
@@ -120,6 +120,7 @@ export default function BatchDetailModal({
               size="sm"
               variant="primary"
               icon={Users}
+              className="w-full sm:w-auto"
               onClick={() => {
                 onClose();
                 onToggleRoster(batch.batch_id);

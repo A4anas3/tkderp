@@ -75,12 +75,12 @@ export default function EditValidityModal({
       maxWidth="max-w-md"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 text-xs text-indigo-950 space-y-1">
+        <div className="bg-purple-50 border border-odoo-200 rounded-lg p-3 text-xs text-odoo-900 space-y-1">
           {item ? (
             <>
               <div className="font-bold flex justify-between">
                 <span>Subject: {item.subject_name || item.item_name_snapshot}</span>
-                <span className="font-mono text-indigo-700">{item.admission_number || ''}</span>
+                <span className="font-mono text-odoo-700">{item.admission_number || ''}</span>
               </div>
               {item.teacher_name && (
                 <div className="text-slate-600">
@@ -109,7 +109,7 @@ export default function EditValidityModal({
               type="date"
               value={validFrom}
               onChange={(e) => setValidFrom(e.target.value)}
-              className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs text-black focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs text-black focus:outline-none focus:ring-1 focus:ring-odoo-500"
               required
             />
           </div>
@@ -122,7 +122,7 @@ export default function EditValidityModal({
               type="date"
               value={validTo}
               onChange={(e) => setValidTo(e.target.value)}
-              className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs text-black focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs text-black focus:outline-none focus:ring-1 focus:ring-odoo-500"
               required
             />
           </div>
@@ -144,7 +144,7 @@ export default function EditValidityModal({
                   d.setDate(d.getDate() + days);
                   setValidTo(d.toISOString().split('T')[0]);
                 }}
-                className="px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-800 border border-slate-200 transition"
+                className="px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-100 hover:bg-purple-50 text-slate-700 hover:text-odoo-800 border border-slate-200 transition"
               >
                 +{days} Days
               </button>
@@ -161,15 +161,15 @@ export default function EditValidityModal({
             placeholder="e.g., Medical leave extension, holiday rollover"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs text-black focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs text-black focus:outline-none focus:ring-1 focus:ring-odoo-500"
           />
         </div>
 
-        <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
-          <Button type="button" variant="secondary" size="sm" onClick={onClose} disabled={submitting}>
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-3 border-t border-slate-200">
+          <Button type="button" variant="secondary" size="sm" onClick={onClose} disabled={submitting} className="w-full sm:w-auto">
             Cancel
           </Button>
-          <Button type="submit" variant="primary" size="sm" icon={Save} loading={submitting}>
+          <Button type="submit" variant="primary" size="sm" icon={Save} loading={submitting} className="w-full sm:w-auto">
             Save Changes
           </Button>
         </div>

@@ -17,12 +17,12 @@ export default function AppLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
+    <div className="min-h-screen bg-slate-50 flex overflow-x-hidden w-full max-w-full">
       {/* Sidebar */}
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 lg:pl-64">
+      <div className="flex-1 flex flex-col min-w-0 w-full max-w-full lg:pl-64 overflow-x-hidden">
         {/* Top Header */}
         <Topbar
           onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
@@ -31,7 +31,7 @@ export default function AppLayout() {
         />
 
         {/* Dynamic page content */}
-        <main className="flex-1 p-3 sm:p-5 overflow-y-auto">
+        <main className="flex-1 px-3.5 py-4 sm:px-6 sm:py-5 overflow-y-auto overflow-x-hidden min-w-0 w-full max-w-full">
           <Outlet />
         </main>
       </div>

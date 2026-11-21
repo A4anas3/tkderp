@@ -600,7 +600,7 @@ export default function EnquiriesPage() {
               <div className="font-bold text-black flex items-center gap-1.5">
                 <span>{e.interested_subject}</span>
                 {demoCount > 1 && (
-                  <span className="px-1.5 py-0.2 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-[10px] font-bold">
+                  <span className="px-1.5 py-0.2 rounded-full bg-purple-50 border border-purple-200 text-odoo-700 text-[10px] font-bold">
                     {demoCount} Demos
                   </span>
                 )}
@@ -612,7 +612,7 @@ export default function EnquiriesPage() {
             <button
               onClick={(ev) => handleOpenCourseUpdate(e, ev)}
               title="Change / Update Interested Subject & Trial Details"
-              className="p-1 rounded text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 border border-transparent hover:border-indigo-200 transition cursor-pointer shrink-0"
+              className="p-1 rounded text-odoo-600 hover:text-odoo-800 hover:bg-purple-50 border border-transparent hover:border-purple-200 transition cursor-pointer shrink-0"
             >
               <Edit2 className="w-3.5 h-3.5" />
             </button>
@@ -821,7 +821,7 @@ export default function EnquiriesPage() {
                     }}
                     className={`p-1.5 rounded border transition cursor-pointer flex items-center justify-center ${
                       isMenuOpen
-                        ? 'bg-indigo-50 border-indigo-400 text-indigo-700'
+                        ? 'bg-purple-50 border-odoo-400 text-odoo-700'
                         : 'bg-white border-slate-300 text-slate-700 hover:text-black hover:bg-slate-50'
                     }`}
                     title="More actions"
@@ -856,7 +856,7 @@ export default function EnquiriesPage() {
                         }}
                         className="w-full text-left px-3 py-1.5 hover:bg-slate-50 flex items-center gap-2 text-slate-700 font-medium cursor-pointer"
                       >
-                        <Printer className="w-3.5 h-3.5 text-indigo-500" />
+                        <Printer className="w-3.5 h-3.5 text-odoo-600" />
                         <span>Print Trial Pass Slip</span>
                       </button>
 
@@ -868,7 +868,7 @@ export default function EnquiriesPage() {
                         }}
                         className="w-full text-left px-3 py-1.5 hover:bg-slate-50 flex items-center gap-2 text-slate-700 font-medium cursor-pointer"
                       >
-                        <Edit2 className="w-3.5 h-3.5 text-indigo-500" />
+                        <Edit2 className="w-3.5 h-3.5 text-odoo-600" />
                         <span>Update Subject</span>
                       </button>
 
@@ -905,9 +905,9 @@ export default function EnquiriesPage() {
                             setActiveActionMenuId(null);
                             handleMarkInterested(e, ev);
                           }}
-                          className="w-full text-left px-3 py-1.5 hover:bg-indigo-50 flex items-center gap-2 text-indigo-700 font-medium cursor-pointer"
+                          className="w-full text-left px-3 py-1.5 hover:bg-purple-50 flex items-center gap-2 text-odoo-700 font-medium cursor-pointer"
                         >
-                          <RotateCcw className="w-3.5 h-3.5 text-indigo-500" />
+                          <RotateCcw className="w-3.5 h-3.5 text-odoo-600" />
                           <span>Re-activate Enquiry</span>
                         </button>
                       )}
@@ -930,7 +930,7 @@ export default function EnquiriesPage() {
       header: 'Demo Reference #',
       render: (d) => (
         <div>
-          <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-indigo-50 border border-indigo-200 text-indigo-900 inline-block">
+          <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-purple-50 border border-purple-200 text-odoo-900 inline-block">
             {d.demo_reference_number}
           </span>
           <span className="text-[10px] text-slate-500 block mt-0.5">
@@ -974,7 +974,7 @@ export default function EnquiriesPage() {
       render: (d) => (
         <div>
           <span className="font-semibold text-black text-xs flex items-center gap-1">
-            <User className="w-3 h-3 text-indigo-600" />
+            <User className="w-3 h-3 text-odoo-600" />
             {d.teacher_name || d.teacher_name_snapshot || 'Assigned Faculty'}
           </span>
         </div>
@@ -995,7 +995,7 @@ export default function EnquiriesPage() {
             <span className="text-[11px] text-slate-500 block">
               Duration: {d.demo_duration_days} days
               {daysLeft !== null && daysLeft !== undefined && (
-                <span className={`ml-1 font-semibold ${daysLeft < 0 ? 'text-rose-600' : 'text-indigo-600'}`}>
+                <span className={`ml-1 font-semibold ${daysLeft < 0 ? 'text-rose-600' : 'text-odoo-600'}`}>
                   ({daysLeft < 0 ? 'Expired' : `${daysLeft}d left`})
                 </span>
               )}
@@ -1137,7 +1137,7 @@ export default function EnquiriesPage() {
             <h1 className="text-xl font-black text-black tracking-tight">
               Enquiries & Trial Demo Classes
             </h1>
-            <span className="text-[10px] font-bold uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-full">
+            <span className="text-[10px] font-bold uppercase tracking-wider bg-purple-50 text-odoo-700 border border-purple-200 px-2 py-0.5 rounded-full">
               Multi-Subject Demo Tracking
             </span>
           </div>
@@ -1165,7 +1165,7 @@ export default function EnquiriesPage() {
                 : 'text-slate-600 hover:text-black hover:bg-slate-200/60'
             }`}
           >
-            <Users className="w-3.5 h-3.5 text-indigo-600" />
+            <Users className="w-3.5 h-3.5 text-odoo-600" />
             <span>All Enquiries</span>
             <span className="px-1.5 py-0.2 bg-slate-100 text-slate-700 rounded-full text-[10px] font-black border border-slate-200">
               {summary.total}
@@ -1216,7 +1216,7 @@ export default function EnquiriesPage() {
               setEnquiryPage(1);
               setDemoPage(1);
             }}
-            className="text-xs font-semibold text-black bg-slate-50 border border-slate-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="text-xs font-semibold text-black bg-slate-50 border border-slate-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600"
           >
             <option value="">All Months</option>
             <option value="1">January</option>
@@ -1240,7 +1240,7 @@ export default function EnquiriesPage() {
               setEnquiryPage(1);
               setDemoPage(1);
             }}
-            className="text-xs font-semibold text-black bg-slate-50 border border-slate-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="text-xs font-semibold text-black bg-slate-50 border border-slate-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600"
           >
             <option value="">All Years</option>
             <option value={currentYear}>{currentYear}</option>
@@ -1301,17 +1301,17 @@ export default function EnquiriesPage() {
               }}
               className={`p-2.5 rounded-lg border transition cursor-pointer ${
                 enquiryStatusFilter === 'ACTIVE_DEMO'
-                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                  : 'bg-white border-slate-200 hover:border-indigo-300'
+                  ? 'bg-odoo-600 text-white border-odoo-600 shadow-xs'
+                  : 'bg-white border-slate-200 hover:border-odoo-300'
               }`}
             >
               <div className="flex items-center justify-between">
-                <span className={`text-[10px] font-bold uppercase tracking-wider ${enquiryStatusFilter === 'ACTIVE_DEMO' ? 'text-indigo-100' : 'text-indigo-700'}`}>
+                <span className={`text-[10px] font-bold uppercase tracking-wider ${enquiryStatusFilter === 'ACTIVE_DEMO' ? 'text-indigo-100' : 'text-odoo-700'}`}>
                   Active Demos
                 </span>
-                <Clock className={`w-3.5 h-3.5 ${enquiryStatusFilter === 'ACTIVE_DEMO' ? 'text-white' : 'text-indigo-500'}`} />
+                <Clock className={`w-3.5 h-3.5 ${enquiryStatusFilter === 'ACTIVE_DEMO' ? 'text-white' : 'text-odoo-600'}`} />
               </div>
-              <div className={`text-lg font-black mt-0.5 ${enquiryStatusFilter === 'ACTIVE_DEMO' ? 'text-white' : 'text-indigo-900'}`}>
+              <div className={`text-lg font-black mt-0.5 ${enquiryStatusFilter === 'ACTIVE_DEMO' ? 'text-white' : 'text-odoo-900'}`}>
                 {summary.ACTIVE_DEMO}
               </div>
             </div>
@@ -1468,7 +1468,7 @@ export default function EnquiriesPage() {
                           </p>
                           <button
                             onClick={(ev) => handleOpenCourseUpdate(d, ev)}
-                            className="text-[10px] font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded border border-indigo-200 inline-flex items-center gap-0.5 cursor-pointer ml-1"
+                            className="text-[10px] font-bold text-odoo-700 hover:text-odoo-900 bg-purple-50 hover:bg-purple-100 px-1.5 py-0.5 rounded border border-purple-200 inline-flex items-center gap-0.5 cursor-pointer ml-1"
                             title="Change / Update Interested Subject"
                           >
                             <Edit2 className="w-2.5 h-2.5" />
@@ -1554,7 +1554,7 @@ export default function EnquiriesPage() {
                   }}
                   className={`px-3 py-1 text-xs rounded-full border transition font-medium flex items-center gap-1.5 cursor-pointer ${
                     isActive
-                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                      ? 'bg-odoo-600 text-white border-odoo-600 shadow-xs'
                       : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
                   }`}
                 >
@@ -1562,7 +1562,7 @@ export default function EnquiriesPage() {
                   <span
                     className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
                       isActive
-                        ? 'bg-indigo-500 text-white'
+                        ? 'bg-purple-500 text-white'
                         : 'bg-slate-100 text-slate-700 border border-slate-200'
                     }`}
                   >
@@ -1604,7 +1604,7 @@ export default function EnquiriesPage() {
           <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-3 text-xs">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-bold text-black uppercase tracking-wider text-[11px] flex items-center gap-1">
-                <Filter className="w-3.5 h-3.5 text-indigo-600" />
+                <Filter className="w-3.5 h-3.5 text-odoo-600" />
                 Filter Demos:
               </span>
 
@@ -1643,7 +1643,7 @@ export default function EnquiriesPage() {
                   setDemoTeacherFilter(e.target.value);
                   setDemoPage(1);
                 }}
-                className="p-1.5 rounded-lg border border-slate-300 text-xs text-black font-medium bg-slate-50 focus:ring-1 focus:ring-indigo-500"
+                className="p-1.5 rounded-lg border border-slate-300 text-xs text-black font-medium bg-slate-50 focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600"
               >
                 <option value="">All Faculty / Teachers</option>
                 {availableTeachers.map((t) => (
@@ -1660,7 +1660,7 @@ export default function EnquiriesPage() {
                   setDemoSubjectFilter(e.target.value);
                   setDemoPage(1);
                 }}
-                className="p-1.5 rounded-lg border border-slate-300 text-xs text-black font-medium bg-slate-50 focus:ring-1 focus:ring-indigo-500"
+                className="p-1.5 rounded-lg border border-slate-300 text-xs text-black font-medium bg-slate-50 focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600"
               >
                 <option value="">All Subjects</option>
                 {availableSubjects.map((s) => (
@@ -1709,7 +1709,7 @@ export default function EnquiriesPage() {
                 <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
                   <div className="flex items-center justify-between text-slate-500 text-[10px] font-bold uppercase tracking-wider">
                     <span>Total Demos</span>
-                    <Hash className="w-3.5 h-3.5 text-indigo-500" />
+                    <Hash className="w-3.5 h-3.5 text-odoo-600" />
                   </div>
                   <div className="text-xl font-black text-black mt-1">
                     {analyticsData.summary?.total_demos || 0}
@@ -1718,14 +1718,14 @@ export default function EnquiriesPage() {
                 </div>
 
                 <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
-                  <div className="flex items-center justify-between text-indigo-600 text-[10px] font-bold uppercase tracking-wider">
+                  <div className="flex items-center justify-between text-odoo-600 text-[10px] font-bold uppercase tracking-wider">
                     <span>Active Trials</span>
                     <Clock className="w-3.5 h-3.5" />
                   </div>
-                  <div className="text-xl font-black text-indigo-900 mt-1">
+                  <div className="text-xl font-black text-odoo-900 mt-1">
                     {analyticsData.summary?.active_demos || 0}
                   </div>
-                  <span className="text-[10px] text-indigo-600">In trial period</span>
+                  <span className="text-[10px] text-odoo-600">In trial period</span>
                 </div>
 
                 <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
@@ -1778,7 +1778,7 @@ export default function EnquiriesPage() {
                 <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                   <div>
                     <h3 className="font-bold text-black text-sm flex items-center gap-2">
-                      <Award className="w-4 h-4 text-indigo-600" />
+                      <Award className="w-4 h-4 text-odoo-600" />
                       <span>Faculty Demo Performance & Conversion Leaderboard</span>
                     </h3>
                     <p className="text-[11px] text-slate-500 mt-0.5">
@@ -1787,8 +1787,8 @@ export default function EnquiriesPage() {
                   </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs text-left">
+                <div className="overflow-x-auto -webkit-overflow-scrolling-touch">
+                  <table className="w-full text-xs text-left min-w-[650px]">
                     <thead className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
                       <tr>
                         <th className="py-2.5 px-4">Faculty Member</th>
@@ -1809,7 +1809,7 @@ export default function EnquiriesPage() {
                             <tr key={t.teacher_id || idx} className="hover:bg-slate-50/70 transition">
                               <td className="py-3 px-4">
                                 <div className="flex items-center gap-2.5">
-                                  <div className="w-7 h-7 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold flex items-center justify-center text-xs shrink-0">
+                                  <div className="w-7 h-7 rounded-full bg-purple-50 border border-purple-200 text-odoo-700 font-bold flex items-center justify-center text-xs shrink-0">
                                     {t.teacher_name?.slice(0, 2).toUpperCase() || 'TR'}
                                   </div>
                                   <div>
@@ -1823,7 +1823,7 @@ export default function EnquiriesPage() {
                               <td className="py-3 px-3 text-center font-bold text-black">
                                 {t.total_demos}
                               </td>
-                              <td className="py-3 px-3 text-center font-semibold text-indigo-700">
+                              <td className="py-3 px-3 text-center font-semibold text-odoo-700">
                                 {t.active_demos}
                               </td>
                               <td className="py-3 px-3 text-center font-semibold text-amber-700">
@@ -1843,7 +1843,7 @@ export default function EnquiriesPage() {
                                         rate >= 50
                                           ? 'bg-emerald-600'
                                           : rate >= 25
-                                          ? 'bg-indigo-600'
+                                          ? 'bg-odoo-600'
                                           : 'bg-amber-500'
                                       }`}
                                       style={{ width: `${Math.min(100, rate)}%` }}
@@ -1854,7 +1854,7 @@ export default function EnquiriesPage() {
                                       rate >= 50
                                         ? 'text-emerald-800'
                                         : rate >= 25
-                                        ? 'text-indigo-800'
+                                        ? 'text-odoo-800'
                                         : 'text-amber-800'
                                     }`}
                                   >
@@ -1882,7 +1882,7 @@ export default function EnquiriesPage() {
                 <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                   <div>
                     <h3 className="font-bold text-black text-sm flex items-center gap-2">
-                      <BookOpen className="w-4 h-4 text-indigo-600" />
+                      <BookOpen className="w-4 h-4 text-odoo-600" />
                       <span>Subject-Wise Trial Volume & Admission Conversion</span>
                     </h3>
                     <p className="text-[11px] text-slate-500 mt-0.5">
@@ -1891,8 +1891,8 @@ export default function EnquiriesPage() {
                   </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs text-left">
+                <div className="overflow-x-auto -webkit-overflow-scrolling-touch">
+                  <table className="w-full text-xs text-left min-w-[650px]">
                     <thead className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
                       <tr>
                         <th className="py-2.5 px-4">Subject Domain</th>
@@ -1917,7 +1917,7 @@ export default function EnquiriesPage() {
                               <td className="py-3 px-3 text-center font-bold text-black">
                                 {s.total_demos}
                               </td>
-                              <td className="py-3 px-3 text-center font-semibold text-indigo-700">
+                              <td className="py-3 px-3 text-center font-semibold text-odoo-700">
                                 {s.active_demos}
                               </td>
                               <td className="py-3 px-3 text-center font-semibold text-amber-700">
@@ -1971,7 +1971,7 @@ export default function EnquiriesPage() {
           {/* Candidate Bio Information */}
           <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3">
             <h4 className="font-bold text-black text-xs uppercase tracking-wider flex items-center gap-1.5">
-              <User className="w-3.5 h-3.5 text-indigo-600" />
+              <User className="w-3.5 h-3.5 text-odoo-600" />
               <span>Candidate Information</span>
             </h4>
 
@@ -2017,15 +2017,15 @@ export default function EnquiriesPage() {
           </div>
 
           {/* Multi-Subject Demo Items Cart Builder */}
-          <div className="bg-white p-3.5 rounded-xl border-2 border-indigo-100 space-y-3">
+          <div className="bg-white p-3.5 rounded-xl border-2 border-purple-100 space-y-3">
             <div className="flex items-center justify-between border-b border-indigo-50 pb-2">
               <div className="flex items-center gap-1.5">
-                <BookOpen className="w-4 h-4 text-indigo-600" />
+                <BookOpen className="w-4 h-4 text-odoo-600" />
                 <h4 className="font-bold text-black text-xs uppercase tracking-wider">
                   Book Demo Trial Subjects (Cart Selection)
                 </h4>
               </div>
-              <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+              <span className="text-[10px] font-bold text-odoo-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
                 {demoCart.length} Subject(s) in Cart
               </span>
             </div>
@@ -2040,7 +2040,7 @@ export default function EnquiriesPage() {
                   <select
                     value={cartDraft.subject_id}
                     onChange={(e) => handleCartSubjectChange(e.target.value)}
-                    className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg text-black font-semibold focus:ring-1 focus:ring-indigo-500"
+                    className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg text-black font-semibold focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600"
                   >
                     <option value="">-- Choose Subject to Demo --</option>
                     {availableSubjects.map((s) => (
@@ -2060,7 +2060,7 @@ export default function EnquiriesPage() {
                     onChange={(e) =>
                       setCartDraft((prev) => ({ ...prev, teacher_id: e.target.value }))
                     }
-                    className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg text-black font-semibold focus:ring-1 focus:ring-indigo-500"
+                    className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg text-black font-semibold focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600"
                   >
                     <option value="">-- Select Teacher --</option>
                     {availableTeachers.map((t) => (
@@ -2084,7 +2084,7 @@ export default function EnquiriesPage() {
                       setCartDraft((prev) => ({ ...prev, hall_number_snapshot: e.target.value }))
                     }
                     placeholder="e.g. Hall 1, Lab 2"
-                    className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg text-black font-semibold focus:ring-1 focus:ring-indigo-500"
+                    className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg text-black font-semibold focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600"
                   />
                 </div>
 
@@ -2098,7 +2098,7 @@ export default function EnquiriesPage() {
                     onChange={(e) =>
                       setCartDraft((prev) => ({ ...prev, demo_start_date: e.target.value }))
                     }
-                    className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg text-black font-semibold focus:ring-1 focus:ring-indigo-500"
+                    className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg text-black font-semibold focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600"
                   />
                 </div>
 
@@ -2117,7 +2117,7 @@ export default function EnquiriesPage() {
                         demo_duration_days: parseInt(e.target.value, 10) || 1,
                       }))
                     }
-                    className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg text-black font-semibold focus:ring-1 focus:ring-indigo-500"
+                    className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg text-black font-semibold focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600"
                   />
                 </div>
               </div>
@@ -2149,7 +2149,7 @@ export default function EnquiriesPage() {
                     >
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded text-[10px] border border-indigo-200">
+                          <span className="font-mono font-bold text-odoo-700 bg-purple-50 px-1.5 py-0.2 rounded text-[10px] border border-purple-200">
                             #{index + 1}
                           </span>
                           <span className="font-bold text-black">{item.subject_name_snapshot}</span>
@@ -2257,7 +2257,7 @@ export default function EnquiriesPage() {
               value={demoStatusNotes}
               onChange={(e) => setDemoStatusNotes(e.target.value)}
               placeholder="e.g. Student completed trial lectures and is pleased with faculty explanations..."
-              className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg text-black font-medium focus:ring-1 focus:ring-indigo-500"
+              className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg text-black font-medium focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600"
             />
           </div>
 
@@ -2409,7 +2409,7 @@ export default function EnquiriesPage() {
                 setCourseFormData({ ...courseFormData, notes: e.target.value })
               }
               placeholder="e.g. Student requested to switch to Physics batch..."
-              className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg text-black focus:ring-1 focus:ring-indigo-500 font-medium"
+              className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg text-black focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600 font-medium"
             />
           </div>
 

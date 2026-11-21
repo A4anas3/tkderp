@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
+  LayoutGrid,
+  List,
   Plus,
   Edit2,
   Calendar,
@@ -28,6 +30,7 @@ export default function BatchesPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState('table');
 
   // References
   const [teachers, setTeachers] = useState([]);
@@ -218,7 +221,7 @@ export default function BatchesPage() {
     {
       header: 'Batch Code',
       accessor: 'batch_code',
-      className: 'font-mono font-bold text-indigo-700 w-28',
+      className: 'font-mono font-bold text-odoo-700 w-28',
     },
     {
       header: 'Batch Name & Class',
@@ -262,7 +265,7 @@ export default function BatchesPage() {
               className="inline-flex flex-col bg-slate-50 border border-slate-300 text-black px-2 py-1 rounded text-[11px] shadow-2xs"
             >
               <div className="flex items-center justify-between gap-2">
-                <strong className="text-indigo-900">{s.subject_name}</strong>
+                <strong className="text-odoo-900">{s.subject_name}</strong>
                 <span className="font-mono font-bold text-emerald-800">₹{Number(s.fee).toFixed(0)}</span>
               </div>
               <div className="text-[10px] text-slate-600 flex items-center gap-2 mt-0.5">
@@ -311,36 +314,204 @@ export default function BatchesPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+      {/* Odoo Control Panel Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
-          <h1 className="text-xl font-bold text-black tracking-tight">Coaching Batches</h1>
-          <p className="text-xs text-slate-500">
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">Coaching Batches</h1>
+          <p className="text-xs text-slate-500 mt-0.5">
             Create batches combining subjects, assign specific teachers & hall numbers per subject, and preserve snapshots
           </p>
         </div>
 
-        <Button variant="primary" icon={Plus} onClick={handleOpenAdd}>
-          Add Batch
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* View Mode Toggle - Odoo style */}
+          <div className="inline-flex rounded-md border border-slate-300 bg-slate-100 p-0.5 shadow-2xs">
+            <button
+              onClick={() => setViewMode('table')}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded transition ${
+                viewMode === 'table'
+                  ? 'bg-white text-odoo-700 shadow-2xs'
+                  : 'text-slate-600 hover:text-black'
+              }`}
+            >
+              <List className="w-3.5 h-3.5" />
+              <span>List</span>
+            </button>
+            <button
+              onClick={() => setViewMode('kanban')}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded transition ${
+                viewMode === 'kanban'
+                  ? 'bg-white text-odoo-700 shadow-2xs'
+                  : 'text-slate-600 hover:text-black'
+              }`}
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span>Kanban</span>
+            </button>
+          </div>
+
+          <Button variant="primary" icon={Plus} onClick={handleOpenAdd} className="w-full sm:w-auto">
+            New Batch
+          </Button>
+        </div>
       </div>
 
-      <DataTable
-        columns={columns}
-        data={batches}
-        total={total}
-        page={page}
-        pageSize={15}
-        onPageChange={(p) => setPage(p)}
-        searchValue={search}
-        onSearchChange={(val) => {
-          setSearch(val);
-          setPage(1);
-        }}
-        onRefresh={loadBatches}
-        loading={loading}
-        searchPlaceholder="Search batch by name, hall, or faculty..."
-        emptyMessage="No batches found."
-      />
+      {viewMode === 'table' ? (
+        <DataTable
+          columns={columns}
+          data={batches}
+          total={total}
+          page={page}
+          pageSize={15}
+          onPageChange={(p) => setPage(p)}
+          searchValue={search}
+          onSearchChange={(val) => {
+            setSearch(val);
+            setPage(1);
+          }}
+          onRefresh={loadBatches}
+          loading={loading}
+          searchPlaceholder="Search batch by name, hall, or faculty..."
+          emptyMessage="No batches found."
+        />
+      ) : (
+        /* Odoo Kanban Card Grid View */
+        <div className="space-y-4">
+          <div className="bg-white border border-slate-200 rounded-lg p-3 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50/70">
+            <div className="w-full sm:max-w-md">
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                placeholder="Search batch by name, hall, or faculty..."
+                className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-xs text-black placeholder-slate-400 focus:outline-none focus:border-odoo-600 focus:ring-1 focus:ring-odoo-600 shadow-2xs"
+              />
+            </div>
+            <div className="text-xs text-slate-500 font-medium">
+              Showing <span className="font-semibold text-black">{batches.length}</span> of <span className="font-semibold text-black">{total}</span> batches
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="p-12 text-center text-xs text-slate-500 animate-pulse bg-white border border-slate-200 rounded-lg">
+              Loading batch cards...
+            </div>
+          ) : batches.length === 0 ? (
+            <div className="p-12 text-center bg-white border border-slate-200 rounded-lg text-xs text-slate-500">
+              No batches found matching your criteria.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5">
+              {batches.map((b) => (
+                <div
+                  key={b.id}
+                  className="bg-white border border-slate-200 hover:border-odoo-300 rounded-lg p-3.5 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <h3 className="font-bold text-black text-sm truncate" title={b.name}>
+                          {b.name}
+                        </h3>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <span className="font-mono text-[10px] font-bold text-odoo-800 bg-purple-50 border border-odoo-200 px-1.5 py-0.2 rounded-full">
+                            {b.batch_code}
+                          </span>
+                          <Badge size="xs" variant={b.status === 'ACTIVE' ? 'success' : 'neutral'}>
+                            {b.status}
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 space-y-1.5 text-xs border-t border-slate-100 pt-2.5">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-400">Category:</span>
+                        <span className="font-medium text-black">{b.class_category}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-400">Faculty:</span>
+                        <span className="font-medium text-black truncate max-w-[140px]">
+                          {b.teacher_name_snapshot || 'Unassigned'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-400">Hall:</span>
+                        <span className="text-slate-700">{b.hall_number || 'Hall 13'}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-400">Schedule:</span>
+                        <span className="text-slate-600 truncate max-w-[140px]">{b.schedule || 'Flexible'}</span>
+                      </div>
+
+                      {/* Included Subjects */}
+                      {(b.subjects || []).length > 0 && (
+                        <div className="pt-2 border-t border-slate-100">
+                          <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
+                            Subjects ({b.subjects.length}):
+                          </span>
+                          <div className="flex flex-wrap gap-1">
+                            {b.subjects.map((sub, sIdx) => (
+                              <span
+                                key={sIdx}
+                                className="inline-flex items-center gap-1 text-[10px] bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded font-medium text-black"
+                              >
+                                <span>{sub.subject_name}</span>
+                                <span className="text-emerald-800 font-bold font-mono">₹{Number(sub.fee).toFixed(0)}</span>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-3.5 pt-2 border-t border-slate-100 flex items-center gap-1.5">
+                    <Button
+                      size="xs"
+                      variant="secondary"
+                      icon={Edit2}
+                      onClick={() => handleOpenEdit(b)}
+                      className="w-full justify-center"
+                    >
+                      Edit Configuration
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {Math.ceil(total / 15) > 1 && (
+            <div className="bg-white border border-slate-200 rounded-lg p-2.5 shadow-2xs flex items-center justify-between text-xs">
+              <span className="text-slate-600">
+                Page <span className="font-semibold text-black">{page}</span> of <span className="font-semibold text-black">{Math.ceil(total / 15)}</span>
+              </span>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  Previous
+                </Button>
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  disabled={page >= Math.ceil(total / 15)}
+                  onClick={() => setPage((p) => Math.min(Math.ceil(total / 15), p + 1))}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Add / Edit Batch Modal */}
       <Modal
@@ -368,7 +539,7 @@ export default function BatchesPage() {
               <select
                 value={formData.teacher_id}
                 onChange={(e) => setFormData({ ...formData, teacher_id: e.target.value })}
-                className="w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-black focus:outline-none focus:border-indigo-600"
+                className="w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-black focus:outline-none focus:border-odoo-600"
               >
                 <option value="">-- Select Faculty --</option>
                 {teachers.map((t) => (
@@ -438,7 +609,7 @@ export default function BatchesPage() {
                   Assign each subject its specific teacher and hall number where classes take place
                 </span>
               </div>
-              <span className="text-xs bg-indigo-100 text-indigo-900 font-bold px-2 py-0.5 rounded">
+              <span className="text-xs bg-purple-100 text-odoo-900 font-bold px-2 py-0.5 rounded">
                 {Object.keys(selectedSubjects).length} Selected
               </span>
             </div>
@@ -450,7 +621,7 @@ export default function BatchesPage() {
                 return (
                   <div
                     key={s.id}
-                    className={`p-2.5 text-xs transition ${isSelected ? 'bg-indigo-50/30' : 'hover:bg-slate-50'}`}
+                    className={`p-2.5 text-xs transition ${isSelected ? 'bg-purple-50/30' : 'hover:bg-slate-50'}`}
                   >
                     <div className="flex items-center justify-between gap-2">
                       <label className="flex items-center gap-2 cursor-pointer flex-1">
@@ -458,7 +629,7 @@ export default function BatchesPage() {
                           type="checkbox"
                           checked={isSelected}
                           onChange={() => handleSubjectToggle(s)}
-                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                          className="rounded border-slate-300 text-odoo-600 focus:ring-odoo-500"
                         />
                         <span className="font-bold text-black text-sm">{s.name}</span>
                         <span className="text-[11px] text-slate-500 font-mono">({s.subject_code})</span>
@@ -473,7 +644,7 @@ export default function BatchesPage() {
                             min="0"
                             value={conf.fee ?? s.default_fee}
                             onChange={(e) => handleSubjectFieldChange(s.id, 'fee', e.target.value)}
-                            className="w-24 text-xs font-mono font-bold text-black border border-slate-300 rounded px-1.5 py-1 bg-white focus:outline-none focus:border-indigo-600"
+                            className="w-24 text-xs font-mono font-bold text-black border border-slate-300 rounded px-1.5 py-1 bg-white focus:outline-none focus:border-odoo-600"
                           />
                         </div>
                       )}
@@ -488,7 +659,7 @@ export default function BatchesPage() {
                           <select
                             value={conf.teacher_id || ''}
                             onChange={(e) => handleSubjectFieldChange(s.id, 'teacher_id', e.target.value)}
-                            className="w-full text-xs border border-slate-300 rounded px-2 py-1 bg-white text-black font-medium focus:outline-none focus:border-indigo-600"
+                            className="w-full text-xs border border-slate-300 rounded px-2 py-1 bg-white text-black font-medium focus:outline-none focus:border-odoo-600"
                           >
                             <option value="">-- Batch Main Coordinator --</option>
                             {teachers.map((t) => (
@@ -508,7 +679,7 @@ export default function BatchesPage() {
                             value={conf.hall_number || ''}
                             onChange={(e) => handleSubjectFieldChange(s.id, 'hall_number', e.target.value)}
                             placeholder="e.g. Hall 1, Room 102"
-                            className="w-full text-xs border border-slate-300 rounded px-2 py-1 bg-white text-black font-medium focus:outline-none focus:border-indigo-600"
+                            className="w-full text-xs border border-slate-300 rounded px-2 py-1 bg-white text-black font-medium focus:outline-none focus:border-odoo-600"
                           />
                         </div>
                       </div>

@@ -291,7 +291,7 @@ export default function QuickPaymentModal({
                   value={searchFilter}
                   onChange={(e) => setSearchFilter(e.target.value)}
                   placeholder="Type student name or Txn ID to filter..."
-                  className="w-full pl-8 pr-3 py-1 text-xs rounded border border-slate-300 bg-white placeholder-slate-400 focus:outline-none focus:border-indigo-600"
+                  className="w-full pl-8 pr-3 py-1 text-xs rounded border border-slate-300 bg-white placeholder-slate-400 focus:outline-none focus:border-odoo-600"
                 />
               </div>
 
@@ -299,7 +299,7 @@ export default function QuickPaymentModal({
               <select
                 value={selectedAdmissionId}
                 onChange={(e) => handleAdmissionChange(e.target.value)}
-                className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-black font-medium focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 shadow-2xs"
+                className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-black font-medium focus:outline-none focus:border-odoo-600 focus:ring-1 focus:ring-odoo-600 shadow-2xs"
               >
                 {filteredAdmissions.length === 0 ? (
                   <option disabled value="">No matching student found</option>
@@ -321,12 +321,12 @@ export default function QuickPaymentModal({
                 {/* Header row */}
                 <div className="flex items-center justify-between border-b border-slate-200 pb-2">
                   <div className="flex items-center gap-2">
-                    <User className="w-4 h-4 text-indigo-700" />
+                    <User className="w-4 h-4 text-odoo-700" />
                     <div>
                       <span className="font-bold text-black text-sm block">
                         {selectedAdmission.student_name_snapshot}
                       </span>
-                      <span className="font-mono text-[10px] text-indigo-800 font-bold bg-indigo-50 border border-indigo-200 px-1 py-0.2 rounded">
+                      <span className="font-mono text-[10px] text-odoo-800 font-bold bg-purple-50 border border-odoo-200 px-1 py-0.2 rounded">
                         Txn: {selectedAdmission.purchase_transaction_id || selectedAdmission.admission_number}
                       </span>
                     </div>
@@ -412,7 +412,7 @@ export default function QuickPaymentModal({
                   <button
                     type="button"
                     onClick={() => setShowPastPayments(!showPastPayments)}
-                    className="w-full flex items-center justify-between text-indigo-700 hover:text-indigo-900 font-semibold text-[11px] py-0.5 transition"
+                    className="w-full flex items-center justify-between text-odoo-700 hover:text-odoo-900 font-semibold text-[11px] py-0.5 transition"
                   >
                     <span className="flex items-center gap-1">
                       <History className="w-3.5 h-3.5" />
@@ -460,21 +460,21 @@ export default function QuickPaymentModal({
             <div className="bg-white border border-slate-200 rounded-lg p-3 space-y-2 shadow-2xs">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-slate-100 pb-1.5">
                 <label className="text-xs font-bold text-black flex items-center gap-1.5">
-                  <CalendarDays className="w-4 h-4 text-indigo-600" />
+                  <CalendarDays className="w-4 h-4 text-odoo-600" />
                   Fee Coverage Period (Date to Date / When to When)
                 </label>
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
                     onClick={() => applyMonthPreset('CURRENT')}
-                    className="text-[10px] px-2 py-0.5 rounded border border-slate-300 text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition"
+                    className="text-[10px] px-2 py-0.5 rounded border border-slate-300 text-slate-700 hover:bg-purple-50 hover:text-odoo-700 transition"
                   >
                     Current Month
                   </button>
                   <button
                     type="button"
                     onClick={() => applyMonthPreset('NEXT')}
-                    className="text-[10px] px-2 py-0.5 rounded border border-slate-300 text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition"
+                    className="text-[10px] px-2 py-0.5 rounded border border-slate-300 text-slate-700 hover:bg-purple-50 hover:text-odoo-700 transition"
                   >
                     Next Month
                   </button>
@@ -506,7 +506,7 @@ export default function QuickPaymentModal({
 
               {feePeriod && (
                 <div className="text-[11px] text-slate-600 bg-slate-50 px-2 py-1 rounded font-mono">
-                  Fee Period Tag: <strong className="text-indigo-900">{feePeriod}</strong>
+                  Fee Period Tag: <strong className="text-odoo-900">{feePeriod}</strong>
                 </div>
               )}
             </div>
@@ -568,8 +568,8 @@ export default function QuickPaymentModal({
             </div>
 
             {/* Bottom Actions */}
-            <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
-              <Button variant="secondary" onClick={onClose} disabled={submitting}>
+            <div className="pt-3 flex flex-col-reverse sm:flex-row sm:justify-end gap-2 border-t border-slate-100">
+              <Button variant="secondary" onClick={onClose} disabled={submitting} className="w-full sm:w-auto">
                 Cancel
               </Button>
               <Button
@@ -577,6 +577,7 @@ export default function QuickPaymentModal({
                 variant="success"
                 loading={submitting}
                 disabled={submitting || !selectedAdmission || Number(selectedAdmission?.balance_due || 0) <= 0}
+                className="w-full sm:w-auto"
               >
                 Record Payment & Print Receipt
               </Button>

@@ -359,27 +359,27 @@ export default function ExpensesPage() {
   return (
     <div className="space-y-4">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
           <h1 className="text-xl font-bold text-black tracking-tight">Expenses & Salary Outflows</h1>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-500 mt-0.5">
             Record daily institute operational costs, teacher & staff payroll, and custom expense heads
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           {activeTab === 'daily' && (
-            <Button variant="primary" icon={Plus} onClick={() => setExpModalOpen(true)}>
+            <Button variant="primary" icon={Plus} onClick={() => setExpModalOpen(true)} className="w-full sm:w-auto">
               Add Daily Expense
             </Button>
           )}
           {activeTab === 'salaries' && (
-            <Button variant="primary" icon={Plus} onClick={() => setSalModalOpen(true)}>
+            <Button variant="primary" icon={Plus} onClick={() => setSalModalOpen(true)} className="w-full sm:w-auto">
               Create Salary Entry
             </Button>
           )}
           {activeTab === 'categories' && (
-            <Button variant="primary" icon={Plus} onClick={() => setCatModalOpen(true)}>
+            <Button variant="primary" icon={Plus} onClick={() => setCatModalOpen(true)} className="w-full sm:w-auto">
               Add Category
             </Button>
           )}
@@ -387,33 +387,33 @@ export default function ExpensesPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-slate-200">
+      <div className="flex flex-wrap border-b border-slate-200 gap-1 pb-1">
         <button
           onClick={() => setActiveTab('daily')}
-          className={`px-4 py-2 text-xs sm:text-sm font-bold border-b-2 transition ${
+          className={`px-3 py-2 min-h-[36px] text-xs font-bold border-b-2 transition cursor-pointer ${
             activeTab === 'daily'
-              ? 'border-indigo-600 text-indigo-700'
-              : 'border-transparent text-slate-600 hover:text-black'
+              ? 'border-odoo-600 text-odoo-700 bg-purple-50/50 rounded-t-lg'
+              : 'border-transparent text-slate-600 hover:text-black hover:bg-slate-100 rounded-t-lg'
           }`}
         >
           Daily Miscellaneous Expenses
         </button>
         <button
           onClick={() => setActiveTab('salaries')}
-          className={`px-4 py-2 text-xs sm:text-sm font-bold border-b-2 transition ${
+          className={`px-3 py-2 min-h-[36px] text-xs font-bold border-b-2 transition cursor-pointer ${
             activeTab === 'salaries'
-              ? 'border-indigo-600 text-indigo-700'
-              : 'border-transparent text-slate-600 hover:text-black'
+              ? 'border-odoo-600 text-odoo-700 bg-purple-50/50 rounded-t-lg'
+              : 'border-transparent text-slate-600 hover:text-black hover:bg-slate-100 rounded-t-lg'
           }`}
         >
           Faculty & Staff Payroll
         </button>
         <button
           onClick={() => setActiveTab('categories')}
-          className={`px-4 py-2 text-xs sm:text-sm font-bold border-b-2 transition ${
+          className={`px-3 py-2 min-h-[36px] text-xs font-bold border-b-2 transition cursor-pointer ${
             activeTab === 'categories'
-              ? 'border-indigo-600 text-indigo-700'
-              : 'border-transparent text-slate-600 hover:text-black'
+              ? 'border-odoo-600 text-odoo-700 bg-purple-50/50 rounded-t-lg'
+              : 'border-transparent text-slate-600 hover:text-black hover:bg-slate-100 rounded-t-lg'
           }`}
         >
           Expense Categories
@@ -501,7 +501,7 @@ export default function ExpensesPage() {
               <select
                 value={expForm.category_id}
                 onChange={(e) => setExpForm({ ...expForm, category_id: e.target.value })}
-                className="w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-black focus:outline-none focus:border-indigo-600"
+                className="w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-black focus:outline-none focus:border-odoo-600"
                 required
               >
                 {categories.map((c) => (
@@ -591,7 +591,7 @@ export default function ExpensesPage() {
                 onChange={(e) =>
                   setSalForm({ ...salForm, employee_name_snapshot: e.target.value })
                 }
-                className="w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-black focus:outline-none focus:border-indigo-600"
+                className="w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-black focus:outline-none focus:border-odoo-600"
               >
                 <option value="">Select registered faculty...</option>
                 {teachers.map((t) => (

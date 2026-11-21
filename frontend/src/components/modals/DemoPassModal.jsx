@@ -156,7 +156,7 @@ export default function DemoPassModal({
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-black uppercase tracking-wider text-black flex items-center gap-1.5">
-                <BookOpen className="w-3.5 h-3.5 text-indigo-600" />
+                <BookOpen className="w-3.5 h-3.5 text-odoo-600" />
                 <span>Authorized Subject Trial Classes ({items.length})</span>
               </span>
               <span className="text-[11px] text-slate-500">
@@ -172,7 +172,7 @@ export default function DemoPassModal({
                 >
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded bg-indigo-50 border border-indigo-200 font-mono font-bold text-xs text-indigo-900 tracking-wider">
+                      <span className="px-2 py-0.5 rounded bg-purple-50 border border-odoo-200 font-mono font-bold text-xs text-odoo-900 tracking-wider">
                         {item.demo_reference_number || `DEM-2026-${String(idx + 1).padStart(4, '0')}`}
                       </span>
                       <h4 className="font-bold text-black text-sm">
@@ -243,15 +243,15 @@ export default function DemoPassModal({
         </div>
 
         {/* Modal Actions */}
-        <div className="flex items-center justify-between pt-2 border-t border-slate-200 print:hidden">
-          <span className="text-xs text-slate-500">
+        <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-200 print:hidden">
+          <span className="text-xs text-slate-500 text-center sm:text-left">
             Print on A4 / Thermal or save as PDF
           </span>
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" onClick={onClose}>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+            <Button variant="secondary" onClick={onClose} className="w-full sm:w-auto">
               Close
             </Button>
-            <Button variant="primary" icon={Printer} onClick={handlePrint}>
+            <Button variant="primary" icon={Printer} onClick={handlePrint} className="w-full sm:w-auto">
               Print Demo Slip
             </Button>
           </div>

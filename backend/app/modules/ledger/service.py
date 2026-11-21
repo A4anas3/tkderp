@@ -363,6 +363,8 @@ async def record_payment_service(
         details=json.dumps({
             "payment_number": pay_no,
             "admission_number": admission.admission_number,
+            "student_id": str(admission.student_id),
+            "student_name": admission.student_name_snapshot,
             "amount": float(amount),
             "payment_mode": payment_mode,
             "txn_number": txn_no
@@ -550,6 +552,7 @@ async def edit_payment_service(
         entity_id=payment.id,
         details=json.dumps({
             "payment_number": payment.payment_number,
+            "student_id": str(admission.student_id),
             "old_amount": float(old_amount),
             "new_amount": float(payment.amount),
             "edit_reason": edit_reason
@@ -808,6 +811,8 @@ async def process_refund_service(
         details=json.dumps({
             "refund_number": ref_no,
             "admission_number": admission.admission_number,
+            "student_id": str(admission.student_id),
+            "student_name": admission.student_name_snapshot,
             "gross_amount": float(gross_amount),
             "deduction_amount": float(ded_amt),
             "net_amount": float(net_amount),
@@ -891,6 +896,7 @@ async def cancel_admission_service(
         entity_id=admission.id,
         details=json.dumps({
             "purchase_transaction_id": admission.admission_number,
+            "student_id": str(admission.student_id),
             "student_name": admission.student_name_snapshot,
             "reason": cancel_reason,
             "document_status": "VOID",
@@ -1046,6 +1052,7 @@ async def revoke_admission_service(
         entity_id=admission.id,
         details=json.dumps({
             "admission_number": admission.admission_number,
+            "student_id": str(admission.student_id),
             "student_name": admission.student_name_snapshot,
             "revoke_type": revoke_type,
             "scope": scope,
@@ -1135,6 +1142,7 @@ async def restore_admission_service(
         entity_id=admission.id,
         details=json.dumps({
             "purchase_transaction_id": admission.admission_number,
+            "student_id": str(admission.student_id),
             "student_name": admission.student_name_snapshot,
             "previous_revocation_reason": old_reason,
             "before": {

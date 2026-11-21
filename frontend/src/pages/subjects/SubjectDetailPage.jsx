@@ -158,7 +158,7 @@ export default function SubjectDetailPage() {
     return (
       <div className="p-6 max-w-5xl mx-auto">
         <div className="flex items-center gap-2 text-xs text-slate-500 mb-4">
-          <ArrowLeft className="w-4 h-4 animate-spin text-indigo-600" />
+          <ArrowLeft className="w-4 h-4 animate-spin text-odoo-600" />
           <span>Loading subject curriculum & course enrollments...</span>
         </div>
         <div className="bg-white rounded-xl p-8 border border-slate-200 animate-pulse space-y-4">
@@ -188,39 +188,40 @@ export default function SubjectDetailPage() {
   const hasActiveFilters = statusFilter !== 'ALL' || rosterSearch.trim() !== '';
 
   return (
-    <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-5">
+    <div className="space-y-4 sm:space-y-5">
       {/* Top Navigation & Breadcrumb */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+        <div className="flex items-start sm:items-center gap-2.5 min-w-0">
           <button
             onClick={() => navigate('/reports/subject-revenue')}
-            className="p-2 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 transition-colors shadow-2xs cursor-pointer"
+            className="p-2 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 transition-colors shadow-2xs cursor-pointer shrink-0 min-h-[38px] min-w-[38px] flex items-center justify-center"
             title="Back to Subject Revenue"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-lg sm:text-xl font-black text-black">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-lg sm:text-xl font-black text-black break-words leading-tight">
                 {subject.subject_name}
               </h1>
-              <span className="font-mono text-xs px-2 py-0.5 bg-slate-100 text-slate-800 rounded font-bold border border-slate-200">
+              <span className="font-mono text-xs px-2 py-0.5 bg-slate-100 text-slate-800 rounded font-bold border border-slate-200 shrink-0">
                 {subject.subject_code}
               </span>
             </div>
-            <p className="text-xs text-slate-500 font-medium">
+            <p className="text-xs text-slate-500 font-medium mt-0.5">
               Standard Monthly Fee: ₹{Number(subject.default_fee || 0).toFixed(2)} • {activeCount} active course enrollments ({totalEnrollments} total cycles across {uniqueStudentsCount} scholars)
             </p>
           </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <Button
             variant="secondary"
             icon={Layers}
             onClick={() => navigate('/reports/subject-revenue')}
             size="sm"
+            className="w-full sm:w-auto"
           >
             View All Ledgers
           </Button>
@@ -262,24 +263,24 @@ export default function SubjectDetailPage() {
       </div>
 
       {/* Financial KPI Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
           <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Total Billed</span>
-          <span className="font-mono font-black text-black text-lg sm:text-xl mt-1 block">
+          <span className="font-mono font-black text-black text-lg sm:text-xl mt-1 block break-all sm:break-normal">
             ₹{Number(subject.total_booked || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
           </span>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
           <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Actual Collected</span>
-          <span className="font-mono font-black text-emerald-800 text-lg sm:text-xl mt-1 block">
+          <span className="font-mono font-black text-emerald-800 text-lg sm:text-xl mt-1 block break-all sm:break-normal">
             ₹{Number(subject.total_collected || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
           </span>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
           <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Balance Due</span>
-          <span className="font-mono font-black text-rose-700 text-lg sm:text-xl mt-1 block">
+          <span className="font-mono font-black text-rose-700 text-lg sm:text-xl mt-1 block break-all sm:break-normal">
             ₹{Number(subject.balance_due || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
           </span>
         </div>
@@ -290,8 +291,8 @@ export default function SubjectDetailPage() {
             <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Course Enrollments</span>
             <span className="text-[10px] text-slate-500 font-medium">({uniqueStudentsCount} scholars)</span>
           </div>
-          <span className="font-mono font-black text-indigo-900 text-lg sm:text-xl mt-1 block flex items-center gap-1.5">
-            <BookOpen className="w-5 h-5 text-indigo-600" />
+          <span className="font-mono font-black text-odoo-900 text-lg sm:text-xl mt-1 block flex items-center gap-1.5">
+            <BookOpen className="w-5 h-5 text-odoo-600" />
             <span>{totalEnrollments}</span>
           </span>
           <div className="flex flex-wrap items-center gap-1.5 mt-2 pt-2 border-t border-slate-200">
@@ -311,7 +312,7 @@ export default function SubjectDetailPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
           <div>
             <h3 className="font-bold text-black text-sm flex items-center gap-2">
-              <BookOpen className="w-4 h-4 text-indigo-600" />
+              <BookOpen className="w-4 h-4 text-odoo-600" />
               <span>Assigned Course Enrollments ({filteredStudents.length})</span>
             </h3>
             <p className="text-[11px] text-slate-500 font-medium mt-0.5">
@@ -391,7 +392,7 @@ export default function SubjectDetailPage() {
                   setRosterSearch(e.target.value);
                   setPage(1);
                 }}
-                className="w-full pl-8 pr-7 py-1.5 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 text-black placeholder:text-slate-400 font-medium shadow-2xs"
+                className="w-full pl-8 pr-7 py-1.5 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-odoo-500 text-black placeholder:text-slate-400 font-medium shadow-2xs"
               />
               {rosterSearch && (
                 <button
@@ -440,15 +441,15 @@ export default function SubjectDetailPage() {
                   setRosterSearch('');
                   setPage(1);
                 }}
-                className="mt-2 text-xs font-bold text-indigo-700 hover:underline cursor-pointer"
+                className="mt-2 text-xs font-bold text-odoo-700 hover:underline cursor-pointer"
               >
                 Clear All Filters
               </button>
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-slate-200">
-            <table className="w-full text-left text-xs">
+          <div className="overflow-x-auto rounded-lg border border-slate-200 -webkit-overflow-scrolling-touch">
+            <table className="w-full text-left text-xs min-w-[750px]">
               <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
                 <tr>
                   <th className="p-3">Student</th>
@@ -467,7 +468,7 @@ export default function SubjectDetailPage() {
                   <tr
                     key={idx}
                     onClick={() => navigate(`/students/${s.student_id}`)}
-                    className="hover:bg-indigo-50/40 cursor-pointer transition-colors"
+                    className="hover:bg-purple-50/40 cursor-pointer transition-colors"
                     title="Click to view full student profile & ledger"
                   >
                     {/* Student Info */}
@@ -480,12 +481,12 @@ export default function SubjectDetailPage() {
                             className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0"
                           />
                         ) : (
-                          <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-xs shrink-0 border border-indigo-200">
+                          <div className="w-8 h-8 rounded-full bg-purple-100 text-odoo-700 font-bold flex items-center justify-center text-xs shrink-0 border border-purple-200">
                             {s.student_name ? s.student_name.slice(0, 2).toUpperCase() : 'ST'}
                           </div>
                         )}
                         <div>
-                          <div className="font-bold text-black hover:text-indigo-600 transition">
+                          <div className="font-bold text-black hover:text-odoo-600 transition">
                             {s.student_name}
                           </div>
                           <div className="font-mono text-[11px] text-slate-600 font-semibold">
@@ -513,7 +514,7 @@ export default function SubjectDetailPage() {
                       <div className="font-mono font-bold text-black text-xs">
                         {s.cycle_label || formatCycleLabel(s.valid_from, s.valid_to)}
                       </div>
-                      <div className="text-[11px] text-indigo-700 font-semibold">
+                      <div className="text-[11px] text-odoo-700 font-semibold">
                         {s.billing_cycle_anchor || `Day ${s.billing_day || 1} of month`}
                       </div>
                     </td>

@@ -191,7 +191,7 @@ export default function EnquiryDetailPage() {
     return (
       <div className="p-6 max-w-4xl mx-auto">
         <div className="flex items-center gap-2 text-xs text-slate-500 mb-4">
-          <ArrowLeft className="w-4 h-4 animate-spin text-indigo-600" />
+          <ArrowLeft className="w-4 h-4 animate-spin text-odoo-600" />
           <span>Loading enquiry details...</span>
         </div>
         <div className="bg-white rounded-xl p-8 border border-slate-200 animate-pulse space-y-4">
@@ -252,34 +252,34 @@ export default function EnquiryDetailPage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-5">
+    <div className="space-y-4 sm:space-y-5">
       {/* Top Navigation & Breadcrumb */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+        <div className="flex items-start sm:items-center gap-2.5 min-w-0">
           <button
             onClick={() => navigate('/enquiries')}
-            className="p-2 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 transition-colors shadow-2xs cursor-pointer"
+            className="p-2 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 transition-colors shadow-2xs cursor-pointer shrink-0 min-h-[38px] min-w-[38px] flex items-center justify-center"
             title="Back to Enquiries"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-lg sm:text-xl font-black text-black">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-lg sm:text-xl font-black text-black break-words leading-tight">
                 Student Enquiry & Trial Class Details
               </h1>
-              <span className="font-mono text-xs px-2 py-0.5 bg-slate-100 text-slate-800 rounded font-bold border border-slate-200">
+              <span className="font-mono text-xs px-2 py-0.5 bg-slate-100 text-slate-800 rounded font-bold border border-slate-200 shrink-0">
                 {enquiry.id.slice(0, 8)}
               </span>
             </div>
-            <p className="text-xs text-slate-500 font-mono">
+            <p className="text-xs text-slate-500 font-mono truncate mt-0.5">
               Registered on {formatIndianDate(enquiry.enquiry_date)}
             </p>
           </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <Button
             variant="secondary"
             icon={Printer}
@@ -382,7 +382,7 @@ export default function EnquiryDetailPage() {
             : isInterested
             ? 'bg-emerald-50 border-emerald-400 text-emerald-950'
             : isActiveDemo && !isExpired
-            ? 'bg-indigo-50 border-indigo-300 text-indigo-950'
+            ? 'bg-purple-50 border-odoo-300 text-odoo-900'
             : isPending
             ? 'bg-amber-50 border-amber-300 text-amber-950'
             : isNotInterested
@@ -398,7 +398,7 @@ export default function EnquiryDetailPage() {
           ) : isInterested ? (
             <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0" />
           ) : isActiveDemo && !isExpired ? (
-            <Clock className="w-6 h-6 text-indigo-600 shrink-0" />
+            <Clock className="w-6 h-6 text-odoo-600 shrink-0" />
           ) : isPending ? (
             <AlertCircle className="w-6 h-6 text-amber-600 shrink-0" />
           ) : isNotInterested ? (
@@ -464,7 +464,7 @@ export default function EnquiryDetailPage() {
       {/* Student Details Card */}
       <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-2xs space-y-4">
         <div className="flex items-center gap-3.5 border-b border-slate-100 pb-3">
-          <div className="w-12 h-12 rounded-full bg-indigo-100 text-indigo-700 font-black flex items-center justify-center text-base border border-indigo-200 shrink-0">
+          <div className="w-12 h-12 rounded-full bg-purple-100 text-odoo-700 font-black flex items-center justify-center text-base border border-purple-200 shrink-0">
             {enquiry.student_name ? enquiry.student_name.slice(0, 2).toUpperCase() : 'EN'}
           </div>
           <div>
@@ -495,7 +495,7 @@ export default function EnquiryDetailPage() {
               <span className="text-[11px] text-slate-500 block font-medium">Interested Subject / Domain</span>
               <button
                 onClick={() => setEditModalOpen(true)}
-                className="text-[10px] font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded border border-indigo-200 inline-flex items-center gap-0.5 cursor-pointer"
+                className="text-[10px] font-bold text-odoo-700 hover:text-odoo-900 bg-purple-50 hover:bg-purple-100 px-1.5 py-0.5 rounded border border-purple-200 inline-flex items-center gap-0.5 cursor-pointer"
               >
                 <Edit2 className="w-2.5 h-2.5" />
                 <span>Change</span>
@@ -520,7 +520,7 @@ export default function EnquiryDetailPage() {
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-2xs space-y-3">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <h3 className="font-bold text-black text-sm flex items-center gap-2">
-              <Hash className="w-4 h-4 text-indigo-600" />
+              <Hash className="w-4 h-4 text-odoo-600" />
               <span>Subject Demos & Tracking Codes ({enquiry.demo_items.length})</span>
             </h3>
             <Button
@@ -541,7 +541,7 @@ export default function EnquiryDetailPage() {
               >
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-indigo-50 border border-indigo-200 text-indigo-900">
+                    <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-purple-50 border border-purple-200 text-odoo-900">
                       {item.demo_reference_number}
                     </span>
                     <h4 className="font-bold text-black text-sm">
@@ -595,7 +595,7 @@ export default function EnquiryDetailPage() {
       {/* Trial Demo Dates Card */}
       <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-2xs space-y-3">
         <h3 className="font-bold text-black text-sm flex items-center gap-2">
-          <Calendar className="w-4 h-4 text-indigo-600" />
+          <Calendar className="w-4 h-4 text-odoo-600" />
           <span>Trial Demo Schedule & Deadlines</span>
         </h3>
 
@@ -616,11 +616,11 @@ export default function EnquiryDetailPage() {
 
           <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
             <span className="text-[11px] text-slate-500 block font-medium">Demo Trial Deadline</span>
-            <span className="font-mono font-bold text-indigo-700 text-sm">
+            <span className="font-mono font-bold text-odoo-700 text-sm">
               {enquiry.demo_deadline ? formatIndianDate(enquiry.demo_deadline) : 'No Deadline'}
             </span>
             {daysRemainingText && (
-              <div className="text-[10px] font-bold text-indigo-600 mt-0.5">
+              <div className="text-[10px] font-bold text-odoo-600 mt-0.5">
                 {daysRemainingText}
               </div>
             )}
@@ -721,7 +721,7 @@ export default function EnquiryDetailPage() {
               rows={3}
               value={editFormData.notes}
               onChange={(e) => setEditFormData({ ...editFormData, notes: e.target.value })}
-              className="w-full text-xs p-2.5 bg-white border border-slate-300 rounded-lg text-black focus:ring-1 focus:ring-indigo-500 font-medium"
+              className="w-full text-xs p-2.5 bg-white border border-slate-300 rounded-lg text-black focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600 font-medium"
             />
           </div>
 

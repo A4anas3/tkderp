@@ -191,8 +191,8 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
     >
       <form onSubmit={handleSubmit} className="space-y-3">
         {initialData?.name && (
-          <div className="p-2.5 bg-indigo-50 border border-indigo-200 rounded-lg flex items-center gap-2 text-xs text-indigo-900 font-semibold">
-            <Sparkles className="w-4 h-4 text-indigo-600 shrink-0" />
+          <div className="p-2.5 bg-purple-50 border border-odoo-200 rounded-lg flex items-center gap-2 text-xs text-odoo-900 font-semibold">
+            <Sparkles className="w-4 h-4 text-odoo-600 shrink-0" />
             <span>Pre-filled with reusable details from student enquiry</span>
           </div>
         )}
@@ -220,7 +220,7 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
                 </button>
               </div>
             ) : (
-              <label className="mt-1.5 inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-indigo-700 bg-white border border-indigo-300 rounded cursor-pointer hover:bg-indigo-50 shadow-2xs transition">
+              <label className="mt-1.5 inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-odoo-700 bg-white border border-odoo-300 rounded cursor-pointer hover:bg-purple-50 shadow-2xs transition">
                 <Camera className="w-3.5 h-3.5" />
                 <span>{compressing ? 'Compressing...' : 'Take / Upload Photo'}</span>
                 <input
@@ -274,7 +274,7 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
             />
             {checkingMobile && (
               <span className="text-[10px] text-slate-500 flex items-center gap-1 mt-1">
-                <Loader2 className="w-3 h-3 animate-spin text-indigo-600" />
+                <Loader2 className="w-3 h-3 animate-spin text-odoo-600" />
                 Checking mobile constraint...
               </span>
             )}
@@ -391,8 +391,8 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
           placeholder="Area, City, Landmark"
         />
 
-        <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
-          <Button variant="secondary" onClick={onClose} disabled={loading}>
+        <div className="pt-3 flex flex-col-reverse sm:flex-row sm:justify-end gap-2 border-t border-slate-100">
+          <Button variant="secondary" onClick={onClose} disabled={loading} className="w-full sm:w-auto">
             Cancel
           </Button>
           <Button
@@ -400,6 +400,7 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
             variant="primary"
             loading={loading}
             disabled={loading || !!existingStudent || (Boolean(formData.mobile) && formData.mobile.length !== 10)}
+            className="w-full sm:w-auto"
             title={
               existingStudent
                 ? 'Mobile number already registered'

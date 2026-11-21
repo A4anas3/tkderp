@@ -1,6 +1,19 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Edit2, BookOpen, Users, MapPin, Clock, School, Calendar, ExternalLink, RefreshCw } from 'lucide-react';
+import {
+  Plus,
+  Edit2,
+  BookOpen,
+  Users,
+  MapPin,
+  Clock,
+  School,
+  Calendar,
+  ExternalLink,
+  RefreshCw,
+  LayoutGrid,
+  List,
+} from 'lucide-react';
 import DataTable from '../../components/common/DataTable';
 import Modal from '../../components/common/Modal';
 import Input from '../../components/common/Input';
@@ -145,7 +158,21 @@ export default function SubjectsPage() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState(() => {
+    try {
+      return localStorage.getItem('subjects_view_mode') || 'table';
+    } catch (_) {
+      return 'table';
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('subjects_view_mode', viewMode);
+    } catch (_) {}
+  }, [viewMode]);
 
   // Modal
   const [modalOpen, setModalOpen] = useState(false);
@@ -247,8 +274,9 @@ export default function SubjectsPage() {
     try {
       const res = await subjectApi.list({
         page,
-        page_size: 15,
+        page_size: viewMode === 'kanban' ? 24 : 15,
         search: search.trim() || undefined,
+        status_filter: statusFilter || undefined,
       });
       setSubjects(res.items || []);
       setTotal(res.total || 0);
@@ -257,7 +285,7 @@ export default function SubjectsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search]);
+  }, [page, search, statusFilter, viewMode]);
 
   useEffect(() => {
     loadSubjects();
@@ -354,15 +382,20 @@ export default function SubjectsPage() {
     {
       header: 'Code',
       accessor: 'subject_code',
-      className: 'font-mono font-bold text-indigo-700 w-28',
+      className: 'font-mono font-bold text-odoo-700 w-28 whitespace-nowrap',
     },
     {
       header: 'Subject Name',
       render: (s) => (
-        <div>
-          <span className="font-bold text-black text-sm block">{s.name}</span>
+        <div className="min-w-[160px]">
+          <button
+            onClick={() => navigate(`/subjects/${s.id}`)}
+            className="font-bold text-black text-sm hover:text-odoo-700 transition text-left block"
+          >
+            {s.name}
+          </button>
           {s.description && (
-            <span className="text-[11px] text-slate-500 block">
+            <span className="text-[11px] text-slate-600 block line-clamp-1 mt-0.5">
               {s.description}
             </span>
           )}
@@ -370,45 +403,49 @@ export default function SubjectsPage() {
       ),
     },
     {
-      header: 'Assigned Faculty',
-      render: (s) => (
-        <div className="flex items-center gap-1.5 text-xs text-slate-700">
-          <Users className="w-3.5 h-3.5 text-indigo-600 flex-shrink-0" />
-          <span className="font-medium text-black">
-            {s.teacher_name_snapshot || 'Not Assigned'}
-          </span>
-        </div>
-      ),
+      header: 'Faculty / Teacher',
+      render: (s) => {
+        const teacherObj = teachers.find((t) => t.id === s.teacher_id);
+        const teacherName = s.teacher_name_snapshot || teacherObj?.name || 'Not Assigned';
+        return (
+          <div className="flex items-center gap-1.5 text-xs text-slate-900 min-w-[140px]">
+            <Users className="w-3.5 h-3.5 text-odoo-600 shrink-0" />
+            <span className="font-semibold text-black truncate">{teacherName}</span>
+          </div>
+        );
+      },
     },
     {
       header: 'Classroom / Hall',
+      className: 'w-32 whitespace-nowrap',
       render: (s) => (
-        <div className="flex items-center gap-1.5 text-xs text-slate-700">
-          <MapPin className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-          <span>{s.hall_number || 'Main Hall'}</span>
+        <div className="flex items-center gap-1.5 text-xs text-slate-900">
+          <MapPin className="w-3.5 h-3.5 text-odoo-600 shrink-0" />
+          <span className="font-medium text-black">{s.hall_number || 'Main Hall'}</span>
         </div>
       ),
     },
     {
       header: 'Schedule / Timing',
+      className: 'w-44 whitespace-nowrap',
       render: (s) => (
-        <div className="flex items-center gap-1.5 text-xs text-slate-600">
-          <Clock className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-          <span>{s.schedule || 'Flexible'}</span>
+        <div className="flex items-center gap-1.5 text-xs text-slate-900">
+          <Clock className="w-3.5 h-3.5 text-odoo-600 shrink-0" />
+          <span className="font-mono text-xs text-black">{s.schedule || 'Flexible'}</span>
         </div>
       ),
     },
     {
       header: 'Monthly Fee & Disc.',
-      className: 'text-right font-mono font-bold text-black w-32',
+      className: 'text-right font-mono font-bold text-black w-36 whitespace-nowrap',
       render: (s) => (
         <div>
-          <div>
+          <div className="font-mono font-bold text-emerald-800 text-sm">
             ₹{Number(s.default_fee).toFixed(2)}{' '}
-            <span className="text-[10px] text-slate-500 font-sans font-normal">/mo</span>
+            <span className="text-[10px] text-slate-600 font-sans font-normal">/mo</span>
           </div>
           {Number(s.default_discount_percentage) > 0 && (
-            <span className="inline-block text-[10px] text-emerald-700 bg-emerald-50 px-1 py-0.2 rounded font-sans font-semibold">
+            <span className="inline-block text-[10px] text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-200 font-sans font-semibold mt-0.5">
               {Number(s.default_discount_percentage).toFixed(0)}% Disc.
             </span>
           )}
@@ -417,7 +454,7 @@ export default function SubjectsPage() {
     },
     {
       header: 'Status',
-      className: 'text-center w-24',
+      className: 'text-center w-24 whitespace-nowrap',
       render: (s) => (
         <Badge size="xs" variant={s.status === 'ACTIVE' ? 'success' : 'neutral'}>
           {s.status}
@@ -426,64 +463,294 @@ export default function SubjectsPage() {
     },
     {
       header: 'Actions',
-      className: 'text-right w-44',
+      className: 'text-right w-36 whitespace-nowrap',
       render: (s) => (
-        <div className="flex items-center justify-end gap-1">
-          <Button
-            size="xs"
-            variant="secondary"
-            icon={ExternalLink}
-            onClick={() => navigate(`/subjects/${s.id}`)}
-            title="Open Dedicated Subject Roster Page"
-          >
-            Detail ↗
-          </Button>
+        <div className="flex items-center justify-end gap-1.5">
           <Button
             size="xs"
             variant="secondary"
             icon={Edit2}
-            onClick={() => handleOpenEdit(s)}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpenEdit(s);
+            }}
+            title="Edit Subject"
           >
             Edit
+          </Button>
+          <Button
+            size="xs"
+            variant="secondary"
+            icon={ExternalLink}
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate(`/subjects/${s.id}`);
+            }}
+            title="Open Subject Roster"
+          >
+            Detail ↗
           </Button>
         </div>
       ),
     },
   ];
 
+  const kanbanPageSize = 24;
+  const kanbanTotalPages = Math.max(1, Math.ceil(total / kanbanPageSize));
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+      {/* Odoo Control Panel Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
-          <h1 className="text-xl font-bold text-black tracking-tight">Institute Subjects & Courses</h1>
-          <p className="text-xs text-slate-500">
-            Manage subject catalog with assigned faculty, classroom halls, timings, and standard fees. Combine any subjects at purchase time.
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">Institute Subjects & Courses</h1>
+          <p className="text-xs text-slate-600 mt-0.5">
+            Manage subject catalog with assigned faculty, classroom halls, timings, and standard fees.
           </p>
         </div>
 
-        <Button variant="primary" icon={Plus} onClick={handleOpenAdd}>
-          Add Subject
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* View Mode Toggle - Odoo style matching Students page */}
+          <div className="inline-flex rounded-md border border-slate-300 bg-slate-100 p-0.5 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => {
+                setViewMode('table');
+                setPage(1);
+              }}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded transition ${
+                viewMode === 'table'
+                  ? 'bg-white text-odoo-700 shadow-2xs'
+                  : 'text-slate-700 hover:text-black'
+              }`}
+            >
+              <List className="w-3.5 h-3.5" />
+              <span>List</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setViewMode('kanban');
+                setPage(1);
+              }}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded transition ${
+                viewMode === 'kanban'
+                  ? 'bg-white text-odoo-700 shadow-2xs'
+                  : 'text-slate-700 hover:text-black'
+              }`}
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span>Kanban</span>
+            </button>
+          </div>
+
+          {/* Status Filter Dropdown */}
+          <select
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setPage(1);
+            }}
+            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-black focus:outline-none focus:border-odoo-600 min-h-[34px] w-full sm:w-auto shadow-2xs"
+          >
+            <option value="">All Subjects</option>
+            <option value="ACTIVE">Active Subjects</option>
+            <option value="INACTIVE">Inactive Subjects</option>
+          </select>
+
+          <Button variant="primary" icon={Plus} onClick={handleOpenAdd} className="w-full sm:w-auto">
+            New Subject
+          </Button>
+        </div>
       </div>
 
-      <DataTable
-        columns={columns}
-        data={subjects}
-        total={total}
-        page={page}
-        pageSize={15}
-        onPageChange={(p) => setPage(p)}
-        searchValue={search}
-        onSearchChange={(val) => {
-          setSearch(val);
-          setPage(1);
-        }}
-        onRefresh={loadSubjects}
-        loading={loading}
-        onRowClick={(s) => navigate(`/subjects/${s.id}`)}
-        searchPlaceholder="Search by subject, code, class, faculty or hall..."
-        emptyMessage="No subjects found."
-      />
+      {viewMode === 'table' ? (
+        <DataTable
+          columns={columns}
+          data={subjects}
+          total={total}
+          page={page}
+          pageSize={15}
+          onPageChange={(p) => setPage(p)}
+          searchValue={search}
+          onSearchChange={(val) => {
+            setSearch(val);
+            setPage(1);
+          }}
+          onRefresh={loadSubjects}
+          loading={loading}
+          onRowClick={(s) => navigate(`/subjects/${s.id}`)}
+          searchPlaceholder="Search by subject, code, class, faculty or hall..."
+          emptyMessage="No subjects found."
+        />
+      ) : (
+        /* Odoo Kanban Card Grid View */
+        <div className="space-y-4">
+          <div className="bg-slate-50/80 border border-slate-200 rounded-lg p-3 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="w-full sm:max-w-md">
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                placeholder="Search by subject, code, class, faculty or hall..."
+                className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-xs sm:text-sm text-black placeholder-slate-400 focus:outline-none focus:border-odoo-600 focus:ring-1 focus:ring-odoo-600 shadow-2xs bg-white"
+              />
+            </div>
+            <div className="text-xs text-slate-600 font-medium self-start sm:self-auto">
+              Showing <span className="font-bold text-black">{subjects.length}</span> of <span className="font-bold text-black">{total}</span> subjects
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="p-12 text-center text-xs text-slate-600 animate-pulse bg-white border border-slate-200 rounded-lg">
+              Loading subject cards...
+            </div>
+          ) : subjects.length === 0 ? (
+            <div className="p-12 text-center bg-white border border-slate-200 rounded-lg text-xs text-slate-600">
+              No subjects found matching your criteria.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5">
+              {subjects.map((s) => {
+                const teacherObj = teachers.find((t) => t.id === s.teacher_id);
+                const teacherName = s.teacher_name_snapshot || teacherObj?.name || 'Not Assigned';
+                return (
+                  <div
+                    key={s.id}
+                    className="bg-white border border-slate-200 hover:border-odoo-300 rounded-lg p-3.5 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between"
+                  >
+                    <div>
+                      {/* Top Header */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <h3
+                            onClick={() => navigate(`/subjects/${s.id}`)}
+                            className="font-bold text-black text-sm hover:text-odoo-700 truncate cursor-pointer transition-colors block"
+                            title={s.name}
+                          >
+                            {s.name}
+                          </h3>
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <span className="font-mono text-[10px] font-bold text-odoo-800 bg-purple-50 border border-odoo-200 px-1.5 py-0.5 rounded-full">
+                              {s.subject_code}
+                            </span>
+                            <Badge size="xs" variant={s.status === 'ACTIVE' ? 'success' : 'neutral'}>
+                              {s.status}
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
+
+                      {s.description && (
+                        <p className="text-[11px] text-slate-600 mt-2 line-clamp-2">
+                          {s.description}
+                        </p>
+                      )}
+
+                      {/* Key Info Details: Faculty, Hall, Timing, Fee */}
+                      <div className="mt-3 space-y-1.5 text-xs border-t border-slate-100 pt-2.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-slate-700 font-semibold flex items-center gap-1">
+                            <Users className="w-3.5 h-3.5 text-odoo-600 shrink-0" /> Teacher:
+                          </span>
+                          <span className="font-bold text-black truncate max-w-[145px] text-right" title={teacherName}>
+                            {teacherName}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-slate-700 font-semibold flex items-center gap-1">
+                            <MapPin className="w-3.5 h-3.5 text-odoo-600 shrink-0" /> Classroom:
+                          </span>
+                          <span className="font-semibold text-zinc-950">
+                            {s.hall_number || 'Main Hall'}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-slate-700 font-semibold flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5 text-odoo-600 shrink-0" /> Timings:
+                          </span>
+                          <span className="font-mono text-[11px] font-semibold text-zinc-950 truncate max-w-[145px] text-right" title={s.schedule || 'Flexible'}>
+                            {s.schedule || 'Flexible'}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100">
+                          <span className="text-slate-700 font-semibold">Monthly Fee:</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono font-bold text-emerald-800 text-sm">
+                              ₹{Number(s.default_fee).toFixed(0)}
+                            </span>
+                            <span className="text-[10px] text-slate-600 font-normal">/mo</span>
+                            {Number(s.default_discount_percentage) > 0 && (
+                              <span className="text-[10px] text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-200 font-bold">
+                                {Number(s.default_discount_percentage).toFixed(0)}% off
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="mt-3.5 pt-2 border-t border-slate-100 flex items-center gap-2">
+                      <Button
+                        size="xs"
+                        variant="secondary"
+                        icon={Edit2}
+                        onClick={() => handleOpenEdit(s)}
+                        className="flex-1 justify-center min-h-[32px]"
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="secondary"
+                        icon={ExternalLink}
+                        onClick={() => navigate(`/subjects/${s.id}`)}
+                        className="flex-1 justify-center min-h-[32px]"
+                        title="Open Subject Roster"
+                      >
+                        Detail ↗
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Kanban Pagination */}
+          {kanbanTotalPages > 1 && (
+            <div className="bg-white border border-slate-200 rounded-lg p-2.5 shadow-2xs flex items-center justify-between text-xs">
+              <span className="text-slate-700">
+                Page <span className="font-bold text-black">{page}</span> of <span className="font-bold text-black">{kanbanTotalPages}</span>
+              </span>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  className="min-h-[30px]"
+                >
+                  Previous
+                </Button>
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  disabled={page >= kanbanTotalPages}
+                  onClick={() => setPage((p) => Math.min(kanbanTotalPages, p + 1))}
+                  className="min-h-[30px]"
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Add / Edit Subject Modal */}
       <Modal
@@ -513,7 +780,7 @@ export default function SubjectsPage() {
                   <button
                     type="button"
                     onClick={handleRegenerateCode}
-                    className="text-[11px] text-indigo-600 hover:text-indigo-800 flex items-center gap-1 font-medium transition cursor-pointer"
+                    className="text-[11px] text-odoo-600 hover:text-odoo-800 flex items-center gap-1 font-medium transition cursor-pointer"
                     title="Regenerate random unique code"
                   >
                     <RefreshCw className="w-3 h-3" /> Regenerate
@@ -571,10 +838,10 @@ export default function SubjectsPage() {
           <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-lg space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-slate-200/80 pb-2">
               <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                <Clock className="w-3.5 h-3.5 text-odoo-600 shrink-0" />
                 Schedule & Timings (Days & Hours)
               </span>
-              <span className="text-xs font-mono font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded shadow-2xs self-start sm:self-auto">
+              <span className="text-xs font-mono font-semibold text-odoo-700 bg-purple-50 border border-odoo-200 px-2 py-0.5 rounded shadow-2xs self-start sm:self-auto">
                 {formData.schedule || 'Not scheduled'}
               </span>
             </div>
@@ -599,7 +866,7 @@ export default function SubjectsPage() {
                       onClick={() => handlePresetClick(preset)}
                       className={`px-2.5 py-1 text-xs font-medium rounded-md border transition cursor-pointer ${
                         isActive
-                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                          ? 'bg-odoo-600 text-white border-odoo-600 shadow-xs'
                           : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100 hover:border-slate-400'
                       }`}
                     >
@@ -619,7 +886,7 @@ export default function SubjectsPage() {
                 <select
                   value={scheduleState.startDay}
                   onChange={(e) => handleDayChange('startDay', e.target.value)}
-                  className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs sm:text-sm text-black focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 shadow-sm font-medium"
+                  className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs sm:text-sm text-black focus:outline-none focus:border-odoo-600 focus:ring-1 focus:ring-odoo-600 shadow-sm font-medium"
                 >
                   {DAYS_OF_WEEK.map((d) => (
                     <option key={d.value} value={d.value}>
@@ -636,7 +903,7 @@ export default function SubjectsPage() {
                 <select
                   value={scheduleState.endDay}
                   onChange={(e) => handleDayChange('endDay', e.target.value)}
-                  className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs sm:text-sm text-black focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 shadow-sm font-medium"
+                  className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs sm:text-sm text-black focus:outline-none focus:border-odoo-600 focus:ring-1 focus:ring-odoo-600 shadow-sm font-medium"
                 >
                   {DAYS_OF_WEEK.map((d) => (
                     <option key={d.value} value={d.value}>
@@ -657,7 +924,7 @@ export default function SubjectsPage() {
                   type="time"
                   value={scheduleState.startTime}
                   onChange={(e) => handleTimeChange('startTime', e.target.value)}
-                  className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs sm:text-sm text-black focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 shadow-sm"
+                  className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs sm:text-sm text-black focus:outline-none focus:border-odoo-600 focus:ring-1 focus:ring-odoo-600 shadow-sm"
                   required
                 />
                 <span className="text-[11px] text-slate-500 mt-0.5 block font-mono">
@@ -673,7 +940,7 @@ export default function SubjectsPage() {
                   type="time"
                   value={scheduleState.endTime}
                   onChange={(e) => handleTimeChange('endTime', e.target.value)}
-                  className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs sm:text-sm text-black focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 shadow-sm"
+                  className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs sm:text-sm text-black focus:outline-none focus:border-odoo-600 focus:ring-1 focus:ring-odoo-600 shadow-sm"
                   required
                 />
                 <span className="text-[11px] text-slate-500 mt-0.5 block font-mono">
