@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, ConfigDict, field_validator
-from typing import Optional, List
+from typing import Optional, List, Any
 from datetime import date, datetime
 from decimal import Decimal
 import uuid
@@ -57,6 +57,38 @@ class StudentResponse(StudentBase):
 
     model_config = ConfigDict(from_attributes=True)
 
+class StudentLineResponse(BaseModel):
+    id: uuid.UUID
+    admission_id: uuid.UUID
+    slip_number: str
+    subject_id: Optional[uuid.UUID] = None
+    subject_name: Optional[str] = None
+    teacher_id: Optional[uuid.UUID] = None
+    teacher_name: Optional[str] = None
+    batch_id: Optional[uuid.UUID] = None
+    batch_name: Optional[str] = None
+    hall_number: Optional[str] = None
+    valid_from: Optional[date] = None
+    valid_to: Optional[date] = None
+    days_left: Optional[int] = None
+    net_price: Decimal = Decimal("0.00")
+    amount_collected: Decimal = Decimal("0.00")
+    balance_due: Decimal = Decimal("0.00")
+    last_paid_date: Optional[date] = None
+    last_paid_amount: Optional[Decimal] = None
+    payment_status: str = "UNPAID"
+    access_status: str = "ACTIVE"
+    item_type: str = "BATCH_SUBJECT"
+
+    @field_validator("last_paid_date", mode="before")
+    @classmethod
+    def parse_last_paid_date(cls, v):
+        if isinstance(v, datetime):
+            return v.date()
+        return v
+
+    model_config = ConfigDict(from_attributes=True)
+
 class StudentDetailResponse(StudentResponse):
     total_billed: Decimal = Decimal("0.00")
     total_paid: Decimal = Decimal("0.00")
@@ -66,3 +98,11 @@ class StudentDetailResponse(StudentResponse):
     admissions_count: int = 0
     active_admissions_count: int = 0
     revoked_admissions_count: int = 0
+
+    # P3 grouped lines and history
+    active: List[StudentLineResponse] = []
+    expiring: List[StudentLineResponse] = []
+    expired: List[StudentLineResponse] = []
+    revoked: List[StudentLineResponse] = []
+    slips: List[Any] = []
+    transactions: List[Any] = []

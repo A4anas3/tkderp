@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional, List
-from sqlalchemy import String, Date, DateTime, Numeric, Boolean, Text, ForeignKey
+from sqlalchemy import String, Date, DateTime, Numeric, Boolean, Text, ForeignKey, Index
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base import BaseModel
@@ -78,8 +78,16 @@ class Admission(BaseModel):
 
 class AdmissionItem(BaseModel):
     __tablename__ = "admission_items"
+    __table_args__ = (
+        Index("ix_admission_items_student_subject_access", "student_id", "subject_id", "access_status"),
+        Index("ix_admission_items_subject_valid_to", "subject_id", "valid_to"),
+        Index("ix_admission_items_teacher_valid_to", "teacher_id", "valid_to"),
+        Index("ix_admission_items_batch_valid_to", "batch_id", "valid_to"),
+        Index("ix_admission_items_access_valid_to", "access_status", "valid_to"),
+    )
 
     admission_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("admissions.id", ondelete="CASCADE"), nullable=False, index=True)
+    student_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("students.id"), nullable=False, index=True)
     item_type: Mapped[str] = mapped_column(String(30), nullable=False, default="BATCH_SUBJECT") # BATCH_SUBJECT, GREEN_CARD
     
     batch_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("batches.id"), nullable=True, index=True)
@@ -121,3 +129,4 @@ class AdmissionItem(BaseModel):
     lifecycle_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     admission: Mapped["Admission"] = relationship("Admission", back_populates="items")
+    student: Mapped[Optional["app.modules.students.models.Student"]] = relationship("app.modules.students.models.Student", lazy="joined")

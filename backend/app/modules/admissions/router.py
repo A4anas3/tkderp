@@ -25,6 +25,7 @@ from app.common.calculations import (
 from app.common.pagination import PaginationParams, PageResponse
 from app.common.numbering import next_number
 from app.common.idempotency import get_idempotency_record, save_idempotency_record, build_idempotent_response
+from app.common.active_lines import today_kolkata, is_active_line
 from app.modules.ledger.service import (
     record_payment_service, process_refund_service, recompute_admission_totals
 )
@@ -248,6 +249,7 @@ async def create_admission(
 
         ai = AdmissionItem(
             admission=admission,
+            student_id=admission.student_id,
             item_type=raw.item_type,
             batch_id=raw.batch_id,
             subject_id=raw.subject_id,
@@ -887,43 +889,71 @@ async def update_admission_validity(
         select(Admission)
         .options(selectinload(Admission.items), selectinload(Admission.student))
         .where(Admission.id == admission_id)
+        .with_for_update()
     )
     res = await db.execute(query)
     admission = res.scalar_one_or_none()
     if not admission:
         raise HTTPException(status_code=404, detail="Admission not found")
 
-    old_from = str(admission.valid_from) if admission.valid_from else None
-    old_to = str(admission.valid_to) if admission.valid_to else None
+    # Determine which items to update
+    if payload.apply_to_all:
+        target_items = list(admission.items)
+    elif payload.item_ids is not None:
+        target_ids = set(payload.item_ids)
+        target_items = [itm for itm in admission.items if itm.id in target_ids]
+        if not target_items and payload.item_ids:
+            raise HTTPException(status_code=400, detail="None of the specified item_ids belong to this admission")
+    else:
+        target_items = list(admission.items)
 
-    if payload.valid_from is not None:
-        admission.valid_from = payload.valid_from
-        for itm in admission.items:
+    today = today_kolkata()
+    for itm in target_items:
+        old_item_from = str(itm.valid_from) if itm.valid_from else None
+        old_item_to = str(itm.valid_to) if itm.valid_to else None
+
+        if payload.valid_from is not None:
             itm.valid_from = payload.valid_from
-
-    if payload.valid_to is not None:
-        admission.valid_to = payload.valid_to
-        for itm in admission.items:
+        if payload.valid_to is not None:
             itm.valid_to = payload.valid_to
+            if itm.access_status in ["ACTIVE", "EXPIRED"]:
+                if itm.valid_to < today:
+                    itm.access_status = "EXPIRED"
+                    itm.status = "EXPIRED"
+                else:
+                    itm.access_status = "ACTIVE"
+                    itm.status = "ACTIVE"
+
+        audit = AuditLog(
+            user_id=current_user.id,
+            action="ADMISSION_ITEM_VALIDITY_UPDATED",
+            entity_type="ADMISSION_ITEM",
+            entity_id=itm.id,
+            details=json.dumps({
+                "admission_id": str(admission.id),
+                "admission_number": admission.admission_number,
+                "item_id": str(itm.id),
+                "item_name": itm.item_name_snapshot,
+                "old_valid_from": old_item_from,
+                "new_valid_from": str(itm.valid_from),
+                "old_valid_to": old_item_to,
+                "new_valid_to": str(itm.valid_to),
+                "reason": payload.notes
+            })
+        )
+        db.add(audit)
+
+    # Derive admission boundaries as min/max of items
+    item_froms = [i.valid_from for i in admission.items if i.valid_from]
+    item_tos = [i.valid_to for i in admission.items if i.valid_to]
+    if item_froms:
+        admission.valid_from = min(item_froms)
+    if item_tos:
+        admission.valid_to = max(item_tos)
 
     if payload.notes:
         admission.notes = f"{admission.notes or ''} • [Validity Adjusted: {payload.notes}]".strip()
 
-    audit = AuditLog(
-        user_id=current_user.id,
-        action="ADMISSION_VALIDITY_UPDATED",
-        entity_type="ADMISSION",
-        entity_id=admission.id,
-        details=json.dumps({
-            "purchase_transaction_id": admission.admission_number,
-            "old_valid_from": old_from,
-            "new_valid_from": str(admission.valid_from),
-            "old_valid_to": old_to,
-            "new_valid_to": str(admission.valid_to),
-            "reason": payload.notes
-        })
-    )
-    db.add(audit)
     await db.commit()
     await db.refresh(admission)
     return admission
@@ -1057,10 +1087,18 @@ async def update_item_validity(
     old_from = item.valid_from
     old_to = item.valid_to
 
+    today = today_kolkata()
     if payload.valid_from is not None:
         item.valid_from = payload.valid_from
     if payload.valid_to is not None:
         item.valid_to = payload.valid_to
+        if item.access_status in ["ACTIVE", "EXPIRED"]:
+            if item.valid_to < today:
+                item.access_status = "EXPIRED"
+                item.status = "EXPIRED"
+            else:
+                item.access_status = "ACTIVE"
+                item.status = "ACTIVE"
 
     # Update parent admission boundaries if applicable
     adm_res = await db.execute(select(Admission).options(selectinload(Admission.items)).where(Admission.id == item.admission_id))
@@ -1273,7 +1311,8 @@ async def renew_subject(
     item_calc = calc["items"][0]
     ai = AdmissionItem(
         admission=admission,
-        item_type="SUBJECT",
+        student_id=admission.student_id,
+        item_type="BATCH_SUBJECT",
         batch_id=payload.batch_id,
         subject_id=subject.id,
         teacher_id=t_id,

@@ -332,6 +332,7 @@ async def seed_data():
         adm_item1 = AdmissionItem(
             id=uuid.UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
             admission_id=admission1.id,
+            student_id=admission1.student_id,
             item_type="BATCH",
             batch_id=batch_10.id,
             subject_id=sub_math.id,
@@ -463,6 +464,7 @@ async def seed_data():
         adm_item2 = AdmissionItem(
             id=uuid.UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb2"),
             admission_id=admission2.id,
+            student_id=admission2.student_id,
             item_type="SUBJECT",
             subject_id=sub_math.id,
             teacher_id=teacher1.id,
@@ -565,6 +567,7 @@ async def seed_data():
         adm_item3 = AdmissionItem(
             id=uuid.UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb3"),
             admission_id=admission3.id,
+            student_id=admission3.student_id,
             item_type="GREEN_CARD",
             green_card_id=gc_annual.id,
             item_name_snapshot="Green Card - All Access Annual Pass",
@@ -664,6 +667,7 @@ async def seed_data():
         adm_item4a = AdmissionItem(
             id=uuid.UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb4"),
             admission_id=admission4a.id,
+            student_id=admission4a.student_id,
             item_type="SUBJECT",
             subject_id=sub_phy.id,
             teacher_id=teacher2.id,
@@ -748,6 +752,7 @@ async def seed_data():
         adm_item4b = AdmissionItem(
             id=uuid.UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb5"),
             admission_id=admission4b.id,
+            student_id=admission4b.student_id,
             item_type="SUBJECT",
             subject_id=sub_math.id,
             teacher_id=teacher1.id,
@@ -850,6 +855,7 @@ async def seed_data():
         adm_item5 = AdmissionItem(
             id=uuid.UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb6"),
             admission_id=admission5.id,
+            student_id=admission5.student_id,
             item_type="SUBJECT",
             subject_id=sub_sci.id,
             teacher_id=teacher1.id,

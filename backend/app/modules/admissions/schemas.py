@@ -1,7 +1,7 @@
 from decimal import Decimal
 from typing import Optional, List
 from datetime import date, datetime
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 import uuid
 
 class AdmissionItemCreate(BaseModel):
@@ -78,6 +78,15 @@ class AdmissionCreate(BaseModel):
     valid_from: Optional[date] = None
     valid_to: Optional[date] = None
     initial_payment: Optional[InitialPaymentData] = None
+
+    @field_validator("initial_payment", mode="before")
+    @classmethod
+    def parse_initial_payment(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, (int, float, Decimal, str)):
+            return {"amount": Decimal(str(v)), "payment_mode": "CASH"}
+        return v
 
 class LineRefundAmount(BaseModel):
     item_id: uuid.UUID
@@ -177,6 +186,8 @@ class AdmissionSlipsResponse(BaseModel):
     slips: List[SlipItemResponse] = Field(default_factory=list)
 
 class AdmissionValidityUpdate(BaseModel):
+    item_ids: Optional[List[uuid.UUID]] = None
+    apply_to_all: bool = False
     valid_from: Optional[date] = None
     valid_to: Optional[date] = None
     notes: Optional[str] = None

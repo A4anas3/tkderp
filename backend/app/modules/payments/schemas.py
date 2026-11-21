@@ -147,3 +147,20 @@ class TransactionResponse(BaseModel):
     payment_id: Optional[uuid.UUID] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+class FinancialTransactionResponse(BaseModel):
+    id: uuid.UUID
+    txn_number: str
+    txn_type: str
+    student_id: uuid.UUID
+    admission_id: Optional[uuid.UUID] = None
+    payment_id: Optional[uuid.UUID] = None
+    refund_id: Optional[uuid.UUID] = None
+    mode: str
+    reference: Optional[str] = None
+    signed_amount: Decimal
+    txn_at: datetime
+    reason: Optional[str] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

@@ -6,6 +6,7 @@ from sqlalchemy.orm import selectinload
 from app.database.session import AsyncSessionLocal
 from app.database.models import Admission, AdmissionItem, PaymentAllocation, Refund
 from app.modules.ledger.service import recompute_admission_totals
+from app.services.daily_jobs import run_daily_expiration_job
 
 async def verify_ledger(fix: bool = False):
     print("Verifying ledger against cached values across all admissions...")
@@ -83,8 +84,15 @@ def main():
         fix = "--fix" in sys.argv
         count = asyncio.run(verify_ledger(fix=fix))
         sys.exit(count)
+    elif len(sys.argv) > 1 and sys.argv[1] == "run_daily_job":
+        async def _run():
+            async with AsyncSessionLocal() as session:
+                summary = await run_daily_expiration_job(session)
+                print("Daily job summary:", summary)
+        asyncio.run(_run())
+        sys.exit(0)
     else:
-        print("Usage: python -m app.cli verify_ledger [--fix]")
+        print("Usage: python -m app.cli [verify_ledger [--fix] | run_daily_job]")
         sys.exit(1)
 
 if __name__ == "__main__":

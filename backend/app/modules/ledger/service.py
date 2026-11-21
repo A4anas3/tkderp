@@ -84,6 +84,14 @@ async def recompute_admission_totals(admission: Admission, db: AsyncSession) -> 
             else:
                 admission.payment_status = "UNPAID"
 
+    # Derive admission valid_from and valid_to as min/max of items
+    item_froms = [i.valid_from for i in items if i.valid_from]
+    item_tos = [i.valid_to for i in items if i.valid_to]
+    if item_froms:
+        admission.valid_from = min(item_froms)
+    if item_tos:
+        admission.valid_to = max(item_tos)
+
 async def record_payment_service(
     db: AsyncSession,
     admission: Admission,

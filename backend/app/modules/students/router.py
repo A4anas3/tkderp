@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_, desc
+from sqlalchemy import select, func, or_, and_, desc
+from sqlalchemy.orm import selectinload
 from decimal import Decimal
 from datetime import datetime, timezone, date, timedelta
 from typing import Optional
@@ -17,12 +18,16 @@ from app.database.session import get_db
 from app.modules.users.models import User
 from app.modules.students.models import Student
 from app.modules.admissions.models import Admission, AdmissionItem
-from app.modules.payments.models import Payment, Refund
+from app.modules.payments.models import Payment, Refund, PaymentAllocation, FinancialTransaction
+from app.modules.batches.models import Batch
 from app.modules.audit.models import AuditLog
 from app.modules.students.schemas import (
     StudentCreate, StudentUpdate, StudentRevokeRequest,
-    StudentResponse, StudentDetailResponse
+    StudentResponse, StudentDetailResponse, StudentLineResponse
 )
+from app.modules.admissions.schemas import AdmissionResponse
+from app.modules.payments.schemas import FinancialTransactionResponse
+from app.common.active_lines import today_kolkata, is_active_line, derive_student_status
 from app.core.dependencies import require_cashier_or_admin, require_staff, require_admin
 from app.common.pagination import PageResponse
 from app.common.calculations import compute_rolling_cycle_end
@@ -96,48 +101,79 @@ async def list_students(
         count_query = count_query.where(search_filter)
 
     if status and status != "ALL":
-        today = date.today()
-        if status == "ACTIVE":
-            active_adm_sub = select(Admission.student_id).where(
-                and_(
-                    Admission.status == "ACTIVE",
-                    func.coalesce(Admission.valid_to, Admission.admission_date + 30) >= today
-                )
+        today = today_kolkata()
+        active_lines_sub = (
+            select(AdmissionItem.student_id)
+            .join(Admission, AdmissionItem.admission_id == Admission.id)
+            .where(
+                AdmissionItem.access_status == "ACTIVE",
+                Admission.document_status == "VALID",
+                or_(AdmissionItem.valid_from == None, AdmissionItem.valid_from <= today),
+                or_(AdmissionItem.valid_to == None, AdmissionItem.valid_to >= today),
             )
-            cond = and_(Student.status == "ACTIVE", Student.id.in_(active_adm_sub))
+        )
+        if status == "ACTIVE":
+            cond = and_(Student.status == "ACTIVE", Student.id.in_(active_lines_sub))
             query = query.where(cond)
             count_query = count_query.where(cond)
         elif status == "UPCOMING":
-            upcoming_adm_sub = select(Admission.student_id).where(
-                and_(
-                    Admission.status == "ACTIVE",
-                    Admission.valid_from > today
+            upcoming_lines_sub = (
+                select(AdmissionItem.student_id)
+                .join(Admission, AdmissionItem.admission_id == Admission.id)
+                .where(
+                    AdmissionItem.access_status == "ACTIVE",
+                    Admission.document_status == "VALID",
+                    AdmissionItem.valid_from != None,
+                    AdmissionItem.valid_from > today,
                 )
             )
-            query = query.where(Student.id.in_(upcoming_adm_sub))
-            count_query = count_query.where(Student.id.in_(upcoming_adm_sub))
+            cond = Student.id.in_(upcoming_lines_sub)
+            query = query.where(cond)
+            count_query = count_query.where(cond)
         elif status == "EXPIRED":
-            expired_adm_sub = select(Admission.student_id).where(
-                func.coalesce(Admission.valid_to, Admission.admission_date + 30) < today
-            )
-            active_adm_sub = select(Admission.student_id).where(
-                and_(
-                    Admission.status == "ACTIVE",
-                    func.coalesce(Admission.valid_to, Admission.admission_date + 30) >= today
+            expired_lines_sub = (
+                select(AdmissionItem.student_id)
+                .join(Admission, AdmissionItem.admission_id == Admission.id)
+                .where(
+                    Admission.document_status == "VALID",
+                    AdmissionItem.valid_to != None,
+                    AdmissionItem.valid_to < today,
+                    AdmissionItem.access_status.in_(["ACTIVE", "EXPIRED"]),
                 )
             )
-            cond = and_(Student.id.in_(expired_adm_sub), ~Student.id.in_(active_adm_sub))
+            cond = and_(Student.id.in_(expired_lines_sub), ~Student.id.in_(active_lines_sub))
             query = query.where(cond)
             count_query = count_query.where(cond)
         elif status == "DISCONTINUED":
-            disc_adm_sub = select(Admission.student_id).where(
-                Admission.status.in_(["DISCONTINUED", "CANCELLED", "REVOKED"])
+            disc_lines_sub = (
+                select(AdmissionItem.student_id)
+                .join(Admission, AdmissionItem.admission_id == Admission.id)
+                .where(
+                    or_(
+                        AdmissionItem.access_status.in_(["SUSPENDED", "REVOKED"]),
+                        Admission.document_status == "VOID",
+                    )
+                )
             )
-            cond = or_(Student.status.in_(["REVOKED", "INACTIVE"]), Student.id.in_(disc_adm_sub))
+            cond = or_(Student.status.in_(["REVOKED", "INACTIVE"]), Student.id.in_(disc_lines_sub))
             query = query.where(cond)
             count_query = count_query.where(cond)
         elif status == "INACTIVE":
             cond = Student.status.in_(["REVOKED", "INACTIVE"])
+            query = query.where(cond)
+            count_query = count_query.where(cond)
+        elif status == "REVOKED":
+            revoked_lines_sub = (
+                select(AdmissionItem.student_id)
+                .join(Admission, AdmissionItem.admission_id == Admission.id)
+                .where(
+                    or_(
+                        AdmissionItem.access_status == "REVOKED",
+                        Admission.document_status == "VOID",
+                    )
+                )
+            )
+            cond = and_(or_(Student.status == "REVOKED", Student.id.in_(revoked_lines_sub)), ~Student.id.in_(active_lines_sub))
             query = query.where(cond)
             count_query = count_query.where(cond)
         else:
@@ -236,26 +272,36 @@ async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db),
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
 
+    today = today_kolkata()
+
+    # Load all admissions with their items
+    adms_stmt = (
+        select(Admission)
+        .options(selectinload(Admission.items))
+        .where(Admission.student_id == student_id)
+        .order_by(Admission.admission_date.desc(), Admission.created_at.desc())
+    )
+    admissions = list((await db.execute(adms_stmt)).scalars().all())
+
+    # Flatten all items with admission reference attached
+    all_items = []
+    for adm in admissions:
+        for itm in adm.items:
+            itm.admission = adm
+            all_items.append(itm)
+
+    # Derive student status dynamically from lines
+    if all_items and student.status != "REVOKED":
+        student.status = derive_student_status(all_items, today)
+
     # Financial totals for student
-    total_adm_count = (await db.execute(
-        select(func.count(Admission.id)).where(Admission.student_id == student_id)
-    )).scalar() or 0
+    total_adm_count = len(admissions)
+    active_adm_count = sum(1 for a in admissions if a.status == "ACTIVE" and getattr(a, "access_status", "ACTIVE") == "ACTIVE")
+    revoked_adm_count = sum(1 for a in admissions if a.status in ["REVOKED", "CANCELLED"] or getattr(a, "access_status", "ACTIVE") == "REVOKED")
 
-    active_adm_count = (await db.execute(
-        select(func.count(Admission.id)).where(Admission.student_id == student_id, Admission.status == "ACTIVE")
-    )).scalar() or 0
-
-    revoked_adm_count = (await db.execute(
-        select(func.count(Admission.id)).where(Admission.student_id == student_id, Admission.status.in_(["REVOKED", "CANCELLED"]))
-    )).scalar() or 0
-
-    active_row = (await db.execute(
-        select(
-            func.coalesce(func.sum(Admission.total_payable), Decimal("0.00")),
-            func.coalesce(func.sum(Admission.balance_due), Decimal("0.00"))
-        ).where(Admission.student_id == student_id, Admission.status == "ACTIVE")
-    )).first()
-    active_billed, active_due = active_row if active_row else (Decimal("0.00"), Decimal("0.00"))
+    active_adms = [a for a in admissions if a.status == "ACTIVE" and getattr(a, "document_status", "VALID") == "VALID"]
+    active_billed = sum((a.total_payable for a in active_adms), Decimal("0.00"))
+    active_due = sum((a.balance_due for a in active_adms), Decimal("0.00"))
 
     total_paid = (await db.execute(
         select(func.coalesce(func.sum(Payment.amount), Decimal("0.00")))
@@ -269,6 +315,102 @@ async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db),
 
     net_paid = total_paid - total_refunded
 
+    # Fetch last payment per item in one query
+    item_ids = [itm.id for itm in all_items]
+    last_payment_info = {}
+    if item_ids:
+        pa_stmt = (
+            select(PaymentAllocation.admission_item_id, Payment.payment_date, PaymentAllocation.allocated_amount)
+            .join(Payment, PaymentAllocation.payment_id == Payment.id)
+            .where(
+                PaymentAllocation.admission_item_id.in_(item_ids),
+                PaymentAllocation.kind == "PAYMENT"
+            )
+            .order_by(Payment.payment_date.desc(), PaymentAllocation.created_at.desc())
+        )
+        pa_res = await db.execute(pa_stmt)
+        for aid, p_date, p_amt in pa_res.all():
+            if aid not in last_payment_info:
+                last_payment_info[aid] = (p_date, p_amt)
+
+    # Fetch batch names in one query
+    batch_ids = [itm.batch_id for itm in all_items if itm.batch_id]
+    batch_names = {}
+    if batch_ids:
+        b_res = await db.execute(select(Batch.id, Batch.name).where(Batch.id.in_(batch_ids)))
+        batch_names = {bid: bname for bid, bname in b_res.all()}
+
+    # Group lines: active, expiring, expired, revoked
+    RENEWAL_ALERT_DAYS = 5
+    active_lines = []
+    expiring_lines = []
+    expired_lines = []
+    revoked_lines = []
+
+    for itm in all_items:
+        last_p_date, last_p_amt = last_payment_info.get(itm.id, (None, None))
+        if isinstance(last_p_date, datetime):
+            last_p_date = last_p_date.date()
+        days_left = (itm.valid_to - today).days if itm.valid_to else None
+
+        if itm.amount_collected >= itm.net_price:
+            pay_st = "PAID"
+        elif itm.amount_collected > Decimal("0.00"):
+            pay_st = "PARTIAL"
+        else:
+            pay_st = "UNPAID"
+
+        line_resp = StudentLineResponse(
+            id=itm.id,
+            admission_id=itm.admission_id,
+            slip_number=itm.admission.admission_number,
+            subject_id=itm.subject_id,
+            subject_name=itm.item_name_snapshot,
+            teacher_id=itm.teacher_id,
+            teacher_name=itm.teacher_name_snapshot,
+            batch_id=itm.batch_id,
+            batch_name=batch_names.get(itm.batch_id),
+            hall_number=itm.hall_number_snapshot,
+            valid_from=itm.valid_from,
+            valid_to=itm.valid_to,
+            days_left=days_left,
+            net_price=itm.net_price,
+            amount_collected=itm.amount_collected,
+            balance_due=itm.balance_due,
+            last_paid_date=last_p_date,
+            last_paid_amount=last_p_amt,
+            payment_status=pay_st,
+            access_status=itm.access_status,
+            item_type=itm.item_type
+        )
+
+        is_line_revoked = (
+            itm.access_status == "REVOKED"
+            or getattr(itm.admission, "document_status", "VALID") == "VOID"
+        )
+        is_line_expired = (
+            itm.access_status == "EXPIRED"
+            or (itm.valid_to is not None and itm.valid_to < today)
+        )
+
+        if is_line_revoked:
+            revoked_lines.append(line_resp)
+        elif is_line_expired:
+            expired_lines.append(line_resp)
+        elif days_left is not None and 0 <= days_left <= RENEWAL_ALERT_DAYS:
+            expiring_lines.append(line_resp)
+            active_lines.append(line_resp)
+        else:
+            active_lines.append(line_resp)
+
+    # Fetch financial transactions history
+    tx_stmt = (
+        select(FinancialTransaction)
+        .where(FinancialTransaction.student_id == student_id)
+        .order_by(FinancialTransaction.txn_at.desc(), FinancialTransaction.created_at.desc())
+    )
+    txns = list((await db.execute(tx_stmt)).scalars().all())
+
     res = StudentDetailResponse.model_validate(student)
     res.admissions_count = total_adm_count
     res.active_admissions_count = active_adm_count
@@ -278,6 +420,13 @@ async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db),
     res.total_refunded = total_refunded
     res.net_paid = net_paid
     res.total_balance_due = active_due
+
+    res.active = active_lines
+    res.expiring = expiring_lines
+    res.expired = expired_lines
+    res.revoked = revoked_lines
+    res.slips = [AdmissionResponse.model_validate(adm) for adm in admissions]
+    res.transactions = [FinancialTransactionResponse.model_validate(tx) for tx in txns]
     return res
 
 @router.post("", response_model=StudentResponse, status_code=status.HTTP_201_CREATED)
