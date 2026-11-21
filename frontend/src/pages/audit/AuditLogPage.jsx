@@ -29,6 +29,7 @@ import {
   Check,
   Eye,
   SlidersHorizontal,
+  ArrowLeftRight,
 } from 'lucide-react';
 import { auditApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
@@ -58,6 +59,8 @@ export function getActionMeta(action) {
       return { label: 'Refund Issued', variant: 'warning', icon: ArrowDownLeft };
     case 'SUBJECT_RENEWED':
       return { label: 'Subject Renewed', variant: 'teal', icon: RefreshCw };
+    case 'SUBJECT_CHANGED':
+      return { label: 'Subject Changed', variant: 'purple', icon: ArrowLeftRight };
     case 'ADMISSION_ITEM_VALIDITY_UPDATED':
       return { label: 'Validity Adjusted', variant: 'info', icon: Calendar };
     case 'ADMISSION_SUSPENDED':
@@ -134,6 +137,21 @@ export function AuditDetailsSummary({ audit }) {
         <span className="font-bold text-rose-700">₹{Number(parsed.net_amount || parsed.gross_amount).toLocaleString('en-IN')}</span>
         {parsed.refund_number && <span className="text-black font-mono text-[11px] font-semibold">{parsed.refund_number}</span>}
         {parsed.reason && <span className="text-slate-800 italic truncate max-w-xs">"{parsed.reason}"</span>}
+      </div>
+    );
+  }
+
+  if (parsed.new_subject) {
+    return (
+      <div className="flex flex-wrap items-center gap-1.5 text-xs">
+        <span className="font-bold text-black">{parsed.student_name}</span>
+        <span className="text-slate-600 text-[11px]">
+          {parsed.old_subject ? `${parsed.old_subject} → ` : ''}
+          <span className="text-odoo-800 font-bold">{parsed.new_subject}</span>
+        </span>
+        {parsed.new_admission_number && (
+          <span className="text-slate-500 font-mono text-[10px]">({parsed.new_admission_number})</span>
+        )}
       </div>
     );
   }
