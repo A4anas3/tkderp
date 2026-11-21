@@ -211,8 +211,9 @@ async def create_admission(
         t_id = raw.teacher_id
         t_name = raw.teacher_name_snapshot
         h_no = raw.hall_number_snapshot
+        bs_obj = None
 
-        if (not t_name or not h_no) and raw.batch_id and raw.subject_id:
+        if raw.batch_id and raw.subject_id:
             bs_res = await db.execute(
                 select(BatchSubject).where(
                     BatchSubject.batch_id == raw.batch_id,

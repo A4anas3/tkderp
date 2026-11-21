@@ -70,9 +70,10 @@ async def get_subject_revenue_from_ledger(
         .join(AdmissionItem, PaymentAllocation.admission_item_id == AdmissionItem.id)
         .outerjoin(Payment, PaymentAllocation.payment_id == Payment.id)
         .outerjoin(Refund, PaymentAllocation.refund_id == Refund.id)
-        .where(and_(*date_conds))
-        .group_by(AdmissionItem.subject_id)
     )
+    if date_conds:
+        stmt = stmt.where(and_(*date_conds))
+    stmt = stmt.group_by(AdmissionItem.subject_id)
     if subject_id:
         stmt = stmt.where(AdmissionItem.subject_id == subject_id)
 
@@ -100,9 +101,10 @@ async def get_teacher_revenue_from_ledger(
         .join(AdmissionItem, PaymentAllocation.admission_item_id == AdmissionItem.id)
         .outerjoin(Payment, PaymentAllocation.payment_id == Payment.id)
         .outerjoin(Refund, PaymentAllocation.refund_id == Refund.id)
-        .where(and_(*date_conds))
-        .group_by(AdmissionItem.teacher_id)
     )
+    if date_conds:
+        stmt = stmt.where(and_(*date_conds))
+    stmt = stmt.group_by(AdmissionItem.teacher_id)
     if teacher_id:
         stmt = stmt.where(AdmissionItem.teacher_id == teacher_id)
 
@@ -130,9 +132,10 @@ async def get_batch_revenue_from_ledger(
         .join(AdmissionItem, PaymentAllocation.admission_item_id == AdmissionItem.id)
         .outerjoin(Payment, PaymentAllocation.payment_id == Payment.id)
         .outerjoin(Refund, PaymentAllocation.refund_id == Refund.id)
-        .where(and_(*date_conds))
-        .group_by(AdmissionItem.batch_id)
     )
+    if date_conds:
+        stmt = stmt.where(and_(*date_conds))
+    stmt = stmt.group_by(AdmissionItem.batch_id)
     if batch_id:
         stmt = stmt.where(AdmissionItem.batch_id == batch_id)
 

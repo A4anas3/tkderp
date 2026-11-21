@@ -362,11 +362,12 @@ async def test_batch_creation_with_teacher_snapshot():
         subject = s_res.json()[0]
 
         # Create Batch
+        unique_hall = f"Hall-{uuid.uuid4().hex[:6]}"
         payload = {
-            "name": "NEET Crash Course 2026",
+            "name": f"NEET Crash Course {uuid.uuid4().hex[:4]}",
             "teacher_id": teacher["id"],
             "class_category": "Class 12+",
-            "hall_number": "Hall 5",
+            "hall_number": unique_hall,
             "schedule": "Daily 5PM - 8PM",
             "start_date": "2026-12-01",
             "status": "ACTIVE",
@@ -380,7 +381,7 @@ async def test_batch_creation_with_teacher_snapshot():
         res = await client.post("/api/batches", json=payload, headers=headers)
         assert res.status_code == 201
         batch = res.json()
-        assert batch["name"] == "NEET Crash Course 2026"
+        assert "NEET Crash Course" in batch["name"]
         assert batch["teacher_name_snapshot"] == teacher["name"]
         assert batch["teacher_mobile_snapshot"] == teacher["mobile"]
         assert len(batch["subjects"]) == 1
