@@ -14,7 +14,7 @@ class StudentBase(BaseModel):
     address: Optional[str] = None
     dob: Optional[date] = None
     registration_date: date = Field(default_factory=date.today)
-    status: str = Field(default="ACTIVE", pattern="^(ACTIVE|INACTIVE|REVOKED)$")
+    status: str = Field(default="ACTIVE", pattern="^(ACTIVE|INACTIVE|EXPIRED|REVOKED)$")
     has_green_card: bool = False
     green_card_expiry: Optional[date] = None
     notes: Optional[str] = None
@@ -36,7 +36,7 @@ class StudentUpdate(BaseModel):
     address: Optional[str] = None
     dob: Optional[date] = None
     registration_date: Optional[date] = None
-    status: Optional[str] = Field(default=None, pattern="^(ACTIVE|INACTIVE|REVOKED)$")
+    status: Optional[str] = Field(default=None, pattern="^(ACTIVE|INACTIVE|EXPIRED|REVOKED)$")
     notes: Optional[str] = None
 
     @field_validator("mobile", mode="before")
