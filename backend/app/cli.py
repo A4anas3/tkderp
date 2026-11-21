@@ -6,7 +6,8 @@ from sqlalchemy.orm import selectinload
 from app.database.session import AsyncSessionLocal
 from app.database.models import Admission, AdmissionItem, PaymentAllocation, Refund
 from app.modules.ledger.service import recompute_admission_totals
-from app.services.daily_jobs import run_daily_expiration_job
+from app.services.daily_jobs import run_daily_expiration_job, refresh_statuses
+from datetime import datetime
 
 async def verify_ledger(fix: bool = False):
     print("Verifying ledger against cached values across all admissions...")
@@ -84,15 +85,19 @@ def main():
         fix = "--fix" in sys.argv
         count = asyncio.run(verify_ledger(fix=fix))
         sys.exit(count)
-    elif len(sys.argv) > 1 and sys.argv[1] == "run_daily_job":
+    elif len(sys.argv) > 1 and sys.argv[1] in ("refresh_statuses", "run_daily_job"):
+        target_date = None
+        for i, arg in enumerate(sys.argv):
+            if arg == "--date" and i + 1 < len(sys.argv):
+                target_date = datetime.strptime(sys.argv[i + 1], "%Y-%m-%d").date()
+
         async def _run():
-            async with AsyncSessionLocal() as session:
-                summary = await run_daily_expiration_job(session)
-                print("Daily job summary:", summary)
+            summary = await refresh_statuses(today=target_date)
+            print("refresh_statuses summary:", summary)
         asyncio.run(_run())
         sys.exit(0)
     else:
-        print("Usage: python -m app.cli [verify_ledger [--fix] | run_daily_job]")
+        print("Usage: python -m app.cli [verify_ledger [--fix] | refresh_statuses [--date YYYY-MM-DD]]")
         sys.exit(1)
 
 if __name__ == "__main__":

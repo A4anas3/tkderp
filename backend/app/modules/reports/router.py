@@ -12,6 +12,7 @@ from sqlalchemy import select, func, and_, or_, case
 
 from app.database.session import get_db
 from app.common.calculations import evaluate_student_rolling_cycle, compute_rolling_cycle_end
+from app.common.active_student import active_student_subject_filter, today_kolkata
 from app.core.dependencies import require_staff, require_admin
 from app.database.models import (
     Admission, AdmissionItem, Subject, Batch, Teacher, PaymentAllocation, Payment,
@@ -131,14 +132,14 @@ async def get_subject_revenue_report(
             *date_conds
         ]
 
-        today = date.today()
+        today = today_kolkata()
         stmt = (
             select(
                 func.coalesce(func.sum(AdmissionItem.original_price), Decimal("0.00")),
                 func.coalesce(func.sum(AdmissionItem.discount_amount + AdmissionItem.overall_discount_share), Decimal("0.00")),
                 func.coalesce(func.sum(AdmissionItem.net_price), Decimal("0.00")),
                 func.coalesce(func.count(AdmissionItem.id), 0),
-                func.count(case((and_(Admission.status == "ACTIVE", end_col >= today), 1), else_=None)),
+                func.count(case((active_student_subject_filter(AdmissionItem, Admission, today), 1), else_=None)),
                 func.count(case((and_(Admission.status == "ACTIVE", end_col < today), 1), else_=None)),
                 func.count(func.distinct(Admission.student_id))
             )
@@ -364,12 +365,12 @@ async def get_batch_revenue_report(
             *date_conds
         ]
 
-        today = date.today()
+        today = today_kolkata()
         stmt = (
             select(
                 func.coalesce(func.sum(AdmissionItem.net_price), Decimal("0.00")),
                 func.coalesce(func.count(AdmissionItem.id), 0),
-                func.count(case((and_(Admission.status == "ACTIVE", end_col >= today), 1), else_=None)),
+                func.count(case((active_student_subject_filter(AdmissionItem, Admission, today), 1), else_=None)),
                 func.count(case((and_(Admission.status == "ACTIVE", end_col < today), 1), else_=None)),
                 func.count(func.distinct(Admission.student_id))
             )

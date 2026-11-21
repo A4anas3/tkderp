@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     ALLOW_PAY_WHEN_SUSPENDED: bool = False
     RENEWAL_GAP_RESET_DAYS: int = 30
     TEACHER_EARNING_BASIS: str = "CASH"
+    GRACE_DAYS: int = 7
+    PAYMENT_GRACE_DAYS: int = 7
 
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["*"]

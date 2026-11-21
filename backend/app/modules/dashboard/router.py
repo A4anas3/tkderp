@@ -12,6 +12,7 @@ from app.database.models import (
     Student, Batch, Teacher, Enquiry, Admission, Payment, Expense, SalaryRecord,
     AdmissionItem, User, Subject, Refund
 )
+from app.common.active_student import active_student_subject_filter, today_kolkata
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboards"])
 
@@ -246,12 +247,16 @@ async def get_teacher_dashboard(
     batch_list = []
     total_students_set = set()
 
+    today = today_kolkata()
     for s in subjects:
         enr_stmt = (
             select(AdmissionItem.admission_id, Admission.student_id, Admission.student_name_snapshot, Student.mobile, Student.student_code)
             .join(Admission, AdmissionItem.admission_id == Admission.id)
             .join(Student, Admission.student_id == Student.id)
-            .where(AdmissionItem.subject_id == s.id, Admission.status == "ACTIVE")
+            .where(
+                AdmissionItem.subject_id == s.id,
+                active_student_subject_filter(AdmissionItem, Admission, today)
+            )
         )
         enr_res = await db.execute(enr_stmt)
         students_rows = enr_res.all()
@@ -278,12 +283,15 @@ async def get_teacher_dashboard(
         })
 
     for b in batches:
-        # Enrolled students for this batch
+        # Enrolled active students for this batch using canonical definition
         enr_stmt = (
             select(AdmissionItem.admission_id, Admission.student_id, Admission.student_name_snapshot, Student.mobile, Student.student_code)
             .join(Admission, AdmissionItem.admission_id == Admission.id)
             .join(Student, Admission.student_id == Student.id)
-            .where(AdmissionItem.batch_id == b.id, Admission.status == "ACTIVE")
+            .where(
+                AdmissionItem.batch_id == b.id,
+                active_student_subject_filter(AdmissionItem, Admission, today)
+            )
         )
         enr_res = await db.execute(enr_stmt)
         students_rows = enr_res.all()

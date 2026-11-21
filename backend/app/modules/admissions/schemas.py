@@ -43,6 +43,7 @@ class AdmissionItemResponse(BaseModel):
     valid_from: Optional[date] = None
     valid_to: Optional[date] = None
     status: str = "ACTIVE"
+    is_on_hold: bool = False
     previous_status: Optional[str] = None
     access_status: str = "ACTIVE"
     previous_access_status: Optional[str] = None

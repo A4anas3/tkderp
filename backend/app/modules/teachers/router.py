@@ -24,6 +24,7 @@ from app.modules.students.models import Student
 from app.modules.expenses.models import SalaryRecord
 from app.database.models import AuditLog
 from app.modules.reports.ledger_queries import get_item_allocated_collected_map, ist_day_boundaries
+from app.common.active_student import active_student_subject_filter, today_kolkata
 from app.core.dependencies import require_staff, require_admin
 from app.common.pagination import PageResponse
 
@@ -281,17 +282,18 @@ async def get_teacher_roster(
     if s_ids: where_cond.append(AdmissionItem.subject_id.in_(s_ids))
     base_teacher_filter = or_(*where_cond)
 
-    today = date.today()
+    today = today_kolkata()
     start_col = func.coalesce(AdmissionItem.valid_from, Admission.valid_from, Admission.admission_date)
     end_col = func.coalesce(AdmissionItem.valid_to, Admission.valid_to, Admission.admission_date + 30)
 
-    # 2. Pre-compute summary metrics across teacher's entire cohort directly at database level
+    # 2. Pre-compute summary metrics across teacher's entire cohort using canonical active definition
+    active_cond = active_student_subject_filter(AdmissionItem, Admission, today)
     metrics_stmt = (
         select(
             func.count(AdmissionItem.id),
-            func.count(case((and_(Admission.status == "ACTIVE", end_col >= today), 1), else_=None)),
-            func.count(case((and_(Admission.status == "ACTIVE", end_col < today), 1), else_=None)),
-            func.count(case((Admission.status.in_(["CANCELLED", "REVOKED"]), 1), else_=None)),
+            func.count(case((active_cond, 1), else_=None)),
+            func.count(case((and_(Admission.status == "ACTIVE", or_(AdmissionItem.valid_to < today, AdmissionItem.status == "EXPIRED")), 1), else_=None)),
+            func.count(case((or_(Admission.status.in_(["CANCELLED", "REVOKED"]), AdmissionItem.status.in_(["CANCELLED", "REVOKED", "DISCONTINUED"])), 1), else_=None)),
             func.count(func.distinct(Admission.student_id))
         )
         .join(Admission, AdmissionItem.admission_id == Admission.id)
@@ -329,7 +331,7 @@ async def get_teacher_roster(
 
     # Apply database-level status filtering
     if status_filter == "ACTIVE":
-        status_cond = and_(Admission.status == "ACTIVE", end_col >= today)
+        status_cond = active_cond
         q_items = q_items.where(status_cond)
         q_count = q_count.where(status_cond)
     elif status_filter in ("INACTIVE", "EXPIRED"):

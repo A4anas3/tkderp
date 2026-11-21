@@ -118,7 +118,8 @@ class AdmissionItem(BaseModel):
     valid_to: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
 
     # Subject Lifecycle Status & Tracking
-    status: Mapped[str] = mapped_column(String(30), nullable=False, default="ACTIVE", index=True) # ACTIVE, SUSPENDED, DISCONTINUED, EXPIRED, COMPLETED
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="ACTIVE", index=True) # ACTIVE, UPCOMING, ON_HOLD, SUSPENDED, DISCONTINUED, EXPIRED, COMPLETED
+    is_on_hold: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     previous_status: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     access_status: Mapped[str] = mapped_column(String(30), nullable=False, default="ACTIVE", server_default="ACTIVE", index=True) # ACTIVE, SUSPENDED, EXPIRED, REVOKED
     previous_access_status: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)

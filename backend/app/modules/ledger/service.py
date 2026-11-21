@@ -126,11 +126,18 @@ async def recompute_admission_totals(admission: Admission, db: AsyncSession) -> 
 
     # Update item caches
     is_void = getattr(admission, "document_status", "VALID") == "VOID"
+    today_dt = date.today()
     for itm in items:
         net_collected = max(Decimal("0.00"), alloc_sums.get(itm.id, Decimal("0.00")))
         itm.amount_collected = net_collected
         w_off = itm.written_off_amount or Decimal("0.00")
         itm.balance_due = Decimal("0.00") if is_void else max(Decimal("0.00"), itm.net_price - net_collected - w_off)
+
+        # Restore from ON_HOLD if balance is paid and validity is still active
+        if itm.status == "ON_HOLD" and itm.balance_due <= Decimal("0.00"):
+            if itm.valid_to is None or itm.valid_to >= today_dt:
+                itm.status = "ACTIVE"
+                itm.is_on_hold = False
 
     # Check if real refund rows exist for this admission
     ref_stmt = select(func.count(Refund.id)).where(Refund.admission_id == admission.id)

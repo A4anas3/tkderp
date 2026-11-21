@@ -154,6 +154,10 @@ async def get_item_allocated_collected_map(
 
     date_conds = build_date_conditions(from_date, to_date)
 
+    where_conds = [PaymentAllocation.admission_item_id.in_(item_ids)]
+    if date_conds:
+        where_conds.extend(date_conds)
+
     stmt = (
         select(
             PaymentAllocation.admission_item_id,
@@ -161,10 +165,7 @@ async def get_item_allocated_collected_map(
         )
         .outerjoin(Payment, PaymentAllocation.payment_id == Payment.id)
         .outerjoin(Refund, PaymentAllocation.refund_id == Refund.id)
-        .where(
-            PaymentAllocation.admission_item_id.in_(item_ids),
-            and_(*date_conds)
-        )
+        .where(and_(*where_conds))
         .group_by(PaymentAllocation.admission_item_id)
     )
     res = await db.execute(stmt)
