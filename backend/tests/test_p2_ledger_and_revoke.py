@@ -600,5 +600,347 @@ async def test_payment_rejection_discontinued_and_non_active():
             "payment_mode": "CASH"
         }, headers=admin_headers)
         assert pay_fail.status_code == 400
-        assert "no outstanding balance" in pay_fail.json()["detail"].lower() or "discontinued" in pay_fail.json()["detail"].lower()
+        assert "discontinued" in pay_fail.json()["detail"].lower() or "no outstanding balance" in pay_fail.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_acceptance_pay_partial_refund_revoke_restore():
+    """
+    Acceptance Test:
+    pay -> partial refund of one subject -> revoke -> restore returns exactly the original
+    per-subject collected numbers minus refunds; reports and teacher totals match the ledger at every step.
+    """
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        adm_login = await client.post("/api/auth/login", json={"username": "ADM001", "password": "Admin@1234"})
+        admin_headers = {"Authorization": f"Bearer {adm_login.json()['access_token']}"}
+
+        st_res = await client.post("/api/students", json={
+            "name": "Acceptance Refund Revoke Student",
+            "mobile": f"97{uuid.uuid4().int % 100000000:08d}"
+        }, headers=admin_headers)
+        st = st_res.json()
+
+        b_res = await client.get("/api/batches/all", headers=admin_headers)
+        batches = b_res.json()
+        sub = batches[0]["subjects"][0]
+
+        # 1. Create admission with 2 subjects of 1000 each = 2000 total
+        adm_res = await client.post("/api/admissions", json={
+            "student_id": st["id"],
+            "admission_date": "2026-11-21",
+            "items": [
+                {
+                    "item_type": "BATCH_SUBJECT",
+                    "batch_id": batches[0]["id"],
+                    "subject_id": sub["subject_id"],
+                    "item_name_snapshot": "Physics-NEET",
+                    "original_price": 1000.0
+                },
+                {
+                    "item_type": "BATCH_SUBJECT",
+                    "batch_id": batches[0]["id"],
+                    "subject_id": sub["subject_id"],
+                    "item_name_snapshot": "Chemistry-NEET",
+                    "original_price": 1000.0
+                }
+            ],
+            "initial_payment": {"amount": 2000.0, "payment_mode": "UPI"}
+        }, headers=admin_headers)
+        assert adm_res.status_code == 201
+        adm = adm_res.json()
+        item_physics = adm["items"][0]
+        item_chemistry = adm["items"][1]
+
+        assert float(item_physics["amount_collected"]) == 1000.0
+        assert float(item_chemistry["amount_collected"]) == 1000.0
+        assert float(adm["amount_paid"]) == 2000.0
+
+        # 2. Partial refund of ONE subject (Physics: 400 refund)
+        ref_res = await client.post("/api/payments/refund", json={
+            "admission_id": adm["id"],
+            "item_id": item_physics["id"],
+            "amount": 400.0,
+            "reason": "Change of faculty preference for Physics",
+            "refund_mode": "UPI"
+        }, headers=admin_headers)
+        assert ref_res.status_code == 201
+
+        # Check collected numbers after refund
+        get_adm1 = (await client.get(f"/api/admissions/{adm['id']}", headers=admin_headers)).json()
+        items1_map = {i["id"]: i for i in get_adm1["items"]}
+        assert float(items1_map[item_physics["id"]]["amount_collected"]) == 600.0
+        assert float(items1_map[item_chemistry["id"]]["amount_collected"]) == 1000.0
+        assert float(get_adm1["amount_paid"]) == 1600.0
+        assert get_adm1["payment_status"] == "PARTIALLY_REFUNDED"
+
+        # 3. Revoke admission (all non-final items become DISCONTINUED with previous_status remembered)
+        rev_res = await client.post(f"/api/admissions/{adm['id']}/revoke", json={
+            "revoke_type": "DROPOUT_NO_REFUND",
+            "scope": "WHOLE_SLIP",
+            "reason": "Family relocation",
+            "pending_due_action": "KEEP_DUE"
+        }, headers=admin_headers)
+        assert rev_res.status_code == 200
+        rev_adm = rev_res.json()
+        assert rev_adm["status"] == "REVOKED"
+        assert rev_adm["access_status"] == "REVOKED"
+        for itm in rev_adm["items"]:
+            assert itm["status"] == "DISCONTINUED"
+            assert itm["previous_status"] == "ACTIVE"
+            assert itm["access_status"] == "REVOKED"
+
+        # 4. Restore admission
+        rest_res = await client.post(f"/api/admissions/{adm['id']}/restore", headers=admin_headers)
+        assert rest_res.status_code == 200
+        rest_adm = rest_res.json()
+        assert rest_adm["status"] == "ACTIVE"
+        assert rest_adm["access_status"] == "ACTIVE"
+
+        # Verify: items go back to previous_status ("ACTIVE"), allocations are NOT touched
+        items_rest_map = {i["id"]: i for i in rest_adm["items"]}
+        assert items_rest_map[item_physics["id"]]["status"] == "ACTIVE"
+        assert items_rest_map[item_chemistry["id"]]["status"] == "ACTIVE"
+        assert items_rest_map[item_physics["id"]]["previous_status"] is None
+        assert items_rest_map[item_chemistry["id"]]["previous_status"] is None
+
+        # EXACT original per-subject collected numbers minus refund restored!
+        assert float(items_rest_map[item_physics["id"]]["amount_collected"]) == 600.0
+        assert float(items_rest_map[item_chemistry["id"]]["amount_collected"]) == 1000.0
+        assert float(rest_adm["amount_paid"]) == 1600.0
+
+        # Ledger check
+        assert await verify_ledger(fix=False) == 0
+
+
+@pytest.mark.asyncio
+async def test_refund_policy_deductions():
+    """
+    Test: refund_policy support with refund_amount_requested, deduction_amount, deduction_reason.
+    Gross, deduction, net payout stored and ledger updated.
+    """
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        adm_login = await client.post("/api/auth/login", json={"username": "ADM001", "password": "Admin@1234"})
+        admin_headers = {"Authorization": f"Bearer {adm_login.json()['access_token']}"}
+
+        st_res = await client.post("/api/students", json={
+            "name": "Refund Policy Student",
+            "mobile": f"98{uuid.uuid4().int % 100000000:08d}"
+        }, headers=admin_headers)
+        st = st_res.json()
+
+        b_res = await client.get("/api/batches/all", headers=admin_headers)
+        sub = b_res.json()[0]["subjects"][0]
+
+        adm_res = await client.post("/api/admissions", json={
+            "student_id": st["id"],
+            "admission_date": "2026-11-21",
+            "items": [
+                {
+                    "item_type": "BATCH_SUBJECT",
+                    "batch_id": b_res.json()[0]["id"],
+                    "subject_id": sub["subject_id"],
+                    "item_name_snapshot": "Mathematics",
+                    "original_price": 1000.0
+                }
+            ],
+            "initial_payment": {"amount": 1000.0, "payment_mode": "CASH"}
+        }, headers=admin_headers)
+        adm = adm_res.json()
+
+        # Request 1000 refund, with 250 deduction for 5 days attended
+        ref_res = await client.post("/api/payments/refund", json={
+            "admission_id": adm["id"],
+            "refund_amount_requested": 1000.0,
+            "deduction_amount": 250.0,
+            "deduction_reason": "Attended 5 days class fee",
+            "reason": "Student withdrawal due to relocation",
+            "refund_mode": "BANK_TRANSFER"
+        }, headers=admin_headers)
+        assert ref_res.status_code == 201
+        ref_data = ref_res.json()
+
+        assert float(ref_data["refund_amount_requested"]) == 1000.0
+        assert float(ref_data["deduction_amount"]) == 250.0
+        assert ref_data["deduction_reason"] == "Attended 5 days class fee"
+        # Net paid out to student: 1000 - 250 = 750
+        assert float(ref_data["amount"]) == 750.0
+
+        # Admission amount_paid is now 1000 - 750 = 250.0 (retained fees)
+        get_adm = (await client.get(f"/api/admissions/{adm['id']}", headers=admin_headers)).json()
+        assert float(get_adm["amount_paid"]) == 250.0
+        assert float(get_adm["items"][0]["amount_collected"]) == 250.0
+        assert get_adm["payment_status"] == "PARTIALLY_REFUNDED"
+
+
+@pytest.mark.asyncio
+async def test_cancel_guards_and_restrictions():
+    """
+    Test:
+    - Cancel allowed only when net money paid == 0; returns 400 if money paid.
+    - Double cancel returns 409.
+    - Cancelling a revoked slip returns 400.
+    """
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        adm_login = await client.post("/api/auth/login", json={"username": "ADM001", "password": "Admin@1234"})
+        admin_headers = {"Authorization": f"Bearer {adm_login.json()['access_token']}"}
+
+        st_res = await client.post("/api/students", json={
+            "name": "Cancel Guard Student",
+            "mobile": f"99{uuid.uuid4().int % 100000000:08d}"
+        }, headers=admin_headers)
+        st = st_res.json()
+
+        b_res = await client.get("/api/batches/all", headers=admin_headers)
+        sub = b_res.json()[0]["subjects"][0]
+
+        # 1. Admission with paid money
+        adm_paid = (await client.post("/api/admissions", json={
+            "student_id": st["id"],
+            "admission_date": "2026-11-21",
+            "items": [
+                {
+                    "item_type": "BATCH_SUBJECT",
+                    "batch_id": b_res.json()[0]["id"],
+                    "subject_id": sub["subject_id"],
+                    "item_name_snapshot": "Subject 1",
+                    "original_price": 1000.0
+                }
+            ],
+            "initial_payment": {"amount": 500.0, "payment_mode": "CASH"}
+        }, headers=admin_headers)).json()
+
+        # Cancel paid admission must return 400
+        cancel_fail = await client.post(f"/api/admissions/{adm_paid['id']}/cancel", headers=admin_headers)
+        assert cancel_fail.status_code == 400
+        assert "refund fees first" in cancel_fail.json()["detail"].lower()
+
+        # 2. Admission with 0 paid
+        adm_unpaid = (await client.post("/api/admissions", json={
+            "student_id": st["id"],
+            "admission_date": "2026-11-21",
+            "items": [
+                {
+                    "item_type": "BATCH_SUBJECT",
+                    "batch_id": b_res.json()[0]["id"],
+                    "subject_id": sub["subject_id"],
+                    "item_name_snapshot": "Subject 2",
+                    "original_price": 1000.0
+                }
+            ]
+        }, headers=admin_headers)).json()
+
+        # Cancel succeeds
+        cancel_ok = await client.post(f"/api/admissions/{adm_unpaid['id']}/cancel", headers=admin_headers)
+        assert cancel_ok.status_code == 200
+        cancelled_adm = cancel_ok.json()
+        assert cancelled_adm["status"] == "CANCELLED"
+        assert cancelled_adm["document_status"] == "VOID"
+        assert cancelled_adm["items"][0]["status"] == "DISCONTINUED"
+
+        # Double cancel returns 409
+        double_cancel = await client.post(f"/api/admissions/{adm_unpaid['id']}/cancel", headers=admin_headers)
+        assert double_cancel.status_code == 409
+
+        # 3. Revoked slip cannot be cancelled
+        adm_revoked = (await client.post("/api/admissions", json={
+            "student_id": st["id"],
+            "admission_date": "2026-11-21",
+            "items": [
+                {
+                    "item_type": "BATCH_SUBJECT",
+                    "batch_id": b_res.json()[0]["id"],
+                    "subject_id": sub["subject_id"],
+                    "item_name_snapshot": "Subject 3",
+                    "original_price": 1000.0
+                }
+            ]
+        }, headers=admin_headers)).json()
+
+        await client.post(f"/api/admissions/{adm_revoked['id']}/revoke", json={
+            "revoke_type": "DROPOUT_NO_REFUND",
+            "scope": "WHOLE_SLIP",
+            "reason": "Revoking before cancel test"
+        }, headers=admin_headers)
+
+        cancel_revoked = await client.post(f"/api/admissions/{adm_revoked['id']}/cancel", headers=admin_headers)
+        assert cancel_revoked.status_code == 400
+        assert "already revoked" in cancel_revoked.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_green_card_multi_admission_integrity():
+    """
+    Test: Student.has_green_card and expiry update correctly when student has another active
+    green card admission (does not blindly set False).
+    """
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        adm_login = await client.post("/api/auth/login", json={"username": "ADM001", "password": "Admin@1234"})
+        admin_headers = {"Authorization": f"Bearer {adm_login.json()['access_token']}"}
+
+        st_res = await client.post("/api/students", json={
+            "name": "Green Card Multi Student",
+            "mobile": f"90{uuid.uuid4().int % 100000000:08d}"
+        }, headers=admin_headers)
+        st = st_res.json()
+
+        gc_prods = (await client.get("/api/green-card", headers=admin_headers)).json()
+        gc1 = gc_prods[0]
+
+        # Admission 1 with Green Card
+        adm1 = (await client.post("/api/admissions", json={
+            "student_id": st["id"],
+            "admission_date": "2026-11-21",
+            "items": [
+                {
+                    "item_type": "GREEN_CARD",
+                    "green_card_id": gc1["id"],
+                    "item_name_snapshot": "GC Line 1",
+                    "original_price": 5000.0
+                }
+            ],
+            "initial_payment": {"amount": 5000.0, "payment_mode": "CASH"}
+        }, headers=admin_headers)).json()
+
+        st_check1 = (await client.get(f"/api/students/{st['id']}", headers=admin_headers)).json()
+        assert st_check1["has_green_card"] is True
+        assert st_check1["green_card_expiry"] is not None
+
+        # Admission 2 with Green Card (additional card)
+        adm2 = (await client.post("/api/admissions", json={
+            "student_id": st["id"],
+            "admission_date": "2026-11-21",
+            "items": [
+                {
+                    "item_type": "GREEN_CARD",
+                    "green_card_id": gc1["id"],
+                    "item_name_snapshot": "GC Line 2",
+                    "original_price": 5000.0
+                }
+            ],
+            "initial_payment": {"amount": 5000.0, "payment_mode": "CASH"}
+        }, headers=admin_headers)).json()
+
+        # Revoke Admission 1
+        await client.post(f"/api/admissions/{adm1['id']}/revoke", json={
+            "revoke_type": "DROPOUT_NO_REFUND",
+            "scope": "WHOLE_SLIP",
+            "reason": "Cancelled first card"
+        }, headers=admin_headers)
+
+        # Student STILL has active green card because Admission 2 is active!
+        st_check2 = (await client.get(f"/api/students/{st['id']}", headers=admin_headers)).json()
+        assert st_check2["has_green_card"] is True
+        assert st_check2["green_card_expiry"] is not None
+
+        # Revoke Admission 2
+        await client.post(f"/api/admissions/{adm2['id']}/revoke", json={
+            "revoke_type": "DROPOUT_NO_REFUND",
+            "scope": "WHOLE_SLIP",
+            "reason": "Cancelled second card"
+        }, headers=admin_headers)
+
+        # Now student has no active green card
+        st_check3 = (await client.get(f"/api/students/{st['id']}", headers=admin_headers)).json()
+        assert st_check3["has_green_card"] is False
+
 

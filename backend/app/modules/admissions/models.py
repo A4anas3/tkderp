@@ -37,6 +37,7 @@ class Admission(BaseModel):
     
     payment_status: Mapped[str] = mapped_column(String(30), nullable=False, default="UNPAID", index=True) # UNPAID, PARTIALLY_PAID, PAID, PARTIALLY_REFUNDED, REFUNDED
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="ACTIVE") # ACTIVE, REVOKED, CANCELLED
+    previous_status: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     access_status: Mapped[str] = mapped_column(String(30), nullable=False, default="ACTIVE", server_default="ACTIVE", index=True) # ACTIVE, SUSPENDED, EXPIRED, REVOKED
     previous_access_status: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     document_status: Mapped[str] = mapped_column(String(30), nullable=False, default="VALID", server_default="VALID", index=True) # VALID, VOID
@@ -118,6 +119,7 @@ class AdmissionItem(BaseModel):
 
     # Subject Lifecycle Status & Tracking
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="ACTIVE", index=True) # ACTIVE, SUSPENDED, DISCONTINUED, EXPIRED, COMPLETED
+    previous_status: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     access_status: Mapped[str] = mapped_column(String(30), nullable=False, default="ACTIVE", server_default="ACTIVE", index=True) # ACTIVE, SUSPENDED, EXPIRED, REVOKED
     previous_access_status: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     revoke_type: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)

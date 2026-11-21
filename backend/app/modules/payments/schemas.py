@@ -31,7 +31,8 @@ class RefundCreate(BaseModel):
     admission_id: uuid.UUID
     payment_id: Optional[uuid.UUID] = None
     item_id: Optional[uuid.UUID] = None
-    amount: Decimal = Field(..., gt=0)
+    amount: Optional[Decimal] = Field(default=None, gt=0)
+    refund_amount_requested: Optional[Decimal] = Field(default=None, gt=0)
     refund_mode: str = Field(default="CASH", pattern="^(CASH|UPI|BANK_TRANSFER|CARD|OTHER)$")
     reason: str = Field(..., min_length=3, max_length=500)
     deduction_amount: Optional[Decimal] = Field(default=None, ge=0)
@@ -49,6 +50,9 @@ class RefundResponse(BaseModel):
     admission_number: Optional[str] = None
     course_name: Optional[str] = None
     amount: Decimal
+    refund_amount_requested: Decimal = Decimal("0.00")
+    deduction_amount: Decimal = Decimal("0.00")
+    deduction_reason: Optional[str] = None
     refund_mode: str
     reason: str
     refund_date: datetime
@@ -64,6 +68,9 @@ class RefundReceiptResponse(BaseModel):
     refund_number: str
     refund_date: datetime
     amount: Decimal
+    refund_amount_requested: Decimal = Decimal("0.00")
+    deduction_amount: Decimal = Decimal("0.00")
+    deduction_reason: Optional[str] = None
     refund_mode: str
     reason: str
     processor_name: str

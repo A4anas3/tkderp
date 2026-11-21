@@ -75,7 +75,10 @@ class Refund(BaseModel):
     payment_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("payments.id"), nullable=True, index=True)
     student_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("students.id"), nullable=False, index=True)
 
-    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False) # net paid out
+    refund_amount_requested: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("0.00"), server_default="0.00") # gross
+    deduction_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("0.00"), server_default="0.00")
+    deduction_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     refund_mode: Mapped[str] = mapped_column(String(30), nullable=False, default="CASH") # CASH, UPI, BANK_TRANSFER, OTHER
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     refund_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False, index=True)

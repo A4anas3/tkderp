@@ -27,32 +27,17 @@ from app.common.numbering import next_number
 from app.common.idempotency import get_idempotency_record, save_idempotency_record, build_idempotent_response
 from app.common.active_lines import today_kolkata, is_active_line
 from app.modules.ledger.service import (
-    record_payment_service, process_refund_service, recompute_admission_totals
+    record_payment_service, process_refund_service, recompute_admission_totals,
+    update_student_green_card_status, cancel_admission_service, revoke_admission_service,
+    restore_admission_service
 )
 
 async def update_student_green_card_flag(student_id: uuid.UUID, db: AsyncSession) -> None:
     """
-    Checks if the student has any active green card line.
-    Green card flag only changes if the student has no other active green-card line.
+    Checks if the student has any active green card line across all valid admissions.
+    Updates has_green_card and expiry correctly (never blindly sets False if another exists).
     """
-    stmt = (
-        select(AdmissionItem)
-        .join(Admission, Admission.id == AdmissionItem.admission_id)
-        .where(
-            Admission.student_id == student_id,
-            AdmissionItem.item_type == "GREEN_CARD",
-            AdmissionItem.access_status == "ACTIVE",
-            Admission.document_status == "VALID",
-            (AdmissionItem.valid_to == None) | (AdmissionItem.valid_to >= date.today())
-        )
-    )
-    res = await db.execute(stmt)
-    active_gc_item = res.scalars().first()
-
-    st_res = await db.execute(select(Student).where(Student.id == student_id))
-    st = st_res.scalar_one_or_none()
-    if st:
-        st.has_green_card = active_gc_item is not None
+    await update_student_green_card_status(student_id, db)
 
 router = APIRouter(prefix="/api/admissions", tags=["Admissions"])
 
@@ -335,18 +320,9 @@ async def get_admission(
     if admission.status == "ACTIVE" and admission.items:
         sum_collected = sum((itm.amount_collected or Decimal("0.00")) for itm in admission.items)
         if sum_collected != admission.amount_paid:
-            items_payload = [{"id": ai.id, "balance_due": ai.net_price} for ai in admission.items]
-            allocations = allocate_payment_proportionally(admission.amount_paid, items_payload)
-            changed = False
-            for itm_id, alloc_amt in allocations:
-                for ai in admission.items:
-                    if ai.id == itm_id and (ai.amount_collected != alloc_amt or ai.balance_due != (ai.net_price - alloc_amt)):
-                        ai.amount_collected = alloc_amt
-                        ai.balance_due = max(Decimal("0.00"), ai.net_price - alloc_amt)
-                        changed = True
-            if changed:
-                await db.commit()
-                await db.refresh(admission)
+            await recompute_admission_totals(admission, db)
+            await db.commit()
+            await db.refresh(admission)
 
     return admission
 
@@ -575,60 +551,18 @@ async def cancel_admission(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin)
 ):
-    """
-    Cancels an admission as ENTRY_MISTAKE (the old cancel).
-    Allowed only when net money paid is zero. Sets document_status VOID.
-    """
     query = (
         select(Admission)
         .options(selectinload(Admission.items), selectinload(Admission.student))
         .where(Admission.id == admission_id)
-        .with_for_update()
+        .with_for_update(of=Admission)
     )
     res = await db.execute(query)
     admission = res.scalar_one_or_none()
     if not admission:
         raise HTTPException(status_code=404, detail="Admission not found")
 
-    if getattr(admission, "document_status", "VALID") == "VOID":
-        raise HTTPException(status_code=409, detail="Admission document is already VOID")
-
-    if admission.amount_paid > Decimal("0.00"):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Cannot cancel admission with paid fees ₹{admission.amount_paid}. Refund fees first."
-        )
-
-    admission.document_status = "VOID"
-    admission.status = "CANCELLED"
-    admission.access_status = "REVOKED"
-    admission.revoke_type = "ENTRY_MISTAKE"
-    admission.revocation_reason = "Cancelled by administrator as entry mistake"
-    admission.revoked_at = datetime.now(timezone.utc)
-    admission.revoked_by = current_user.id
-    admission.balance_due = Decimal("0.00")
-    admission.payment_status = "VOID"
-
-    for itm in admission.items:
-        itm.access_status = "REVOKED"
-        itm.status = "DISCONTINUED"
-        itm.balance_due = Decimal("0.00")
-
-    await update_student_green_card_flag(admission.student_id, db)
-
-    audit = AuditLog(
-        user_id=current_user.id,
-        action="BATCH_PURCHASE_CANCELLED",
-        entity_type="ADMISSION",
-        entity_id=admission.id,
-        details=json.dumps({
-            "purchase_transaction_id": admission.admission_number,
-            "student_name": admission.student_name_snapshot,
-            "reason": "Cancelled by administrator as entry mistake",
-            "document_status": "VOID"
-        })
-    )
-    db.add(audit)
+    admission = await cancel_admission_service(admission, db, current_user)
     await db.commit()
     await db.refresh(admission)
     return admission
@@ -640,165 +574,32 @@ async def revoke_batch_purchase(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin)
 ):
-    """
-    Revocation handling according to P2 specification:
-    - DROPOUT_NO_REFUND: lines -> REVOKED, valid_to = effective_date, money untouched,
-      payment_status unchanged, forfeited_amount = collected. Teacher earnings stay.
-    - DROPOUT_WITH_REFUND: processes refund for requested amount/lines, then revokes.
-    - ENTRY_MISTAKE: allowed only when net money paid is zero; sets document_status VOID.
-    - pending_due_action: WAIVE (admin only, stores written_off_amount) vs KEEP_DUE (leaves collectable).
-    - Double revoke / double cancel -> 409 Conflict.
-    """
     query = (
         select(Admission)
         .options(selectinload(Admission.items), selectinload(Admission.student))
         .where(Admission.id == admission_id)
-        .with_for_update()
+        .with_for_update(of=Admission)
     )
     res = await db.execute(query)
     admission = res.scalar_one_or_none()
     if not admission:
         raise HTTPException(status_code=404, detail="Course purchase / admission not found")
 
-    # Double revoke / cancel checks (409)
-    if getattr(admission, "document_status", "VALID") == "VOID":
-        raise HTTPException(status_code=409, detail="Admission document is already VOID")
-
-    if payload.scope == "WHOLE_SLIP":
-        if getattr(admission, "access_status", "ACTIVE") == "REVOKED":
-            raise HTTPException(status_code=409, detail="Admission access is already REVOKED")
-        target_items = admission.items
-    else:
-        # SELECTED_ITEMS
-        target_ids = set(payload.item_ids or [])
-        target_items = [itm for itm in admission.items if itm.id in target_ids]
-        if not target_items:
-            raise HTTPException(status_code=400, detail="No matching subject lines found for revocation")
-        if all(getattr(itm, "access_status", "ACTIVE") == "REVOKED" for itm in target_items):
-            raise HTTPException(status_code=409, detail="All selected subject lines are already REVOKED")
-
-    # Guard ENTRY_MISTAKE
-    if payload.revoke_type == "ENTRY_MISTAKE":
-        if admission.amount_paid > Decimal("0.00"):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Cannot mark admission as ENTRY_MISTAKE because ₹{admission.amount_paid} has been paid. Refund fees first or use DROPOUT_WITH_REFUND."
-            )
-        before_status = getattr(admission, "access_status", "ACTIVE")
-        admission.document_status = "VOID"
-        admission.status = "CANCELLED"
-        admission.access_status = "REVOKED"
-        admission.revoke_type = "ENTRY_MISTAKE"
-        admission.revocation_reason = payload.reason.strip()
-        admission.revoked_at = datetime.now(timezone.utc)
-        admission.revoked_by = current_user.id
-        admission.payment_status = "VOID"
-        admission.balance_due = Decimal("0.00")
-
-        for itm in admission.items:
-            itm.access_status = "REVOKED"
-            itm.status = "DISCONTINUED"
-            itm.balance_due = Decimal("0.00")
-
-        await update_student_green_card_flag(admission.student_id, db)
-
-        audit = AuditLog(
-            user_id=current_user.id,
-            action="BATCH_PURCHASE_REVOKED",
-            entity_type="ADMISSION",
-            entity_id=admission.id,
-            details=json.dumps({
-                "admission_number": admission.admission_number,
-                "revoke_type": "ENTRY_MISTAKE",
-                "before_status": before_status,
-                "after_status": "REVOKED",
-                "document_status": "VOID",
-                "reason": payload.reason.strip()
-            })
-        )
-        db.add(audit)
-        await db.commit()
-        await db.refresh(admission)
-        return admission
-
-    # Check WAIVE permission
-    if payload.pending_due_action == "WAIVE" and current_user.role != "ADMIN":
-        raise HTTPException(status_code=403, detail="Only administrators can waive pending dues")
-
-    # Handle refund if DROPOUT_WITH_REFUND or refund amount provided
-    if payload.revoke_type == "DROPOUT_WITH_REFUND" or (payload.refund_amount and payload.refund_amount > Decimal("0.00")) or payload.line_refunds:
-        l_refs = [(lr.item_id, lr.refund_amount) for lr in payload.line_refunds] if payload.line_refunds else None
-        tot_ref = sum((lr.refund_amount for lr in payload.line_refunds), Decimal("0.00")) if payload.line_refunds else (payload.refund_amount or Decimal("0.00"))
-        if tot_ref > Decimal("0.00"):
-            await process_refund_service(
-                db=db,
-                admission=admission,
-                amount=tot_ref,
-                refund_mode=payload.refund_mode,
-                reason=f"Dropout refund: {payload.reason.strip()}",
-                current_user=current_user,
-                line_refunds=l_refs
-            )
-
-    eff_date = payload.effective_date or date.today()
-    before_admission_status = getattr(admission, "access_status", "ACTIVE")
-
-    for itm in target_items:
-        itm.previous_access_status = getattr(itm, "access_status", "ACTIVE")
-        itm.access_status = "REVOKED"
-        itm.status = "REVOKED"
-        itm.revoke_type = payload.revoke_type
-        itm.valid_to = min(itm.valid_to or eff_date, eff_date)
-        itm.discontinued_at = datetime.now(timezone.utc)
-        itm.lifecycle_reason = payload.reason.strip()
-        itm.forfeited_amount = itm.amount_collected
-
-        if payload.pending_due_action == "WAIVE":
-            itm.written_off_amount = itm.balance_due
-            itm.balance_due = Decimal("0.00")
-            itm.keep_due = False
-        else:
-            itm.keep_due = True
-
-    admission.previous_access_status = before_admission_status
-    if all(getattr(itm, "access_status", "ACTIVE") == "REVOKED" for itm in admission.items):
-        admission.access_status = "REVOKED"
-        admission.status = "REVOKED"
-
-    admission.revoke_type = payload.revoke_type
-    admission.revocation_reason = payload.reason.strip()
-    admission.revoked_at = datetime.now(timezone.utc)
-    admission.revoked_by = current_user.id
-    admission.forfeited_amount = sum((itm.forfeited_amount for itm in admission.items), Decimal("0.00"))
-
-    # Recompute derived totals strictly from allocation ledger and refunds
-    await recompute_admission_totals(admission, db)
-
-    # Check green card flag
-    await update_student_green_card_flag(admission.student_id, db)
-
-    # Audit log with before / after statuses and amounts
-    audit = AuditLog(
-        user_id=current_user.id,
-        action="BATCH_PURCHASE_REVOKED",
-        entity_type="ADMISSION",
-        entity_id=admission.id,
-        details=json.dumps({
-            "admission_number": admission.admission_number,
-            "student_name": admission.student_name_snapshot,
-            "revoke_type": payload.revoke_type,
-            "scope": payload.scope,
-            "pending_due_action": payload.pending_due_action,
-            "before_access_status": before_admission_status,
-            "after_access_status": admission.access_status,
-            "amount_paid": float(admission.amount_paid),
-            "balance_due": float(admission.balance_due),
-            "forfeited_amount": float(admission.forfeited_amount),
-            "written_off_amount": float(admission.written_off_amount or 0),
-            "reason": payload.reason.strip()
-        })
+    l_refs = [(lr.item_id, lr.refund_amount) for lr in payload.line_refunds] if payload.line_refunds else None
+    admission = await revoke_admission_service(
+        admission=admission,
+        db=db,
+        current_user=current_user,
+        reason=payload.reason,
+        revoke_type=payload.revoke_type,
+        scope=payload.scope,
+        item_ids=payload.item_ids,
+        effective_date=payload.effective_date,
+        pending_due_action=payload.pending_due_action,
+        refund_amount=payload.refund_amount,
+        refund_mode=payload.refund_mode,
+        line_refunds=l_refs
     )
-    db.add(audit)
     await db.commit()
     await db.refresh(admission)
     return admission
@@ -809,70 +610,18 @@ async def restore_batch_purchase(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin)
 ):
-    """
-    Restores access to previous_access_status (or ACTIVE), clears forfeits & write-offs,
-    and recomputes totals.
-    """
     query = (
         select(Admission)
         .options(selectinload(Admission.items), selectinload(Admission.student))
         .where(Admission.id == admission_id)
-        .with_for_update()
+        .with_for_update(of=Admission)
     )
     res = await db.execute(query)
     admission = res.scalar_one_or_none()
     if not admission:
         raise HTTPException(status_code=404, detail="Course purchase / admission not found")
 
-    if getattr(admission, "document_status", "VALID") == "VOID":
-        raise HTTPException(status_code=400, detail="Cannot restore an admission marked as VOID (ENTRY_MISTAKE)")
-
-    if getattr(admission, "access_status", "ACTIVE") != "REVOKED" and all(getattr(itm, "access_status", "ACTIVE") != "REVOKED" for itm in admission.items):
-        raise HTTPException(status_code=400, detail="Admission is not revoked")
-
-    before_status = getattr(admission, "access_status", "ACTIVE")
-    old_reason = admission.revocation_reason
-
-    admission.access_status = getattr(admission, "previous_access_status", None) or "ACTIVE"
-    admission.status = "ACTIVE"
-    admission.previous_access_status = None
-    admission.revoke_type = None
-    admission.revocation_reason = None
-    admission.revoked_at = None
-    admission.revoked_by = None
-    admission.forfeited_amount = Decimal("0.00")
-
-    for itm in admission.items:
-        if getattr(itm, "access_status", "ACTIVE") == "REVOKED":
-            itm.access_status = getattr(itm, "previous_access_status", None) or "ACTIVE"
-            itm.status = "ACTIVE"
-            itm.previous_access_status = None
-            itm.revoke_type = None
-            itm.forfeited_amount = Decimal("0.00")
-            itm.written_off_amount = Decimal("0.00")
-            itm.keep_due = False
-            itm.discontinued_at = None
-            itm.lifecycle_reason = None
-
-    await recompute_admission_totals(admission, db)
-    await update_student_green_card_flag(admission.student_id, db)
-
-    audit = AuditLog(
-        user_id=current_user.id,
-        action="BATCH_PURCHASE_RESTORED",
-        entity_type="ADMISSION",
-        entity_id=admission.id,
-        details=json.dumps({
-            "purchase_transaction_id": admission.admission_number,
-            "student_name": admission.student_name_snapshot,
-            "before_access_status": before_status,
-            "after_access_status": admission.access_status,
-            "amount_paid": float(admission.amount_paid),
-            "balance_due": float(admission.balance_due),
-            "previous_revocation_reason": old_reason
-        })
-    )
-    db.add(audit)
+    admission = await restore_admission_service(admission, db, current_user)
     await db.commit()
     await db.refresh(admission)
     return admission
@@ -889,7 +638,7 @@ async def update_admission_validity(
         select(Admission)
         .options(selectinload(Admission.items), selectinload(Admission.student))
         .where(Admission.id == admission_id)
-        .with_for_update()
+        .with_for_update(of=Admission)
     )
     res = await db.execute(query)
     admission = res.scalar_one_or_none()
@@ -1044,16 +793,40 @@ async def discontinue_admission(
         select(Admission)
         .options(selectinload(Admission.items), selectinload(Admission.student))
         .where(Admission.id == admission_id)
+        .with_for_update(of=Admission)
     )
     res = await db.execute(query)
     admission = res.scalar_one_or_none()
     if not admission:
         raise HTTPException(status_code=404, detail="Admission not found")
 
+    before_status = admission.status
+    before_paid = admission.amount_paid
+    before_due = admission.balance_due
+    before_written_off = admission.written_off_amount or Decimal("0.00")
+
+    disc_reason = f"Discontinued: {payload.reason}" if payload.reason else "Discontinued by Student/Admin"
+    admission.previous_status = before_status
+    admission.previous_access_status = getattr(admission, "access_status", "ACTIVE")
     admission.status = "DISCONTINUED"
-    admission.revocation_reason = f"Discontinued: {payload.reason}" if payload.reason else "Discontinued by Student/Admin"
+    admission.access_status = "REVOKED"
+    admission.revocation_reason = disc_reason
     admission.revoked_at = datetime.now(timezone.utc)
     admission.revoked_by = current_user.id
+
+    for itm in admission.items:
+        if itm.status not in ["DISCONTINUED", "COMPLETED"]:
+            itm.previous_status = itm.status
+            itm.previous_access_status = getattr(itm, "access_status", "ACTIVE")
+            itm.status = "DISCONTINUED"
+            itm.access_status = "REVOKED"
+            itm.discontinued_at = datetime.now(timezone.utc)
+            itm.lifecycle_reason = disc_reason
+            itm.written_off_amount = itm.balance_due
+            itm.balance_due = Decimal("0.00")
+
+    await recompute_admission_totals(admission, db)
+    await update_student_green_card_status(admission.student_id, db)
 
     audit = AuditLog(
         user_id=current_user.id,
@@ -1062,7 +835,19 @@ async def discontinue_admission(
         entity_id=admission.id,
         details=json.dumps({
             "purchase_transaction_id": admission.admission_number,
-            "reason": payload.reason
+            "reason": payload.reason,
+            "before": {
+                "status": before_status,
+                "amount_paid": float(before_paid),
+                "balance_due": float(before_due),
+                "written_off_amount": float(before_written_off)
+            },
+            "after": {
+                "status": "DISCONTINUED",
+                "amount_paid": float(admission.amount_paid),
+                "balance_due": float(admission.balance_due),
+                "written_off_amount": float(admission.written_off_amount or 0)
+            }
         })
     )
     db.add(audit)
@@ -1205,9 +990,24 @@ async def discontinue_admission_item(
     if not item:
         raise HTTPException(status_code=404, detail="Subject enrollment item not found")
 
+    before_status = item.status
+    before_due = item.balance_due
+
+    item.previous_status = item.status
     item.status = "DISCONTINUED"
+    item.access_status = "REVOKED"
     item.discontinued_at = datetime.now(timezone.utc)
     item.lifecycle_reason = payload.reason or "Discontinued by Student/Admin"
+    item.written_off_amount = item.balance_due
+    item.balance_due = Decimal("0.00")
+
+    adm_res = await db.execute(
+        select(Admission).options(selectinload(Admission.items)).where(Admission.id == item.admission_id).with_for_update(of=Admission)
+    )
+    admission = adm_res.scalar_one_or_none()
+    if admission:
+        await recompute_admission_totals(admission, db)
+        await update_student_green_card_status(admission.student_id, db)
 
     audit = AuditLog(
         user_id=current_user.id,
@@ -1216,7 +1016,10 @@ async def discontinue_admission_item(
         entity_id=item.id,
         details=json.dumps({
             "subject": item.item_name_snapshot,
-            "reason": payload.reason
+            "reason": payload.reason,
+            "before_status": before_status,
+            "after_status": "DISCONTINUED",
+            "written_off_amount": float(before_due)
         })
     )
     db.add(audit)

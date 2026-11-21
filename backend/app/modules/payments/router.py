@@ -22,7 +22,8 @@ from app.common.pagination import PaginationParams, PageResponse
 from app.common.numbering import next_number
 from app.common.idempotency import get_idempotency_record, save_idempotency_record, build_idempotent_response
 from app.modules.ledger.service import (
-    record_payment_service, edit_payment_service, process_refund_service, recompute_admission_totals
+    record_payment_service, edit_payment_service, process_refund_service, recompute_admission_totals,
+    revoke_admission_service
 )
 
 router = APIRouter(prefix="/api/payments", tags=["Payments"])
@@ -218,7 +219,7 @@ async def record_payment(
         select(Admission)
         .options(selectinload(Admission.items), selectinload(Admission.student))
         .where(Admission.id == payload.admission_id)
-        .with_for_update()
+        .with_for_update(of=Admission)
     )
     admission = adm_res.scalar_one_or_none()
     if not admission:
@@ -362,7 +363,7 @@ async def update_payment(
         select(Admission)
         .options(selectinload(Admission.items), selectinload(Admission.student))
         .where(Admission.id == payment.admission_id)
-        .with_for_update()
+        .with_for_update(of=Admission)
     )
     admission = adm_res.scalar_one()
 
@@ -439,7 +440,7 @@ async def process_refund(
         select(Admission)
         .options(selectinload(Admission.items), selectinload(Admission.student))
         .where(Admission.id == payload.admission_id)
-        .with_for_update()
+        .with_for_update(of=Admission)
     )
     admission = adm_res.scalar_one_or_none()
     if not admission:
@@ -449,6 +450,7 @@ async def process_refund(
         db=db,
         admission=admission,
         amount=payload.amount,
+        refund_amount_requested=payload.refund_amount_requested,
         refund_mode=payload.refund_mode,
         reason=payload.reason,
         current_user=current_user,
@@ -461,24 +463,15 @@ async def process_refund(
 
     is_revoked = False
     if payload.revoke_admission:
-        admission.access_status = "REVOKED"
-        admission.status = "REVOKED"
-        admission.revocation_reason = f"Full refund issued: {payload.reason.strip()}"
-        admission.revoked_at = datetime.now(timezone.utc)
-        admission.revoked_by = current_user.id
+        admission = await revoke_admission_service(
+            admission=admission,
+            db=db,
+            current_user=current_user,
+            reason=f"Full refund issued: {payload.reason.strip()}",
+            revoke_type="DROPOUT_WITH_REFUND",
+            pending_due_action="WAIVE"
+        )
         is_revoked = True
-        for itm in admission.items:
-            itm.access_status = "REVOKED"
-            itm.status = "DISCONTINUED"
-            itm.written_off_amount = itm.balance_due
-            itm.balance_due = Decimal("0.00")
-            itm.keep_due = False
-
-        has_gc = any(itm.item_type == "GREEN_CARD" for itm in admission.items)
-        if has_gc and admission.student:
-            admission.student.has_green_card = False
-
-        await recompute_admission_totals(admission, db)
 
     await db.commit()
     await db.refresh(refund)
@@ -492,6 +485,9 @@ async def process_refund(
         student_name=admission.student.full_name if admission.student else None,
         admission_number=admission.admission_number,
         amount=refund.amount,
+        refund_amount_requested=refund.refund_amount_requested,
+        deduction_amount=refund.deduction_amount,
+        deduction_reason=refund.deduction_reason,
         refund_mode=refund.refund_mode,
         reason=refund.reason,
         refund_date=refund.refund_date,
