@@ -1,9 +1,12 @@
 import uuid
 import calendar
+import csv
+import io
 from decimal import Decimal
 from typing import Optional, List, Dict, Any
 from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_, case
 
@@ -14,8 +17,34 @@ from app.database.models import (
     Admission, AdmissionItem, Subject, Batch, Teacher, PaymentAllocation, Payment,
     Expense, SalaryRecord, Refund, User, Student
 )
+from app.modules.reports.ledger_queries import (
+    get_subject_revenue_from_ledger,
+    get_teacher_revenue_from_ledger,
+    get_batch_revenue_from_ledger,
+    get_item_allocated_collected_map,
+    get_total_ledger_revenue,
+    get_collections_by_mode,
+    get_collections_by_cashier,
+    get_teacher_payable_summary,
+    get_dues_by_subject,
+    ist_day_boundaries
+)
 
 router = APIRouter(prefix="/api/reports", tags=["Reports & Analytics"])
+
+
+def generate_csv_response(filename: str, headers: List[str], rows: List[List[Any]]) -> Response:
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(headers)
+    for row in rows:
+        writer.writerow(row)
+    content = output.getvalue()
+    return Response(
+        content=content,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
 
 
 def _resolve_date_range(
@@ -64,13 +93,15 @@ async def get_subject_revenue_report(
     to_date: Optional[date] = Query(None, description="End date (YYYY-MM-DD)"),
     month: Optional[int] = Query(None, ge=1, le=12, description="Specific month (1-12)"),
     year: Optional[int] = Query(None, description="Specific year (e.g. 2026)"),
+    format: Optional[str] = Query(None, description="Set to 'csv' for CSV export"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin)
 ):
     """
     Returns revenue breakdown by subject with date-to-date and month-wise filtering:
-    Total booked net price, total collected via allocations, balance due, and enrolled student breakdown
-    with rolling date-to-date billing cycles and cycle renewal statuses.
+    Total booked net price, total collected strictly via allocation ledger in IST boundaries,
+    balance due, and enrolled student breakdown.
+    Supports CSV export via ?format=csv.
     """
     f_date, t_date = _resolve_date_range(from_date, to_date, month, year)
 
@@ -85,6 +116,9 @@ async def get_subject_revenue_report(
 
     subjects_res = await db.execute(select(Subject).order_by(Subject.name.asc()))
     subjects = subjects_res.scalars().all()
+
+    # Reconciled subject revenue strictly from PaymentAllocation ledger
+    ledger_subject_map = await get_subject_revenue_from_ledger(db, f_date, t_date)
 
     report = []
     total_revenue_all = Decimal("0.00")
@@ -103,7 +137,6 @@ async def get_subject_revenue_report(
                 func.coalesce(func.sum(AdmissionItem.original_price), Decimal("0.00")),
                 func.coalesce(func.sum(AdmissionItem.discount_amount + AdmissionItem.overall_discount_share), Decimal("0.00")),
                 func.coalesce(func.sum(AdmissionItem.net_price), Decimal("0.00")),
-                func.coalesce(func.sum(AdmissionItem.amount_collected), Decimal("0.00")),
                 func.coalesce(func.count(AdmissionItem.id), 0),
                 func.count(case((and_(Admission.status == "ACTIVE", end_col >= today), 1), else_=None)),
                 func.count(case((and_(Admission.status == "ACTIVE", end_col < today), 1), else_=None)),
@@ -113,9 +146,10 @@ async def get_subject_revenue_report(
             .where(and_(*where_filter))
         )
         res = await db.execute(stmt)
-        orig_price, total_disc, booked, collected, student_count, active_enr, inactive_enr, uniq_stu = res.one()
+        orig_price, total_disc, booked, student_count, active_enr, inactive_enr, uniq_stu = res.one()
 
-        balance = booked - collected
+        collected = ledger_subject_map.get(s.id, Decimal("0.00"))
+        balance = max(Decimal("0.00"), booked - collected)
         total_revenue_all += booked
         total_collected_all += collected
 
@@ -129,11 +163,15 @@ async def get_subject_revenue_report(
             .order_by(start_col.desc(), Student.name.asc())
         )
         stu_rows = (await db.execute(stu_stmt)).all()
+        stu_item_ids = [itm.id for itm, adm, stu, bch in stu_rows]
+        stu_collected_map = await get_item_allocated_collected_map(db, stu_item_ids, f_date, t_date)
+
         subject_students = []
         for itm, adm, stu, bch in stu_rows:
+            itm_coll = stu_collected_map.get(itm.id, Decimal("0.00"))
             c_info = _evaluate_student_cycle(
                 itm.valid_from, itm.valid_to, adm.admission_date,
-                itm.balance_due, itm.net_price, itm.amount_collected
+                itm.balance_due, itm.net_price, itm_coll
             )
             subject_students.append({
                 "item_id": str(itm.id),
@@ -181,31 +219,36 @@ async def get_subject_revenue_report(
     gc_stmt = (
         select(
             func.coalesce(func.sum(AdmissionItem.net_price), Decimal("0.00")),
-            func.coalesce(func.sum(AdmissionItem.amount_collected), Decimal("0.00")),
             func.coalesce(func.count(AdmissionItem.id), 0)
         )
         .join(Admission, AdmissionItem.admission_id == Admission.id)
         .where(and_(*gc_filter))
     )
     gc_res = await db.execute(gc_stmt)
-    gc_booked, gc_collected, gc_count = gc_res.one()
-    if gc_count > 0:
+    gc_booked, gc_count = gc_res.one()
+
+    gc_stu_stmt = (
+        select(AdmissionItem, Admission, Student)
+        .join(Admission, AdmissionItem.admission_id == Admission.id)
+        .join(Student, Admission.student_id == Student.id)
+        .where(and_(*gc_filter))
+        .order_by(start_col.desc(), Student.name.asc())
+    )
+    gc_stu_rows = (await db.execute(gc_stu_stmt)).all()
+    gc_item_ids = [itm.id for itm, adm, stu in gc_stu_rows]
+    gc_collected_map = await get_item_allocated_collected_map(db, gc_item_ids, f_date, t_date)
+    gc_collected = sum(gc_collected_map.values(), Decimal("0.00"))
+
+    if gc_count > 0 or gc_collected > Decimal("0.00"):
         total_revenue_all += gc_booked
         total_collected_all += gc_collected
 
-        gc_stu_stmt = (
-            select(AdmissionItem, Admission, Student)
-            .join(Admission, AdmissionItem.admission_id == Admission.id)
-            .join(Student, Admission.student_id == Student.id)
-            .where(and_(*gc_filter))
-            .order_by(start_col.desc(), Student.name.asc())
-        )
-        gc_stu_rows = (await db.execute(gc_stu_stmt)).all()
         gc_students = []
         for itm, adm, stu in gc_stu_rows:
+            itm_coll = gc_collected_map.get(itm.id, Decimal("0.00"))
             c_info = _evaluate_student_cycle(
                 itm.valid_from, itm.valid_to, adm.admission_date,
-                itm.balance_due, itm.net_price, itm.amount_collected
+                itm.balance_due, itm.net_price, itm_coll
             )
             gc_students.append({
                 "item_id": str(itm.id),
@@ -239,9 +282,17 @@ async def get_subject_revenue_report(
             "total_discounts": 0.0,
             "total_booked": float(gc_booked),
             "total_collected": float(gc_collected),
-            "balance_due": float(gc_booked - gc_collected),
+            "balance_due": float(max(Decimal("0.00"), gc_booked - gc_collected)),
             "students": gc_students
         })
+
+    if format == "csv":
+        headers = ["Subject Code", "Subject Name", "Enrolled", "Total Booked (₹)", "Total Collected (₹)", "Balance Due (₹)"]
+        rows = [
+            [item["subject_code"], item["subject_name"], item["enrolled_count"], item["total_booked"], item["total_collected"], item["balance_due"]]
+            for item in report
+        ]
+        return generate_csv_response("subject_revenue_report.csv", headers, rows)
 
     return {
         "filters": {
@@ -259,17 +310,34 @@ async def get_subject_revenue_report(
     }
 
 
+@router.get("/subject-revenue/csv")
+async def get_subject_revenue_csv(
+    from_date: Optional[date] = Query(None),
+    to_date: Optional[date] = Query(None),
+    month: Optional[int] = Query(None, ge=1, le=12),
+    year: Optional[int] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    return await get_subject_revenue_report(
+        from_date=from_date, to_date=to_date, month=month, year=year,
+        format="csv", db=db, current_user=current_user
+    )
+
+
 @router.get("/batch-revenue")
 async def get_batch_revenue_report(
     from_date: Optional[date] = Query(None, description="Start date (YYYY-MM-DD)"),
     to_date: Optional[date] = Query(None, description="End date (YYYY-MM-DD)"),
     month: Optional[int] = Query(None, ge=1, le=12, description="Specific month (1-12)"),
     year: Optional[int] = Query(None, description="Specific year (e.g. 2026)"),
+    format: Optional[str] = Query(None, description="Set to 'csv' for CSV export"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin)
 ):
     """
     Returns revenue breakdown by batch with date-to-date and month-wise filtering and student roster.
+    Collections are derived strictly from PaymentAllocation ledger.
     """
     f_date, t_date = _resolve_date_range(from_date, to_date, month, year)
 
@@ -285,10 +353,10 @@ async def get_batch_revenue_report(
     batches_res = await db.execute(select(Batch).order_by(Batch.name.asc()))
     batches = batches_res.scalars().all()
 
-    report = []
-    total_booked_all = Decimal("0.00")
-    total_collected_all = Decimal("0.00")
+    # Ledger collected map for batches
+    batch_collected_map = await get_batch_revenue_from_ledger(db, f_date, t_date)
 
+    report = []
     for b in batches:
         where_filter = [
             AdmissionItem.batch_id == b.id,
@@ -300,7 +368,6 @@ async def get_batch_revenue_report(
         stmt = (
             select(
                 func.coalesce(func.sum(AdmissionItem.net_price), Decimal("0.00")),
-                func.coalesce(func.sum(AdmissionItem.amount_collected), Decimal("0.00")),
                 func.coalesce(func.count(AdmissionItem.id), 0),
                 func.count(case((and_(Admission.status == "ACTIVE", end_col >= today), 1), else_=None)),
                 func.count(case((and_(Admission.status == "ACTIVE", end_col < today), 1), else_=None)),
@@ -310,10 +377,9 @@ async def get_batch_revenue_report(
             .where(and_(*where_filter))
         )
         res = await db.execute(stmt)
-        booked, collected, count, active_enr, inactive_enr, uniq_stu = res.one()
+        booked, count, active_enr, inactive_enr, uniq_stu = res.one()
 
-        total_booked_all += booked
-        total_collected_all += collected
+        collected = batch_collected_map.get(b.id, Decimal("0.00"))
 
         # Fetch enrolled students
         stu_stmt = (
@@ -324,11 +390,15 @@ async def get_batch_revenue_report(
             .order_by(start_col.desc(), Student.name.asc())
         )
         stu_rows = (await db.execute(stu_stmt)).all()
+        stu_item_ids = [itm.id for itm, adm, stu in stu_rows]
+        stu_collected_map = await get_item_allocated_collected_map(db, stu_item_ids, f_date, t_date)
+
         batch_students = []
         for itm, adm, stu in stu_rows:
+            itm_coll = stu_collected_map.get(itm.id, Decimal("0.00"))
             c_info = _evaluate_student_cycle(
                 itm.valid_from, itm.valid_to, adm.admission_date,
-                itm.balance_due, itm.net_price, itm.amount_collected
+                itm.balance_due, itm.net_price, itm_coll
             )
             batch_students.append({
                 "item_id": str(itm.id),
@@ -361,12 +431,35 @@ async def get_batch_revenue_report(
             "unique_students_count": uniq_stu or 0,
             "total_booked": float(booked),
             "total_collected": float(collected),
-            "balance_due": float(booked - collected),
+            "balance_due": float(max(Decimal("0.00"), booked - collected)),
             "status": b.status,
             "students": batch_students
         })
 
+    if format == "csv":
+        headers = ["Batch Code", "Batch Name", "Teacher", "Hall", "Enrolled", "Total Booked (₹)", "Total Collected (₹)", "Balance Due (₹)"]
+        rows = [
+            [b["batch_code"], b["batch_name"], b["teacher_name"], b["hall_number"], b["enrolled_count"], b["total_booked"], b["total_collected"], b["balance_due"]]
+            for b in report
+        ]
+        return generate_csv_response("batch_revenue_report.csv", headers, rows)
+
     return report
+
+
+@router.get("/batch-revenue/csv")
+async def get_batch_revenue_csv(
+    from_date: Optional[date] = Query(None),
+    to_date: Optional[date] = Query(None),
+    month: Optional[int] = Query(None, ge=1, le=12),
+    year: Optional[int] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    return await get_batch_revenue_report(
+        from_date=from_date, to_date=to_date, month=month, year=year,
+        format="csv", db=db, current_user=current_user
+    )
 
 
 @router.get("/teacher-revenue")
@@ -375,12 +468,13 @@ async def get_teacher_revenue_report(
     to_date: Optional[date] = Query(None, description="End date (YYYY-MM-DD)"),
     month: Optional[int] = Query(None, ge=1, le=12, description="Specific month (1-12)"),
     year: Optional[int] = Query(None, description="Specific year (e.g. 2026)"),
+    format: Optional[str] = Query(None, description="Set to 'csv' for CSV export"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin)
 ):
     """
     Teacher-wise associated subject and batch revenue report with date filtering
-    and complete student roster with rolling date-to-date billing cycles.
+    and complete student roster. Collections derived strictly from PaymentAllocation ledger.
     """
     f_date, t_date = _resolve_date_range(from_date, to_date, month, year)
 
@@ -396,6 +490,9 @@ async def get_teacher_revenue_report(
     teachers_res = await db.execute(select(Teacher).order_by(Teacher.name.asc()))
     teachers = teachers_res.scalars().all()
 
+    # Ledger collected map for teachers
+    teacher_collected_map = await get_teacher_revenue_from_ledger(db, f_date, t_date)
+
     report = []
     for t in teachers:
         b_res = await db.execute(select(Batch.id).where(Batch.teacher_id == t.id))
@@ -403,7 +500,6 @@ async def get_teacher_revenue_report(
         s_res = await db.execute(select(Subject.id).where(Subject.teacher_id == t.id))
         s_ids = [s for s, in s_res.all()]
 
-        # Match either AdmissionItem.teacher_id == t.id OR AdmissionItem.batch_id in batches OR AdmissionItem.subject_id in subjects
         where_cond = [AdmissionItem.teacher_id == t.id]
         if b_ids:
             where_cond.append(AdmissionItem.batch_id.in_(b_ids))
@@ -419,14 +515,15 @@ async def get_teacher_revenue_report(
         stmt = (
             select(
                 func.coalesce(func.sum(AdmissionItem.net_price), Decimal("0.00")),
-                func.coalesce(func.sum(AdmissionItem.amount_collected), Decimal("0.00")),
                 func.coalesce(func.count(AdmissionItem.id), 0)
             )
             .join(Admission, AdmissionItem.admission_id == Admission.id)
             .where(and_(*teacher_filter))
         )
         res = await db.execute(stmt)
-        booked, collected, count = res.one()
+        booked, count = res.one()
+
+        collected = teacher_collected_map.get(t.id, Decimal("0.00"))
 
         # Fetch enrolled students under this teacher
         t_stu_stmt = (
@@ -439,11 +536,15 @@ async def get_teacher_revenue_report(
             .order_by(start_col.desc(), Student.name.asc())
         )
         t_stu_rows = (await db.execute(t_stu_stmt)).all()
+        t_item_ids = [itm.id for itm, adm, stu, bch, sub in t_stu_rows]
+        t_collected_map = await get_item_allocated_collected_map(db, t_item_ids, f_date, t_date)
+
         t_students = []
         for itm, adm, stu, bch, sub in t_stu_rows:
+            itm_coll = t_collected_map.get(itm.id, Decimal("0.00"))
             c_info = _evaluate_student_cycle(
                 itm.valid_from, itm.valid_to, adm.admission_date,
-                itm.balance_due, itm.net_price, itm.amount_collected
+                itm.balance_due, itm.net_price, itm_coll
             )
             t_students.append({
                 "item_id": str(itm.id),
@@ -474,11 +575,273 @@ async def get_teacher_revenue_report(
             "enrolled_count": count,
             "total_booked": float(booked),
             "total_collected": float(collected),
-            "balance_due": float(booked - collected),
+            "balance_due": float(max(Decimal("0.00"), booked - collected)),
             "students": t_students
         })
 
+    if format == "csv":
+        headers = ["Teacher Code", "Teacher Name", "Specialization", "Batches", "Enrolled", "Total Booked (₹)", "Total Collected (₹)", "Balance Due (₹)"]
+        rows = [
+            [t["teacher_code"], t["teacher_name"], t["specialization"], t["batches_count"], t["enrolled_count"], t["total_booked"], t["total_collected"], t["balance_due"]]
+            for t in report
+        ]
+        return generate_csv_response("teacher_revenue_report.csv", headers, rows)
+
     return report
+
+
+@router.get("/teacher-revenue/csv")
+async def get_teacher_revenue_csv(
+    from_date: Optional[date] = Query(None),
+    to_date: Optional[date] = Query(None),
+    month: Optional[int] = Query(None, ge=1, le=12),
+    year: Optional[int] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    return await get_teacher_revenue_report(
+        from_date=from_date, to_date=to_date, month=month, year=year,
+        format="csv", db=db, current_user=current_user
+    )
+
+
+# -------------------------------------------------------------------------
+# New Financial & Operational Ledger Reports with CSV Export Support
+# -------------------------------------------------------------------------
+
+@router.get("/teacher-payable")
+async def get_teacher_payable_report(
+    from_date: Optional[date] = Query(None, description="Start date (YYYY-MM-DD)"),
+    to_date: Optional[date] = Query(None, description="End date (YYYY-MM-DD)"),
+    month: Optional[int] = Query(None, ge=1, le=12),
+    year: Optional[int] = Query(None),
+    format: Optional[str] = Query(None, description="Set to 'csv' for CSV export"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    """
+    Teacher Payable Report:
+    earned, reversed, net_earned, paid, payable = earned - reversed - paid.
+    Supports CSV export via ?format=csv.
+    """
+    f_date, t_date = _resolve_date_range(from_date, to_date, month, year)
+    report = await get_teacher_payable_summary(db, f_date, t_date)
+
+    if format == "csv":
+        headers = ["Teacher Code", "Teacher Name", "Share Type", "Share Value", "Total Earned (₹)", "Total Reversed (₹)", "Net Earned (₹)", "Total Paid (₹)", "Payable (₹)", "Status"]
+        rows = [
+            [
+                r["teacher_code"], r["teacher_name"], r["share_type"], r["share_value"],
+                r["total_earned"], r["total_reversed"], r["net_earned"], r["total_paid"], r["payable"], r["status"]
+            ]
+            for r in report
+        ]
+        return generate_csv_response("teacher_payable_report.csv", headers, rows)
+
+    return {
+        "filters": {
+            "from_date": str(f_date) if f_date else None,
+            "to_date": str(t_date) if t_date else None
+        },
+        "summary": {
+            "total_earned": float(sum((r["total_earned"] for r in report), Decimal("0.00"))),
+            "total_reversed": float(sum((r["total_reversed"] for r in report), Decimal("0.00"))),
+            "net_earned": float(sum((r["net_earned"] for r in report), Decimal("0.00"))),
+            "total_paid": float(sum((r["total_paid"] for r in report), Decimal("0.00"))),
+            "total_payable": float(sum((r["payable"] for r in report), Decimal("0.00")))
+        },
+        "items": report
+    }
+
+
+@router.get("/teacher-payable/csv")
+async def get_teacher_payable_csv(
+    from_date: Optional[date] = Query(None),
+    to_date: Optional[date] = Query(None),
+    month: Optional[int] = Query(None, ge=1, le=12),
+    year: Optional[int] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    return await get_teacher_payable_report(
+        from_date=from_date, to_date=to_date, month=month, year=year,
+        format="csv", db=db, current_user=current_user
+    )
+
+
+@router.get("/dues-by-subject")
+async def get_dues_by_subject_report(
+    from_date: Optional[date] = Query(None, description="Start date (YYYY-MM-DD)"),
+    to_date: Optional[date] = Query(None, description="End date (YYYY-MM-DD)"),
+    month: Optional[int] = Query(None, ge=1, le=12),
+    year: Optional[int] = Query(None),
+    format: Optional[str] = Query(None, description="Set to 'csv' for CSV export"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    """
+    Dues By Subject Report:
+    enrolled_count, total_booked, total_collected (from ledger), total_balance_due, total_written_off.
+    Supports CSV export via ?format=csv.
+    """
+    f_date, t_date = _resolve_date_range(from_date, to_date, month, year)
+    report = await get_dues_by_subject(db, f_date, t_date)
+
+    if format == "csv":
+        headers = ["Subject Code", "Subject Name", "Enrolled", "Total Booked (₹)", "Total Collected (₹)", "Balance Due (₹)", "Written Off (₹)"]
+        rows = [
+            [
+                r["subject_code"], r["subject_name"], r["enrolled_count"],
+                r["total_booked"], r["total_collected"], r["total_balance_due"], r["total_written_off"]
+            ]
+            for r in report
+        ]
+        return generate_csv_response("dues_by_subject_report.csv", headers, rows)
+
+    return {
+        "filters": {
+            "from_date": str(f_date) if f_date else None,
+            "to_date": str(t_date) if t_date else None
+        },
+        "summary": {
+            "total_booked": float(sum((r["total_booked"] for r in report), Decimal("0.00"))),
+            "total_collected": float(sum((r["total_collected"] for r in report), Decimal("0.00"))),
+            "total_balance_due": float(sum((r["total_balance_due"] for r in report), Decimal("0.00"))),
+            "total_written_off": float(sum((r["total_written_off"] for r in report), Decimal("0.00")))
+        },
+        "items": report
+    }
+
+
+@router.get("/dues-by-subject/csv")
+async def get_dues_by_subject_csv(
+    from_date: Optional[date] = Query(None),
+    to_date: Optional[date] = Query(None),
+    month: Optional[int] = Query(None, ge=1, le=12),
+    year: Optional[int] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    return await get_dues_by_subject_report(
+        from_date=from_date, to_date=to_date, month=month, year=year,
+        format="csv", db=db, current_user=current_user
+    )
+
+
+@router.get("/collection-by-cashier")
+async def get_collection_by_cashier_report(
+    from_date: Optional[date] = Query(None, description="Start date (YYYY-MM-DD)"),
+    to_date: Optional[date] = Query(None, description="End date (YYYY-MM-DD)"),
+    month: Optional[int] = Query(None, ge=1, le=12),
+    year: Optional[int] = Query(None),
+    format: Optional[str] = Query(None, description="Set to 'csv' for CSV export"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    """
+    Collection By Cashier Report:
+    Payment counts, gross collections, refunds, and net collections by cashier staff user.
+    Supports CSV export via ?format=csv.
+    """
+    f_date, t_date = _resolve_date_range(from_date, to_date, month, year)
+    report = await get_collections_by_cashier(db, f_date, t_date)
+
+    if format == "csv":
+        headers = ["Cashier Name", "Username", "Payments Count", "Gross Collected (₹)", "Refunds Count", "Total Refunded (₹)", "Net Collected (₹)"]
+        rows = [
+            [
+                r["cashier_name"], r["username"], r["payment_count"],
+                r["gross_collected"], r["refund_count"], r["total_refunded"], r["net_collected"]
+            ]
+            for r in report
+        ]
+        return generate_csv_response("collection_by_cashier_report.csv", headers, rows)
+
+    return {
+        "filters": {
+            "from_date": str(f_date) if f_date else None,
+            "to_date": str(t_date) if t_date else None
+        },
+        "summary": {
+            "gross_collected": float(sum((r["gross_collected"] for r in report), Decimal("0.00"))),
+            "total_refunded": float(sum((r["total_refunded"] for r in report), Decimal("0.00"))),
+            "net_collected": float(sum((r["net_collected"] for r in report), Decimal("0.00")))
+        },
+        "items": report
+    }
+
+
+@router.get("/collection-by-cashier/csv")
+async def get_collection_by_cashier_csv(
+    from_date: Optional[date] = Query(None),
+    to_date: Optional[date] = Query(None),
+    month: Optional[int] = Query(None, ge=1, le=12),
+    year: Optional[int] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    return await get_collection_by_cashier_report(
+        from_date=from_date, to_date=to_date, month=month, year=year,
+        format="csv", db=db, current_user=current_user
+    )
+
+
+@router.get("/collection-by-mode")
+async def get_collection_by_mode_report(
+    from_date: Optional[date] = Query(None, description="Start date (YYYY-MM-DD)"),
+    to_date: Optional[date] = Query(None, description="End date (YYYY-MM-DD)"),
+    month: Optional[int] = Query(None, ge=1, le=12),
+    year: Optional[int] = Query(None),
+    format: Optional[str] = Query(None, description="Set to 'csv' for CSV export"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    """
+    Collection By Payment Mode Report:
+    Payment counts, gross collections, refunds, and net collections by mode (CASH, UPI, etc.).
+    Supports CSV export via ?format=csv.
+    """
+    f_date, t_date = _resolve_date_range(from_date, to_date, month, year)
+    report = await get_collections_by_mode(db, f_date, t_date)
+
+    if format == "csv":
+        headers = ["Payment Mode", "Payments Count", "Gross Collected (₹)", "Refunds Count", "Total Refunded (₹)", "Net Collected (₹)"]
+        rows = [
+            [
+                r["mode"], r["payment_count"], r["gross_collected"],
+                r["refund_count"], r["total_refunded"], r["net_collected"]
+            ]
+            for r in report
+        ]
+        return generate_csv_response("collection_by_mode_report.csv", headers, rows)
+
+    return {
+        "filters": {
+            "from_date": str(f_date) if f_date else None,
+            "to_date": str(t_date) if t_date else None
+        },
+        "summary": {
+            "gross_collected": float(sum((r["gross_collected"] for r in report), Decimal("0.00"))),
+            "total_refunded": float(sum((r["total_refunded"] for r in report), Decimal("0.00"))),
+            "net_collected": float(sum((r["net_collected"] for r in report), Decimal("0.00")))
+        },
+        "items": report
+    }
+
+
+@router.get("/collection-by-mode/csv")
+async def get_collection_by_mode_csv(
+    from_date: Optional[date] = Query(None),
+    to_date: Optional[date] = Query(None),
+    month: Optional[int] = Query(None, ge=1, le=12),
+    year: Optional[int] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    return await get_collection_by_mode_report(
+        from_date=from_date, to_date=to_date, month=month, year=year,
+        format="csv", db=db, current_user=current_user
+    )
 
 @router.get("/cash-movement")
 async def get_cash_movement_report(

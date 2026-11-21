@@ -56,6 +56,9 @@ class AdmissionItemResponse(BaseModel):
     renewed_from_item_id: Optional[uuid.UUID] = None
     renewal_count: int = 0
     price_override_reason: Optional[str] = None
+    share_type: str = "PERCENT"
+    share_value: Decimal = Decimal("0.00")
+    share_percent: Optional[Decimal] = None
 
     model_config = ConfigDict(from_attributes=True)
 

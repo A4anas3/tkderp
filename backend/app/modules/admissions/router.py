@@ -234,6 +234,27 @@ async def create_admission(
         else:
             itm_to = raw.valid_to or compute_rolling_cycle_end(itm_from, 1)[0]
 
+        # Snapshot teacher compensation settings at sale time
+        s_type = "PERCENT"
+        s_val = Decimal("0.00")
+        s_pct = Decimal("0.00")
+
+        if t_id:
+            if bs_obj and bs_obj.share_value is not None and bs_obj.share_value > Decimal("0.00"):
+                s_type = bs_obj.share_type or "PERCENT"
+                s_val = bs_obj.share_value
+            else:
+                t_res = await db.execute(select(Teacher).where(Teacher.id == t_id))
+                t_obj = t_res.scalar_one_or_none()
+                if t_obj:
+                    s_type = t_obj.share_type or "PERCENT"
+                    s_val = t_obj.share_value or Decimal("0.00")
+
+            if s_type == "PERCENT":
+                s_pct = s_val
+            else:
+                s_pct = None
+
         ai = AdmissionItem(
             admission=admission,
             student_id=admission.student_id,
@@ -254,7 +275,10 @@ async def create_admission(
             amount_collected=Decimal("0.00"),
             balance_due=c_itm["net_price"],
             valid_from=itm_from,
-            valid_to=itm_to
+            valid_to=itm_to,
+            share_type=s_type,
+            share_value=s_val,
+            share_percent=s_pct
         )
         db.add(ai)
         db_items.append(ai)

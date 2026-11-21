@@ -10,6 +10,8 @@ class BatchSubjectItem(BaseModel):
     teacher_id: Optional[uuid.UUID] = None
     teacher_name_snapshot: Optional[str] = None
     hall_number: Optional[str] = None
+    share_type: Optional[str] = Field(default=None, pattern="^(PERCENT|FIXED_MONTHLY|PER_STUDENT)$")
+    share_value: Optional[Decimal] = Field(default=None, ge=0)
 
 class BatchSubjectResponse(BaseModel):
     id: uuid.UUID
@@ -20,6 +22,8 @@ class BatchSubjectResponse(BaseModel):
     teacher_id: Optional[uuid.UUID] = None
     teacher_name_snapshot: Optional[str] = None
     hall_number: Optional[str] = None
+    share_type: Optional[str] = None
+    share_value: Optional[Decimal] = None
 
     model_config = ConfigDict(from_attributes=True)
 

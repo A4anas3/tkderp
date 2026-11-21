@@ -135,6 +135,11 @@ class AdmissionItem(BaseModel):
     renewal_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     price_override_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    # Teacher Compensation Snapshot at sale time (never recalculated later)
+    share_type: Mapped[str] = mapped_column(String(30), nullable=False, default="PERCENT", server_default="PERCENT")
+    share_value: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("0.00"), server_default="0.00")
+    share_percent: Mapped[Optional[Decimal]] = mapped_column(Numeric(6, 2), nullable=True)
+
     admission: Mapped["Admission"] = relationship("Admission", back_populates="items")
     student: Mapped[Optional["app.modules.students.models.Student"]] = relationship("app.modules.students.models.Student", lazy="joined")
     renewed_from_item: Mapped[Optional["AdmissionItem"]] = relationship("AdmissionItem", remote_side="AdmissionItem.id", lazy="selectin")

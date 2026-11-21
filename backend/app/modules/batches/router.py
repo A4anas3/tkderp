@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -80,7 +81,9 @@ async def list_batches(
                     fee=bs.fee,
                     teacher_id=bs.teacher_id,
                     teacher_name_snapshot=bs.teacher_name_snapshot,
-                    hall_number=bs.hall_number
+                    hall_number=bs.hall_number,
+                    share_type=bs.share_type,
+                    share_value=bs.share_value
                 )
             )
         response_items.append(
@@ -213,7 +216,9 @@ async def create_batch(
             fee=item.fee,
             teacher_id=sub_teacher_id,
             teacher_name_snapshot=sub_teacher_name,
-            hall_number=sub_hall
+            hall_number=sub_hall,
+            share_type=item.share_type or "PERCENT",
+            share_value=item.share_value or Decimal("0.00")
         )
         db.add(bs)
 
@@ -251,7 +256,9 @@ async def get_batch(
             fee=bs.fee,
             teacher_id=bs.teacher_id,
             teacher_name_snapshot=bs.teacher_name_snapshot,
-            hall_number=bs.hall_number
+            hall_number=bs.hall_number,
+            share_type=bs.share_type,
+            share_value=bs.share_value
         )
         for bs in batch.subjects
     ]
@@ -326,7 +333,9 @@ async def update_batch(
                 fee=item.fee,
                 teacher_id=sub_teacher_id,
                 teacher_name_snapshot=sub_teacher_name,
-                hall_number=sub_hall
+                hall_number=sub_hall,
+                share_type=item.share_type or "PERCENT",
+                share_value=item.share_value or Decimal("0.00")
             )
             db.add(bs)
 

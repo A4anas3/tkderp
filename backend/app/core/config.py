@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     USE_FINANCIAL_YEAR: bool = False
     ALLOW_PAY_WHEN_SUSPENDED: bool = False
     RENEWAL_GAP_RESET_DAYS: int = 30
+    TEACHER_EARNING_BASIS: str = "CASH"
 
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["*"]

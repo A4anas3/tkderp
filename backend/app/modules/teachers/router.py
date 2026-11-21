@@ -1,23 +1,29 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, and_, desc, case
-from datetime import date, timedelta
-from typing import Optional
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
+from typing import Optional, List
 import uuid
 import os
+import json
 
 from app.database.session import get_db
 from app.core.config import settings
 from app.modules.students.router import compress_avatar_image
-from app.modules.teachers.models import Teacher
+from app.modules.teachers.models import Teacher, TeacherEarning
 from app.modules.teachers.schemas import (
     TeacherCreate, TeacherUpdate, TeacherResponse,
-    TeacherEnrollmentItem, TeacherRosterMetrics, TeacherRosterResponse, TeacherSubjectOption
+    TeacherEnrollmentItem, TeacherRosterMetrics, TeacherRosterResponse, TeacherSubjectOption,
+    TeacherPayoutCreate, TeacherPayoutResponse, TeacherEarningsResponse, TeacherSubjectEarningItem
 )
 from app.modules.batches.models import Batch
 from app.modules.subjects.models import Subject
 from app.modules.admissions.models import Admission, AdmissionItem
 from app.modules.students.models import Student
+from app.modules.expenses.models import SalaryRecord
+from app.database.models import AuditLog
+from app.modules.reports.ledger_queries import get_item_allocated_collected_map, ist_day_boundaries
 from app.core.dependencies import require_staff, require_admin
 from app.common.pagination import PageResponse
 
@@ -123,7 +129,9 @@ async def create_teacher(
         specialization=req.specialization.strip() if req.specialization else "General Faculty",
         photo_url=req.photo_url,
         joining_date=req.joining_date,
-        status=req.status
+        status=req.status,
+        share_type=req.share_type,
+        share_value=req.share_value
     )
     db.add(new_teacher)
     await db.commit()
@@ -169,6 +177,8 @@ async def update_teacher(
     if req.photo_url is not None: teacher.photo_url = req.photo_url
     if req.joining_date is not None: teacher.joining_date = req.joining_date
     if req.status is not None: teacher.status = req.status
+    if req.share_type is not None: teacher.share_type = req.share_type
+    if req.share_value is not None: teacher.share_value = req.share_value
 
     await db.commit()
     await db.refresh(teacher)
@@ -358,6 +368,9 @@ async def get_teacher_roster(
 
     rows = (await db.execute(q_items)).all()
 
+    item_ids = [itm.id for itm, adm, stu, bch, sub in rows]
+    collected_map = await get_item_allocated_collected_map(db, item_ids)
+
     items = []
     for itm, adm, stu, bch, sub in rows:
         c_start = itm.valid_from or adm.valid_from or adm.admission_date
@@ -404,7 +417,7 @@ async def get_teacher_roster(
             batch_name=bch.name if bch else "Direct Subject",
             hall_number=itm.hall_number_snapshot or (bch.hall_number if bch else (sub.hall_number if sub and sub.hall_number else "Main")),
             fee_billed=float(itm.net_price or 0),
-            fee_collected=float(itm.amount_collected or 0),
+            fee_collected=float(collected_map.get(itm.id, Decimal("0.00"))),
             balance_due=float(itm.balance_due or 0),
             payment_status=adm.payment_status,
             admission_status=adm.status,
@@ -438,4 +451,215 @@ async def get_teacher_roster(
         total_pages=total_pages,
         metrics=metrics,
         subjects=subjects_list
+    )
+
+
+@router.get("/{teacher_id}/earnings", response_model=TeacherEarningsResponse)
+async def get_teacher_earnings(
+    teacher_id: uuid.UUID,
+    from_date: Optional[date] = Query(None, alias="from"),
+    to_date: Optional[date] = Query(None, alias="to"),
+    start_date: Optional[date] = Query(None, alias="from_date"),
+    end_date: Optional[date] = Query(None, alias="to_date"),
+    db: AsyncSession = Depends(get_db),
+    user = Depends(require_staff)
+):
+    """
+    Returns breakdown of earnings (earned, reversed, paid, payable) for a teacher,
+    with per-subject breakdown and list of payout transactions.
+    """
+    f_date = from_date or start_date
+    t_date = to_date or end_date
+
+    t_res = await db.execute(select(Teacher).where(Teacher.id == teacher_id))
+    teacher = t_res.scalar_one_or_none()
+    if not teacher:
+        raise HTTPException(status_code=404, detail="Teacher not found")
+
+    start_dt, end_dt = ist_day_boundaries(f_date, t_date)
+    date_conds = []
+    if start_dt:
+        date_conds.append(TeacherEarning.earning_date >= start_dt)
+    if end_dt:
+        date_conds.append(TeacherEarning.earning_date < end_dt)
+
+    # 1. Total aggregations
+    stmt_totals = (
+        select(
+            func.coalesce(func.sum(case((TeacherEarning.earning_type == "EARNED", TeacherEarning.amount), else_=Decimal("0.00"))), Decimal("0.00")),
+            func.coalesce(func.sum(case((TeacherEarning.earning_type == "REVERSAL", TeacherEarning.amount), else_=Decimal("0.00"))), Decimal("0.00")),
+            func.coalesce(func.sum(case((TeacherEarning.earning_type == "PAYOUT", TeacherEarning.amount), else_=Decimal("0.00"))), Decimal("0.00"))
+        )
+        .where(TeacherEarning.teacher_id == teacher_id)
+    )
+    if date_conds:
+        stmt_totals = stmt_totals.where(and_(*date_conds))
+    res_totals = await db.execute(stmt_totals)
+    tot_earned, tot_reversed, tot_paid = res_totals.one()
+
+    tot_earned = Decimal(str(tot_earned))
+    tot_reversed = Decimal(str(tot_reversed))
+    tot_paid = Decimal(str(tot_paid))
+    net_earned = tot_earned - tot_reversed
+    payable = tot_earned - tot_reversed - tot_paid
+
+    # 2. Per-subject breakdown
+    stmt_subj = (
+        select(
+            TeacherEarning.subject_id,
+            Subject.name,
+            func.coalesce(func.sum(case((TeacherEarning.earning_type == "EARNED", TeacherEarning.amount), else_=Decimal("0.00"))), Decimal("0.00")),
+            func.coalesce(func.sum(case((TeacherEarning.earning_type == "REVERSAL", TeacherEarning.amount), else_=Decimal("0.00"))), Decimal("0.00"))
+        )
+        .outerjoin(Subject, TeacherEarning.subject_id == Subject.id)
+        .where(
+            TeacherEarning.teacher_id == teacher_id,
+            TeacherEarning.earning_type.in_(["EARNED", "REVERSAL"])
+        )
+    )
+    if date_conds:
+        stmt_subj = stmt_subj.where(and_(*date_conds))
+    stmt_subj = stmt_subj.group_by(TeacherEarning.subject_id, Subject.name)
+    res_subj = await db.execute(stmt_subj)
+    by_subject = []
+    for s_id, s_name, s_earned, s_rev in res_subj.all():
+        s_e = Decimal(str(s_earned))
+        s_r = Decimal(str(s_rev))
+        by_subject.append(TeacherSubjectEarningItem(
+            subject_id=s_id,
+            subject_name=s_name or "General / Direct",
+            earned=s_e,
+            reversed=s_r,
+            net_earned=s_e - s_r
+        ))
+
+    # 3. Payouts list
+    stmt_payouts = (
+        select(TeacherEarning)
+        .where(
+            TeacherEarning.teacher_id == teacher_id,
+            TeacherEarning.earning_type == "PAYOUT"
+        )
+    )
+    if date_conds:
+        stmt_payouts = stmt_payouts.where(and_(*date_conds))
+    stmt_payouts = stmt_payouts.order_by(desc(TeacherEarning.earning_date))
+    payout_rows = (await db.execute(stmt_payouts)).scalars().all()
+    payouts_list = [
+        {
+            "id": str(p.id),
+            "amount": float(p.amount),
+            "payout_mode": p.payout_mode or "CASH",
+            "date": p.earning_date.isoformat(),
+            "notes": p.notes,
+            "salary_record_id": str(p.salary_record_id) if p.salary_record_id else None
+        }
+        for p in payout_rows
+    ]
+
+    basis = getattr(settings, "TEACHER_EARNING_BASIS", "CASH")
+
+    return TeacherEarningsResponse(
+        teacher_id=teacher.id,
+        teacher_name=teacher.name,
+        teacher_code=teacher.teacher_code,
+        share_type=teacher.share_type,
+        share_value=Decimal(str(teacher.share_value)),
+        basis=basis,
+        from_date=f_date,
+        to_date=t_date,
+        total_earned=tot_earned,
+        total_reversed=tot_reversed,
+        net_earned=net_earned,
+        total_paid=tot_paid,
+        payable=payable,
+        by_subject=by_subject,
+        payouts=payouts_list
+    )
+
+
+@router.post("/{teacher_id}/payouts", response_model=TeacherPayoutResponse, status_code=status.HTTP_201_CREATED)
+async def create_teacher_payout(
+    teacher_id: uuid.UUID,
+    payload: TeacherPayoutCreate,
+    db: AsyncSession = Depends(get_db),
+    admin = Depends(require_admin)
+):
+    """
+    Creates a payout for a teacher.
+    Links payout to SalaryRecord (status=PAID) so cash-flow reports do not double count.
+    Records TeacherEarning row (type=PAYOUT) and AuditLog.
+    """
+    t_res = await db.execute(select(Teacher).where(Teacher.id == teacher_id))
+    teacher = t_res.scalar_one_or_none()
+    if not teacher:
+        raise HTTPException(status_code=404, detail="Teacher not found")
+
+    p_amt = Decimal(str(payload.amount))
+    if p_amt <= Decimal("0.00"):
+        raise HTTPException(status_code=400, detail="Payout amount must be greater than zero")
+
+    pay_date = payload.payment_date or date.today()
+    month_str = pay_date.strftime("%Y-%m")
+
+    # 1. Create SalaryRecord linked so cash-flow outflow recognizes it once
+    salary_record = SalaryRecord(
+        employee_id=teacher.id,
+        employee_type="TEACHER",
+        employee_name_snapshot=teacher.name,
+        month_year=month_str,
+        salary_amount=p_amt,
+        due_date=pay_date,
+        paid_amount=p_amt,
+        status="PAID",
+        payment_date=pay_date,
+        payment_mode=payload.payout_mode,
+        notes=f"Faculty payout: {payload.notes or ''}"
+    )
+    db.add(salary_record)
+    await db.flush()
+
+    # 2. Append-only TeacherEarning (PAYOUT)
+    now_dt = datetime.combine(pay_date, datetime.min.time(), tzinfo=timezone.utc)
+    earning = TeacherEarning(
+        teacher_id=teacher.id,
+        earning_type="PAYOUT",
+        basis=getattr(settings, "TEACHER_EARNING_BASIS", "CASH"),
+        amount=p_amt,
+        salary_record_id=salary_record.id,
+        payout_mode=payload.payout_mode,
+        earning_date=now_dt,
+        notes=payload.notes or f"Payout of ₹{p_amt} via {payload.payout_mode}",
+        created_by=admin.id
+    )
+    db.add(earning)
+    await db.flush()
+
+    # 3. Audit Log
+    audit = AuditLog(
+        user_id=admin.id,
+        action="TEACHER_PAYOUT_RECORDED",
+        entity_type="TEACHER_PAYOUT",
+        entity_id=earning.id,
+        details=json.dumps({
+            "teacher_id": str(teacher.id),
+            "teacher_name": teacher.name,
+            "amount": float(p_amt),
+            "payout_mode": payload.payout_mode,
+            "salary_record_id": str(salary_record.id),
+            "payment_date": pay_date.isoformat()
+        })
+    )
+    db.add(audit)
+    await db.commit()
+    await db.refresh(earning)
+
+    return TeacherPayoutResponse(
+        id=earning.id,
+        teacher_id=teacher.id,
+        amount=earning.amount,
+        payout_mode=earning.payout_mode or "CASH",
+        earning_date=earning.earning_date,
+        salary_record_id=earning.salary_record_id,
+        notes=earning.notes
     )

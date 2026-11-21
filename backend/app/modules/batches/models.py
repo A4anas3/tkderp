@@ -40,6 +40,10 @@ class BatchSubject(BaseModel):
     teacher_name_snapshot: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
     hall_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
 
+    # Optional teacher compensation override per batch subject
+    share_type: Mapped[Optional[str]] = mapped_column(String(30), nullable=True) # PERCENT, FIXED_MONTHLY, PER_STUDENT
+    share_value: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
+
     batch: Mapped["Batch"] = relationship("Batch", back_populates="subjects")
     subject: Mapped["Subject"] = relationship("app.modules.subjects.models.Subject", lazy="joined")
     teacher: Mapped[Optional["app.modules.teachers.models.Teacher"]] = relationship("app.modules.teachers.models.Teacher", lazy="joined")

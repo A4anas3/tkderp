@@ -12,11 +12,86 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.models import (
     Admission, AdmissionItem, Payment, PaymentAllocation, Refund, FinancialTransaction, AuditLog, Student, User,
-    Batch, Subject, Teacher, BatchSubject
+    Batch, Subject, Teacher, BatchSubject, TeacherEarning
 )
 from app.common.numbering import next_number
 from app.common.calculations import allocate_payment_proportionally, round_money, compute_rolling_cycle_end, calculate_admission_financials
 from app.core.config import settings
+
+async def record_teacher_earning_for_allocation(
+    db: AsyncSession,
+    allocation: PaymentAllocation,
+    item: AdmissionItem,
+    payment: Optional[Payment] = None,
+    refund: Optional[Refund] = None,
+    user_id: Optional[uuid.UUID] = None,
+    notes: Optional[str] = None
+) -> Optional[TeacherEarning]:
+    """
+    Records an append-only TeacherEarning ledger entry for a PaymentAllocation (EARNED or REVERSAL).
+    Basis is configurable (settings.TEACHER_EARNING_BASIS = CASH | ACCRUAL, default CASH).
+    In CASH basis, teacher earns as money is collected / reversed.
+    """
+    if not item.teacher_id:
+        return None
+
+    basis = getattr(settings, "TEACHER_EARNING_BASIS", "CASH")
+    share_pct = item.share_percent
+    if share_pct is None or share_pct <= Decimal("0.00"):
+        return None
+
+    alloc_amt = allocation.allocated_amount
+    if alloc_amt == Decimal("0.00"):
+        return None
+
+    if alloc_amt > Decimal("0.00"):
+        earning_type = "EARNED"
+        earning_amount = round_money(alloc_amt * (share_pct / Decimal("100.00")))
+    else:
+        earning_type = "REVERSAL"
+        earning_amount = round_money(abs(alloc_amt) * (share_pct / Decimal("100.00")))
+
+    if earning_amount <= Decimal("0.00"):
+        return None
+
+    e_date = datetime.now(timezone.utc)
+    p_mode = None
+    pay_id = allocation.payment_id
+    ref_id = allocation.refund_id
+    if payment:
+        e_date = payment.payment_date
+        p_mode = payment.payment_mode
+        pay_id = payment.id
+    elif refund:
+        e_date = refund.refund_date
+        p_mode = refund.refund_mode
+        ref_id = refund.id
+
+    desc_note = notes
+    if not desc_note:
+        if earning_type == "EARNED":
+            desc_note = f"Earning ({share_pct}%) on payment {payment.payment_number if payment else pay_id}"
+        else:
+            desc_note = f"Earning reversal ({share_pct}%)" + (f" on refund {refund.refund_number}" if refund else "")
+
+    te = TeacherEarning(
+        teacher_id=item.teacher_id,
+        earning_type=earning_type,
+        basis=basis,
+        amount=earning_amount,
+        payment_allocation_id=allocation.id,
+        admission_item_id=item.id,
+        subject_id=item.subject_id,
+        batch_id=item.batch_id,
+        payment_id=pay_id,
+        refund_id=ref_id,
+        payout_mode=p_mode,
+        earning_date=e_date,
+        notes=desc_note,
+        created_by=user_id
+    )
+    db.add(te)
+    return te
 
 async def _ensure_items_loaded(admission: Admission, db: AsyncSession) -> List[AdmissionItem]:
     """Ensures admission.items is eagerly loaded in async context without lazy loading triggers."""
@@ -237,6 +312,20 @@ async def record_payment_service(
     set_committed_value(payment, "allocations", alloc_objs)
     await db.flush()
 
+    # Record teacher earnings for each payment allocation
+    item_map = {itm.id: itm for itm in items}
+    for pa in alloc_objs:
+        itm_obj = item_map.get(pa.admission_item_id)
+        if itm_obj:
+            await record_teacher_earning_for_allocation(
+                db=db,
+                allocation=pa,
+                item=itm_obj,
+                payment=payment,
+                user_id=collected_by_user.id
+            )
+    await db.flush()
+
     # 3. Append-only FinancialTransaction (TXN series)
     txn_no = await next_number(db, "TXN")
     f_txn = FinancialTransaction(
@@ -322,6 +411,9 @@ async def edit_payment_service(
             if pa.kind == "REVERSAL" and pa.reverses_allocation_id is not None
         }
 
+        items = await _ensure_items_loaded(admission, db)
+        item_map = {itm.id: itm for itm in items}
+
         for pa in existing_allocations:
             if pa.kind == "PAYMENT" and pa.allocated_amount > Decimal("0.00") and pa.id not in reversed_ids:
                 rev_pa = PaymentAllocation(
@@ -333,6 +425,17 @@ async def edit_payment_service(
                     reverses_allocation_id=pa.id
                 )
                 db.add(rev_pa)
+                await db.flush()
+                itm_obj = item_map.get(rev_pa.admission_item_id)
+                if itm_obj:
+                    await record_teacher_earning_for_allocation(
+                        db=db,
+                        allocation=rev_pa,
+                        item=itm_obj,
+                        payment=payment,
+                        user_id=current_user.id,
+                        notes=f"Earning reversal on payment edit: {edit_reason}"
+                    )
 
         await db.flush()
 
@@ -382,6 +485,7 @@ async def edit_payment_service(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
+        new_allocs = []
         for itm_id, alloc_amt in alloc_tuples:
             new_pa = PaymentAllocation(
                 payment=payment,
@@ -391,6 +495,22 @@ async def edit_payment_service(
                 kind="PAYMENT"
             )
             db.add(new_pa)
+            new_allocs.append(new_pa)
+
+        await db.flush()
+
+        for new_pa in new_allocs:
+            itm_obj = item_map.get(new_pa.admission_item_id)
+            if itm_obj:
+                await record_teacher_earning_for_allocation(
+                    db=db,
+                    allocation=new_pa,
+                    item=itm_obj,
+                    payment=payment,
+                    user_id=current_user.id,
+                    notes=f"Earning ({itm_obj.share_percent}%) on payment edit {payment.payment_number}"
+                )
+        await db.flush()
 
         # New transaction header
         new_txn_no = await next_number(db, "TXN")
@@ -625,6 +745,7 @@ async def process_refund_service(
     await db.flush()
 
     # Create negative PaymentAllocation rows for the refund against specific items
+    item_map = {itm.id: itm for itm in items}
     for itm_id, ref_amt in refund_allocations:
         if ref_amt > Decimal("0.00"):
             pa = PaymentAllocation(
@@ -635,6 +756,17 @@ async def process_refund_service(
                 kind="REVERSAL"
             )
             db.add(pa)
+            await db.flush()
+            itm_obj = item_map.get(itm_id)
+            if itm_obj:
+                await record_teacher_earning_for_allocation(
+                    db=db,
+                    allocation=pa,
+                    item=itm_obj,
+                    refund=refund,
+                    user_id=user_id,
+                    notes=f"Earning reversal on refund {refund.refund_number}: {reason}"
+                )
 
     await db.flush()
 
@@ -1208,6 +1340,27 @@ async def renew_admission_items_service(
                 detail=f"Subject '{itm.item_name_snapshot}' has an overlapping active enrollment from {overlap.valid_from} to {overlap.valid_to}."
             )
 
+        # Snapshot teacher compensation settings
+        s_type = "PERCENT"
+        s_val = Decimal("0.00")
+        s_pct = Decimal("0.00")
+
+        if teacher_id:
+            if bs and bs.share_value is not None and bs.share_value > Decimal("0.00"):
+                s_type = bs.share_type or "PERCENT"
+                s_val = bs.share_value
+            else:
+                t_res = await db.execute(select(Teacher).where(Teacher.id == teacher_id))
+                t_obj = t_res.scalar_one_or_none()
+                if t_obj:
+                    s_type = t_obj.share_type or "PERCENT"
+                    s_val = t_obj.share_value or Decimal("0.00")
+
+            if s_type == "PERCENT":
+                s_pct = s_val
+            else:
+                s_pct = None
+
         renewal_specs.append({
             "prev_item": itm,
             "subject_id": itm.subject_id,
@@ -1221,7 +1374,10 @@ async def renew_admission_items_service(
             "fee": final_fee,
             "price_override_reason": reason if (req_fee is not None and Decimal(str(req_fee)) != Decimal(str(default_fee))) else None,
             "discount_type": disc_type,
-            "discount_value": disc_val
+            "discount_value": disc_val,
+            "share_type": s_type,
+            "share_value": s_val,
+            "share_percent": s_pct
         })
 
     # Internal overlap check among items being renewed in this single slip
@@ -1316,7 +1472,10 @@ async def renew_admission_items_service(
             access_status="ACTIVE",
             renewed_from_item_id=prev_itm.id,
             renewal_count=(prev_itm.renewal_count or 0) + 1,
-            price_override_reason=spec["price_override_reason"]
+            price_override_reason=spec["price_override_reason"],
+            share_type=spec["share_type"],
+            share_value=spec["share_value"],
+            share_percent=spec["share_percent"]
         )
         db.add(ai)
         new_items.append(ai)

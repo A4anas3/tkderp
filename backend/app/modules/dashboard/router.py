@@ -10,7 +10,7 @@ from app.database.session import get_db
 from app.core.dependencies import require_staff, require_admin, require_cashier_or_admin
 from app.database.models import (
     Student, Batch, Teacher, Enquiry, Admission, Payment, Expense, SalaryRecord,
-    AdmissionItem, User, Subject
+    AdmissionItem, User, Subject, Refund
 )
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboards"])
@@ -44,9 +44,15 @@ async def get_admin_dashboard(
         .where(Admission.status == "ACTIVE")
     )).scalar_one()
 
-    total_collected = (await db.execute(
+    total_pay = (await db.execute(
         select(func.coalesce(func.sum(Payment.amount), Decimal("0.00")))
     )).scalar_one()
+
+    total_ref = (await db.execute(
+        select(func.coalesce(func.sum(Refund.amount), Decimal("0.00")))
+    )).scalar_one()
+
+    total_collected = total_pay - total_ref
 
     total_expenses = (await db.execute(
         select(func.coalesce(func.sum(Expense.amount), Decimal("0.00")))
@@ -116,11 +122,18 @@ async def get_cashier_dashboard(
 ):
     today = date.today()
 
-    # Today's collections
-    today_coll = (await db.execute(
+    # Today's net collections
+    today_pay = (await db.execute(
         select(func.coalesce(func.sum(Payment.amount), Decimal("0.00")))
         .where(func.date(Payment.payment_date) == today)
     )).scalar_one()
+
+    today_ref = (await db.execute(
+        select(func.coalesce(func.sum(Refund.amount), Decimal("0.00")))
+        .where(func.date(Refund.refund_date) == today)
+    )).scalar_one()
+
+    today_coll = today_pay - today_ref
 
     # Today's expenses
     today_exp = (await db.execute(

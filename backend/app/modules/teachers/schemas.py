@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field, ConfigDict, field_validator
-from typing import Optional
-from datetime import date
+from typing import Optional, List
+from datetime import date, datetime
+from decimal import Decimal
 import uuid
 from app.common.validators import validate_mobile_10_digits
 
@@ -13,6 +14,8 @@ class TeacherBase(BaseModel):
     photo_url: Optional[str] = None
     joining_date: date = Field(default_factory=date.today)
     status: str = Field(default="ACTIVE", pattern="^(ACTIVE|INACTIVE)$")
+    share_type: str = Field(default="PERCENT", pattern="^(PERCENT|FIXED_MONTHLY|PER_STUDENT)$")
+    share_value: Decimal = Field(default=Decimal("0.00"), ge=0)
 
     @field_validator("qualification", "specialization", mode="before")
     @classmethod
@@ -38,6 +41,8 @@ class TeacherUpdate(BaseModel):
     photo_url: Optional[str] = None
     joining_date: Optional[date] = None
     status: Optional[str] = Field(default=None, pattern="^(ACTIVE|INACTIVE)$")
+    share_type: Optional[str] = Field(default=None, pattern="^(PERCENT|FIXED_MONTHLY|PER_STUDENT)$")
+    share_value: Optional[Decimal] = Field(default=None, ge=0)
 
     @field_validator("mobile", mode="before")
     @classmethod
@@ -102,3 +107,45 @@ class TeacherRosterResponse(BaseModel):
     total_pages: int
     metrics: TeacherRosterMetrics
     subjects: list[TeacherSubjectOption] = []
+
+class TeacherPayoutCreate(BaseModel):
+    amount: Decimal = Field(..., gt=0)
+    payout_mode: str = Field(default="CASH", pattern="^(CASH|UPI|BANK_TRANSFER|CHEQUE|OTHER)$")
+    payment_date: Optional[date] = None
+    notes: Optional[str] = None
+    reference: Optional[str] = None
+
+class TeacherPayoutResponse(BaseModel):
+    id: uuid.UUID
+    teacher_id: uuid.UUID
+    amount: Decimal
+    payout_mode: str
+    earning_date: datetime
+    salary_record_id: Optional[uuid.UUID] = None
+    notes: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+class TeacherSubjectEarningItem(BaseModel):
+    subject_id: Optional[uuid.UUID] = None
+    subject_name: str
+    earned: Decimal
+    reversed: Decimal
+    net_earned: Decimal
+
+class TeacherEarningsResponse(BaseModel):
+    teacher_id: uuid.UUID
+    teacher_name: str
+    teacher_code: str
+    share_type: str
+    share_value: Decimal
+    basis: str
+    from_date: Optional[date] = None
+    to_date: Optional[date] = None
+    total_earned: Decimal
+    total_reversed: Decimal
+    net_earned: Decimal
+    total_paid: Decimal
+    payable: Decimal
+    by_subject: List[TeacherSubjectEarningItem]
+    payouts: List[dict]
