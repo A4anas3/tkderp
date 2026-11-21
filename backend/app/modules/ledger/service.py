@@ -152,6 +152,15 @@ async def record_payment_service(
                         detail=f"Cannot record payment: subject line '{target_itm.item_name_snapshot}' is SUSPENDED"
                     )
 
+    active_candidates = [
+        itm for itm in items
+        if not (getattr(itm, "access_status", "ACTIVE") == "REVOKED" and not getattr(itm, "keep_due", False))
+    ]
+    if active_candidates and all((itm.status == "DISCONTINUED" or getattr(itm, "access_status", "ACTIVE") == "DISCONTINUED") for itm in active_candidates):
+        raise HTTPException(status_code=400, detail="Cannot record payment: target subject line is DISCONTINUED")
+    if active_candidates and not allow_suspended and all((itm.status == "SUSPENDED" or getattr(itm, "access_status", "ACTIVE") == "SUSPENDED") for itm in active_candidates):
+        raise HTTPException(status_code=400, detail="Cannot record payment: target subject line is SUSPENDED")
+
     # Only lines that are not REVOKED (or REVOKED with KEEP_DUE), not DISCONTINUED, and not SUSPENDED (unless allowed)
     payable_items = []
     for itm in items:

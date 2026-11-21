@@ -121,6 +121,108 @@ def test_allocate_payment_proportionally():
     assert alloc_map[item3_id] == Decimal("242.42")
 
 
+def test_three_subjects_odd_paise_and_modes():
+    """
+    Acceptance:
+    Three subjects (1000/1000/1000), pay 1000 then 1000.01 style odd amounts:
+    allocation sum always equals payment exactly.
+    Tests PROPORTIONAL (largest-remainder), SEQUENTIAL, and MANUAL modes.
+    Tests error handling when payment exceeds total balance.
+    """
+    s1, s2, s3 = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    items = [
+        {"id": s1, "balance_due": Decimal("1000.00")},
+        {"id": s2, "balance_due": Decimal("1000.00")},
+        {"id": s3, "balance_due": Decimal("1000.00")},
+    ]
+
+    # Test odd payment amounts
+    odd_amounts = [
+        Decimal("0.01"),
+        Decimal("0.02"),
+        Decimal("1.00"),
+        Decimal("333.33"),
+        Decimal("1000.00"),
+        Decimal("1000.01"),
+        Decimal("1000.02"),
+        Decimal("1000.03"),
+        Decimal("1499.99"),
+        Decimal("2000.00"),
+        Decimal("2500.50"),
+        Decimal("2999.99"),
+        Decimal("3000.00")
+    ]
+
+    for pay_amt in odd_amounts:
+        allocs = allocate_payment_proportionally(pay_amt, items, mode="PROPORTIONAL")
+        alloc_map = dict(allocs)
+        total_allocated = sum(alloc_map.values())
+        assert total_allocated == pay_amt, f"Allocated sum {total_allocated} != {pay_amt}"
+        for itm_id, amt in allocs:
+            assert amt <= Decimal("1000.00"), f"Item {itm_id} allocated {amt} > balance 1000.00"
+            assert amt >= Decimal("0.00")
+
+    # Specifically for 1000.00 and 1000.01
+    alloc_1000 = dict(allocate_payment_proportionally(Decimal("1000.00"), items))
+    assert sum(alloc_1000.values()) == Decimal("1000.00")
+
+    alloc_1000_01 = dict(allocate_payment_proportionally(Decimal("1000.01"), items))
+    assert sum(alloc_1000_01.values()) == Decimal("1000.01")
+    # In paise: 100001 / 3 = 33333.666... -> two items get 333.34 and one gets 333.33
+    values_1000_01 = sorted(alloc_1000_01.values())
+    assert values_1000_01 == [Decimal("333.33"), Decimal("333.34"), Decimal("333.34")]
+
+    # Overpayment raises ValueError
+    with pytest.raises(ValueError, match="exceeds total outstanding balance"):
+        allocate_payment_proportionally(Decimal("3000.01"), items)
+
+    with pytest.raises(ValueError, match="exceeds total outstanding balance"):
+        allocate_payment_proportionally(Decimal("5000.00"), items)
+
+    # SEQUENTIAL mode
+    seq_allocs = dict(allocate_payment_proportionally(Decimal("1500.50"), items, mode="SEQUENTIAL"))
+    assert sum(seq_allocs.values()) == Decimal("1500.50")
+    assert seq_allocs[s1] == Decimal("1000.00")
+    assert seq_allocs[s2] == Decimal("500.50")
+    assert seq_allocs[s3] == Decimal("0.00")
+
+    # MANUAL mode
+    manual_entries = [
+        {"admission_item_id": s1, "allocated_amount": Decimal("600.00")},
+        {"admission_item_id": s2, "allocated_amount": Decimal("300.00")},
+        {"admission_item_id": s3, "allocated_amount": Decimal("100.00")},
+    ]
+    man_allocs = dict(allocate_payment_proportionally(
+        Decimal("1000.00"), items, mode="MANUAL", manual_allocations=manual_entries
+    ))
+    assert sum(man_allocs.values()) == Decimal("1000.00")
+    assert man_allocs[s1] == Decimal("600.00")
+    assert man_allocs[s2] == Decimal("300.00")
+    assert man_allocs[s3] == Decimal("100.00")
+
+    # MANUAL mode mismatch raises ValueError
+    bad_manual = [
+        {"admission_item_id": s1, "allocated_amount": Decimal("500.00")},
+        {"admission_item_id": s2, "allocated_amount": Decimal("300.00")},
+        {"admission_item_id": s3, "allocated_amount": Decimal("100.00")},
+    ]
+    with pytest.raises(ValueError, match="Sum of manual allocations"):
+        allocate_payment_proportionally(
+            Decimal("1000.00"), items, mode="MANUAL", manual_allocations=bad_manual
+        )
+
+    # MANUAL mode exceeding item balance raises ValueError
+    excess_manual = [
+        {"admission_item_id": s1, "allocated_amount": Decimal("1200.00")},
+        {"admission_item_id": s2, "allocated_amount": Decimal("0.00")},
+        {"admission_item_id": s3, "allocated_amount": Decimal("0.00")},
+    ]
+    with pytest.raises(ValueError, match="exceeds item balance"):
+        allocate_payment_proportionally(
+            Decimal("1200.00"), items, mode="MANUAL", manual_allocations=excess_manual
+        )
+
+
 def test_rolling_monthly_cycle_calculations():
     """
     Test user specified rolling cycle rules:
