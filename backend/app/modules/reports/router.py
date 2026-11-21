@@ -729,3 +729,119 @@ async def get_cash_movement_report(
         "breakdown": months_data,
         "monthly_breakdown": months_data
     }
+
+
+@router.get("/renewal-rate")
+async def get_renewal_rate_report(
+    from_date: Optional[date] = Query(None, description="Start date (YYYY-MM-DD)"),
+    to_date: Optional[date] = Query(None, description="End date (YYYY-MM-DD)"),
+    month: Optional[int] = Query(None, ge=1, le=12, description="Specific month (1-12)"),
+    year: Optional[int] = Query(None, description="Specific year (e.g. 2026)"),
+    teacher_id: Optional[uuid.UUID] = Query(None, description="Filter by teacher"),
+    subject_id: Optional[uuid.UUID] = Query(None, description="Filter by subject"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_staff)
+):
+    """
+    Renewal rate report:
+    Renewal rate per subject / teacher = renewed items / items that expired in the period.
+    """
+    f_date, t_date = _resolve_date_range(from_date, to_date, month, year)
+    if not f_date:
+        today = date.today()
+        f_date = date(today.year, today.month, 1)
+        _, last_d = calendar.monthrange(today.year, today.month)
+        t_date = date(today.year, today.month, last_d)
+    elif not t_date:
+        t_date = date.today()
+
+    conds = [
+        AdmissionItem.item_type == "BATCH_SUBJECT",
+        AdmissionItem.status != "DISCONTINUED",
+        Admission.document_status == "VALID",
+        Admission.status != "CANCELLED",
+        AdmissionItem.valid_to != None,
+        AdmissionItem.valid_to >= f_date,
+        AdmissionItem.valid_to <= t_date
+    ]
+    if teacher_id:
+        conds.append(AdmissionItem.teacher_id == teacher_id)
+    if subject_id:
+        conds.append(AdmissionItem.subject_id == subject_id)
+
+    stmt = (
+        select(AdmissionItem)
+        .join(Admission, AdmissionItem.admission_id == Admission.id)
+        .where(and_(*conds))
+    )
+    res = await db.execute(stmt)
+    expired_items = res.scalars().all()
+
+    expired_ids = [i.id for i in expired_items]
+    renewed_ids = set()
+    if expired_ids:
+        r_stmt = (
+            select(AdmissionItem.renewed_from_item_id)
+            .where(
+                AdmissionItem.renewed_from_item_id.in_(expired_ids),
+                AdmissionItem.status != "DISCONTINUED"
+            )
+        )
+        r_res = await db.execute(r_stmt)
+        renewed_ids = set(r_res.scalars().all())
+
+    by_subject_map = {}
+    by_teacher_map = {}
+
+    for itm in expired_items:
+        s_id = itm.subject_id
+        s_name = itm.item_name_snapshot
+        if s_id not in by_subject_map:
+            by_subject_map[s_id] = {
+                "subject_id": str(s_id) if s_id else None,
+                "subject_name": s_name,
+                "expired_count": 0,
+                "renewed_count": 0
+            }
+        by_subject_map[s_id]["expired_count"] += 1
+        if itm.id in renewed_ids:
+            by_subject_map[s_id]["renewed_count"] += 1
+
+        t_id = itm.teacher_id
+        t_name = itm.teacher_name_snapshot or "Unknown Faculty"
+        if t_id not in by_teacher_map:
+            by_teacher_map[t_id] = {
+                "teacher_id": str(t_id) if t_id else None,
+                "teacher_name": t_name,
+                "expired_count": 0,
+                "renewed_count": 0
+            }
+        by_teacher_map[t_id]["expired_count"] += 1
+        if itm.id in renewed_ids:
+            by_teacher_map[t_id]["renewed_count"] += 1
+
+    by_subject = []
+    for s in by_subject_map.values():
+        rate = round((s["renewed_count"] / s["expired_count"]) * 100, 2) if s["expired_count"] > 0 else 0.0
+        by_subject.append({**s, "renewal_rate_pct": rate})
+
+    by_teacher = []
+    for t in by_teacher_map.values():
+        rate = round((t["renewed_count"] / t["expired_count"]) * 100, 2) if t["expired_count"] > 0 else 0.0
+        by_teacher.append({**t, "renewal_rate_pct": rate})
+
+    total_expired = len(expired_items)
+    total_renewed = len([i for i in expired_items if i.id in renewed_ids])
+    overall_rate = round((total_renewed / total_expired) * 100, 2) if total_expired > 0 else 0.0
+
+    return {
+        "summary": {
+            "from_date": str(f_date),
+            "to_date": str(t_date),
+            "total_expired": total_expired,
+            "total_renewed": total_renewed,
+            "overall_renewal_rate_pct": overall_rate
+        },
+        "by_subject": by_subject,
+        "by_teacher": by_teacher
+    }

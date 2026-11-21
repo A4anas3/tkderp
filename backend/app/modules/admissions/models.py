@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional, List
-from sqlalchemy import String, Date, DateTime, Numeric, Boolean, Text, ForeignKey, Index
+from sqlalchemy import String, Date, DateTime, Numeric, Boolean, Text, ForeignKey, Index, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base import BaseModel
@@ -130,5 +130,11 @@ class AdmissionItem(BaseModel):
     discontinued_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     lifecycle_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    # Renewal Tracking & Price Override
+    renewed_from_item_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("admission_items.id", ondelete="SET NULL"), nullable=True, index=True)
+    renewal_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    price_override_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     admission: Mapped["Admission"] = relationship("Admission", back_populates="items")
     student: Mapped[Optional["app.modules.students.models.Student"]] = relationship("app.modules.students.models.Student", lazy="joined")
+    renewed_from_item: Mapped[Optional["AdmissionItem"]] = relationship("AdmissionItem", remote_side="AdmissionItem.id", lazy="selectin")

@@ -1303,10 +1303,10 @@ async def test_subject_lifecycle_and_renewal_flow():
         assert len(enr_disc.json()["active_subjects"]) == 0
         assert len(enr_disc.json()["historical_subjects"]) == 1
 
-        # 10. Test subject renewal endpoint with initial payment
+        # 10. Attempting to renew a discontinued subject is rejected with clear 400 error
         ren_from = today + timedelta(days=1)
         ren_to = ren_from + timedelta(days=30)
-        renew_res = await client.post("/api/admissions/renew-subject", json={
+        renew_err = await client.post("/api/admissions/renew-subject", json={
             "student_id": student_id,
             "subject_id": subject_id,
             "valid_from": ren_from.isoformat(),
@@ -1318,8 +1318,30 @@ async def test_subject_lifecycle_and_renewal_flow():
             },
             "notes": "Renewed for next term"
         }, headers=headers)
-        assert renew_res.status_code == 201
-        renew_data = renew_res.json()
+        assert renew_err.status_code == 400
+        assert "cannot renew discontinued subject line" in renew_err.json()["detail"].lower()
+
+        # To re-enroll after discontinuation, enroll as a new admission line
+        new_adm_res = await client.post("/api/admissions", json={
+            "student_id": student_id,
+            "admission_date": today.isoformat(),
+            "items": [
+                {
+                    "item_type": "BATCH_SUBJECT",
+                    "subject_id": subject_id,
+                    "item_name_snapshot": subject["name"],
+                    "original_price": 2500.00,
+                    "valid_from": ren_from.isoformat(),
+                    "valid_to": ren_to.isoformat()
+                }
+            ],
+            "initial_payment": {
+                "amount": 1500.00,
+                "payment_mode": "CASH"
+            }
+        }, headers=headers)
+        assert new_adm_res.status_code == 201
+        renew_data = new_adm_res.json()
         assert float(renew_data["total_payable"]) == 2500.00
         assert float(renew_data["amount_paid"]) == 1500.00
         assert float(renew_data["balance_due"]) == 1000.00

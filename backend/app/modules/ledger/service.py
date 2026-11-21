@@ -1,6 +1,6 @@
 import uuid
 import json
-from datetime import datetime, timezone, date
+from datetime import datetime, timezone, date, timedelta
 from decimal import Decimal
 from typing import Optional, List, Dict, Any, Tuple
 from fastapi import HTTPException
@@ -11,10 +11,11 @@ from sqlalchemy.inspection import inspect as sa_inspect
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.models import (
-    Admission, AdmissionItem, Payment, PaymentAllocation, Refund, FinancialTransaction, AuditLog, Student, User
+    Admission, AdmissionItem, Payment, PaymentAllocation, Refund, FinancialTransaction, AuditLog, Student, User,
+    Batch, Subject, Teacher, BatchSubject
 )
 from app.common.numbering import next_number
-from app.common.calculations import allocate_payment_proportionally, round_money
+from app.common.calculations import allocate_payment_proportionally, round_money, compute_rolling_cycle_end, calculate_admission_financials
 from app.core.config import settings
 
 async def _ensure_items_loaded(admission: Admission, db: AsyncSession) -> List[AdmissionItem]:
@@ -1013,4 +1014,378 @@ async def restore_admission_service(
     )
     db.add(audit)
     return admission
+
+
+async def renew_admission_items_service(
+    db: AsyncSession,
+    current_user: User,
+    target_item_ids: List[uuid.UUID],
+    item_overrides: Optional[Dict[uuid.UUID, Dict[str, Any]]] = None,
+    default_params: Optional[Dict[str, Any]] = None,
+    initial_payment: Optional[Any] = None,
+    notes: Optional[str] = None
+) -> Admission:
+    """
+    Centralized service for renewing one or many subjects on one admission slip.
+    - default valid_from = previous valid_to + 1 day (or today if already expired > RENEWAL_GAP_RESET_DAYS)
+    - default valid_to = same cycle length as previous period (using compute_rolling_cycle_end)
+    - fee defaults from BatchSubject.fee / Subject.default_fee; cashier may override only with price_override_reason
+    - teacher / hall / batch copied from previous item unless batch changed; always store snapshots
+    - item_type must be BATCH_SUBJECT (rejects GREEN_CARD)
+    - overlap check: student + subject + overlapping [valid_from, valid_to] raises 409
+    - creates single Admission with renewed items, linking renewed_from_item_id and incrementing renewal_count
+    - initial payment handled via unified record_payment_service
+    """
+    if not target_item_ids:
+        raise HTTPException(status_code=400, detail="At least one item must be provided for renewal.")
+
+    today = date.today()
+    item_overrides = item_overrides or {}
+    default_params = default_params or {}
+
+    # Lock and load target items
+    stmt = (
+        select(AdmissionItem)
+        .options(
+            selectinload(AdmissionItem.admission),
+            selectinload(AdmissionItem.student)
+        )
+        .where(AdmissionItem.id.in_(target_item_ids))
+    )
+    res = await db.execute(stmt)
+    prev_items = list(res.scalars().all())
+    
+    if len(prev_items) != len(target_item_ids):
+        found_ids = {i.id for i in prev_items}
+        missing = [str(i) for i in target_item_ids if i not in found_ids]
+        raise HTTPException(status_code=404, detail=f"Admission item(s) not found: {', '.join(missing)}")
+
+    # Sort prev_items to match target_item_ids order
+    prev_items.sort(key=lambda x: target_item_ids.index(x.id))
+
+    # All must belong to same student
+    student_ids = {i.student_id for i in prev_items}
+    if len(student_ids) > 1:
+        raise HTTPException(status_code=400, detail="All items to renew must belong to the same student.")
+    student_id = list(student_ids)[0]
+
+    # Lock student row
+    st_res = await db.execute(select(Student).where(Student.id == student_id).with_for_update())
+    student = st_res.scalar_one_or_none()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    # Validate each item
+    for itm in prev_items:
+        if itm.status == "DISCONTINUED":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot renew discontinued subject line '{itm.item_name_snapshot}'. Enroll as a new subject instead."
+            )
+        if itm.item_type != "BATCH_SUBJECT":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Item '{itm.item_name_snapshot}' has type '{itm.item_type}'. Only BATCH_SUBJECT items are renewable."
+            )
+
+    # Prepare renewed items data
+    renewal_specs = []
+    gap_limit = getattr(settings, "RENEWAL_GAP_RESET_DAYS", 30)
+
+    for itm in prev_items:
+        ovr = item_overrides.get(itm.id, {})
+
+        # 1. valid_from
+        req_from = ovr.get("valid_from") or default_params.get("valid_from")
+        if req_from:
+            new_from = req_from
+        else:
+            if itm.valid_to:
+                gap = (today - itm.valid_to).days
+                if gap > gap_limit:
+                    new_from = today
+                else:
+                    new_from = itm.valid_to + timedelta(days=1)
+            else:
+                new_from = today
+
+        # 2. valid_to
+        req_to = ovr.get("valid_to") or default_params.get("valid_to")
+        if req_to:
+            new_to = req_to
+        else:
+            # same cycle length as previous
+            if itm.valid_from and itm.valid_to:
+                approx_days = (itm.valid_to - itm.valid_from).days + 1
+                months = max(1, round(approx_days / 30))
+            else:
+                months = ovr.get("months") or default_params.get("months") or 1
+            new_to, _ = compute_rolling_cycle_end(new_from, months)
+
+        # 3. Batch, Teacher, Hall
+        req_batch_id = ovr.get("batch_id") or default_params.get("batch_id")
+        if req_batch_id and req_batch_id != itm.batch_id:
+            batch_id = req_batch_id
+            b_res = await db.execute(select(Batch).where(Batch.id == batch_id))
+            batch = b_res.scalar_one_or_none()
+            bs_res = await db.execute(
+                select(BatchSubject).where(BatchSubject.batch_id == batch_id, BatchSubject.subject_id == itm.subject_id)
+            )
+            bs = bs_res.scalar_one_or_none()
+            teacher_id = bs.teacher_id if (bs and bs.teacher_id) else (batch.teacher_id if batch else itm.teacher_id)
+            teacher_name = bs.teacher_name_snapshot if (bs and bs.teacher_name_snapshot) else (batch.teacher_name_snapshot if batch else itm.teacher_name_snapshot)
+            hall_number = bs.hall_number if (bs and bs.hall_number) else (batch.hall_number if batch else itm.hall_number_snapshot)
+            default_fee = bs.fee if (bs and bs.fee is not None) else Decimal("0.00")
+        else:
+            batch_id = itm.batch_id
+            # Fetch current BatchSubject.fee or Subject.default_fee
+            bs = None
+            if itm.batch_id and itm.subject_id:
+                bs_res = await db.execute(
+                    select(BatchSubject).where(BatchSubject.batch_id == itm.batch_id, BatchSubject.subject_id == itm.subject_id)
+                )
+                bs = bs_res.scalar_one_or_none()
+            
+            if bs and bs.fee is not None:
+                default_fee = bs.fee
+            else:
+                s_res = await db.execute(select(Subject).where(Subject.id == itm.subject_id))
+                subj = s_res.scalar_one_or_none()
+                default_fee = subj.default_fee if subj else itm.original_price
+
+            req_t_id = ovr.get("teacher_id") or default_params.get("teacher_id")
+            if req_t_id and req_t_id != itm.teacher_id:
+                t_res = await db.execute(select(Teacher).where(Teacher.id == req_t_id))
+                t_obj = t_res.scalar_one_or_none()
+                teacher_name = t_obj.name if t_obj else itm.teacher_name_snapshot
+            else:
+                teacher_id = itm.teacher_id
+                teacher_name = itm.teacher_name_snapshot
+            hall_number = itm.hall_number_snapshot
+
+        # 4. Fee & Price Override
+        req_fee = ovr.get("fee") if ovr.get("fee") is not None else default_params.get("fee")
+        reason = ovr.get("price_override_reason") or default_params.get("price_override_reason")
+        if req_fee is not None:
+            req_fee_dec = Decimal(str(req_fee))
+            if req_fee_dec != Decimal(str(default_fee)):
+                if not reason or not str(reason).strip():
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Price override reason is required when fee (₹{req_fee_dec}) differs from standard fee (₹{default_fee})."
+                    )
+                final_fee = req_fee_dec
+            else:
+                final_fee = Decimal(str(default_fee))
+        else:
+            final_fee = Decimal(str(default_fee))
+
+        # 5. Discount
+        disc_type = ovr.get("discount_type") or default_params.get("discount_type") or "NONE"
+        disc_val = Decimal(str(ovr.get("discount_value") or default_params.get("discount_value") or "0.00"))
+
+        # 6. Overlap Validation
+        overlap_stmt = (
+            select(AdmissionItem)
+            .join(Admission, AdmissionItem.admission_id == Admission.id)
+            .where(
+                AdmissionItem.student_id == student_id,
+                AdmissionItem.subject_id == itm.subject_id,
+                AdmissionItem.status != "DISCONTINUED",
+                Admission.document_status == "VALID",
+                Admission.status != "CANCELLED",
+                AdmissionItem.valid_from != None,
+                AdmissionItem.valid_to != None,
+                AdmissionItem.valid_from <= new_to,
+                AdmissionItem.valid_to >= new_from
+            )
+        )
+        overlap_res = await db.execute(overlap_stmt)
+        overlap = overlap_res.scalars().first()
+        if overlap:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Subject '{itm.item_name_snapshot}' has an overlapping active enrollment from {overlap.valid_from} to {overlap.valid_to}."
+            )
+
+        renewal_specs.append({
+            "prev_item": itm,
+            "subject_id": itm.subject_id,
+            "subject_name": itm.item_name_snapshot,
+            "batch_id": batch_id,
+            "teacher_id": teacher_id,
+            "teacher_name_snapshot": teacher_name,
+            "hall_number_snapshot": hall_number,
+            "valid_from": new_from,
+            "valid_to": new_to,
+            "fee": final_fee,
+            "price_override_reason": reason if (req_fee is not None and Decimal(str(req_fee)) != Decimal(str(default_fee))) else None,
+            "discount_type": disc_type,
+            "discount_value": disc_val
+        })
+
+    # Internal overlap check among items being renewed in this single slip
+    for i in range(len(renewal_specs)):
+        for j in range(i + 1, len(renewal_specs)):
+            s1 = renewal_specs[i]
+            s2 = renewal_specs[j]
+            if s1["subject_id"] == s2["subject_id"]:
+                if s1["valid_from"] <= s2["valid_to"] and s1["valid_to"] >= s2["valid_from"]:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"Duplicate overlapping renewal for subject '{s1['subject_name']}' in the same request."
+                    )
+
+    # Calculate financials
+    raw_calc_items = [
+        {
+            "price": spec["fee"],
+            "discount_type": spec["discount_type"],
+            "discount_value": spec["discount_value"]
+        }
+        for spec in renewal_specs
+    ]
+    calc = calculate_admission_financials(
+        items=raw_calc_items,
+        overall_discount_type="NONE",
+        overall_discount_value=Decimal("0.00"),
+        gst_enabled=False,
+        gst_rate=Decimal("18.00")
+    )
+
+    # Next sequential admission number atomically
+    adm_no = await next_number(db, "ADM")
+    min_from = min(spec["valid_from"] for spec in renewal_specs)
+    max_to = max(spec["valid_to"] for spec in renewal_specs)
+    sub_names = ", ".join(spec["subject_name"] for spec in renewal_specs)
+
+    admission = Admission(
+        admission_number=adm_no,
+        student_id=student.id,
+        student_name_snapshot=student.full_name,
+        admission_date=today,
+        subtotal=calc["subtotal"],
+        individual_discount_total=calc["individual_discount_total"],
+        overall_discount_type="NONE",
+        overall_discount_value=Decimal("0.00"),
+        overall_discount_amount=Decimal("0.00"),
+        total_discount=calc["total_discount"],
+        gst_enabled=False,
+        gst_rate=Decimal("18.00"),
+        taxable_base=calc["taxable_base"],
+        gst_amount=Decimal("0.00"),
+        total_payable=calc["total_payable"],
+        amount_paid=Decimal("0.00"),
+        balance_due=calc["total_payable"],
+        payment_status="UNPAID",
+        status="ACTIVE",
+        access_status="ACTIVE",
+        notes=notes or f"Renewal: {sub_names}",
+        valid_from=min_from,
+        valid_to=max_to,
+        created_by=current_user.id
+    )
+    db.add(admission)
+    await db.flush()
+
+    new_items = []
+    for idx, spec in enumerate(renewal_specs):
+        item_calc = calc["items"][idx]
+        prev_itm = spec["prev_item"]
+        ai = AdmissionItem(
+            admission=admission,
+            student_id=admission.student_id,
+            item_type="BATCH_SUBJECT",
+            batch_id=spec["batch_id"],
+            subject_id=spec["subject_id"],
+            teacher_id=spec["teacher_id"],
+            teacher_name_snapshot=spec["teacher_name_snapshot"],
+            hall_number_snapshot=spec["hall_number_snapshot"],
+            item_name_snapshot=spec["subject_name"],
+            original_price=item_calc["original_price"],
+            discount_type=spec["discount_type"],
+            discount_value=spec["discount_value"],
+            discount_amount=item_calc["individual_discount"],
+            overall_discount_share=Decimal("0.00"),
+            net_price=item_calc["net_price"],
+            amount_collected=Decimal("0.00"),
+            balance_due=item_calc["net_price"],
+            valid_from=spec["valid_from"],
+            valid_to=spec["valid_to"],
+            status="ACTIVE",
+            access_status="ACTIVE",
+            renewed_from_item_id=prev_itm.id,
+            renewal_count=(prev_itm.renewal_count or 0) + 1,
+            price_override_reason=spec["price_override_reason"]
+        )
+        db.add(ai)
+        new_items.append(ai)
+
+    await db.flush()
+    set_committed_value(admission, "items", new_items)
+
+    # Initial payment
+    if initial_payment and getattr(initial_payment, "amount", Decimal("0.00")) > Decimal("0.00"):
+        pay_amount = Decimal(str(initial_payment.amount))
+        if pay_amount > admission.total_payable:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Initial payment amount ₹{pay_amount} exceeds total payable ₹{admission.total_payable}"
+            )
+        await record_payment_service(
+            db=db,
+            admission=admission,
+            amount=pay_amount,
+            payment_mode=getattr(initial_payment, "payment_mode", "CASH"),
+            collected_by_user=current_user,
+            transaction_reference=getattr(initial_payment, "transaction_reference", None),
+            notes=getattr(initial_payment, "notes", None) or f"Renewal payment for {sub_names}",
+            valid_from=min_from,
+            valid_to=max_to,
+            fee_period=f"{min_from} to {max_to}",
+            allocation_mode=getattr(initial_payment, "allocation_mode", "PROPORTIONAL"),
+            manual_allocations=getattr(initial_payment, "manual_allocations", None)
+        )
+
+    # Audit log
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="SUBJECT_RENEWED",
+        entity_type="ADMISSION",
+        entity_id=admission.id,
+        details=json.dumps({
+            "student_id": str(student.id),
+            "student_name": student.full_name,
+            "admission_number": admission.admission_number,
+            "total_payable": str(admission.total_payable),
+            "amount_paid": str(admission.amount_paid),
+            "items_renewed": [
+                {
+                    "item_id": str(ni.id),
+                    "renewed_from_item_id": str(ni.renewed_from_item_id),
+                    "renewal_count": ni.renewal_count,
+                    "subject": ni.item_name_snapshot,
+                    "valid_from": str(ni.valid_from),
+                    "valid_to": str(ni.valid_to),
+                    "fee": str(ni.original_price),
+                    "price_override_reason": ni.price_override_reason
+                }
+                for ni in new_items
+            ]
+        })
+    )
+    db.add(audit)
+    await db.commit()
+
+    # Re-query with eager load
+    refreshed_stmt = (
+        select(Admission)
+        .options(
+            selectinload(Admission.items),
+            selectinload(Admission.student)
+        )
+        .where(Admission.id == admission.id)
+    )
+    refreshed = (await db.execute(refreshed_stmt)).scalar_one()
+    return refreshed
 

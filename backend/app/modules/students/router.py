@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, and_, desc
 from sqlalchemy.orm import selectinload
 from decimal import Decimal
 from datetime import datetime, timezone, date, timedelta
-from typing import Optional
+from typing import Optional, List
 import json
 import uuid
 import os
@@ -25,7 +25,7 @@ from app.modules.students.schemas import (
     StudentCreate, StudentUpdate, StudentRevokeRequest,
     StudentResponse, StudentDetailResponse, StudentLineResponse
 )
-from app.modules.admissions.schemas import AdmissionResponse
+from app.modules.admissions.schemas import AdmissionResponse, RenewalsDueItemResponse
 from app.modules.payments.schemas import FinancialTransactionResponse
 from app.common.active_lines import today_kolkata, is_active_line, derive_student_status
 from app.core.dependencies import require_cashier_or_admin, require_staff, require_admin
@@ -755,6 +755,93 @@ async def get_student_last_batch_period(
             "suggested_end_date": suggested_end.isoformat(),
             "item_name": None
         }
+
+
+@router.get("/{student_id}/renewals-due", response_model=List[RenewalsDueItemResponse])
+async def get_student_renewals_due(
+    student_id: uuid.UUID,
+    days: int = Query(7, ge=1, description="Number of days ahead to look for expiring subjects"),
+    include_overdue: bool = Query(True, description="Include items that expired in the past 30 days"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_staff)
+):
+    student = (await db.execute(select(Student).where(Student.id == student_id))).scalar_one_or_none()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    today = date.today()
+    window_end = today + timedelta(days=days)
+    gap_limit = getattr(settings, "RENEWAL_GAP_RESET_DAYS", 30)
+
+    conds = [
+        AdmissionItem.student_id == student_id,
+        AdmissionItem.item_type == "BATCH_SUBJECT",
+        AdmissionItem.status != "DISCONTINUED",
+        Admission.document_status == "VALID",
+        Admission.status != "CANCELLED",
+        AdmissionItem.valid_to != None,
+        AdmissionItem.valid_to <= window_end
+    ]
+    if include_overdue:
+        conds.append(AdmissionItem.valid_to >= today - timedelta(days=gap_limit))
+    else:
+        conds.append(AdmissionItem.valid_to >= today)
+
+    stmt = (
+        select(AdmissionItem, Admission, Student, Batch)
+        .join(Admission, AdmissionItem.admission_id == Admission.id)
+        .join(Student, Admission.student_id == Student.id)
+        .outerjoin(Batch, AdmissionItem.batch_id == Batch.id)
+        .where(and_(*conds))
+        .order_by(AdmissionItem.valid_to.asc())
+    )
+    res = await db.execute(stmt)
+    rows = res.all()
+
+    item_ids = [itm.id for itm, adm, stu, bch in rows]
+    renewed_ids = set()
+    if item_ids:
+        r_stmt = (
+            select(AdmissionItem.renewed_from_item_id)
+            .where(
+                AdmissionItem.renewed_from_item_id.in_(item_ids),
+                AdmissionItem.status != "DISCONTINUED"
+            )
+        )
+        r_res = await db.execute(r_stmt)
+        renewed_ids = set(r_res.scalars().all())
+
+    results = []
+    for itm, adm, stu, bch in rows:
+        d_remaining = (itm.valid_to - today).days if itm.valid_to else 0
+        results.append(
+            RenewalsDueItemResponse(
+                item_id=itm.id,
+                admission_id=adm.id,
+                admission_number=adm.admission_number,
+                student_id=stu.id,
+                student_name=stu.full_name,
+                student_mobile=stu.mobile,
+                student_code=stu.student_code,
+                subject_id=itm.subject_id,
+                subject_name=itm.item_name_snapshot,
+                batch_id=itm.batch_id,
+                batch_name=bch.name if bch else itm.item_name_snapshot,
+                teacher_id=itm.teacher_id,
+                teacher_name=itm.teacher_name_snapshot,
+                hall_number=itm.hall_number_snapshot,
+                valid_from=itm.valid_from,
+                valid_to=itm.valid_to,
+                days_remaining=d_remaining,
+                balance_due=itm.balance_due,
+                net_price=itm.net_price,
+                amount_collected=itm.amount_collected,
+                payment_status=adm.payment_status,
+                status=itm.status,
+                renewed=(itm.id in renewed_ids)
+            )
+        )
+    return results
 
 
 @router.get("/{student_id}/active-enrollment")

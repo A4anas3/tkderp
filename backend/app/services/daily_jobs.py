@@ -2,7 +2,7 @@ import logging
 import json
 from datetime import date
 from typing import Dict, Any, Optional
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,7 +28,8 @@ async def run_daily_expiration_job(db: AsyncSession, run_date: Optional[date] = 
     items_stmt = (
         select(AdmissionItem)
         .where(
-            AdmissionItem.access_status == "ACTIVE",
+            or_(AdmissionItem.access_status == "ACTIVE", AdmissionItem.status == "ACTIVE"),
+            AdmissionItem.status.notin_(["DISCONTINUED", "REVOKED", "CANCELLED"]),
             AdmissionItem.valid_to != None,
             AdmissionItem.valid_to < today
         )

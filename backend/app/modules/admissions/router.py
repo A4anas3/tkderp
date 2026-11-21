@@ -2,13 +2,14 @@ import uuid
 import json
 from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
-from typing import Optional
+from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, status, Header
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_, desc
+from sqlalchemy import select, func, or_, desc, and_
 from sqlalchemy.orm import selectinload
 
 from app.database.session import get_db
+from app.core.config import settings
 from app.core.dependencies import require_staff, require_cashier_or_admin, require_admin
 from app.database.models import (
     Admission, AdmissionItem, Student, Payment, PaymentAllocation, GreenCardProduct, User, BatchSubject, Refund, AuditLog,
@@ -17,7 +18,8 @@ from app.database.models import (
 from app.modules.admissions.schemas import (
     AdmissionCreate, AdmissionResponse, AdmissionCalculatePreviewRequest, AdmissionItemResponse, AdmissionRevokeRequest,
     AdmissionSlipsResponse, SlipItemResponse, AdmissionValidityUpdate, AdmissionLifecycleAction,
-    AdmissionItemValidityUpdate, AdmissionItemLifecycleAction, SubjectRenewalRequest
+    AdmissionItemValidityUpdate, AdmissionItemLifecycleAction, SubjectRenewalRequest,
+    ItemRenewalRequest, RenewalsDueItemResponse, ItemRenewalSpec
 )
 from app.common.calculations import (
     calculate_admission_financials, allocate_payment_proportionally, compute_rolling_cycle_end
@@ -29,7 +31,7 @@ from app.common.active_lines import today_kolkata, is_active_line
 from app.modules.ledger.service import (
     record_payment_service, process_refund_service, recompute_admission_totals,
     update_student_green_card_status, cancel_admission_service, revoke_admission_service,
-    restore_admission_service
+    restore_admission_service, renew_admission_items_service
 )
 
 async def update_student_green_card_flag(student_id: uuid.UUID, db: AsyncSession) -> None:
@@ -303,6 +305,96 @@ async def create_admission(
         await db.commit()
 
     return full_adm
+
+
+@router.get("/renewals-due", response_model=List[RenewalsDueItemResponse])
+async def get_renewals_due(
+    days: int = Query(7, ge=1, description="Number of days ahead to look for expiring subjects"),
+    teacher_id: Optional[uuid.UUID] = Query(None, description="Filter by teacher"),
+    subject_id: Optional[uuid.UUID] = Query(None, description="Filter by subject"),
+    include_overdue: bool = Query(True, description="Include items that expired in the past 30 days"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_staff)
+):
+    today = date.today()
+    window_end = today + timedelta(days=days)
+    gap_limit = getattr(settings, "RENEWAL_GAP_RESET_DAYS", 30)
+
+    conds = [
+        AdmissionItem.item_type == "BATCH_SUBJECT",
+        AdmissionItem.status != "DISCONTINUED",
+        Admission.document_status == "VALID",
+        Admission.status != "CANCELLED",
+        AdmissionItem.valid_to != None,
+        AdmissionItem.valid_to <= window_end
+    ]
+    if include_overdue:
+        conds.append(AdmissionItem.valid_to >= today - timedelta(days=gap_limit))
+    else:
+        conds.append(AdmissionItem.valid_to >= today)
+
+    if teacher_id:
+        conds.append(AdmissionItem.teacher_id == teacher_id)
+    if subject_id:
+        conds.append(AdmissionItem.subject_id == subject_id)
+
+    stmt = (
+        select(AdmissionItem, Admission, Student, Batch)
+        .join(Admission, AdmissionItem.admission_id == Admission.id)
+        .join(Student, Admission.student_id == Student.id)
+        .outerjoin(Batch, AdmissionItem.batch_id == Batch.id)
+        .where(and_(*conds))
+        .order_by(AdmissionItem.valid_to.asc())
+    )
+    res = await db.execute(stmt)
+    rows = res.all()
+
+    # Determine which items are renewed
+    item_ids = [itm.id for itm, adm, stu, bch in rows]
+    renewed_ids = set()
+    if item_ids:
+        r_stmt = (
+            select(AdmissionItem.renewed_from_item_id)
+            .where(
+                AdmissionItem.renewed_from_item_id.in_(item_ids),
+                AdmissionItem.status != "DISCONTINUED"
+            )
+        )
+        r_res = await db.execute(r_stmt)
+        renewed_ids = set(r_res.scalars().all())
+
+    results = []
+    for itm, adm, stu, bch in rows:
+        d_remaining = (itm.valid_to - today).days if itm.valid_to else 0
+        results.append(
+            RenewalsDueItemResponse(
+                item_id=itm.id,
+                admission_id=adm.id,
+                admission_number=adm.admission_number,
+                student_id=stu.id,
+                student_name=stu.full_name,
+                student_mobile=stu.mobile,
+                student_code=stu.student_code,
+                subject_id=itm.subject_id,
+                subject_name=itm.item_name_snapshot,
+                batch_id=itm.batch_id,
+                batch_name=bch.name if bch else itm.item_name_snapshot,
+                teacher_id=itm.teacher_id,
+                teacher_name=itm.teacher_name_snapshot,
+                hall_number=itm.hall_number_snapshot,
+                valid_from=itm.valid_from,
+                valid_to=itm.valid_to,
+                days_remaining=d_remaining,
+                balance_due=itm.balance_due,
+                net_price=itm.net_price,
+                amount_collected=itm.amount_collected,
+                payment_status=adm.payment_status,
+                status=itm.status,
+                renewed=(itm.id in renewed_ids)
+            )
+        )
+    return results
+
 
 @router.get("/{admission_id}", response_model=AdmissionResponse)
 async def get_admission(
@@ -1028,160 +1120,119 @@ async def discontinue_admission_item(
     return item
 
 
+@router.post("/items/{item_id}/renew", response_model=AdmissionResponse, status_code=status.HTTP_201_CREATED)
+async def renew_admission_item_endpoint(
+    item_id: uuid.UUID,
+    payload: ItemRenewalRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_cashier_or_admin)
+):
+    target_item_ids = [item_id]
+    if payload.additional_item_ids:
+        for aid in payload.additional_item_ids:
+            if aid not in target_item_ids:
+                target_item_ids.append(aid)
+
+    item_overrides = {}
+    if payload.items:
+        for itm_spec in payload.items:
+            item_overrides[itm_spec.item_id] = itm_spec.model_dump(exclude_unset=True)
+
+    default_params = {
+        "valid_from": payload.valid_from,
+        "valid_to": payload.valid_to,
+        "months": payload.months,
+        "fee": payload.fee,
+        "price_override_reason": payload.price_override_reason,
+        "discount_type": payload.discount_type,
+        "discount_value": payload.discount_value,
+        "batch_id": payload.batch_id,
+        "teacher_id": payload.teacher_id,
+    }
+
+    adm = await renew_admission_items_service(
+        db=db,
+        current_user=current_user,
+        target_item_ids=target_item_ids,
+        item_overrides=item_overrides,
+        default_params=default_params,
+        initial_payment=payload.initial_payment,
+        notes=payload.notes
+    )
+    return adm
+
+
 @router.post("/renew-subject", response_model=AdmissionResponse, status_code=status.HTTP_201_CREATED)
 async def renew_subject(
     payload: SubjectRenewalRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
-    # Verify and lock student row
-    st_res = await db.execute(select(Student).where(Student.id == payload.student_id).with_for_update())
+    # Verify student exists
+    st_res = await db.execute(select(Student).where(Student.id == payload.student_id))
     student = st_res.scalar_one_or_none()
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
 
-    # Verify subject
-    sb_res = await db.execute(select(Subject).where(Subject.id == payload.subject_id))
-    subject = sb_res.scalar_one_or_none()
-    if not subject:
-        raise HTTPException(status_code=404, detail="Subject not found")
-
-    # Resolve Teacher and Hall
-    t_id = payload.teacher_id
-    t_name = None
-    h_no = None
-
-    if t_id:
-        t_res = await db.execute(select(Teacher).where(Teacher.id == t_id))
-        teacher = t_res.scalar_one_or_none()
-        if teacher:
-            t_name = teacher.name
-
-    if payload.batch_id:
-        b_res = await db.execute(select(Batch).where(Batch.id == payload.batch_id))
-        batch = b_res.scalar_one_or_none()
-        if batch:
-            if not t_name and batch.teacher_name_snapshot:
-                t_name = batch.teacher_name_snapshot
-            if not h_no and batch.hall_number:
-                h_no = batch.hall_number
-
-    # Next sequential admission number atomically
-    adm_no = await next_number(db, "ADM")
-
-    # Calculate financials
-    raw_item = {
-        "price": payload.fee,
-        "discount_type": payload.discount_type,
-        "discount_value": payload.discount_value
-    }
-    calc = calculate_admission_financials(
-        items=[raw_item],
-        overall_discount_type="NONE",
-        overall_discount_value=Decimal("0.00"),
-        gst_enabled=False,
-        gst_rate=Decimal("18.00")
-    )
-
-    admission = Admission(
-        admission_number=adm_no,
-        student_id=student.id,
-        student_name_snapshot=student.full_name,
-        admission_date=date.today(),
-        subtotal=calc["subtotal"],
-        individual_discount_total=calc["individual_discount_total"],
-        overall_discount_type="NONE",
-        overall_discount_value=Decimal("0.00"),
-        overall_discount_amount=Decimal("0.00"),
-        total_discount=calc["total_discount"],
-        gst_enabled=False,
-        gst_rate=Decimal("18.00"),
-        taxable_base=calc["taxable_base"],
-        gst_amount=Decimal("0.00"),
-        total_payable=calc["total_payable"],
-        amount_paid=Decimal("0.00"),
-        balance_due=calc["total_payable"],
-        payment_status="UNPAID",
-        status="ACTIVE",
-        notes=payload.notes or f"Renewal: {subject.name}",
-        valid_from=payload.valid_from,
-        valid_to=payload.valid_to,
-        created_by=current_user.id
-    )
-    db.add(admission)
-    await db.flush()
-
-    item_calc = calc["items"][0]
-    ai = AdmissionItem(
-        admission=admission,
-        student_id=admission.student_id,
-        item_type="BATCH_SUBJECT",
-        batch_id=payload.batch_id,
-        subject_id=subject.id,
-        teacher_id=t_id,
-        teacher_name_snapshot=t_name,
-        hall_number_snapshot=h_no,
-        item_name_snapshot=subject.name,
-        original_price=item_calc["original_price"],
-        discount_type=payload.discount_type,
-        discount_value=payload.discount_value,
-        discount_amount=item_calc["individual_discount"],
-        overall_discount_share=Decimal("0.00"),
-        net_price=item_calc["net_price"],
-        amount_collected=Decimal("0.00"),
-        balance_due=item_calc["net_price"],
-        valid_from=payload.valid_from,
-        valid_to=payload.valid_to,
-        status="ACTIVE"
-    )
-    db.add(ai)
-    await db.flush()
-
-    # Process Initial Payment via centralized ledger service
-    if payload.initial_payment and payload.initial_payment.amount > Decimal("0.00"):
-        if payload.initial_payment.amount > admission.total_payable:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Initial payment amount ₹{payload.initial_payment.amount} exceeds total payable ₹{admission.total_payable}"
-            )
-        await record_payment_service(
-            db=db,
-            admission=admission,
-            amount=payload.initial_payment.amount,
-            payment_mode=payload.initial_payment.payment_mode,
-            collected_by_user=current_user,
-            transaction_reference=payload.initial_payment.transaction_reference,
-            notes=payload.initial_payment.notes or f"Renewal payment for {subject.name}",
-            valid_from=payload.valid_from,
-            valid_to=payload.valid_to,
-            fee_period=f"{payload.valid_from} to {payload.valid_to}",
-            allocation_mode=payload.initial_payment.allocation_mode,
-            manual_allocations=payload.initial_payment.manual_allocations
-        )
-
-    audit = AuditLog(
-        user_id=current_user.id,
-        action="SUBJECT_RENEWED",
-        entity_type="ADMISSION",
-        entity_id=admission.id,
-        details=json.dumps({
-            "student_id": str(student.id),
-            "subject": subject.name,
-            "valid_from": str(payload.valid_from),
-            "valid_to": str(payload.valid_to),
-            "fee": str(payload.fee),
-            "admission_number": admission.admission_number
-        })
-    )
-    db.add(audit)
-    await db.commit()
-
-    # Re-query with eager load of items and student
+    # Find the most recent active/expired AdmissionItem for student_id and subject_id
     stmt = (
-        select(Admission)
-        .options(selectinload(Admission.items), selectinload(Admission.student))
-        .where(Admission.id == admission.id)
+        select(AdmissionItem)
+        .join(Admission, AdmissionItem.admission_id == Admission.id)
+        .where(
+            AdmissionItem.student_id == payload.student_id,
+            AdmissionItem.subject_id == payload.subject_id,
+            AdmissionItem.status != "DISCONTINUED",
+            Admission.document_status == "VALID",
+            Admission.status != "CANCELLED"
+        )
+        .order_by(
+            func.coalesce(AdmissionItem.valid_to, Admission.valid_to).desc(),
+            AdmissionItem.created_at.desc()
+        )
     )
     res = await db.execute(stmt)
-    full_adm = res.scalar_one()
-    return full_adm
+    target_item = res.scalars().first()
+
+    default_params = {
+        "valid_from": payload.valid_from,
+        "valid_to": payload.valid_to,
+        "months": payload.months,
+        "fee": payload.fee,
+        "price_override_reason": payload.price_override_reason,
+        "discount_type": payload.discount_type,
+        "discount_value": payload.discount_value,
+        "batch_id": payload.batch_id,
+        "teacher_id": payload.teacher_id,
+    }
+
+    if target_item:
+        return await renew_admission_items_service(
+            db=db,
+            current_user=current_user,
+            target_item_ids=[target_item.id],
+            item_overrides=None,
+            default_params=default_params,
+            initial_payment=payload.initial_payment,
+            notes=payload.notes
+        )
+    else:
+        # Check if discontinued item exists to raise proper error
+        disc_stmt = (
+            select(AdmissionItem)
+            .where(
+                AdmissionItem.student_id == payload.student_id,
+                AdmissionItem.subject_id == payload.subject_id,
+                AdmissionItem.status == "DISCONTINUED"
+            )
+        )
+        disc_res = await db.execute(disc_stmt)
+        disc_item = disc_res.scalars().first()
+        if disc_item:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot renew discontinued subject line '{disc_item.item_name_snapshot}'. Enroll as a new subject instead."
+            )
+        raise HTTPException(
+            status_code=404,
+            detail="No previous enrollment found for this student and subject to renew."
+        )
