@@ -651,7 +651,6 @@ async def send_student_due_reminder(
             status="pending",
         )
         db.add(rq)
-        await db.commit()
     else:
         rq.due_amount = adm.balance_due
         rq.due_date = due_d
@@ -660,7 +659,16 @@ async def send_student_due_reminder(
         rq.course_name = course_str
         rq.subject_id = target_subject_id
         rq.batch_id = target_batch_id
-        await db.commit()
+
+    audit = AuditLog(
+        action="REMINDER_TRIGGERED_STUDENT",
+        user_id=actor_id,
+        entity_type="Student",
+        entity_id=student_id,
+        details=f"Prepared WhatsApp due reminder for {student.name} ({format_currency_in(adm.balance_due)})",
+    )
+    db.add(audit)
+    await db.commit()
 
     item_res = await get_reminder_item_response(db, rq.id)
     return ReminderSendStudentResponse(
@@ -680,5 +688,36 @@ async def send_subject_due_reminders(
         raise HTTPException(status_code=404, detail="Subject not found")
 
     # Build/refresh reminders for active dues
-    count = await build_due_reminders(db)
-    return count
+    await build_due_reminders(db)
+
+    # Count all pending reminders for this subject
+    stmt = (
+        select(func.count(ReminderQueue.id))
+        .join(Admission, ReminderQueue.admission_id == Admission.id)
+        .where(
+            ReminderQueue.status == "pending",
+            Admission.balance_due > Decimal("0.00"),
+            Admission.document_status == "VALID",
+            Admission.status.notin_(["REVOKED", "CANCELLED", "EXPIRED"]),
+            Admission.access_status.notin_(["REVOKED", "EXPIRED"]),
+            or_(Admission.valid_to.is_(None), Admission.valid_to >= today),
+            ReminderQueue.kind != "expired_due",
+            or_(
+                ReminderQueue.subject_id == subject_id,
+                Admission.items.any(AdmissionItem.subject_id == subject_id),
+            ),
+        )
+    )
+    subject_due_count = (await db.execute(stmt)).scalar() or 0
+
+    audit = AuditLog(
+        action="REMINDER_TRIGGERED_SUBJECT",
+        user_id=actor_id,
+        entity_type="Subject",
+        entity_id=subject_id,
+        details=f"Triggered due reminders for subject {subject.name}: {subject_due_count} active pending reminder(s)",
+    )
+    db.add(audit)
+    await db.commit()
+
+    return subject_due_count

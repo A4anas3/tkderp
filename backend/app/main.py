@@ -120,6 +120,7 @@ async def batches_active_summary_alias(
     return await get_batches_active_summary(db=db, current_user=current_user)
 
 @app.get("/health", tags=["Health"])
+@app.get("/api/health", tags=["Health"])
 async def health_check():
     return {
         "status": "healthy",
