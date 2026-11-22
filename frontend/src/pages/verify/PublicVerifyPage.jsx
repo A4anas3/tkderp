@@ -99,6 +99,16 @@ export default function PublicVerifyPage() {
   return (
     <div className="min-h-screen bg-slate-50 text-black font-sans py-6 px-3 sm:px-6 flex flex-col justify-between">
       <div className="max-w-2xl mx-auto w-full space-y-5">
+        {/* Navigation Link Back to ERP */}
+        <div className="no-print">
+          <Link
+            to="/dashboard"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-black transition"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" /> Back to ERP Dashboard
+          </Link>
+        </div>
+
         {/* Top Institute Header */}
         <div className="bg-white border-2 border-black rounded-xl p-4 sm:p-5 shadow-xs text-center relative overflow-hidden">
           <div className="flex items-center justify-center gap-2 mb-1">

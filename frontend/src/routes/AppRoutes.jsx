@@ -135,6 +135,14 @@ export default function AppRoutes() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="fees"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER']}>
+              <RemindersPage />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Students (Admin & Cashier) */}
         <Route
@@ -218,7 +226,11 @@ export default function AppRoutes() {
 
         <Route
           path="batches"
-          element={<Navigate to="/subjects" replace />}
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN']}>
+              <BatchesPage />
+            </ProtectedRoute>
+          }
         />
         <Route
           path="batches/:id"
@@ -255,6 +267,10 @@ export default function AppRoutes() {
           }
         />
         <Route
+          path="reports"
+          element={<Navigate to="/reports/subject-revenue" replace />}
+        />
+        <Route
           path="reports/subject-revenue"
           element={
             <ProtectedRoute allowedRoles={['ADMIN']}>
@@ -272,6 +288,14 @@ export default function AppRoutes() {
         />
         <Route
           path="users"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN']}>
+              <StaffUsersPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="settings"
           element={
             <ProtectedRoute allowedRoles={['ADMIN']}>
               <StaffUsersPage />
