@@ -196,7 +196,7 @@ export default function StaffUsersPage() {
         <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
           <Button
             size="xs"
-            variant="secondary"
+            variant="amber"
             icon={Edit2}
             onClick={() => handleOpenEdit(u)}
           >
@@ -204,7 +204,7 @@ export default function StaffUsersPage() {
           </Button>
           <Button
             size="xs"
-            variant="secondary"
+            variant="violet"
             icon={KeyRound}
             onClick={() => handleOpenReset(u)}
             title="Reset Password"

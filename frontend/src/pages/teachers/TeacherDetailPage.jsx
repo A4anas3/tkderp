@@ -736,9 +736,9 @@ export default function TeacherDetailPage() {
                       <div className="flex items-center justify-center whitespace-nowrap">
                         <Link
                           to={`/students/${s.student_id}`}
-                          className="h-8 min-h-[32px] px-2.5 py-1 text-xs bg-white hover:bg-slate-100 active:bg-slate-200 text-black font-semibold rounded-md border border-slate-300 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shadow-2xs transition-colors"
+                          className="h-8 min-h-[32px] px-2.5 py-1 text-xs bg-blue-50 hover:bg-blue-100 active:bg-blue-200 text-blue-700 hover:text-blue-800 font-semibold rounded-md border border-blue-300 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shadow-2xs transition-colors"
                         >
-                          <ExternalLink className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+                          <ExternalLink className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                           <span>Profile</span>
                         </Link>
                       </div>

@@ -306,7 +306,7 @@ export default function TeachersPage() {
         <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
           <Button
             size="xs"
-            variant="secondary"
+            variant="info"
             icon={ExternalLink}
             onClick={() => navigate(`/teachers/${t.id}`)}
             title="Open Dedicated Faculty Roster Page"
@@ -315,7 +315,7 @@ export default function TeachersPage() {
           </Button>
           <Button
             size="xs"
-            variant="secondary"
+            variant="amber"
             icon={Edit2}
             onClick={() => handleOpenEdit(t)}
           >
@@ -493,7 +493,7 @@ export default function TeachersPage() {
                   <div className="mt-3.5 pt-2 border-t border-slate-100 flex items-center gap-1.5">
                     <Button
                       size="xs"
-                      variant="secondary"
+                      variant="amber"
                       icon={Edit2}
                       onClick={() => handleOpenEdit(t)}
                       className="flex-1 justify-center"
@@ -502,7 +502,7 @@ export default function TeachersPage() {
                     </Button>
                     <Button
                       size="xs"
-                      variant="secondary"
+                      variant="info"
                       icon={ExternalLink}
                       onClick={() => navigate(`/teachers/${t.id}`)}
                       className="flex-1 justify-center"

@@ -522,9 +522,9 @@ export default function RemindersPage() {
                                 onClick={() => handleMarkSent(rem.id)}
                                 disabled={actionLoadingId === rem.id}
                                 title="Mark this reminder as sent"
-                                className="h-8 min-h-[32px] px-2.5 py-1 rounded-md text-xs font-bold inline-flex items-center gap-1 whitespace-nowrap border border-slate-300 bg-white text-slate-800 hover:text-black hover:bg-slate-50 active:bg-slate-100 transition-colors shadow-2xs touch-manipulation cursor-pointer"
+                                className="h-8 min-h-[32px] px-2.5 py-1 rounded-md text-xs font-bold inline-flex items-center gap-1 whitespace-nowrap border border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 active:bg-emerald-200 transition-colors shadow-2xs touch-manipulation cursor-pointer"
                               >
-                                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                <Check className="w-3.5 h-3.5 text-emerald-700" />
                                 <span className="hidden md:inline">Mark Sent</span>
                               </button>
                             ) : (
@@ -532,9 +532,9 @@ export default function RemindersPage() {
                                 onClick={() => handleResetPending(rem.id)}
                                 disabled={actionLoadingId === rem.id}
                                 title="Reset reminder back to pending"
-                                className="h-8 min-h-[32px] px-2.5 py-1 rounded-md text-xs font-semibold inline-flex items-center gap-1 whitespace-nowrap border border-slate-300 bg-white text-slate-700 hover:text-black hover:bg-slate-50 active:bg-slate-100 transition-colors shadow-2xs touch-manipulation cursor-pointer"
+                                className="h-8 min-h-[32px] px-2.5 py-1 rounded-md text-xs font-semibold inline-flex items-center gap-1 whitespace-nowrap border border-violet-300 bg-violet-50 text-violet-800 hover:bg-violet-100 active:bg-violet-200 transition-colors shadow-2xs touch-manipulation cursor-pointer"
                               >
-                                <RotateCcw className="w-3 h-3" />
+                                <RotateCcw className="w-3 h-3 text-violet-700" />
                                 <span className="hidden md:inline">Reset</span>
                               </button>
                             )}

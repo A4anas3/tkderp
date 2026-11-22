@@ -281,7 +281,7 @@ export default function EnquiryDetailPage() {
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <Button
-            variant="secondary"
+            variant="indigo"
             icon={Printer}
             onClick={() => setPassModalOpen(true)}
             size="sm"
@@ -291,7 +291,7 @@ export default function EnquiryDetailPage() {
           </Button>
 
           <Button
-            variant="secondary"
+            variant="amber"
             icon={Edit2}
             onClick={() => setEditModalOpen(true)}
             size="sm"
@@ -301,7 +301,7 @@ export default function EnquiryDetailPage() {
 
           {isNotInterested && (
             <Button
-              variant="secondary"
+              variant="teal-soft"
               icon={RotateCcw}
               onClick={handleReactivate}
               size="sm"
@@ -525,7 +525,7 @@ export default function EnquiryDetailPage() {
             </h3>
             <Button
               size="xs"
-              variant="secondary"
+              variant="indigo"
               icon={Printer}
               onClick={() => setPassModalOpen(true)}
             >

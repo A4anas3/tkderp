@@ -173,7 +173,7 @@ export default function AdmissionDetailPage() {
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <Button
-            variant="secondary"
+            variant="purple"
             icon={FileText}
             onClick={() => setAllSlipsModalOpen(true)}
             size="sm"
@@ -183,7 +183,7 @@ export default function AdmissionDetailPage() {
           </Button>
 
           <Button
-            variant="secondary"
+            variant="indigo"
             icon={Printer}
             onClick={() => setSlipModalOpen(true)}
             size="sm"
@@ -204,11 +204,10 @@ export default function AdmissionDetailPage() {
 
           {isAdmin && Number(admission.balance_due || 0) > 0 && admission.status !== 'REVOKED' && admission.status !== 'CANCELLED' && (
             <Button
-              variant="warning"
+              variant="amber"
               icon={Sparkles}
               onClick={() => setWaiveModalOpen(true)}
               size="sm"
-              className="bg-amber-500 hover:bg-amber-600 text-black font-bold border-amber-600"
               title="Admin only: Waive / forgive pending fee due"
             >
               Waive Due

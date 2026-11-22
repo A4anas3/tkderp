@@ -203,12 +203,12 @@ export default function PaymentsPage() {
     },
     {
       header: 'Actions',
-      className: 'text-right w-56 whitespace-nowrap',
+      className: 'text-right w-64 whitespace-nowrap',
       render: (p) => (
         <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
           <Button
             size="xs"
-            variant="secondary"
+            variant="info"
             icon={ExternalLink}
             onClick={() => navigate(`/payments/${p.id}`)}
             title="Open Dedicated Payment Page"
@@ -218,7 +218,7 @@ export default function PaymentsPage() {
 
           <Button
             size="xs"
-            variant="secondary"
+            variant="indigo"
             icon={Printer}
             onClick={() => handleViewReceipt(p)}
           >
@@ -229,7 +229,7 @@ export default function PaymentsPage() {
             <>
               <Button
                 size="xs"
-                variant="secondary"
+                variant="amber"
                 icon={Edit2}
                 onClick={() => handleOpenEditPayment(p)}
               >
@@ -238,7 +238,7 @@ export default function PaymentsPage() {
 
               <Button
                 size="xs"
-                variant="secondary"
+                variant="orange"
                 onClick={() => handleOpenRefund(p)}
               >
                 Refund
@@ -312,7 +312,7 @@ export default function PaymentsPage() {
         <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
           <Button
             size="xs"
-            variant="secondary"
+            variant="indigo"
             icon={Printer}
             onClick={() => handleViewRefundVoucher(r)}
           >

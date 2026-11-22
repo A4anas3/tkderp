@@ -468,7 +468,7 @@ export default function SubjectsPage() {
         <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
           <Button
             size="xs"
-            variant="secondary"
+            variant="amber"
             icon={Edit2}
             onClick={(e) => {
               e.stopPropagation();
@@ -480,7 +480,7 @@ export default function SubjectsPage() {
           </Button>
           <Button
             size="xs"
-            variant="secondary"
+            variant="info"
             icon={ExternalLink}
             onClick={(e) => {
               e.stopPropagation();
@@ -697,7 +697,7 @@ export default function SubjectsPage() {
                     <div className="mt-3.5 pt-2 border-t border-slate-100 flex items-center gap-1.5">
                       <Button
                         size="xs"
-                        variant="secondary"
+                        variant="amber"
                         icon={Edit2}
                         onClick={() => handleOpenEdit(s)}
                         className="flex-1 justify-center"
@@ -706,7 +706,7 @@ export default function SubjectsPage() {
                       </Button>
                       <Button
                         size="xs"
-                        variant="secondary"
+                        variant="info"
                         icon={ExternalLink}
                         onClick={() => navigate(`/subjects/${s.id}`)}
                         className="flex-1 justify-center"

@@ -303,7 +303,7 @@ export default function BatchesPage() {
         <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
           <Button
             size="xs"
-            variant="secondary"
+            variant="amber"
             icon={Edit2}
             onClick={() => handleOpenEdit(b)}
           >
@@ -474,7 +474,7 @@ export default function BatchesPage() {
                   <div className="mt-3.5 pt-2 border-t border-slate-100 flex items-center gap-1.5">
                     <Button
                       size="xs"
-                      variant="secondary"
+                      variant="amber"
                       icon={Edit2}
                       onClick={() => handleOpenEdit(b)}
                       className="w-full justify-center"

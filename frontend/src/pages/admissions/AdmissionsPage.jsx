@@ -186,12 +186,12 @@ export default function AdmissionsPage() {
     },
     {
       header: 'Actions',
-      className: 'text-right w-52 whitespace-nowrap',
+      className: 'text-right w-64 whitespace-nowrap',
       render: (a) => (
         <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
           <Button
             size="xs"
-            variant="secondary"
+            variant="info"
             icon={ExternalLink}
             onClick={() => navigate(`/admissions/${a.id}`)}
             title="Open Full Course Purchase Page"
@@ -201,7 +201,7 @@ export default function AdmissionsPage() {
 
           <Button
             size="xs"
-            variant="secondary"
+            variant="indigo"
             icon={Printer}
             onClick={() => setSlipToShow(a)}
             title="View & Print Purchase Slip"
@@ -212,7 +212,7 @@ export default function AdmissionsPage() {
           {Number(a.balance_due) > 0 && a.status !== 'REVOKED' && a.status !== 'CANCELLED' && (
             <Button
               size="xs"
-              variant="success"
+              variant="success-soft"
               onClick={() => setPayAdmissionId(a.id)}
               title="Collect Remaining Fee"
             >
@@ -223,27 +223,28 @@ export default function AdmissionsPage() {
           {isAdmin && Number(a.balance_due) > 0 && a.status !== 'REVOKED' && a.status !== 'CANCELLED' && (
             <Button
               size="xs"
-              variant="warning"
+              variant="amber"
               icon={Sparkles}
               onClick={() => {
                 setSelectedAdmissionForWaive(a);
                 setWaiveModalOpen(true);
               }}
               title="Admin only: Waive / forgive pending fee due"
-              className="bg-amber-500 hover:bg-amber-600 text-black font-bold border-amber-600"
             >
               Waive
             </Button>
           )}
 
           {isAdmin && a.can_cancel && (
-            <button
+            <Button
+              size="xs"
+              variant="danger-soft"
+              icon={Ban}
               onClick={() => handleCancelAdmission(a)}
               title="Cancel Purchase"
-              className="p-1 rounded text-slate-400 hover:text-rose-600 transition"
             >
-              <Ban className="w-3.5 h-3.5" />
-            </button>
+              Cancel
+            </Button>
           )}
         </div>
       ),
@@ -403,7 +404,7 @@ export default function AdmissionsPage() {
                   <div className="flex items-center gap-1.5 pt-1">
                     <Button
                       size="xs"
-                      variant="secondary"
+                      variant="indigo"
                       icon={Printer}
                       onClick={() => setSlipToShow(a)}
                       className="flex-1 justify-center text-xs font-semibold"
@@ -414,7 +415,7 @@ export default function AdmissionsPage() {
                     {Number(a.balance_due) > 0 && !isCancelled && (
                       <Button
                         size="xs"
-                        variant="success"
+                        variant="success-soft"
                         onClick={() => setPayAdmissionId(a.id)}
                         className="flex-1 justify-center text-xs font-bold"
                       >
@@ -425,13 +426,13 @@ export default function AdmissionsPage() {
                     {isAdmin && Number(a.balance_due) > 0 && !isCancelled && (
                       <Button
                         size="xs"
-                        variant="warning"
+                        variant="amber"
                         icon={Sparkles}
                         onClick={() => {
                           setSelectedAdmissionForWaive(a);
                           setWaiveModalOpen(true);
                         }}
-                        className="flex-1 justify-center text-xs font-bold bg-amber-500 hover:bg-amber-600 text-black border-amber-600"
+                        className="flex-1 justify-center text-xs font-bold"
                         title="Admin only: Waive / forgive pending fee due"
                       >
                         Waive
@@ -440,7 +441,7 @@ export default function AdmissionsPage() {
 
                     <Button
                       size="xs"
-                      variant="secondary"
+                      variant="info"
                       icon={ExternalLink}
                       onClick={() => navigate(`/admissions/${a.id}`)}
                       className="flex-1 justify-center text-xs font-semibold"
@@ -449,13 +450,16 @@ export default function AdmissionsPage() {
                     </Button>
 
                     {isAdmin && a.can_cancel && (
-                      <button
+                      <Button
+                        size="xs"
+                        variant="danger-soft"
+                        icon={Ban}
                         onClick={() => handleCancelAdmission(a)}
                         title="Cancel Purchase"
-                        className="p-2 rounded text-slate-400 hover:text-rose-600 transition min-w-[36px] min-h-[36px] flex items-center justify-center border border-slate-200"
+                        className="justify-center text-xs font-semibold"
                       >
-                        <Ban className="w-3.5 h-3.5" />
-                      </button>
+                        Cancel
+                      </Button>
                     )}
                   </div>
                 </div>

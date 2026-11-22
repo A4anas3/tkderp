@@ -116,7 +116,7 @@ export default function PaymentDetailPage() {
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <Button
-            variant="secondary"
+            variant="indigo"
             icon={Printer}
             onClick={() => setReceiptModalOpen(true)}
             size="sm"
@@ -126,7 +126,7 @@ export default function PaymentDetailPage() {
 
           {isAdmin && isActive && (
             <Button
-              variant="danger"
+              variant="orange"
               icon={RotateCcw}
               onClick={() => setRefundModalOpen(true)}
               size="sm"

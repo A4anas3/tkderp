@@ -1293,7 +1293,7 @@ export default function StudentDetailPage() {
                           {Number(item.balance_due) > 0 && !isRevoked && (
                             <Button
                               size="xs"
-                              variant="success"
+                              variant="success-soft"
                               icon={CreditCard}
                               onClick={() => {
                                 setTargetAdmissionId(item.admission_id);
@@ -1306,7 +1306,7 @@ export default function StudentDetailPage() {
                           )}
                           <Button
                             size="xs"
-                            variant="secondary"
+                            variant="success-soft"
                             icon={RefreshCw}
                             onClick={() => {
                               setSelectedItemForRenew(item);
@@ -1318,20 +1318,19 @@ export default function StudentDetailPage() {
                           </Button>
                           <Button
                             size="xs"
-                            variant="secondary"
+                            variant="teal-soft"
                             icon={ArrowLeftRight}
                             onClick={() => {
                               setSelectedItemForChange(item);
                               setChangeModalOpen(true);
                             }}
                             title="Change to another subject"
-                            className="text-odoo-800 border-purple-200 hover:bg-purple-50"
                           >
                             Change
                           </Button>
                           <Button
                             size="xs"
-                            variant="ghost"
+                            variant="indigo"
                             icon={Calendar}
                             onClick={() => {
                               setSelectedItemForValidity(item);
@@ -1345,8 +1344,7 @@ export default function StudentDetailPage() {
                             <>
                               <Button
                                 size="xs"
-                                variant="ghost"
-                                className="text-amber-800 hover:bg-amber-50"
+                                variant="amber"
                                 onClick={() => {
                                   setSelectedItemForSuspend(item);
                                   setSuspendMode('SUSPEND');
@@ -1358,8 +1356,7 @@ export default function StudentDetailPage() {
                               </Button>
                               <Button
                                 size="xs"
-                                variant="ghost"
-                                className="text-rose-700 hover:bg-rose-50"
+                                variant="danger-soft"
                                 onClick={() => {
                                   setSelectedItemForSuspend(item);
                                   setSuspendMode('DISCONTINUE');
@@ -1693,7 +1690,7 @@ export default function StudentDetailPage() {
                               {isSuspended && isAdmin && (
                                 <Button
                                   size="xs"
-                                  variant="success"
+                                  variant="success-soft"
                                   icon={PlayCircle}
                                   loading={resumingItemId === item.id}
                                   onClick={() => handleResumeItem(item)}
@@ -1704,7 +1701,7 @@ export default function StudentDetailPage() {
                               {hasDue && !isCancelled && !isRevoked && (
                                 <Button
                                   size="xs"
-                                  variant="success"
+                                  variant="success-soft"
                                   icon={CreditCard}
                                   onClick={() => {
                                     setTargetAdmissionId(item.admission_id);
@@ -1718,7 +1715,7 @@ export default function StudentDetailPage() {
                               {!isCancelled && (
                                 <Button
                                   size="xs"
-                                  variant="secondary"
+                                  variant="success-soft"
                                   icon={RefreshCw}
                                   onClick={() => {
                                     setSelectedItemForRenew(item);
@@ -1947,7 +1944,7 @@ export default function StudentDetailPage() {
                     <div className="flex flex-wrap items-center gap-1.5 pt-1">
                       <Button
                         size="xs"
-                        variant="secondary"
+                        variant="purple"
                         icon={FileText}
                         onClick={() => {
                           setSelectedAdmissionForSlips(adm);
@@ -1961,7 +1958,7 @@ export default function StudentDetailPage() {
                       {Number(adm.balance_due) > 0 && !isBatchCancelled && !isRevoked && (
                         <Button
                           size="xs"
-                          variant="success"
+                          variant="success-soft"
                           icon={CreditCard}
                           onClick={() => {
                             setTargetAdmissionId(adm.id);
@@ -1976,13 +1973,13 @@ export default function StudentDetailPage() {
                       {isAdmin && Number(adm.balance_due) > 0 && !isBatchCancelled && (
                         <Button
                           size="xs"
-                          variant="warning"
+                          variant="amber"
                           icon={Sparkles}
                           onClick={() => {
                             setSelectedAdmissionForWaive(adm);
                             setWaiveModalOpen(true);
                           }}
-                          className="flex-1 justify-center bg-amber-500 hover:bg-amber-600 text-black font-bold border-amber-600"
+                          className="flex-1 justify-center"
                           title="Admin only: Waive / forgive pending fee due"
                         >
                           Waive Due
@@ -1994,7 +1991,7 @@ export default function StudentDetailPage() {
                           {isAdmin && Number(adm.amount_paid) > 0 && (
                             <Button
                               size="xs"
-                              variant="danger"
+                              variant="orange"
                               onClick={() => {
                                 setSelectedAdmissionForRefund(adm);
                                 setRefundModalOpen(true);
@@ -2007,7 +2004,7 @@ export default function StudentDetailPage() {
                           {isAdmin && (
                             <Button
                               size="xs"
-                              variant="primary"
+                              variant="info"
                               icon={RotateCcw}
                               loading={restoringBatchId === adm.id}
                               onClick={() => handleRestoreBatch(adm)}
@@ -2022,7 +2019,7 @@ export default function StudentDetailPage() {
                           {isAdmin && canCancelBatch && (
                             <Button
                               size="xs"
-                              variant="danger"
+                              variant="danger-soft"
                               onClick={() => {
                                 setSelectedAdmissionForBatchRevoke(adm);
                                 setRevokeBatchModalOpen(true);
@@ -2035,7 +2032,7 @@ export default function StudentDetailPage() {
                           {isAdmin && Number(adm.amount_paid) > 0 && (
                             <Button
                               size="xs"
-                              variant="secondary"
+                              variant="orange"
                               onClick={() => {
                                 setSelectedAdmissionForRefund(adm);
                                 setRefundModalOpen(true);
@@ -2204,7 +2201,7 @@ export default function StudentDetailPage() {
                             {/* All Slips */}
                             <Button
                               size="xs"
-                              variant="secondary"
+                              variant="purple"
                               icon={FileText}
                               onClick={() => {
                                 setSelectedAdmissionForSlips(adm);
@@ -2219,7 +2216,7 @@ export default function StudentDetailPage() {
                             {Number(adm.balance_due) > 0 && !isBatchCancelled && !isRevoked && (
                               <Button
                                 size="xs"
-                                variant="success"
+                                variant="success-soft"
                                 icon={CreditCard}
                                 onClick={() => {
                                   setTargetAdmissionId(adm.id);
@@ -2235,13 +2232,12 @@ export default function StudentDetailPage() {
                             {isAdmin && Number(adm.balance_due) > 0 && !isBatchCancelled && (
                               <Button
                                 size="xs"
-                                variant="warning"
+                                variant="amber"
                                 icon={Sparkles}
                                 onClick={() => {
                                   setSelectedAdmissionForWaive(adm);
                                   setWaiveModalOpen(true);
                                 }}
-                                className="bg-amber-500 hover:bg-amber-600 text-black font-bold border-amber-600"
                                 title="Admin only: Waive / forgive pending fee due"
                               >
                                 Waive Due
@@ -2254,7 +2250,7 @@ export default function StudentDetailPage() {
                                 {isAdmin && Number(adm.amount_paid) > 0 && (
                                   <Button
                                     size="xs"
-                                    variant="danger"
+                                    variant="orange"
                                     onClick={() => {
                                       setSelectedAdmissionForRefund(adm);
                                       setRefundModalOpen(true);
@@ -2267,7 +2263,7 @@ export default function StudentDetailPage() {
                                 {isAdmin && (
                                   <Button
                                     size="xs"
-                                    variant="primary"
+                                    variant="info"
                                     icon={RotateCcw}
                                     loading={restoringBatchId === adm.id}
                                     onClick={() => handleRestoreBatch(adm)}
@@ -2282,7 +2278,7 @@ export default function StudentDetailPage() {
                                 {isAdmin && canCancelBatch && (
                                   <Button
                                     size="xs"
-                                    variant="danger"
+                                    variant="danger-soft"
                                     onClick={() => {
                                       setSelectedAdmissionForBatchRevoke(adm);
                                       setRevokeBatchModalOpen(true);
@@ -2295,7 +2291,7 @@ export default function StudentDetailPage() {
                                 {isAdmin && Number(adm.amount_paid) > 0 && (
                                   <Button
                                     size="xs"
-                                    variant="secondary"
+                                    variant="orange"
                                     onClick={() => {
                                       setSelectedAdmissionForRefund(adm);
                                       setRefundModalOpen(true);

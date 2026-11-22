@@ -244,9 +244,9 @@ function StudentRosterSubtable({ students = [], contextType = 'subject', onColle
                     <button
                       onClick={() => navigate(`/students/${s.student_id}`)}
                       title="View Student Profile"
-                      className="h-8 min-h-[32px] px-2.5 py-1 text-xs bg-white hover:bg-slate-100 active:bg-slate-200 text-black font-semibold rounded-md border border-slate-300 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shadow-2xs transition-colors"
+                      className="h-8 min-h-[32px] px-2.5 py-1 text-xs bg-blue-50 hover:bg-blue-100 active:bg-blue-200 text-blue-700 hover:text-blue-800 font-semibold rounded-md border border-blue-300 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shadow-2xs transition-colors"
                     >
-                      <ExternalLink className="w-3.5 h-3.5 text-slate-700 shrink-0" />
+                      <ExternalLink className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                       <span>Profile</span>
                     </button>
                     {(s.balance_due > 0 || s.cycle_status === 'OVERDUE' || s.cycle_status === 'RENEWAL_DUE' || s.cycle_status === 'DUE_SOON') && (
@@ -737,9 +737,9 @@ export default function SubjectRevenuePage() {
                                   <button
                                     onClick={() => navigate(`/reports/subject/${s.subject_id}`)}
                                     title="Open Dedicated Subject Roster Page"
-                                    className="px-2 py-0.5 text-[11px] font-bold bg-purple-50 hover:bg-purple-100 text-odoo-700 rounded border border-odoo-200 flex items-center gap-1 cursor-pointer transition-colors"
+                                    className="px-2 py-0.5 text-[11px] font-bold bg-blue-50 hover:bg-blue-100 text-blue-700 rounded border border-blue-200 flex items-center gap-1 cursor-pointer transition-colors"
                                   >
-                                    <ExternalLink className="w-3 h-3 text-odoo-600" />
+                                    <ExternalLink className="w-3 h-3 text-blue-600" />
                                     <span>Detail / Roster ↗</span>
                                   </button>
                                   <button
@@ -928,9 +928,9 @@ export default function SubjectRevenuePage() {
                                   <button
                                     onClick={() => navigate(`/teachers/${t.teacher_id}`)}
                                     title="Open Dedicated Faculty Roster Page"
-                                    className="px-2 py-0.5 text-[11px] font-bold bg-purple-50 hover:bg-purple-100 text-odoo-700 rounded border border-odoo-200 flex items-center gap-1 cursor-pointer transition-colors"
+                                    className="px-2 py-0.5 text-[11px] font-bold bg-blue-50 hover:bg-blue-100 text-blue-700 rounded border border-blue-200 flex items-center gap-1 cursor-pointer transition-colors"
                                   >
-                                    <ExternalLink className="w-3 h-3 text-odoo-600" />
+                                    <ExternalLink className="w-3 h-3 text-blue-600" />
                                     <span>Detail / Roster ↗</span>
                                   </button>
                                   <button
@@ -1125,9 +1125,9 @@ export default function SubjectRevenuePage() {
                                   <button
                                     onClick={() => navigate(`/batches/${b.batch_id}`)}
                                     title="Open Dedicated Batch Roster Page"
-                                    className="px-2 py-0.5 text-[11px] font-bold bg-purple-50 hover:bg-purple-100 text-odoo-700 rounded border border-odoo-200 flex items-center gap-1 cursor-pointer transition-colors"
+                                    className="px-2 py-0.5 text-[11px] font-bold bg-blue-50 hover:bg-blue-100 text-blue-700 rounded border border-blue-200 flex items-center gap-1 cursor-pointer transition-colors"
                                   >
-                                    <ExternalLink className="w-3 h-3 text-odoo-600" />
+                                    <ExternalLink className="w-3 h-3 text-blue-600" />
                                     <span>Detail / Roster ↗</span>
                                   </button>
                                   <button

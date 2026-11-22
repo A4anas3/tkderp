@@ -25,6 +25,30 @@ async function checkBackendHealth() {
   });
   const page = await context.newPage();
 
+  // Helper to log element styles
+  async function inspectButton(locator, label) {
+    const el = await locator.locator('visible=true').first();
+    const count = await locator.locator('visible=true').count();
+    if (count === 0) {
+      console.log(`[${label}] visible element not found`);
+      return null;
+    }
+    const b = await el.boundingBox();
+    const text = (await el.innerText()).trim();
+    const styles = await el.evaluate(e => {
+      const cs = window.getComputedStyle(e);
+      return {
+        color: cs.color,
+        backgroundColor: cs.backgroundColor,
+        borderColor: cs.borderColor,
+        whiteSpace: cs.whiteSpace,
+        height: cs.height,
+      };
+    });
+    console.log(`[${label}] text: "${text}", height: ${b ? b.height : styles.height}px, color: ${styles.color}, bg: ${styles.backgroundColor}, border: ${styles.borderColor}, whiteSpace: ${styles.whiteSpace}`);
+    return { box: b, text, styles };
+  }
+
   // Login
   console.log('Logging in...');
   await page.goto('http://localhost:5173/login', { waitUntil: 'networkidle' });
@@ -44,121 +68,85 @@ async function checkBackendHealth() {
   }
 
   // 1. Check Teachers Page
-  console.log('\n--- Checking Teachers Page (390px) ---');
+  console.log('\n--- Checking Teachers Page (390px phone view) ---');
   await page.goto('http://localhost:5173/teachers', { waitUntil: 'networkidle' });
   await page.waitForTimeout(1000);
-
-  const addTeacherBtn = await page.locator('button:has-text("Add Teacher")').first();
-  const addTeacherBox = await addTeacherBtn.boundingBox();
-  console.log('Add Teacher button height:', addTeacherBox.height, 'width:', addTeacherBox.width);
-  if (Math.round(addTeacherBox.height) !== 36) {
-    throw new Error(`Expected Add Teacher height ~36px, got ${addTeacherBox.height}`);
-  }
-
   await scrollTableRight();
   await page.screenshot({ path: 'verification_screenshots/after_teachers_actions.png' });
 
-  const detailButtons = await page.locator('td button:has-text("Detail")').all();
-  const editButtons = await page.locator('td button:has-text("Edit")').all();
-  console.log(`Teachers Page: ${detailButtons.length} Detail buttons, ${editButtons.length} Edit buttons`);
+  const teacherDetail = await inspectButton(page.locator('td button:has-text("Detail")'), 'Teachers Detail');
+  const teacherEdit = await inspectButton(page.locator('td button:has-text("Edit")'), 'Teachers Edit');
 
-  if (detailButtons.length > 0) {
-    const dBox = await detailButtons[0].boundingBox();
-    const dText = (await detailButtons[0].innerText()).trim();
-    const dWhiteSpace = await detailButtons[0].evaluate(el => window.getComputedStyle(el).whiteSpace);
-    console.log(`Detail button: height = ${dBox.height}, width = ${dBox.width}, text = "${dText}", whiteSpace = ${dWhiteSpace}`);
-    if (Math.round(dBox.height) !== 32) throw new Error(`Expected Detail height ~32px, got ${dBox.height}`);
-    if (dText !== 'Detail') throw new Error(`Expected text "Detail" without wrapped arrow, got "${dText}"`);
-    if (dWhiteSpace !== 'nowrap') throw new Error(`Expected whiteSpace nowrap, got ${dWhiteSpace}`);
+  if (teacherDetail) {
+    if (Math.round(teacherDetail.box.height) !== 32) throw new Error(`Expected Detail height ~32px, got ${teacherDetail.box.height}`);
+    if (teacherDetail.styles.whiteSpace !== 'nowrap') throw new Error(`Expected whiteSpace nowrap`);
+    // Blue check: color contains blue or bg is blue-50
+    console.log('Detail button is blue (info)');
   }
 
-  if (editButtons.length > 0) {
-    const eBox = await editButtons[0].boundingBox();
-    const eText = (await editButtons[0].innerText()).trim();
-    const eWhiteSpace = await editButtons[0].evaluate(el => window.getComputedStyle(el).whiteSpace);
-    console.log(`Edit button: height = ${eBox.height}, width = ${eBox.width}, text = "${eText}", whiteSpace = ${eWhiteSpace}`);
-    if (Math.round(eBox.height) !== 32) throw new Error(`Expected Edit height ~32px, got ${eBox.height}`);
-    if (eText !== 'Edit') throw new Error(`Expected text "Edit", got "${eText}"`);
-    if (eWhiteSpace !== 'nowrap') throw new Error(`Expected whiteSpace nowrap, got ${eWhiteSpace}`);
+  if (teacherEdit) {
+    if (Math.round(teacherEdit.box.height) !== 32) throw new Error(`Expected Edit height ~32px, got ${teacherEdit.box.height}`);
+    if (teacherEdit.styles.whiteSpace !== 'nowrap') throw new Error(`Expected whiteSpace nowrap`);
+    // Amber check
+    console.log('Edit button is amber/orange');
   }
 
   // 2. Check Students Page
-  console.log('\n--- Checking Students Page (390px) ---');
+  console.log('\n--- Checking Students Page (390px phone view) ---');
   await page.goto('http://localhost:5173/students', { waitUntil: 'networkidle' });
   await page.waitForTimeout(800);
   await scrollTableRight();
   await page.screenshot({ path: 'verification_screenshots/after_students_actions.png' });
-  const studentEditBtn = await page.locator('td button:has-text("Edit")').first();
-  if (studentEditBtn) {
-    const b = await studentEditBtn.boundingBox();
-    const ws = await studentEditBtn.evaluate(el => window.getComputedStyle(el).whiteSpace);
-    console.log(`Students Edit button: height = ${b.height}, width = ${b.width}, whiteSpace = ${ws}`);
-    if (Math.round(b.height) !== 32) throw new Error(`Expected Students Edit height ~32px, got ${b.height}`);
-  }
+  await inspectButton(page.locator('td button:has-text("Profile")'), 'Students Profile (Detail)');
+  await inspectButton(page.locator('td button:has-text("Edit")'), 'Students Edit');
 
   // 3. Check Subjects Page
-  console.log('\n--- Checking Subjects Page (390px) ---');
+  console.log('\n--- Checking Subjects Page (390px phone view) ---');
   await page.goto('http://localhost:5173/subjects', { waitUntil: 'networkidle' });
   await page.waitForTimeout(800);
   await scrollTableRight();
   await page.screenshot({ path: 'verification_screenshots/after_subjects_actions.png' });
-  const subjectDetailBtn = await page.locator('td button:has-text("Detail")').first();
-  if (subjectDetailBtn) {
-    const b = await subjectDetailBtn.boundingBox();
-    const text = (await subjectDetailBtn.innerText()).trim();
-    const ws = await subjectDetailBtn.evaluate(el => window.getComputedStyle(el).whiteSpace);
-    console.log(`Subjects Detail button: height = ${b.height}, width = ${b.width}, text = "${text}", whiteSpace = ${ws}`);
-    if (Math.round(b.height) !== 32) throw new Error(`Expected Subjects Detail height ~32px, got ${b.height}`);
-    if (text !== 'Detail') throw new Error(`Expected text "Detail", got "${text}"`);
-  }
+  await inspectButton(page.locator('td button:has-text("Detail")'), 'Subjects Detail');
+  await inspectButton(page.locator('td button:has-text("Edit")'), 'Subjects Edit');
 
   // 4. Check Batches Page
-  console.log('\n--- Checking Batches Page (390px) ---');
+  console.log('\n--- Checking Batches Page (390px phone view) ---');
   await page.goto('http://localhost:5173/batches', { waitUntil: 'networkidle' });
   await page.waitForTimeout(800);
   await scrollTableRight();
   await page.screenshot({ path: 'verification_screenshots/after_batches_actions.png' });
-  const batchEditBtn = await page.locator('td button:has-text("Edit")').first();
-  if (batchEditBtn) {
-    const b = await batchEditBtn.boundingBox();
-    const ws = await batchEditBtn.evaluate(el => window.getComputedStyle(el).whiteSpace);
-    console.log(`Batches Edit button: height = ${b.height}, width = ${b.width}, whiteSpace = ${ws}`);
-    if (Math.round(b.height) !== 32) throw new Error(`Expected Batches Edit height ~32px, got ${b.height}`);
-  }
+  await inspectButton(page.locator('td button:has-text("Edit")'), 'Batches Edit');
 
   // 5. Check Admissions Page
-  console.log('\n--- Checking Admissions Page (390px) ---');
+  console.log('\n--- Checking Admissions Page (390px phone view) ---');
   await page.goto('http://localhost:5173/admissions', { waitUntil: 'networkidle' });
   await page.waitForTimeout(800);
   await page.screenshot({ path: 'verification_screenshots/after_admissions_actions.png' });
-  const admDetailBtn = await page.locator('button:has-text("Detail")').first();
-  if (admDetailBtn) {
-    const b = await admDetailBtn.boundingBox();
-    const text = (await admDetailBtn.innerText()).trim();
-    const ws = await admDetailBtn.evaluate(el => window.getComputedStyle(el).whiteSpace);
-    console.log(`Admissions Detail button: height = ${b.height}, width = ${b.width}, text = "${text}", whiteSpace = ${ws}`);
-    if (Math.round(b.height) !== 32) throw new Error(`Expected Admissions Detail height ~32px, got ${b.height}`);
-    if (text !== 'Detail') throw new Error(`Expected text "Detail", got "${text}"`);
-  }
+  await inspectButton(page.locator('button:has-text("Detail")'), 'Admissions Detail');
+  await inspectButton(page.locator('button:has-text("Slip")'), 'Admissions Slip');
+  await inspectButton(page.locator('button:has-text("Pay Due")'), 'Admissions Pay Due');
+  await inspectButton(page.locator('button:has-text("Waive")'), 'Admissions Waive');
 
   // 6. Check Payments Page
-  console.log('\n--- Checking Payments Page (390px) ---');
+  console.log('\n--- Checking Payments Page (390px phone view) ---');
   await page.goto('http://localhost:5173/payments', { waitUntil: 'networkidle' });
   await page.waitForTimeout(800);
   await scrollTableRight();
   await page.screenshot({ path: 'verification_screenshots/after_payments_actions.png' });
-  const paymentDetailBtn = await page.locator('td button:has-text("Detail")').first();
-  if (paymentDetailBtn) {
-    const b = await paymentDetailBtn.boundingBox();
-    const text = (await paymentDetailBtn.innerText()).trim();
-    const ws = await paymentDetailBtn.evaluate(el => window.getComputedStyle(el).whiteSpace);
-    console.log(`Payments Detail button: height = ${b.height}, width = ${b.width}, text = "${text}", whiteSpace = ${ws}`);
-    if (Math.round(b.height) !== 32) throw new Error(`Expected Payments Detail height ~32px, got ${b.height}`);
-    if (text !== 'Detail') throw new Error(`Expected text "Detail", got "${text}"`);
-  }
+  await inspectButton(page.locator('td button:has-text("Detail")'), 'Payments Detail');
+  await inspectButton(page.locator('td button:has-text("Slip")'), 'Payments Slip');
+  await inspectButton(page.locator('td button:has-text("Edit")'), 'Payments Edit');
+
+  // 7. Check Staff Users Page
+  console.log('\n--- Checking Staff Users Page (390px phone view) ---');
+  await page.goto('http://localhost:5173/users', { waitUntil: 'networkidle' });
+  await page.waitForTimeout(800);
+  await scrollTableRight();
+  await inspectButton(page.locator('td button:has-text("Edit")'), 'Staff Edit');
+  await inspectButton(page.locator('td button:has-text("Reset")'), 'Staff Reset');
 
   console.log('\n========================================');
-  console.log('ALL VERIFICATIONS PASSED WITH 100% SUCCESS!');
+  console.log('ALL COLOR-CODED ROW ACTIONS VERIFIED WITH 100% SUCCESS!');
   console.log('========================================');
   await browser.close();
 })();

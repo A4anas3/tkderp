@@ -755,7 +755,7 @@ export default function AdmissionAllSlipsModal({
 
                               <Button
                                 size="xs"
-                                variant="secondary"
+                                variant="indigo"
                                 icon={Printer}
                                 onClick={() => handleOpenSlip(slip)}
                               >

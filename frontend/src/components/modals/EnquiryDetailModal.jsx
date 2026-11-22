@@ -189,7 +189,7 @@ export default function EnquiryDetailModal({
                 </span>
                 <Button
                   size="xs"
-                  variant="secondary"
+                  variant="indigo"
                   icon={Printer}
                   onClick={() => setPassModalOpen(true)}
                 >
@@ -275,7 +275,7 @@ export default function EnquiryDetailModal({
           <div className="flex items-center justify-between pt-2 border-t border-slate-200">
             <Button
               size="sm"
-              variant="secondary"
+              variant="indigo"
               icon={Printer}
               onClick={() => setPassModalOpen(true)}
             >

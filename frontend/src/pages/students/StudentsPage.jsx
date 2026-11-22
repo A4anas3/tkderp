@@ -169,7 +169,7 @@ export default function StudentsPage() {
         <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
           <Button
             size="xs"
-            variant="secondary"
+            variant="amber"
             icon={Edit2}
             onClick={(e) => {
               e.stopPropagation();
@@ -182,7 +182,7 @@ export default function StudentsPage() {
           </Button>
           <Button
             size="xs"
-            variant="secondary"
+            variant="info"
             icon={Eye}
             onClick={(e) => {
               e.stopPropagation();
@@ -428,7 +428,7 @@ export default function StudentsPage() {
                     <div className="mt-3.5 pt-2 border-t border-slate-100 flex items-center gap-1.5">
                       <Button
                         size="xs"
-                        variant="secondary"
+                        variant="amber"
                         icon={Edit2}
                         onClick={() => {
                           setEditingStudent(s);
@@ -440,7 +440,7 @@ export default function StudentsPage() {
                       </Button>
                       <Button
                         size="xs"
-                        variant="secondary"
+                        variant="info"
                         className="flex-1 justify-center"
                         icon={Eye}
                         onClick={() => navigate(`/students/${s.id}`)}

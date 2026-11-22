@@ -742,7 +742,7 @@ export default function EnquiriesPage() {
           <div className="flex items-center justify-end gap-1.5 relative">
             <Button
               size="xs"
-              variant="secondary"
+              variant="indigo"
               icon={Printer}
               onClick={(ev) => {
                 ev.stopPropagation();
@@ -761,7 +761,7 @@ export default function EnquiriesPage() {
                 </Badge>
                 <Button
                   size="xs"
-                  variant="secondary"
+                  variant="info"
                   icon={ExternalLink}
                   onClick={(ev) => {
                     ev.stopPropagation();
@@ -788,7 +788,7 @@ export default function EnquiriesPage() {
                 </Button>
                 <Button
                   size="xs"
-                  variant="secondary"
+                  variant="info"
                   icon={ExternalLink}
                   onClick={(ev) => {
                     ev.stopPropagation();
@@ -1036,7 +1036,7 @@ export default function EnquiriesPage() {
         <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
           <Button
             size="xs"
-            variant="secondary"
+            variant="indigo"
             icon={Printer}
             onClick={() => {
               setPassModalEnquiry({
@@ -1057,7 +1057,7 @@ export default function EnquiriesPage() {
             <>
               <Button
                 size="xs"
-                variant="success"
+                variant="success-soft"
                 onClick={(ev) => handleOpenDemoStatusModal(d, 'ATTENDED', ev)}
                 title="Mark demo as attended"
               >
@@ -1065,8 +1065,7 @@ export default function EnquiriesPage() {
               </Button>
               <Button
                 size="xs"
-                variant="secondary"
-                className="text-rose-700 hover:text-rose-800 hover:bg-rose-50 border-rose-200"
+                variant="danger-soft"
                 onClick={(ev) => handleOpenDemoStatusModal(d, 'DROPPED', ev)}
                 title="Mark demo as dropped"
               >
@@ -1097,8 +1096,7 @@ export default function EnquiriesPage() {
               </Button>
               <Button
                 size="xs"
-                variant="secondary"
-                className="text-rose-700 hover:text-rose-800 hover:bg-rose-50 border-rose-200"
+                variant="danger-soft"
                 onClick={(ev) => handleOpenDemoStatusModal(d, 'DROPPED', ev)}
                 title="Mark demo as dropped"
               >
@@ -1116,7 +1114,7 @@ export default function EnquiriesPage() {
           {(d.status === 'DROPPED' || d.status === 'EXPIRED') && (
             <Button
               size="xs"
-              variant="secondary"
+              variant="teal-soft"
               onClick={(ev) => handleOpenDemoStatusModal(d, 'ACTIVE', ev)}
               title="Re-open demo class"
             >
@@ -1487,7 +1485,7 @@ export default function EnquiriesPage() {
                         <div className="flex items-center gap-1">
                           <Button
                             size="xs"
-                            variant="secondary"
+                            variant="indigo"
                             icon={Printer}
                             onClick={() => {
                               setPassModalEnquiry(d);
@@ -1500,7 +1498,7 @@ export default function EnquiriesPage() {
                           {!isInterested && (
                             <Button
                               size="xs"
-                              variant="success"
+                              variant="success-soft"
                               onClick={(ev) => handleMarkInterested(d, ev)}
                               title="Student completed demo and liked it"
                             >
@@ -1509,8 +1507,7 @@ export default function EnquiriesPage() {
                           )}
                           <Button
                             size="xs"
-                            variant="secondary"
-                            className="text-rose-700 hover:text-rose-800 hover:bg-rose-50 border-rose-200"
+                            variant="danger-soft"
                             onClick={(ev) => handleOpenNotInterestedModal(d, ev)}
                             title="Student not interested / drop"
                           >
