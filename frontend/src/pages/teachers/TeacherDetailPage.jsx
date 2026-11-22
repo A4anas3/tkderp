@@ -350,7 +350,7 @@ export default function TeacherDetailPage() {
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <Button
-            variant="secondary"
+            variant="amber"
             icon={Edit2}
             onClick={() => setEditModalOpen(true)}
             size="sm"

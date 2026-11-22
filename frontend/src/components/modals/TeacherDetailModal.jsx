@@ -145,7 +145,7 @@ export default function TeacherDetailModal({
           {onViewRoster && (
             <Button
               size="sm"
-              variant="secondary"
+              variant="info"
               icon={BookOpen}
               className="w-full sm:w-auto"
               onClick={() => {
@@ -160,7 +160,7 @@ export default function TeacherDetailModal({
           {onEditTeacher && (
             <Button
               size="sm"
-              variant="primary"
+              variant="amber"
               icon={Edit2}
               className="w-full sm:w-auto"
               onClick={() => {

@@ -172,7 +172,7 @@ export default function PaymentDetailModal({
           {isAdmin && isActive && onIssueRefund && (
             <Button
               size="sm"
-              variant="danger"
+              variant="orange"
               icon={RotateCcw}
               className="w-full sm:w-auto"
               onClick={() => {
@@ -187,7 +187,7 @@ export default function PaymentDetailModal({
           {isAdmin && isActive && onEditPayment && (
             <Button
               size="sm"
-              variant="secondary"
+              variant="amber"
               icon={Edit2}
               className="w-full sm:w-auto"
               onClick={() => {
@@ -202,7 +202,7 @@ export default function PaymentDetailModal({
           {onPrintReceipt && (
             <Button
               size="sm"
-              variant="primary"
+              variant="indigo"
               icon={Printer}
               className="w-full sm:w-auto"
               onClick={() => {

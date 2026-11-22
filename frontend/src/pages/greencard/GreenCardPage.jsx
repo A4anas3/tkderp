@@ -174,7 +174,7 @@ export default function GreenCardPage() {
               <div className="mt-5 pt-3 border-t border-slate-200 flex justify-end">
                 <Button
                   size="xs"
-                  variant="secondary"
+                  variant="amber"
                   icon={Edit2}
                   onClick={() => handleOpenEdit(c)}
                 >

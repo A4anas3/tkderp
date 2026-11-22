@@ -612,7 +612,7 @@ export default function StudentDetailPage() {
             {/* Edit Student Profile Button */}
             <Button
               size="xs"
-              variant="secondary"
+              variant="amber"
               icon={Edit2}
               onClick={() => setEditModalOpen(true)}
               title="Edit Student Information"
@@ -624,11 +624,11 @@ export default function StudentDetailPage() {
             {/* Student ID Card Button */}
             <Button
               size="xs"
-              variant="secondary"
+              variant="indigo"
               icon={IdCard}
               onClick={() => setIdCardModalOpen(true)}
               title="View, Print & WhatsApp Student ID Card"
-              className="flex-1 sm:flex-initial justify-center bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border-indigo-200 font-bold"
+              className="flex-1 sm:flex-initial justify-center"
             >
               ID Card
             </Button>
@@ -1139,7 +1139,7 @@ export default function StudentDetailPage() {
                     {Number(item.balance_due) > 0 && !isRevoked && (
                       <Button
                         size="xs"
-                        variant="success"
+                        variant="success-soft"
                         icon={CreditCard}
                         onClick={() => {
                           setTargetAdmissionId(item.admission_id);
@@ -1152,7 +1152,7 @@ export default function StudentDetailPage() {
                     )}
                     <Button
                       size="xs"
-                      variant="secondary"
+                      variant="success-soft"
                       icon={RefreshCw}
                       onClick={() => {
                         setSelectedItemForRenew(item);
@@ -1164,26 +1164,26 @@ export default function StudentDetailPage() {
                     </Button>
                     <Button
                       size="xs"
-                      variant="secondary"
+                      variant="teal-soft"
                       icon={ArrowLeftRight}
                       onClick={() => {
                         setSelectedItemForChange(item);
                         setChangeModalOpen(true);
                       }}
-                      className="flex-1 justify-center text-odoo-800 border-purple-200 hover:bg-purple-50"
+                      className="flex-1 justify-center"
                       title="Change Subject"
                     >
                       Change
                     </Button>
                     <Button
                       size="xs"
-                      variant="ghost"
+                      variant="indigo"
                       icon={Calendar}
                       onClick={() => {
                         setSelectedItemForValidity(item);
                         setValidityModalOpen(true);
                       }}
-                      className="flex-1 justify-center border border-slate-200"
+                      className="flex-1 justify-center"
                     >
                       Dates
                     </Button>
@@ -1191,8 +1191,8 @@ export default function StudentDetailPage() {
                       <>
                         <Button
                           size="xs"
-                          variant="ghost"
-                          className="text-amber-800 hover:bg-amber-50 flex-1 justify-center border border-slate-200"
+                          variant="amber"
+                          className="flex-1 justify-center"
                           onClick={() => {
                             setSelectedItemForSuspend(item);
                             setSuspendMode('SUSPEND');
@@ -1203,8 +1203,8 @@ export default function StudentDetailPage() {
                         </Button>
                         <Button
                           size="xs"
-                          variant="ghost"
-                          className="text-rose-700 hover:bg-rose-50 flex-1 justify-center border border-slate-200"
+                          variant="danger-soft"
+                          className="flex-1 justify-center"
                           onClick={() => {
                             setSelectedItemForSuspend(item);
                             setSuspendMode('DISCONTINUE');
@@ -1611,7 +1611,7 @@ export default function StudentDetailPage() {
                         {!isCancelled && (
                           <Button
                             size="xs"
-                            variant="secondary"
+                            variant="success-soft"
                             icon={RefreshCw}
                             onClick={() => {
                               setSelectedItemForRenew(item);
@@ -2591,7 +2591,7 @@ export default function StudentDetailPage() {
 
                       <Button
                         size="xs"
-                        variant="secondary"
+                        variant="indigo"
                         icon={Printer}
                         onClick={() => handleViewReceipt(txn)}
                       >
@@ -2713,7 +2713,7 @@ export default function StudentDetailPage() {
                         <td className="p-2.5 text-right">
                           <Button
                             size="xs"
-                            variant="secondary"
+                            variant="indigo"
                             icon={Printer}
                             onClick={() => handleViewReceipt(txn)}
                           >

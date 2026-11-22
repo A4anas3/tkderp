@@ -259,7 +259,7 @@ export default function AdmissionDetailModal({
           {onPrintSlip && (
             <Button
               size="sm"
-              variant="secondary"
+              variant="indigo"
               icon={Printer}
               onClick={() => {
                 onClose();
