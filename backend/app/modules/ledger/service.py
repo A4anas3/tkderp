@@ -15,7 +15,10 @@ from app.database.models import (
     Batch, Subject, Teacher, BatchSubject, TeacherEarning
 )
 from app.common.numbering import next_number
-from app.common.calculations import allocate_payment_proportionally, round_money, compute_rolling_cycle_end, calculate_admission_financials
+from app.common.calculations import (
+    allocate_payment_proportionally, round_money, compute_rolling_cycle_end,
+    calculate_admission_financials, calculate_course_duration_breakdown, calculate_course_duration_fee
+)
 from app.core.config import settings
 
 async def record_teacher_earning_for_allocation(
@@ -1559,19 +1562,32 @@ async def renew_admission_items_service(
         # 4. Fee & Price Override
         req_fee = ovr.get("fee") if ovr.get("fee") is not None else default_params.get("fee")
         reason = ovr.get("price_override_reason") or default_params.get("price_override_reason")
+        disc_type = ovr.get("discount_type") or default_params.get("discount_type") or "NONE"
+        disc_val = Decimal(str(ovr.get("discount_value") or default_params.get("discount_value") or "0.00"))
+
+        breakdown = calculate_course_duration_breakdown(
+            monthly_fee=default_fee,
+            valid_from=new_from,
+            valid_to=new_to,
+            months=ovr.get("months") or default_params.get("months"),
+            fee_override=req_fee,
+            price_override_reason=reason,
+            discount_type=disc_type,
+            discount_value=disc_val
+        )
         if req_fee is not None:
             req_fee_dec = Decimal(str(req_fee))
-            if req_fee_dec != Decimal(str(default_fee)):
+            if req_fee_dec != breakdown["computed_standard_fee"]:
                 if not reason or not str(reason).strip():
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Price override reason is required when fee (₹{req_fee_dec}) differs from standard fee (₹{default_fee})."
+                        detail=f"Price override reason is required when fee (₹{req_fee_dec}) differs from standard fee (₹{breakdown['computed_standard_fee']})."
                     )
                 final_fee = req_fee_dec
             else:
-                final_fee = Decimal(str(default_fee))
+                final_fee = breakdown["computed_standard_fee"]
         else:
-            final_fee = Decimal(str(default_fee))
+            final_fee = breakdown["computed_standard_fee"]
 
         # 5. Discount
         disc_type = ovr.get("discount_type") or default_params.get("discount_type") or "NONE"
@@ -1633,7 +1649,7 @@ async def renew_admission_items_service(
             "valid_from": new_from,
             "valid_to": new_to,
             "fee": final_fee,
-            "price_override_reason": reason if (req_fee is not None and Decimal(str(req_fee)) != Decimal(str(default_fee))) else None,
+            "price_override_reason": reason if (req_fee is not None and Decimal(str(req_fee)) != breakdown["computed_standard_fee"]) else None,
             "discount_type": disc_type,
             "discount_value": disc_val,
             "share_type": s_type,

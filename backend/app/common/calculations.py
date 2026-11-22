@@ -1,7 +1,121 @@
 from decimal import Decimal, ROUND_HALF_UP
-from typing import List, Dict, Any, Tuple, Optional
+from typing import List, Dict, Any, Tuple, Optional, Union
 import calendar
 from datetime import date, timedelta
+
+
+def calculate_course_duration_factor(
+    valid_from: Optional[date] = None,
+    valid_to: Optional[date] = None,
+    months: Optional[Union[int, float, Decimal]] = None
+) -> Tuple[Decimal, int]:
+    """
+    Computes duration factor and duration in days according to renewal/enrollment period.
+    Rule:
+      (months/days divide — fee per month multiplied/divided by the chosen duration)
+    """
+    if valid_from and valid_to:
+        if valid_to < valid_from:
+            raise ValueError("End date cannot be earlier than start date")
+        diff_days = (valid_to - valid_from).days
+        inc_days = diff_days + 1
+
+        # Check rolling cycle match for integer months 1..24
+        for m in range(1, 25):
+            end_d, _ = compute_rolling_cycle_end(valid_from, m)
+            if end_d == valid_to:
+                return Decimal(str(m)), diff_days
+
+        # Check preset durations: 15d, 30d (1m), 60d (2m), 90d (3m)
+        if diff_days in (14, 15) or inc_days in (15, 16):
+            return Decimal("0.5"), 15
+        if diff_days % 30 == 0 and diff_days > 0:
+            return Decimal(str(diff_days // 30)), diff_days
+        if inc_days % 30 == 0 and inc_days > 0:
+            return Decimal(str(inc_days // 30)), inc_days
+        if diff_days in (28, 29, 30, 31) or inc_days in (28, 29, 30, 31):
+            return Decimal("1.0"), 30
+        if diff_days in (58, 59, 60, 61, 62) or inc_days in (59, 60, 61, 62):
+            return Decimal("2.0"), 60
+        if diff_days in (88, 89, 90, 91, 92) or inc_days in (89, 90, 91, 92):
+            return Decimal("3.0"), 90
+
+        # If months was explicitly provided and diff_days roughly matches
+        if months is not None:
+            m_val = float(months)
+            if m_val > 0 and abs(diff_days - m_val * 30) <= 3:
+                return Decimal(str(months)), diff_days
+
+        # General days divide: fee per month / 30 * days
+        if diff_days > 0:
+            return round_money(Decimal(str(diff_days)) / Decimal("30.00")), diff_days
+
+    if months is not None:
+        m_val = float(months)
+        if m_val > 0:
+            return Decimal(str(months)), int(m_val * 30)
+
+    return Decimal("1.0"), 30
+
+
+def calculate_course_duration_fee(
+    monthly_fee: Union[Decimal, float, int],
+    valid_from: Optional[date] = None,
+    valid_to: Optional[date] = None,
+    months: Optional[Union[int, float, Decimal]] = None
+) -> Decimal:
+    """
+    Computes course fee from monthly fee rate and duration (months/days divide).
+    """
+    factor, _ = calculate_course_duration_factor(valid_from, valid_to, months)
+    return round_money(Decimal(str(monthly_fee)) * factor)
+
+
+def calculate_course_duration_breakdown(
+    monthly_fee: Union[Decimal, float, int],
+    valid_from: Optional[date] = None,
+    valid_to: Optional[date] = None,
+    months: Optional[Union[int, float, Decimal]] = None,
+    fee_override: Optional[Union[Decimal, float, int]] = None,
+    price_override_reason: Optional[str] = None,
+    discount_type: str = "NONE",
+    discount_value: Union[Decimal, float, int] = Decimal("0.00")
+) -> Dict[str, Any]:
+    """
+    Computes full course duration fee breakdown including duration factor, standard fee,
+    price overrides, discount, and net payable.
+    """
+    monthly_dec = round_money(Decimal(str(monthly_fee)))
+    factor, days = calculate_course_duration_factor(valid_from, valid_to, months)
+    computed_standard_fee = round_money(monthly_dec * factor)
+
+    if fee_override is not None:
+        fee_override_dec = round_money(Decimal(str(fee_override)))
+        if fee_override_dec != computed_standard_fee:
+            if price_override_reason and str(price_override_reason).strip():
+                final_fee = fee_override_dec
+            else:
+                final_fee = computed_standard_fee
+        else:
+            final_fee = computed_standard_fee
+    else:
+        final_fee = computed_standard_fee
+
+    disc_amount = calculate_item_discount(final_fee, discount_type, Decimal(str(discount_value)))
+    net_payable = max(Decimal("0.00"), final_fee - disc_amount)
+
+    return {
+        "base_monthly_fee": monthly_dec,
+        "duration_factor": factor,
+        "duration_days": days,
+        "computed_standard_fee": computed_standard_fee,
+        "fee": final_fee,
+        "discount_type": discount_type,
+        "discount_value": Decimal(str(discount_value)),
+        "discount_amount": disc_amount,
+        "net_payable": net_payable
+    }
+
 
 
 def compute_rolling_cycle_end(start_d: date, months: int = 1) -> Tuple[date, date]:

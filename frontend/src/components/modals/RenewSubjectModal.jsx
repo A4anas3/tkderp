@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Modal from '../common/Modal';
 import Button from '../common/Button';
 import { RefreshCw, Calendar, CreditCard, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { admissionApi, teacherApi, subjectApi } from '../../services/allApis';
+import { admissionApi, teacherApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 
 export default function RenewSubjectModal({
@@ -21,7 +21,12 @@ export default function RenewSubjectModal({
   const [fee, setFee] = useState('');
   const [discountType, setDiscountType] = useState('NONE');
   const [discountValue, setDiscountValue] = useState('0');
-  
+  const [priceOverrideReason, setPriceOverrideReason] = useState('');
+
+  // Authoritative Backend Calculation State
+  const [calculation, setCalculation] = useState(null);
+  const [calcLoading, setCalcLoading] = useState(false);
+
   // Payment toggle
   const [collectPayment, setCollectPayment] = useState(true);
   const [paymentAmount, setPaymentAmount] = useState('');
@@ -45,12 +50,72 @@ export default function RenewSubjectModal({
     }
   };
 
+  const fetchBackendCalculation = useCallback(
+    async ({
+      newFrom,
+      newTo,
+      newFee,
+      newDiscountType,
+      newDiscountValue,
+      overrideReason,
+      updateFeeState = true,
+      updatePaymentState = true,
+    } = {}) => {
+      const targetFrom = newFrom !== undefined ? newFrom : validFrom;
+      const targetTo = newTo !== undefined ? newTo : validTo;
+      if (!item?.subject_id || !targetFrom || !targetTo) return;
+
+      try {
+        setCalcLoading(true);
+        const reqPayload = {
+          subject_id: item.subject_id,
+          student_id: student?.id,
+          batch_id: item.batch_id,
+          valid_from: targetFrom,
+          valid_to: targetTo,
+          discount_type: newDiscountType !== undefined ? newDiscountType : discountType,
+          discount_value: parseFloat(newDiscountValue !== undefined ? newDiscountValue : discountValue) || 0,
+        };
+
+        const targetFee = newFee !== undefined ? newFee : fee;
+        if (targetFee !== null && targetFee !== undefined && String(targetFee).trim() !== '') {
+          reqPayload.fee = parseFloat(targetFee);
+          const reason = overrideReason !== undefined ? overrideReason : priceOverrideReason;
+          if (reason) {
+            reqPayload.price_override_reason = reason;
+          }
+        }
+
+        const res = await admissionApi.calculateRenewal(reqPayload);
+        setCalculation(res);
+
+        if (updateFeeState) {
+          setFee(String(res.fee));
+        }
+        if (updatePaymentState) {
+          setPaymentAmount(String(res.net_payable));
+        }
+      } catch (err) {
+        console.error('Failed to calculate renewal payable from backend:', err);
+      } finally {
+        setCalcLoading(false);
+      }
+    },
+    [item, student, validFrom, validTo, fee, discountType, discountValue, priceOverrideReason]
+  );
+
   useEffect(() => {
     if (isOpen && item) {
       setTeacherId(item.teacher_id || '');
-      setFee(String(item.original_price || item.net_price || '1500'));
-      setPaymentAmount(String(item.net_price || item.original_price || '1500'));
-      
+      setDurationPreset('1m');
+      setDiscountType('NONE');
+      setDiscountValue('0');
+      setCollectPayment(true);
+      setPaymentMode('CASH');
+      setTransactionRef('');
+      setNotes('');
+      setPriceOverrideReason('');
+
       // Calculate suggested start date: if item has valid_to, start day after valid_to, else today
       let start = new Date();
       if (item.valid_to) {
@@ -66,14 +131,19 @@ export default function RenewSubjectModal({
       // Default 1 month (30 days)
       const end = new Date(start);
       end.setDate(end.getDate() + 30);
-      setValidTo(end.toISOString().split('T')[0]);
-      setDurationPreset('1m');
-      setDiscountType('NONE');
-      setDiscountValue('0');
-      setCollectPayment(true);
-      setPaymentMode('CASH');
-      setTransactionRef('');
-      setNotes('');
+      const endStr = end.toISOString().split('T')[0];
+      setValidTo(endStr);
+
+      // Fetch authoritative backend calculation on open
+      fetchBackendCalculation({
+        newFrom: startStr,
+        newTo: endStr,
+        newFee: null, // let backend calculate standard fee based on subject rate and duration
+        newDiscountType: 'NONE',
+        newDiscountValue: '0',
+        updateFeeState: true,
+        updatePaymentState: true,
+      });
     }
   }, [isOpen, item]);
 
@@ -92,7 +162,16 @@ export default function RenewSubjectModal({
     } else if (preset === '3m') {
       end.setDate(end.getDate() + 90);
     }
-    setValidTo(end.toISOString().split('T')[0]);
+    const endStr = end.toISOString().split('T')[0];
+    setValidTo(endStr);
+
+    fetchBackendCalculation({
+      newFrom: validFrom,
+      newTo: endStr,
+      newFee: null, // recompute fee for new duration
+      updateFeeState: true,
+      updatePaymentState: true,
+    });
   };
 
   const handleValidFromChange = (e) => {
@@ -105,19 +184,64 @@ export default function RenewSubjectModal({
       else if (durationPreset === '1m') end.setDate(end.getDate() + 30);
       else if (durationPreset === '2m') end.setDate(end.getDate() + 60);
       else if (durationPreset === '3m') end.setDate(end.getDate() + 90);
-      setValidTo(end.toISOString().split('T')[0]);
+      const endStr = end.toISOString().split('T')[0];
+      setValidTo(endStr);
+      fetchBackendCalculation({
+        newFrom,
+        newTo: endStr,
+        newFee: null,
+        updateFeeState: true,
+        updatePaymentState: true,
+      });
+    } else if (newFrom && validTo) {
+      fetchBackendCalculation({
+        newFrom,
+        newTo: validTo,
+        updateFeeState: true,
+        updatePaymentState: true,
+      });
     }
   };
 
-  const calculatedNet = () => {
-    const f = parseFloat(fee) || 0;
-    const dVal = parseFloat(discountValue) || 0;
-    if (discountType === 'PERCENTAGE') {
-      return Math.max(0, f - (f * dVal) / 100);
-    } else if (discountType === 'FIXED') {
-      return Math.max(0, f - dVal);
+  const handleValidToChange = (e) => {
+    const newTo = e.target.value;
+    setValidTo(newTo);
+    setDurationPreset('custom');
+    if (validFrom && newTo && newTo >= validFrom) {
+      fetchBackendCalculation({
+        newFrom: validFrom,
+        newTo,
+        updateFeeState: true,
+        updatePaymentState: true,
+      });
     }
-    return f;
+  };
+
+  const handleDiscountTypeChange = (newType) => {
+    setDiscountType(newType);
+    fetchBackendCalculation({
+      newDiscountType: newType,
+      updateFeeState: false,
+      updatePaymentState: true,
+    });
+  };
+
+  const handleDiscountValueChange = (newVal) => {
+    setDiscountValue(newVal);
+    fetchBackendCalculation({
+      newDiscountValue: newVal,
+      updateFeeState: false,
+      updatePaymentState: true,
+    });
+  };
+
+  const handleFeeChange = (newFee) => {
+    setFee(newFee);
+    fetchBackendCalculation({
+      newFee,
+      updateFeeState: false,
+      updatePaymentState: true,
+    });
   };
 
   const handleSubmit = async (e) => {
@@ -136,9 +260,21 @@ export default function RenewSubjectModal({
       return;
     }
 
+    // Authoritative net payable computed by backend
+    const authoritativeNet = calculation ? Number(calculation.net_payable) : feeNum;
+    const isPriceOverridden = calculation && feeNum !== Number(calculation.computed_standard_fee);
+    if (isPriceOverridden && !priceOverrideReason.trim()) {
+      error(`Price override reason is required when fee (₹${feeNum}) differs from standard fee (₹${calculation.computed_standard_fee})`);
+      return;
+    }
+
+    if (collectPayment && parseFloat(paymentAmount) > authoritativeNet) {
+      error(`Amount paid cannot exceed the net payable of ₹${authoritativeNet.toFixed(2)}`);
+      return;
+    }
+
     setSubmitting(true);
     try {
-      const netPayable = calculatedNet();
       const payload = {
         student_id: student.id,
         subject_id: item.subject_id,
@@ -146,6 +282,7 @@ export default function RenewSubjectModal({
         valid_from: validFrom,
         valid_to: validTo,
         fee: feeNum,
+        price_override_reason: isPriceOverridden ? priceOverrideReason.trim() : undefined,
         discount_type: discountType,
         discount_value: parseFloat(discountValue) || 0,
         notes: notes.trim() || `Renewal for ${item.subject_name}`,
@@ -153,7 +290,7 @@ export default function RenewSubjectModal({
 
       if (collectPayment && parseFloat(paymentAmount) > 0) {
         payload.initial_payment = {
-          amount: Math.min(parseFloat(paymentAmount), netPayable),
+          amount: Math.min(parseFloat(paymentAmount), authoritativeNet),
           payment_mode: paymentMode,
           transaction_reference: transactionRef.trim() || undefined,
           notes: `Renewal fee collection for ${item.subject_name}`,
@@ -172,6 +309,8 @@ export default function RenewSubjectModal({
   };
 
   if (!isOpen || !item) return null;
+
+  const currentNetPayable = calculation ? Number(calculation.net_payable) : (parseFloat(fee) || 0);
 
   return (
     <Modal
@@ -204,7 +343,7 @@ export default function RenewSubjectModal({
           <select
             value={teacherId}
             onChange={(e) => setTeacherId(e.target.value)}
-            className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs text-black focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs text-black focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white"
           >
             <option value="">Select Teacher / Keep Existing</option>
             {teachers.map((t) => (
@@ -254,7 +393,7 @@ export default function RenewSubjectModal({
               type="date"
               value={validFrom}
               onChange={handleValidFromChange}
-              className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs text-black focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs text-black focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white"
               required
             />
           </div>
@@ -266,11 +405,8 @@ export default function RenewSubjectModal({
             <input
               type="date"
               value={validTo}
-              onChange={(e) => {
-                setValidTo(e.target.value);
-                setDurationPreset('custom');
-              }}
-              className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs text-black focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              onChange={handleValidToChange}
+              className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs text-black focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white"
               required
             />
           </div>
@@ -284,13 +420,10 @@ export default function RenewSubjectModal({
               <input
                 type="number"
                 min="0"
-                step="50"
+                step="any"
                 value={fee}
-                onChange={(e) => {
-                  setFee(e.target.value);
-                  setPaymentAmount(e.target.value);
-                }}
-                className="w-full border border-slate-300 rounded px-2 py-1 text-xs text-black font-semibold"
+                onChange={(e) => handleFeeChange(e.target.value)}
+                className="w-full border border-slate-300 rounded px-2 py-1 text-xs text-black font-semibold bg-white"
                 required
               />
             </div>
@@ -299,8 +432,8 @@ export default function RenewSubjectModal({
               <label className="block text-slate-700 font-bold mb-1">Discount</label>
               <select
                 value={discountType}
-                onChange={(e) => setDiscountType(e.target.value)}
-                className="w-full border border-slate-300 rounded px-2 py-1 text-xs text-black"
+                onChange={(e) => handleDiscountTypeChange(e.target.value)}
+                className="w-full border border-slate-300 rounded px-2 py-1 text-xs text-black bg-white"
               >
                 <option value="NONE">None</option>
                 <option value="FIXED">Fixed (₹)</option>
@@ -314,17 +447,44 @@ export default function RenewSubjectModal({
                 <input
                   type="number"
                   min="0"
+                  step="any"
                   value={discountValue}
-                  onChange={(e) => setDiscountValue(e.target.value)}
-                  className="w-full border border-slate-300 rounded px-2 py-1 text-xs text-black font-semibold"
+                  onChange={(e) => handleDiscountValueChange(e.target.value)}
+                  className="w-full border border-slate-300 rounded px-2 py-1 text-xs text-black font-semibold bg-white"
                 />
               </div>
             )}
           </div>
 
+          {/* Price Override Reason if changed */}
+          {calculation && parseFloat(fee) !== Number(calculation.computed_standard_fee) && (
+            <div className="pt-1">
+              <label className="block text-amber-800 font-bold mb-1 text-[11px]">
+                Price Override Reason <span className="text-rose-600">*</span>
+                <span className="font-normal text-slate-500 ml-1">
+                  (Standard fee: ₹{Number(calculation.computed_standard_fee).toFixed(2)})
+                </span>
+              </label>
+              <input
+                type="text"
+                placeholder="Reason for changing standard fee..."
+                value={priceOverrideReason}
+                onChange={(e) => {
+                  setPriceOverrideReason(e.target.value);
+                  fetchBackendCalculation({ overrideReason: e.target.value, updateFeeState: false, updatePaymentState: true });
+                }}
+                className="w-full border border-amber-300 rounded px-2 py-1 text-xs text-black bg-amber-50 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                required
+              />
+            </div>
+          )}
+
           <div className="flex justify-between items-center pt-1 border-t border-slate-200 font-bold">
             <span className="text-slate-600">Net Payable for Renewal:</span>
-            <span className="text-emerald-700 text-sm font-mono">₹{calculatedNet().toFixed(2)}</span>
+            <span className="text-emerald-700 text-sm font-mono">
+              ₹{currentNetPayable.toFixed(2)}
+              {calcLoading && <span className="text-[10px] text-slate-400 ml-1 font-normal font-sans">(calculating...)</span>}
+            </span>
           </div>
         </div>
 
@@ -346,12 +506,12 @@ export default function RenewSubjectModal({
                 <label className="block text-slate-600 font-medium mb-1">Amount Paid (₹)</label>
                 <input
                   type="number"
-                  min="1"
-                  max={calculatedNet()}
-                  step="50"
+                  min="0"
+                  max={currentNetPayable}
+                  step="any"
                   value={paymentAmount}
                   onChange={(e) => setPaymentAmount(e.target.value)}
-                  className="w-full border border-slate-300 rounded px-2 py-1 text-xs text-black font-semibold"
+                  className="w-full border border-slate-300 rounded px-2 py-1 text-xs text-black font-semibold bg-white"
                   required={collectPayment}
                 />
               </div>
@@ -361,7 +521,7 @@ export default function RenewSubjectModal({
                 <select
                   value={paymentMode}
                   onChange={(e) => setPaymentMode(e.target.value)}
-                  className="w-full border border-slate-300 rounded px-2 py-1 text-xs text-black"
+                  className="w-full border border-slate-300 rounded px-2 py-1 text-xs text-black bg-white"
                 >
                   <option value="CASH">Cash</option>
                   <option value="UPI">UPI / QR Code</option>
@@ -381,7 +541,7 @@ export default function RenewSubjectModal({
                     placeholder="e.g., UPI Ref / UTR / Cheque No."
                     value={transactionRef}
                     onChange={(e) => setTransactionRef(e.target.value)}
-                    className="w-full border border-slate-300 rounded px-2 py-1 text-xs text-black"
+                    className="w-full border border-slate-300 rounded px-2 py-1 text-xs text-black bg-white"
                   />
                 </div>
               )}
@@ -399,7 +559,7 @@ export default function RenewSubjectModal({
             variant="success"
             size="sm"
             icon={RefreshCw}
-            loading={submitting}
+            loading={submitting || calcLoading}
             className="w-full sm:w-auto"
           >
             Confirm Renewal

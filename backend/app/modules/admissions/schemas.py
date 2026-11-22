@@ -13,7 +13,9 @@ class AdmissionItemCreate(BaseModel):
     teacher_name_snapshot: Optional[str] = None
     hall_number_snapshot: Optional[str] = None
     item_name_snapshot: str = Field(..., min_length=2, max_length=200)
-    original_price: Decimal = Field(..., ge=0)
+    original_price: Optional[Decimal] = Field(default=None, ge=0)
+    months: Optional[int] = Field(default=None, ge=1)
+    duration_days: Optional[int] = Field(default=None, ge=1)
     discount_type: str = Field(default="NONE", pattern="^(NONE|FIXED|PERCENTAGE)$")
     discount_value: Decimal = Field(default=Decimal("0.00"), ge=0)
     valid_from: Optional[date] = None
@@ -299,6 +301,31 @@ class SubjectRenewalRequest(BaseModel):
     discount_value: Decimal = Field(default=Decimal("0.00"), ge=0)
     initial_payment: Optional[InitialPaymentData] = None
     notes: Optional[str] = None
+
+class RenewalCalculateRequest(BaseModel):
+    subject_id: uuid.UUID
+    student_id: Optional[uuid.UUID] = None
+    batch_id: Optional[uuid.UUID] = None
+    valid_from: Optional[date] = None
+    valid_to: Optional[date] = None
+    months: Optional[int] = Field(default=None, ge=1)
+    duration_days: Optional[int] = Field(default=None, ge=1)
+    fee: Optional[Decimal] = Field(default=None, ge=0)
+    price_override_reason: Optional[str] = None
+    discount_type: str = Field(default="NONE", pattern="^(NONE|FIXED|PERCENTAGE)$")
+    discount_value: Decimal = Field(default=Decimal("0.00"), ge=0)
+
+class RenewalCalculateResponse(BaseModel):
+    subject_id: uuid.UUID
+    base_monthly_fee: Decimal
+    duration_days: int
+    duration_factor: Decimal
+    fee: Decimal
+    computed_standard_fee: Decimal
+    discount_type: str
+    discount_value: Decimal
+    discount_amount: Decimal
+    net_payable: Decimal
 
 class SubjectChangeRequest(BaseModel):
     student_id: uuid.UUID

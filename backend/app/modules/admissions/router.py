@@ -19,10 +19,12 @@ from app.modules.admissions.schemas import (
     AdmissionCreate, AdmissionResponse, AdmissionCalculatePreviewRequest, AdmissionItemResponse, AdmissionRevokeRequest,
     AdmissionSlipsResponse, SlipItemResponse, AdmissionValidityUpdate, AdmissionLifecycleAction,
     AdmissionItemValidityUpdate, AdmissionItemLifecycleAction, SubjectRenewalRequest, SubjectChangeRequest,
-    ItemRenewalRequest, RenewalsDueItemResponse, ItemRenewalSpec, AdmissionWaiveDueRequest
+    ItemRenewalRequest, RenewalsDueItemResponse, ItemRenewalSpec, AdmissionWaiveDueRequest,
+    RenewalCalculateRequest, RenewalCalculateResponse
 )
 from app.common.calculations import (
-    calculate_admission_financials, allocate_payment_proportionally, compute_rolling_cycle_end
+    calculate_admission_financials, allocate_payment_proportionally, compute_rolling_cycle_end,
+    calculate_course_duration_fee, calculate_course_duration_breakdown
 )
 from app.common.pagination import PaginationParams, PageResponse
 from app.common.numbering import next_number
@@ -46,18 +48,45 @@ router = APIRouter(prefix="/api/admissions", tags=["Admissions"])
 @router.post("/preview")
 async def preview_admission_calculation(
     payload: AdmissionCalculatePreviewRequest,
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_staff)
 ):
-    items_data = [
-        {
-            "price": itm.original_price,
+    items_data = []
+    for itm in payload.items:
+        price = itm.original_price
+        if itm.subject_id:
+            bs = None
+            if itm.batch_id:
+                bs_res = await db.execute(
+                    select(BatchSubject).where(
+                        BatchSubject.batch_id == itm.batch_id,
+                        BatchSubject.subject_id == itm.subject_id
+                    )
+                )
+                bs = bs_res.scalar_one_or_none()
+            if bs and bs.fee is not None:
+                base_fee = bs.fee
+            else:
+                s_res = await db.execute(select(Subject).where(Subject.id == itm.subject_id))
+                subj = s_res.scalar_one_or_none()
+                base_fee = subj.default_fee if subj else (price or Decimal("0.00"))
+
+            computed = calculate_course_duration_fee(
+                monthly_fee=base_fee,
+                valid_from=itm.valid_from,
+                valid_to=itm.valid_to,
+                months=getattr(itm, "months", None)
+            )
+            if price is None or price == Decimal("0.00"):
+                price = computed
+
+        items_data.append({
+            "price": price if price is not None else Decimal("0.00"),
             "discount_type": itm.discount_type,
             "discount_value": itm.discount_value,
             "item_name_snapshot": itm.item_name_snapshot,
             "item_type": itm.item_type
-        }
-        for itm in payload.items
-    ]
+        })
     calc = calculate_admission_financials(
         items=items_data,
         overall_discount_type=payload.overall_discount_type,
@@ -138,15 +167,41 @@ async def create_admission(
     adm_no = await next_number(db, "ADM")
 
     # Calculate item financials
-    raw_items = [
-        {
+    raw_items = []
+    for itm in payload.items:
+        price = itm.original_price
+        if itm.subject_id:
+            bs = None
+            if itm.batch_id:
+                bs_res = await db.execute(
+                    select(BatchSubject).where(
+                        BatchSubject.batch_id == itm.batch_id,
+                        BatchSubject.subject_id == itm.subject_id
+                    )
+                )
+                bs = bs_res.scalar_one_or_none()
+            if bs and bs.fee is not None:
+                base_fee = bs.fee
+            else:
+                s_res = await db.execute(select(Subject).where(Subject.id == itm.subject_id))
+                subj = s_res.scalar_one_or_none()
+                base_fee = subj.default_fee if subj else (price or Decimal("0.00"))
+
+            computed = calculate_course_duration_fee(
+                monthly_fee=base_fee,
+                valid_from=itm.valid_from,
+                valid_to=itm.valid_to,
+                months=getattr(itm, "months", None)
+            )
+            if price is None or price == Decimal("0.00"):
+                price = computed
+
+        raw_items.append({
             "raw_item": itm,
-            "price": itm.original_price,
+            "price": price if price is not None else Decimal("0.00"),
             "discount_type": itm.discount_type,
             "discount_value": itm.discount_value
-        }
-        for itm in payload.items
-    ]
+        })
     calc = calculate_admission_financials(
         items=raw_items,
         overall_discount_type=payload.overall_discount_type,
@@ -1330,6 +1385,76 @@ async def renew_admission_item_endpoint(
         notes=payload.notes
     )
     return adm
+
+
+@router.post("/calculate-renewal", response_model=RenewalCalculateResponse)
+async def calculate_renewal_endpoint(
+    payload: RenewalCalculateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_staff)
+):
+    """
+    Computes authoritative renewal payable from subject fee rate, renewal period (months/days divide),
+    and discount.
+    """
+    base_fee = None
+    if payload.batch_id:
+        bs_res = await db.execute(
+            select(BatchSubject).where(
+                BatchSubject.batch_id == payload.batch_id,
+                BatchSubject.subject_id == payload.subject_id
+            )
+        )
+        bs = bs_res.scalar_one_or_none()
+        if bs and bs.fee is not None:
+            base_fee = bs.fee
+
+    if base_fee is None:
+        s_res = await db.execute(select(Subject).where(Subject.id == payload.subject_id))
+        subj = s_res.scalar_one_or_none()
+        if subj and subj.default_fee is not None:
+            base_fee = subj.default_fee
+
+    if base_fee is None and payload.student_id:
+        prev_stmt = (
+            select(AdmissionItem)
+            .where(
+                AdmissionItem.student_id == payload.student_id,
+                AdmissionItem.subject_id == payload.subject_id
+            )
+            .order_by(AdmissionItem.created_at.desc())
+        )
+        prev_res = await db.execute(prev_stmt)
+        prev_item = prev_res.scalars().first()
+        if prev_item:
+            base_fee = prev_item.original_price
+
+    if base_fee is None:
+        base_fee = Decimal("0.00")
+
+    breakdown = calculate_course_duration_breakdown(
+        monthly_fee=base_fee,
+        valid_from=payload.valid_from,
+        valid_to=payload.valid_to,
+        months=payload.months,
+        fee_override=payload.fee,
+        price_override_reason=payload.price_override_reason,
+        discount_type=payload.discount_type,
+        discount_value=payload.discount_value
+    )
+
+    return RenewalCalculateResponse(
+        subject_id=payload.subject_id,
+        base_monthly_fee=breakdown["base_monthly_fee"],
+        duration_days=breakdown["duration_days"],
+        duration_factor=breakdown["duration_factor"],
+        fee=breakdown["fee"],
+        computed_standard_fee=breakdown["computed_standard_fee"],
+        discount_type=breakdown["discount_type"],
+        discount_value=breakdown["discount_value"],
+        discount_amount=breakdown["discount_amount"],
+        net_payable=breakdown["net_payable"]
+    )
 
 
 @router.post("/renew-subject", response_model=AdmissionResponse, status_code=status.HTTP_201_CREATED)

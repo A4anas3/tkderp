@@ -311,6 +311,10 @@ export const admissionApi = {
     const res = await api.post('/admissions/renew-subject', payload);
     return res.data;
   },
+  calculateRenewal: async (payload) => {
+    const res = await api.post('/admissions/calculate-renewal', payload);
+    return res.data;
+  },
   changeSubject: async (payload) => {
     const res = await api.post('/admissions/change-subject', payload);
     return res.data;

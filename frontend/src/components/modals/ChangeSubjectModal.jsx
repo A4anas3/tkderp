@@ -360,7 +360,7 @@ export default function ChangeSubjectModal({
               <input
                 type="number"
                 min="0"
-                step="50"
+                step="any"
                 value={fee}
                 onChange={(e) => {
                   setFee(e.target.value);
@@ -424,7 +424,7 @@ export default function ChangeSubjectModal({
                   type="number"
                   min="0"
                   max={netDue}
-                  step="50"
+                  step="any"
                   value={paymentAmount}
                   onChange={(e) => setPaymentAmount(e.target.value)}
                   className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs text-black font-bold font-mono bg-white"

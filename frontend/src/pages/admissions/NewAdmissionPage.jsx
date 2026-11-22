@@ -375,8 +375,14 @@ export default function NewAdmissionPage() {
         const payload = {
           items: items.map((itm) => ({
             item_type: itm.item_type,
+            batch_id: itm.batch_id || undefined,
+            subject_id: itm.subject_id || undefined,
+            green_card_id: itm.green_card_id || undefined,
             item_name_snapshot: itm.item_name_snapshot,
             original_price: parseFloat(itm.original_price) || 0,
+            months: itm.months || billingMonths || 1,
+            valid_from: itm.valid_from,
+            valid_to: itm.valid_to,
             discount_type: itm.discount_type,
             discount_value: parseFloat(itm.discount_value) || 0,
           })),
@@ -787,6 +793,7 @@ export default function NewAdmissionPage() {
           discount_value: parseFloat(itm.discount_value) || 0,
           valid_from: itmFrom,
           valid_to: itmTo,
+          months: itmMonths,
           change_from_item_id: itm.change_from_item_id || null,
         };
       });
