@@ -16,7 +16,7 @@ export default function Button({
     primary:
       'bg-odoo-600 hover:bg-odoo-700 active:bg-odoo-800 text-white shadow-2xs font-semibold disabled:bg-odoo-300 disabled:cursor-not-allowed',
     secondary:
-      'bg-white hover:bg-slate-50 active:bg-slate-100 text-slate-800 border border-slate-300 shadow-2xs font-medium disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed',
+      'bg-white hover:bg-slate-50 active:bg-slate-100 text-black border border-slate-300 shadow-2xs font-semibold disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed',
     teal:
       'bg-odoo-teal hover:bg-odoo-teal-dark active:bg-teal-800 text-white shadow-2xs font-semibold disabled:bg-teal-300 disabled:cursor-not-allowed',
     success:

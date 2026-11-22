@@ -39,7 +39,7 @@ export default function Topbar({ onToggleSidebar, onQuickStudent, onQuickPayment
             className="min-h-[32px] px-2.5 py-1 text-xs font-semibold whitespace-nowrap"
             title="Purchase & Pay for Course Batches"
           >
-            <span className="hidden xs:inline">Course </span>Paid
+            Course Paid
           </Button>
         )}
 
@@ -50,8 +50,9 @@ export default function Topbar({ onToggleSidebar, onQuickStudent, onQuickPayment
             icon={CreditCard}
             onClick={onQuickPayment}
             className="min-h-[32px] px-2.5 py-1 text-xs font-semibold whitespace-nowrap"
+            title="Collect Fee / Record Payment"
           >
-            <span className="hidden xs:inline">Collect </span>Fee
+            Collect Fee
           </Button>
         )}
 

@@ -9,6 +9,8 @@ import {
   Plus,
   UserPlus,
   CheckCircle,
+  Phone,
+  Calendar,
 } from 'lucide-react';
 import StatCard from '../../components/common/StatCard';
 import Badge from '../../components/common/Badge';
@@ -40,49 +42,59 @@ export default function CashierDashboard() {
   }, []);
 
   if (loading) {
-    return <div className="p-8 text-center text-xs text-slate-500 animate-pulse">Loading Cashier Dashboard...</div>;
+    return (
+      <div className="space-y-4 animate-pulse">
+        <div className="h-8 bg-slate-200 rounded w-1/4"></div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-24 bg-slate-200 rounded-lg"></div>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   const m = data?.metrics || {};
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 sm:space-y-6">
       {/* Odoo Control Panel Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 border-b border-slate-200 pb-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+          <h1 className="text-xl sm:text-2xl font-black text-black tracking-tight">
             Cashier Front Desk & Fee Portal
           </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-xs text-slate-500 mt-0.5 font-medium">
             Admissions, manual fee collection, receipt generation, and demo follow-ups
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+        {/* Quick Shortcut Buttons - easy tap on mobile */}
+        <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 sm:gap-2.5 w-full sm:w-auto">
           <Button
-            size="xs"
+            size="sm"
             variant="primary"
             icon={Plus}
             onClick={() => navigate('/admissions/new')}
-            className="flex-1 sm:flex-initial"
+            className="min-h-[42px] sm:min-h-[34px] px-3.5 py-2 text-xs font-semibold rounded-lg shadow-2xs active:scale-[0.98] transition-all justify-center"
             title="Purchase & Pay for Course Batches"
           >
             Course Paid
           </Button>
           <Button
-            size="xs"
+            size="sm"
             variant="success"
             icon={CreditCard}
             onClick={() => setSelectedAdmissionForPay('any')}
-            className="flex-1 sm:flex-initial"
+            className="min-h-[42px] sm:min-h-[34px] px-3.5 py-2 text-xs font-semibold rounded-lg shadow-2xs active:scale-[0.98] transition-all justify-center"
           >
             Collect Fee
           </Button>
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      {/* Primary KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatCard
           title="Today's Collections"
           value={`₹${(m.today_collections || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
@@ -114,40 +126,51 @@ export default function CashierDashboard() {
       </div>
 
       {/* Upcoming Demo Deadlines Alert Card */}
-      <div className="bg-white border border-amber-300 rounded-lg p-4 shadow-2xs">
-        <div className="flex items-center justify-between pb-3 border-b border-amber-100">
+      <div className="bg-white border border-amber-200/90 rounded-xl p-4 sm:p-5 shadow-2xs">
+        <div className="flex items-center justify-between pb-3.5 border-b border-amber-100 gap-2">
           <div className="flex items-center gap-2">
-            <Clock className="w-5 h-5 text-amber-600" />
+            <div className="p-1.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200">
+              <Clock className="w-4 h-4" />
+            </div>
             <div>
-              <h2 className="text-sm font-bold text-black">Upcoming Demo Trial Deadlines</h2>
-              <p className="text-[11px] text-slate-600">Students with demos ending soon or expired</p>
+              <h2 className="text-sm sm:text-base font-bold text-black">Upcoming Demo Trial Deadlines</h2>
+              <p className="text-[11px] text-slate-500 font-medium">Students with demos ending soon or expired</p>
             </div>
           </div>
           <button
             onClick={() => navigate('/enquiries')}
-            className="text-xs font-semibold text-odoo-600 hover:text-odoo-800 flex items-center gap-1"
+            className="text-xs font-bold text-odoo-700 hover:text-odoo-900 flex items-center gap-1 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2.5 py-1 rounded-md transition-colors shrink-0"
           >
             All Enquiries <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
 
-        <div className="mt-3 divide-y divide-slate-100">
+        <div className="mt-1 divide-y divide-slate-100">
           {(data?.upcoming_demos || []).length === 0 ? (
-            <p className="py-4 text-center text-xs text-slate-500">
+            <p className="py-6 text-center text-xs text-slate-500 font-medium">
               No demo deadlines in the next 5 days.
             </p>
           ) : (
             data.upcoming_demos.map((d) => (
-              <div key={d.id} className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs hover:bg-slate-50/70 px-1 rounded transition-colors">
+              <div
+                key={d.id}
+                className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs hover:bg-slate-50/80 px-2 rounded-lg transition-colors"
+              >
                 <div className="min-w-0 flex-1">
-                  <span className="font-bold text-black truncate block">{d.student_name}</span>
-                  <div className="text-[11px] text-slate-500 truncate">
-                    Subject: <strong className="text-slate-700">{d.interested_subject || 'General'}</strong>
-                    {d.mobile && ` • Mob: ${d.mobile}`}
+                  <span className="font-bold text-black text-xs sm:text-sm truncate block">
+                    {d.student_name}
+                  </span>
+                  <div className="text-[11px] text-slate-600 truncate mt-0.5">
+                    Subject: <strong className="text-black font-semibold">{d.interested_subject || 'General'}</strong>
+                    {d.mobile && (
+                      <span className="ml-2 font-mono text-slate-500">
+                        • Mob: {d.mobile}
+                      </span>
+                    )}
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto shrink-0">
+                <div className="flex items-center gap-2 self-start sm:self-auto shrink-0 w-full sm:w-auto justify-between sm:justify-end">
                   <Badge
                     size="xs"
                     variant={
@@ -170,7 +193,7 @@ export default function CashierDashboard() {
                   </Badge>
 
                   <Button
-                    size="xs"
+                    size="sm"
                     variant="primary"
                     onClick={() =>
                       navigate(
@@ -179,6 +202,7 @@ export default function CashierDashboard() {
                         )}&mobile=${encodeURIComponent(d.mobile || '')}`
                       )
                     }
+                    className="min-h-[36px] sm:min-h-[30px] px-3 py-1.5 text-xs font-semibold rounded-md shadow-2xs"
                   >
                     Complete Admission
                   </Button>
@@ -190,66 +214,67 @@ export default function CashierDashboard() {
       </div>
 
       {/* Due / Outstanding Purchases Table */}
-      <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-2xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-200">
+      <div className="bg-white border border-slate-200/90 rounded-xl p-4 sm:p-5 shadow-2xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3.5 border-b border-slate-100">
           <div>
-            <h2 className="text-sm font-bold text-black">Purchases with Outstanding Fee Balances</h2>
-            <p className="text-[11px] text-slate-500">Follow up with students and record partial or full fee collections</p>
+            <h2 className="text-sm sm:text-base font-bold text-black">Purchases with Outstanding Fee Balances</h2>
+            <p className="text-[11px] text-slate-500 font-medium">Follow up with students and record partial or full fee collections</p>
           </div>
           <button
             onClick={() => navigate('/admissions')}
-            className="text-xs font-semibold text-odoo-600 hover:text-odoo-800 flex items-center gap-1 self-start sm:self-auto"
+            className="text-xs font-bold text-odoo-700 hover:text-odoo-900 flex items-center gap-1 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2.5 py-1 rounded-md transition-colors self-start sm:self-auto"
           >
             All Purchases <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
 
-        <div className="mt-3 overflow-x-auto -webkit-overflow-scrolling-touch">
+        <div className="mt-3.5 overflow-x-auto -webkit-overflow-scrolling-touch rounded-lg border border-slate-200">
           <table className="w-full text-left text-xs min-w-[650px]">
-            <thead className="bg-slate-100/80 text-slate-700 font-bold uppercase tracking-wider text-[11px] border-b border-slate-200">
+            <thead className="bg-slate-50/90 text-slate-700 font-bold uppercase tracking-wider text-[11px] border-b border-slate-200">
               <tr>
-                <th className="p-2.5">Purchase Transaction ID</th>
-                <th className="p-2.5">Student Name</th>
-                <th className="p-2.5 text-right">Total Fee</th>
-                <th className="p-2.5 text-right">Paid</th>
-                <th className="p-2.5 text-right text-rose-700">Due Balance</th>
-                <th className="p-2.5 text-center">Status</th>
-                <th className="p-2.5 text-right">Action</th>
+                <th className="p-3">Purchase Txn ID</th>
+                <th className="p-3">Student Name</th>
+                <th className="p-3 text-right">Total Fee</th>
+                <th className="p-3 text-right">Paid</th>
+                <th className="p-3 text-right text-rose-700">Due Balance</th>
+                <th className="p-3 text-center">Status</th>
+                <th className="p-3 text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {(data?.due_admissions || []).length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-6 text-center text-slate-500">
+                  <td colSpan={7} className="py-8 text-center text-slate-500 font-medium">
                     No pending fee purchases!
                   </td>
                 </tr>
               ) : (
                 data.due_admissions.map((adm) => (
-                  <tr key={adm.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="p-2.5 font-mono font-bold text-black">
+                  <tr key={adm.id} className="hover:bg-purple-50/20 transition-colors">
+                    <td className="p-3 font-mono font-bold text-black">
                       {adm.purchase_transaction_id || adm.admission_number}
                     </td>
-                    <td className="p-2.5 font-semibold text-black">{adm.student_name}</td>
-                    <td className="p-2.5 text-right font-mono text-black">
-                      ₹{adm.total_payable.toFixed(2)}
+                    <td className="p-3 font-semibold text-black">{adm.student_name}</td>
+                    <td className="p-3 text-right font-mono text-black">
+                      ₹{adm.total_payable.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </td>
-                    <td className="p-2.5 text-right font-mono text-emerald-800 font-semibold">
-                      ₹{adm.amount_paid.toFixed(2)}
+                    <td className="p-3 text-right font-mono text-emerald-800 font-semibold">
+                      ₹{adm.amount_paid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </td>
-                    <td className="p-2.5 text-right font-mono text-rose-700 font-bold">
-                      ₹{adm.balance_due.toFixed(2)}
+                    <td className="p-3 text-right font-mono text-rose-700 font-black">
+                      ₹{adm.balance_due.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </td>
-                    <td className="p-2.5 text-center">
+                    <td className="p-3 text-center">
                       <Badge size="xs" variant={adm.payment_status === 'PARTIALLY_PAID' ? 'warning' : 'danger'}>
                         {adm.payment_status}
                       </Badge>
                     </td>
-                    <td className="p-2.5 text-right">
+                    <td className="p-3 text-right">
                       <Button
                         size="xs"
                         variant="success"
                         onClick={() => setSelectedAdmissionForPay(adm.id)}
+                        className="min-h-[30px] px-3 text-xs font-semibold shadow-2xs"
                       >
                         Collect Fee
                       </Button>
