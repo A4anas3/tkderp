@@ -167,11 +167,21 @@ async function runLiveVerification() {
     console.log('PASS: One-click "Send Due Reminder" button is visible and active on Student Profile!');
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'live_student_send_due_reminder.png'), fullPage: true });
 
-    // 9. Test One-Click Send Due Reminder from Subject Detail Page
-    console.log('\n9. Testing Subject Detail Page Reminders Action...');
-    // Fetch a subject ID using fetch from backend
+    // 9. Test One-Click Send Due Reminder from Subject Detail Page (Admin role)
+    console.log('\n9. Testing Subject Detail Page Reminders Action (Logging in as Admin ADM001)...');
+    await page.goto(`${BASE_URL}/login`);
+    await page.waitForSelector('button[type="submit"]', { timeout: 10000 });
+    await page.fill('input[placeholder*="ADM"], input[type="text"]', 'ADM001');
+    await page.fill('input[type="password"]', 'Admin@1234');
+    await page.click('button[type="submit"]');
+    await page.waitForURL('**/dashboard', { timeout: 15000 });
+
+    // Fetch a subject ID using fetch from backend with stored token
     const subsRes = await page.evaluate(async () => {
-      const res = await fetch('/api/subjects');
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/subjects', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       return await res.json();
     });
     const subList = subsRes?.items || subsRes || [];
@@ -185,6 +195,8 @@ async function runLiveVerification() {
       const subjectRemindersBtn = page.locator('button:has-text("Send Due Reminders")');
       console.log('PASS: "Send Due Reminders" button visible in Subject header!');
       await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'live_subject_send_due_reminders.png'), fullPage: true });
+    } else {
+      throw new Error('No subjects found to test Subject Reminders action');
     }
 
     console.log('\n=== ALL LIVE UI & FUNCTIONALITY CHECKS PASSED PERFECTLY ===');

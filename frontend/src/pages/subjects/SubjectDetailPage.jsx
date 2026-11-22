@@ -81,20 +81,10 @@ export default function SubjectDetailPage() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. Fetch from subject revenue report to get live metrics and enrolled roster
-      const reportRes = await reportApi.getSubjectRevenue({});
-      const items = reportRes?.items || [];
-      const foundInReport = items.find(
-        (itm) => String(itm.subject_id) === String(id) || itm.subject_code === id
-      );
-
-      if (foundInReport) {
-        setSubject(foundInReport);
-        setStudents(foundInReport.students || []);
-      } else {
-        // Fallback to subjectApi
-        try {
-          const sData = await subjectApi.get(id);
+      // 1. Fetch core subject info immediately so header and actions render instantly
+      try {
+        const sData = await subjectApi.get(id);
+        if (sData) {
           setSubject({
             subject_id: sData.id,
             subject_name: sData.name,
@@ -110,15 +100,28 @@ export default function SubjectDetailPage() {
             balance_due: 0,
             status: sData.status,
           });
-          setStudents([]);
-        } catch {
-          // If green-card or not found
-          if (id === 'green-card-all-access' || id === 'GREEN-CARD') {
-            const gc = items.find((itm) => itm.subject_code === 'GREEN-CARD');
-            if (gc) {
-              setSubject(gc);
-              setStudents(gc.students || []);
-            }
+          setLoading(false);
+        }
+      } catch {
+        // Fallback to reportApi
+      }
+
+      // 2. Fetch from subject revenue report to get live metrics and enrolled roster
+      const reportRes = await reportApi.getSubjectRevenue({});
+      const items = reportRes?.items || [];
+      const foundInReport = items.find(
+        (itm) => String(itm.subject_id) === String(id) || itm.subject_code === id
+      );
+
+      if (foundInReport) {
+        setSubject(foundInReport);
+        setStudents(foundInReport.students || []);
+      } else if (!subject) {
+        if (id === 'green-card-all-access' || id === 'GREEN-CARD') {
+          const gc = items.find((itm) => itm.subject_code === 'GREEN-CARD');
+          if (gc) {
+            setSubject(gc);
+            setStudents(gc.students || []);
           }
         }
       }
