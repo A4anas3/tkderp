@@ -2,6 +2,7 @@ import uuid
 import calendar
 import csv
 import io
+from collections import defaultdict
 from decimal import Decimal
 from typing import Optional, List, Dict, Any
 from datetime import date, datetime, timedelta
@@ -389,67 +390,78 @@ async def get_batch_revenue_report(
     # Ledger collected map for batches
     batch_collected_map = await get_batch_revenue_from_ledger(db, f_date, t_date)
 
+    where_filter_all = [
+        AdmissionItem.batch_id.is_not(None),
+        Admission.status != "CANCELLED",
+        *date_conds
+    ]
+    today = today_kolkata()
+
+    # Bulk aggregates per batch
+    agg_stmt = (
+        select(
+            AdmissionItem.batch_id,
+            func.coalesce(func.sum(AdmissionItem.net_price), Decimal("0.00")),
+            func.coalesce(func.count(AdmissionItem.id), 0),
+            func.count(case((active_student_subject_filter(AdmissionItem, Admission, today), 1), else_=None)),
+            func.count(case((and_(Admission.status == "ACTIVE", end_col < today), 1), else_=None)),
+            func.count(func.distinct(Admission.student_id))
+        )
+        .join(Admission, AdmissionItem.admission_id == Admission.id)
+        .where(and_(*where_filter_all))
+        .group_by(AdmissionItem.batch_id)
+    )
+    agg_rows = (await db.execute(agg_stmt)).all()
+    batch_metrics = {row[0]: (row[1], row[2], row[3], row[4], row[5]) for row in agg_rows}
+
+    # Bulk fetch enrolled students for all matching batches
+    stu_stmt = (
+        select(AdmissionItem, Admission, Student)
+        .join(Admission, AdmissionItem.admission_id == Admission.id)
+        .join(Student, Admission.student_id == Student.id)
+        .where(and_(*where_filter_all))
+        .order_by(start_col.desc(), Student.name.asc())
+    )
+    stu_rows = (await db.execute(stu_stmt)).all()
+    stu_item_ids = [itm.id for itm, adm, stu in stu_rows]
+    stu_collected_map = await get_item_allocated_collected_map(db, stu_item_ids, f_date, t_date)
+
+    batch_students_map = defaultdict(list)
+    for itm, adm, stu in stu_rows:
+        itm_coll = stu_collected_map.get(itm.id, Decimal("0.00"))
+        c_info = _evaluate_student_cycle(
+            itm.valid_from, itm.valid_to, adm.admission_date,
+            itm.balance_due, itm.net_price, itm_coll
+        )
+        batch_students_map[itm.batch_id].append({
+            "item_id": str(itm.id),
+            "admission_id": str(adm.id),
+            "admission_number": adm.admission_number,
+            "admission_date": str(adm.admission_date),
+            "student_id": str(stu.id),
+            "student_code": stu.student_code,
+            "student_name": stu.name,
+            "mobile": stu.mobile or "",
+            "father_name": stu.father_name or "",
+            "photo_url": stu.photo_url,
+            "batch_id": str(itm.batch_id),
+            "batch_name": "",
+            "teacher_name": itm.teacher_name_snapshot or "Faculty",
+            "hall_number": itm.hall_number_snapshot or "Main",
+            **c_info
+        })
+
     report = []
     for b in batches:
-        where_filter = [
-            AdmissionItem.batch_id == b.id,
-            Admission.status != "CANCELLED",
-            *date_conds
-        ]
-
-        today = today_kolkata()
-        stmt = (
-            select(
-                func.coalesce(func.sum(AdmissionItem.net_price), Decimal("0.00")),
-                func.coalesce(func.count(AdmissionItem.id), 0),
-                func.count(case((active_student_subject_filter(AdmissionItem, Admission, today), 1), else_=None)),
-                func.count(case((and_(Admission.status == "ACTIVE", end_col < today), 1), else_=None)),
-                func.count(func.distinct(Admission.student_id))
-            )
-            .join(Admission, AdmissionItem.admission_id == Admission.id)
-            .where(and_(*where_filter))
-        )
-        res = await db.execute(stmt)
-        booked, count, active_enr, inactive_enr, uniq_stu = res.one()
-
+        booked, count, active_enr, inactive_enr, uniq_stu = batch_metrics.get(b.id, (Decimal("0.00"), 0, 0, 0, 0))
         collected = batch_collected_map.get(b.id, Decimal("0.00"))
-
-        # Fetch enrolled students
-        stu_stmt = (
-            select(AdmissionItem, Admission, Student)
-            .join(Admission, AdmissionItem.admission_id == Admission.id)
-            .join(Student, Admission.student_id == Student.id)
-            .where(and_(*where_filter))
-            .order_by(start_col.desc(), Student.name.asc())
-        )
-        stu_rows = (await db.execute(stu_stmt)).all()
-        stu_item_ids = [itm.id for itm, adm, stu in stu_rows]
-        stu_collected_map = await get_item_allocated_collected_map(db, stu_item_ids, f_date, t_date)
-
-        batch_students = []
-        for itm, adm, stu in stu_rows:
-            itm_coll = stu_collected_map.get(itm.id, Decimal("0.00"))
-            c_info = _evaluate_student_cycle(
-                itm.valid_from, itm.valid_to, adm.admission_date,
-                itm.balance_due, itm.net_price, itm_coll
-            )
-            batch_students.append({
-                "item_id": str(itm.id),
-                "admission_id": str(adm.id),
-                "admission_number": adm.admission_number,
-                "admission_date": str(adm.admission_date),
-                "student_id": str(stu.id),
-                "student_code": stu.student_code,
-                "student_name": stu.name,
-                "mobile": stu.mobile or "",
-                "father_name": stu.father_name or "",
-                "photo_url": stu.photo_url,
-                "batch_id": str(b.id),
-                "batch_name": b.name,
-                "teacher_name": b.teacher_name_snapshot or "Faculty",
-                "hall_number": b.hall_number or "Main",
-                **c_info
-            })
+        b_students = batch_students_map.get(b.id, [])
+        for s in b_students:
+            s["batch_name"] = b.name
+            if not s["teacher_name"] or s["teacher_name"] == "Faculty":
+                s["teacher_name"] = b.teacher_name_snapshot or "Faculty"
+            if not s["hall_number"] or s["hall_number"] == "Main":
+                s["hall_number"] = b.hall_number or "Main"
 
         report.append({
             "batch_id": str(b.id),
@@ -470,7 +482,7 @@ async def get_batch_revenue_report(
             "balance_due": float(max(Decimal("0.00"), booked - collected)),
             "dues": float(max(Decimal("0.00"), booked - collected)),
             "status": b.status,
-            "students": batch_students
+            "students": b_students
         })
 
     if format == "csv":
@@ -527,81 +539,97 @@ async def get_teacher_revenue_report(
     teachers_res = await db.execute(select(Teacher).order_by(Teacher.name.asc()))
     teachers = teachers_res.scalars().all()
 
+    # Preload batches and subjects associated with teachers
+    b_res = await db.execute(select(Batch.id, Batch.teacher_id).where(Batch.teacher_id.is_not(None)))
+    t_batch_ids_map = defaultdict(list)
+    batch_to_teacher = {}
+    for b_id, t_id in b_res.all():
+        t_batch_ids_map[t_id].append(b_id)
+        batch_to_teacher[b_id] = t_id
+
+    s_res = await db.execute(select(Subject.id, Subject.teacher_id).where(Subject.teacher_id.is_not(None)))
+    t_subj_ids_map = defaultdict(list)
+    subj_to_teacher = {}
+    for s_id, t_id in s_res.all():
+        t_subj_ids_map[t_id].append(s_id)
+        subj_to_teacher[s_id] = t_id
+
     # Ledger collected map for teachers
     teacher_collected_map = await get_teacher_revenue_from_ledger(db, f_date, t_date)
 
+    # Bulk fetch all relevant student / admission items
+    t_stu_stmt = (
+        select(AdmissionItem, Admission, Student, Batch, Subject)
+        .join(Admission, AdmissionItem.admission_id == Admission.id)
+        .join(Student, Admission.student_id == Student.id)
+        .outerjoin(Batch, AdmissionItem.batch_id == Batch.id)
+        .outerjoin(Subject, AdmissionItem.subject_id == Subject.id)
+        .where(and_(Admission.status != "CANCELLED", *date_conds))
+        .order_by(start_col.desc(), Student.name.asc())
+    )
+    all_t_stu_rows = (await db.execute(t_stu_stmt)).all()
+    all_item_ids = [itm.id for itm, adm, stu, bch, sub in all_t_stu_rows]
+    all_t_collected_map = await get_item_allocated_collected_map(db, all_item_ids, f_date, t_date)
+
+    # Group students and compute booked/count per teacher
+    t_students_map = defaultdict(list)
+    t_metrics = defaultdict(lambda: {"booked": Decimal("0.00"), "count": 0})
+
+    for itm, adm, stu, bch, sub in all_t_stu_rows:
+        matching_t_ids = set()
+        if itm.teacher_id:
+            matching_t_ids.add(itm.teacher_id)
+        if bch and bch.teacher_id:
+            matching_t_ids.add(bch.teacher_id)
+        elif itm.batch_id in batch_to_teacher:
+            matching_t_ids.add(batch_to_teacher[itm.batch_id])
+        if sub and sub.teacher_id:
+            matching_t_ids.add(sub.teacher_id)
+        elif itm.subject_id in subj_to_teacher:
+            matching_t_ids.add(subj_to_teacher[itm.subject_id])
+
+        if not matching_t_ids:
+            continue
+
+        itm_coll = all_t_collected_map.get(itm.id, Decimal("0.00"))
+        c_info = _evaluate_student_cycle(
+            itm.valid_from, itm.valid_to, adm.admission_date,
+            itm.balance_due, itm.net_price, itm_coll
+        )
+
+        stu_entry = {
+            "item_id": str(itm.id),
+            "admission_id": str(adm.id),
+            "admission_number": adm.admission_number,
+            "admission_date": str(adm.admission_date),
+            "student_id": str(stu.id),
+            "student_code": stu.student_code,
+            "student_name": stu.name,
+            "mobile": stu.mobile or "",
+            "father_name": stu.father_name or "",
+            "photo_url": stu.photo_url,
+            "subject_id": str(sub.id) if sub else (str(itm.subject_id) if itm.subject_id else None),
+            "subject_name": sub.name if sub else (itm.item_name_snapshot or "Subject"),
+            "subject_code": sub.subject_code if sub else "",
+            "batch_id": str(bch.id) if bch else None,
+            "batch_name": bch.name if bch else "Direct Subject",
+            "hall_number": itm.hall_number_snapshot or (bch.hall_number if bch else (sub.hall_number if sub and sub.hall_number else "Main")),
+            **c_info
+        }
+
+        for t_id in matching_t_ids:
+            t_students_map[t_id].append(stu_entry)
+            t_metrics[t_id]["booked"] += itm.net_price or Decimal("0.00")
+            t_metrics[t_id]["count"] += 1
+
     report = []
     for t in teachers:
-        b_res = await db.execute(select(Batch.id).where(Batch.teacher_id == t.id))
-        b_ids = [b for b, in b_res.all()]
-        s_res = await db.execute(select(Subject.id).where(Subject.teacher_id == t.id))
-        s_ids = [s for s, in s_res.all()]
-
-        where_cond = [AdmissionItem.teacher_id == t.id]
-        if b_ids:
-            where_cond.append(AdmissionItem.batch_id.in_(b_ids))
-        if s_ids:
-            where_cond.append(AdmissionItem.subject_id.in_(s_ids))
-
-        teacher_filter = [
-            or_(*where_cond),
-            Admission.status != "CANCELLED",
-            *date_conds
-        ]
-
-        stmt = (
-            select(
-                func.coalesce(func.sum(AdmissionItem.net_price), Decimal("0.00")),
-                func.coalesce(func.count(AdmissionItem.id), 0)
-            )
-            .join(Admission, AdmissionItem.admission_id == Admission.id)
-            .where(and_(*teacher_filter))
-        )
-        res = await db.execute(stmt)
-        booked, count = res.one()
-
+        b_ids = t_batch_ids_map.get(t.id, [])
+        t_students = t_students_map.get(t.id, [])
+        m = t_metrics[t.id]
+        booked = m["booked"]
+        count = m["count"]
         collected = teacher_collected_map.get(t.id, Decimal("0.00"))
-
-        # Fetch enrolled students under this teacher
-        t_stu_stmt = (
-            select(AdmissionItem, Admission, Student, Batch, Subject)
-            .join(Admission, AdmissionItem.admission_id == Admission.id)
-            .join(Student, Admission.student_id == Student.id)
-            .outerjoin(Batch, AdmissionItem.batch_id == Batch.id)
-            .outerjoin(Subject, AdmissionItem.subject_id == Subject.id)
-            .where(and_(*teacher_filter))
-            .order_by(start_col.desc(), Student.name.asc())
-        )
-        t_stu_rows = (await db.execute(t_stu_stmt)).all()
-        t_item_ids = [itm.id for itm, adm, stu, bch, sub in t_stu_rows]
-        t_collected_map = await get_item_allocated_collected_map(db, t_item_ids, f_date, t_date)
-
-        t_students = []
-        for itm, adm, stu, bch, sub in t_stu_rows:
-            itm_coll = t_collected_map.get(itm.id, Decimal("0.00"))
-            c_info = _evaluate_student_cycle(
-                itm.valid_from, itm.valid_to, adm.admission_date,
-                itm.balance_due, itm.net_price, itm_coll
-            )
-            t_students.append({
-                "item_id": str(itm.id),
-                "admission_id": str(adm.id),
-                "admission_number": adm.admission_number,
-                "admission_date": str(adm.admission_date),
-                "student_id": str(stu.id),
-                "student_code": stu.student_code,
-                "student_name": stu.name,
-                "mobile": stu.mobile or "",
-                "father_name": stu.father_name or "",
-                "photo_url": stu.photo_url,
-                "subject_id": str(sub.id) if sub else (str(itm.subject_id) if itm.subject_id else None),
-                "subject_name": sub.name if sub else (itm.item_name_snapshot or "Subject"),
-                "subject_code": sub.subject_code if sub else "",
-                "batch_id": str(bch.id) if bch else None,
-                "batch_name": bch.name if bch else "Direct Subject",
-                "hall_number": itm.hall_number_snapshot or (bch.hall_number if bch else (sub.hall_number if sub and sub.hall_number else "Main")),
-                **c_info
-            })
 
         t_sub_names = sorted(list({s.get("subject_name") for s in t_students if s.get("subject_name")}))
         report.append({

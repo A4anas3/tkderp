@@ -137,7 +137,7 @@ async def build_due_reminders(db: AsyncSession, as_of_date: Optional[date] = Non
                 select(ReminderQueue)
                 .where(ReminderQueue.admission_id == adm.id, ReminderQueue.status == "pending")
             )
-            existing_rq = (await db.execute(update_stmt)).scalar_one_or_none()
+            existing_rq = (await db.execute(update_stmt)).scalars().first()
             if existing_rq:
                 existing_rq.due_amount = adm.balance_due
                 existing_rq.message = msg
