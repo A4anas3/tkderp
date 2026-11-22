@@ -944,3 +944,125 @@ async def test_green_card_multi_admission_integrity():
         assert st_check3["has_green_card"] is False
 
 
+@pytest.mark.asyncio
+async def test_cancel_expired_or_completed_admission_item_fails():
+    """
+    Test:
+    1. Expired admission item (valid_to in past, or status EXPIRED):
+       - can_cancel is False in response.
+       - Cancel endpoint /admissions/{id}/cancel returns 400 error.
+       - Revoke endpoint /admissions/{id}/revoke returns 400 error.
+    2. Completed admission item (status COMPLETED):
+       - can_cancel is False in response.
+       - Cancel endpoint returns 400 error.
+    3. Active upcoming admission item:
+       - can_cancel is True in response.
+       - Cancel endpoint succeeds with 200 (when unpaid).
+    """
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        adm_login = await client.post("/api/auth/login", json={"username": "ADM001", "password": "Admin@1234"})
+        admin_headers = {"Authorization": f"Bearer {adm_login.json()['access_token']}"}
+
+        st_res = await client.post("/api/students", json={
+            "name": f"Cancel Expired Test {uuid.uuid4().hex[:6]}",
+            "mobile": f"94{uuid.uuid4().int % 100000000:08d}"
+        }, headers=admin_headers)
+        assert st_res.status_code == 201
+        st = st_res.json()
+
+        b_res = await client.get("/api/batches/all", headers=admin_headers)
+        sub = b_res.json()[0]["subjects"][0]
+        batch_id = b_res.json()[0]["id"]
+
+        # 1. Admission with expired validity date (e.g., last month)
+        adm_expired_res = await client.post("/api/admissions", json={
+            "student_id": st["id"],
+            "admission_date": "2026-10-01",
+            "valid_from": "2026-10-01",
+            "valid_to": "2026-10-31",
+            "items": [
+                {
+                    "item_type": "BATCH_SUBJECT",
+                    "batch_id": batch_id,
+                    "subject_id": sub["subject_id"],
+                    "item_name_snapshot": "Expired Subject Test",
+                    "original_price": 1000.0,
+                    "valid_from": "2026-10-01",
+                    "valid_to": "2026-10-31"
+                }
+            ]
+        }, headers=admin_headers)
+        assert adm_expired_res.status_code == 201
+        adm_expired = adm_expired_res.json()
+
+        # can_cancel must be False on admission and item
+        assert adm_expired["can_cancel"] is False
+        assert adm_expired["items"][0]["can_cancel"] is False
+
+        # Attempting to cancel via /cancel endpoint must fail with 400
+        cancel_expired_res = await client.post(f"/api/admissions/{adm_expired['id']}/cancel", headers=admin_headers)
+        assert cancel_expired_res.status_code == 400
+        err_msg = cancel_expired_res.json()["detail"].lower()
+        assert "expired" in err_msg or "cannot cancel" in err_msg
+
+        # Attempting to revoke via /revoke endpoint must also fail with 400
+        revoke_expired_res = await client.post(f"/api/admissions/{adm_expired['id']}/revoke", json={
+            "revoke_type": "DROPOUT_NO_REFUND",
+            "scope": "WHOLE_SLIP",
+            "reason": "Trying to cancel expired batch"
+        }, headers=admin_headers)
+        assert revoke_expired_res.status_code == 400
+        err_msg2 = revoke_expired_res.json()["detail"].lower()
+        assert "expired" in err_msg2 or "cannot cancel" in err_msg2
+
+        # 2. Admission with COMPLETED status
+        from app.database.session import AsyncSessionLocal
+        from app.modules.admissions.models import Admission, AdmissionItem
+
+        async with AsyncSessionLocal() as session:
+            db_adm = await session.get(Admission, uuid.UUID(adm_expired["id"]))
+            db_adm.status = "COMPLETED"
+            for itm in db_adm.items:
+                itm.status = "COMPLETED"
+            await session.commit()
+
+        # Get via API to verify computed can_cancel
+        adm_completed_res = await client.get(f"/api/admissions/{adm_expired['id']}", headers=admin_headers)
+        assert adm_completed_res.status_code == 200
+        assert adm_completed_res.json()["can_cancel"] is False
+        assert adm_completed_res.json()["items"][0]["can_cancel"] is False
+
+        cancel_completed_res = await client.post(f"/api/admissions/{adm_expired['id']}/cancel", headers=admin_headers)
+        assert cancel_completed_res.status_code == 400
+
+        # 3. Active upcoming admission item (valid_to in future)
+        adm_active_res = await client.post("/api/admissions", json={
+            "student_id": st["id"],
+            "admission_date": "2026-11-21",
+            "valid_from": "2026-11-21",
+            "valid_to": "2026-12-20",
+            "items": [
+                {
+                    "item_type": "BATCH_SUBJECT",
+                    "batch_id": batch_id,
+                    "subject_id": sub["subject_id"],
+                    "item_name_snapshot": "Active Subject Test",
+                    "original_price": 1000.0,
+                    "valid_from": "2026-11-21",
+                    "valid_to": "2026-12-20"
+                }
+            ]
+        }, headers=admin_headers)
+        assert adm_active_res.status_code == 201
+        adm_active = adm_active_res.json()
+
+        assert adm_active["can_cancel"] is True
+        assert adm_active["items"][0]["can_cancel"] is True
+
+        # Unpaid active admission can be cancelled successfully
+        cancel_active_res = await client.post(f"/api/admissions/{adm_active['id']}/cancel", headers=admin_headers)
+        assert cancel_active_res.status_code == 200
+        assert cancel_active_res.json()["status"] == "CANCELLED"
+
+
+

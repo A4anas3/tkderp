@@ -852,6 +852,44 @@ async def cancel_admission_service(
 
     items = await _ensure_items_loaded(admission, db)
 
+    today = date.today()
+
+    # Expired or completed guards (admission and item level)
+    if admission.status in ("EXPIRED", "COMPLETED"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot cancel admission: admission status is {admission.status}. Expired or completed admissions cannot be cancelled."
+        )
+
+    if getattr(admission, "access_status", "ACTIVE") == "EXPIRED":
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot cancel admission: admission access is EXPIRED. Expired admissions cannot be cancelled."
+        )
+
+    if admission.valid_to and admission.valid_to < today:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot cancel admission: validity period ended on {admission.valid_to}. Expired admissions cannot be cancelled."
+        )
+
+    for itm in items:
+        if itm.status in ("EXPIRED", "COMPLETED"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot cancel admission item '{itm.item_name_snapshot}': status is {itm.status}. Expired or completed items cannot be cancelled."
+            )
+        if getattr(itm, "access_status", "ACTIVE") == "EXPIRED":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot cancel admission item '{itm.item_name_snapshot}': access is EXPIRED. Expired items cannot be cancelled."
+            )
+        if itm.valid_to and itm.valid_to < today:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot cancel admission item '{itm.item_name_snapshot}': validity period ended on {itm.valid_to}. Expired items cannot be cancelled."
+            )
+
     # Net money paid check
     if admission.amount_paid > Decimal("0.00"):
         raise HTTPException(
@@ -1008,6 +1046,40 @@ async def revoke_admission_service(
             raise HTTPException(status_code=409, detail="All selected subject lines are already REVOKED / DISCONTINUED")
 
     eff_date = effective_date or date.today()
+
+    if admission.status in ("EXPIRED", "COMPLETED"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot cancel or revoke admission: admission status is {admission.status}. Expired or completed admissions cannot be cancelled."
+        )
+    if getattr(admission, "access_status", "ACTIVE") == "EXPIRED":
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot cancel or revoke admission: admission access is EXPIRED. Expired admissions cannot be cancelled."
+        )
+    if admission.valid_to and admission.valid_to < eff_date:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot cancel or revoke admission: validity period ended on {admission.valid_to}. Expired admissions cannot be cancelled."
+        )
+
+    for itm in target_items:
+        if itm.status in ("EXPIRED", "COMPLETED"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot cancel or revoke admission item '{itm.item_name_snapshot}': status is {itm.status}. Expired or completed items cannot be cancelled."
+            )
+        if getattr(itm, "access_status", "ACTIVE") == "EXPIRED":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot cancel or revoke admission item '{itm.item_name_snapshot}': access is EXPIRED. Expired items cannot be cancelled."
+            )
+        if itm.valid_to and itm.valid_to < eff_date:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot cancel or revoke admission item '{itm.item_name_snapshot}': validity period ended on {itm.valid_to}. Expired items cannot be cancelled."
+            )
+
     before_status = admission.status
     before_paid = admission.amount_paid
     before_due = admission.balance_due

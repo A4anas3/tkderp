@@ -1,7 +1,7 @@
 from decimal import Decimal
 from typing import Optional, List
 from datetime import date, datetime
-from pydantic import BaseModel, Field, ConfigDict, field_validator
+from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 import uuid
 
 class AdmissionItemCreate(BaseModel):
@@ -61,6 +61,27 @@ class AdmissionItemResponse(BaseModel):
     share_type: str = "PERCENT"
     share_value: Decimal = Decimal("0.00")
     share_percent: Optional[Decimal] = None
+    can_cancel: bool = True
+
+    @model_validator(mode="before")
+    @classmethod
+    def set_computed_can_cancel(cls, data):
+        if isinstance(data, dict):
+            if "can_cancel" not in data or data["can_cancel"] is None:
+                st = data.get("status", "ACTIVE")
+                acc = data.get("access_status", "ACTIVE")
+                vt = data.get("valid_to")
+                today = date.today()
+                if isinstance(vt, str):
+                    try:
+                        vt = date.fromisoformat(vt)
+                    except Exception:
+                        pass
+                if st in ("EXPIRED", "COMPLETED", "DISCONTINUED") or acc in ("EXPIRED", "REVOKED") or (isinstance(vt, date) and vt < today):
+                    data["can_cancel"] = False
+                else:
+                    data["can_cancel"] = True
+        return data
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -158,6 +179,48 @@ class AdmissionResponse(BaseModel):
     revoked_by: Optional[uuid.UUID] = None
     created_by: Optional[uuid.UUID] = None
     items: List[AdmissionItemResponse] = Field(default_factory=list)
+    can_cancel: bool = True
+
+    @model_validator(mode="before")
+    @classmethod
+    def set_computed_admission_can_cancel(cls, data):
+        if isinstance(data, dict):
+            if "can_cancel" not in data or data["can_cancel"] is None:
+                st = data.get("status", "ACTIVE")
+                acc = data.get("access_status", "ACTIVE")
+                doc = data.get("document_status", "VALID")
+                vt = data.get("valid_to")
+                today = date.today()
+                if isinstance(vt, str):
+                    try:
+                        vt = date.fromisoformat(vt)
+                    except Exception:
+                        pass
+                if st in ("CANCELLED", "REVOKED", "EXPIRED", "COMPLETED") or acc in ("EXPIRED", "REVOKED") or doc == "VOID" or (isinstance(vt, date) and vt < today):
+                    data["can_cancel"] = False
+                else:
+                    items = data.get("items") or []
+                    has_expired = False
+                    has_cancellable = False
+                    for i in items:
+                        i_vt = i.get("valid_to") if isinstance(i, dict) else getattr(i, "valid_to", None)
+                        if isinstance(i_vt, str):
+                            try:
+                                i_vt = date.fromisoformat(i_vt)
+                            except Exception:
+                                pass
+                        i_st = i.get("status", "ACTIVE") if isinstance(i, dict) else getattr(i, "status", "ACTIVE")
+                        i_acc = i.get("access_status", "ACTIVE") if isinstance(i, dict) else getattr(i, "access_status", "ACTIVE")
+                        if i_st in ("EXPIRED", "COMPLETED") or i_acc == "EXPIRED" or (isinstance(i_vt, date) and i_vt < today):
+                            has_expired = True
+                            break
+                        if i_st not in ("DISCONTINUED", "COMPLETED", "EXPIRED") and i_acc not in ("REVOKED", "EXPIRED"):
+                            has_cancellable = True
+                    if has_expired or (items and not has_cancellable):
+                        data["can_cancel"] = False
+                    else:
+                        data["can_cancel"] = True
+        return data
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -199,6 +262,7 @@ class AdmissionSlipsResponse(BaseModel):
     valid_from: Optional[date] = None
     valid_to: Optional[date] = None
     written_off_amount: Decimal = Decimal("0.00")
+    can_cancel: bool = True
     items: List[AdmissionItemResponse] = Field(default_factory=list)
     slips: List[SlipItemResponse] = Field(default_factory=list)
 

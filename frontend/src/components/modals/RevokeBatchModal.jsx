@@ -35,9 +35,14 @@ export default function RevokeBatchModal({
 
   const maxPaid = Number(admission.amount_paid || 0);
   const txnId = admission.purchase_transaction_id || admission.admission_number;
+  const isCannotCancel = admission.can_cancel === false;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isCannotCancel) {
+      error('Cannot cancel an expired or completed admission.');
+      return;
+    }
     if (!reason.trim()) {
       error('Please provide a mandatory reason for cancelling this batch');
       return;
@@ -209,6 +214,12 @@ export default function RevokeBatchModal({
           </div>
         )}
 
+        {isCannotCancel && (
+          <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg text-xs font-semibold">
+            This admission or batch is expired or completed and cannot be cancelled.
+          </div>
+        )}
+
         {/* Confirmation Buttons */}
         <div className="pt-3 flex flex-col-reverse sm:flex-row sm:justify-end gap-2 border-t border-slate-100">
           <Button variant="secondary" onClick={onClose} disabled={submitting} className="w-full sm:w-auto">
@@ -217,6 +228,7 @@ export default function RevokeBatchModal({
           <Button
             type="submit"
             variant="danger"
+            disabled={isCannotCancel}
             loading={submitting}
             icon={Undo2}
             className="w-full sm:w-auto"

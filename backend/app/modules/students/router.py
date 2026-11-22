@@ -990,7 +990,8 @@ async def get_student_active_enrollment(
             "is_expiring_soon": days_remaining is not None and 0 <= days_remaining <= 7,
             "is_expired": is_item_expired,
             "is_overdue": is_item_overdue,
-            "lifecycle_reason": item.lifecycle_reason or adm.revocation_reason
+            "lifecycle_reason": item.lifecycle_reason or adm.revocation_reason,
+            "can_cancel": item.can_cancel
         }
 
         if item.item_type == "GREEN_CARD":

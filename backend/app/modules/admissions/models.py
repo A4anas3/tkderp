@@ -73,6 +73,25 @@ class Admission(BaseModel):
     def student_father_name(self) -> Optional[str]:
         return self.student.father_name if self.student else None
 
+    @property
+    def can_cancel(self) -> bool:
+        today = date.today()
+        if getattr(self, "document_status", "VALID") == "VOID":
+            return False
+        if self.status in ("CANCELLED", "REVOKED", "EXPIRED", "COMPLETED"):
+            return False
+        if getattr(self, "access_status", "ACTIVE") in ("EXPIRED", "REVOKED"):
+            return False
+        if self.valid_to and self.valid_to < today:
+            return False
+        if "items" in self.__dict__ and self.items:
+            for itm in self.items:
+                if itm.status in ("EXPIRED", "COMPLETED") or getattr(itm, "access_status", "ACTIVE") == "EXPIRED" or (itm.valid_to and itm.valid_to < today):
+                    return False
+            if not any(itm.can_cancel for itm in self.items):
+                return False
+        return True
+
     # Relationships
     items: Mapped[List["AdmissionItem"]] = relationship("AdmissionItem", back_populates="admission", cascade="all, delete-orphan", lazy="selectin")
     student: Mapped["app.modules.students.models.Student"] = relationship("app.modules.students.models.Student", lazy="joined")
@@ -144,3 +163,14 @@ class AdmissionItem(BaseModel):
     admission: Mapped["Admission"] = relationship("Admission", back_populates="items")
     student: Mapped[Optional["app.modules.students.models.Student"]] = relationship("app.modules.students.models.Student", lazy="joined")
     renewed_from_item: Mapped[Optional["AdmissionItem"]] = relationship("AdmissionItem", remote_side="AdmissionItem.id", lazy="selectin")
+
+    @property
+    def can_cancel(self) -> bool:
+        today = date.today()
+        if self.status in ("EXPIRED", "COMPLETED", "DISCONTINUED"):
+            return False
+        if getattr(self, "access_status", "ACTIVE") in ("EXPIRED", "REVOKED"):
+            return False
+        if self.valid_to and self.valid_to < today:
+            return False
+        return True

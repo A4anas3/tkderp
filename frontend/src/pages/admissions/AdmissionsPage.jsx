@@ -236,7 +236,7 @@ export default function AdmissionsPage() {
             </Button>
           )}
 
-          {isAdmin && a.status === 'ACTIVE' && (
+          {isAdmin && a.can_cancel && (
             <button
               onClick={() => handleCancelAdmission(a)}
               title="Cancel Purchase"
@@ -448,7 +448,7 @@ export default function AdmissionsPage() {
                       Detail
                     </Button>
 
-                    {isAdmin && a.status === 'ACTIVE' && (
+                    {isAdmin && a.can_cancel && (
                       <button
                         onClick={() => handleCancelAdmission(a)}
                         title="Cancel Purchase"

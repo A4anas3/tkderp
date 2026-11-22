@@ -215,7 +215,7 @@ export default function AdmissionDetailPage() {
             </Button>
           )}
 
-          {isAdmin && isActive && (
+          {isAdmin && isActive && admission.can_cancel && (
             <Button
               variant="danger"
               icon={ShieldAlert}

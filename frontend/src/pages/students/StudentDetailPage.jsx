@@ -1840,6 +1840,7 @@ export default function StudentDetailPage() {
               {admissions.map((adm) => {
                 const isBatchCancelled = adm.status === 'REVOKED' || adm.status === 'CANCELLED';
                 const validity = getValidityStatus(adm);
+                const canCancelBatch = Boolean(adm.can_cancel && (adm.items?.length > 0 ? adm.items.every((i) => i.can_cancel) : true));
                 return (
                   <div
                     key={adm.id}
@@ -2018,7 +2019,7 @@ export default function StudentDetailPage() {
                         </>
                       ) : (
                         <>
-                          {isAdmin && (
+                          {isAdmin && canCancelBatch && (
                             <Button
                               size="xs"
                               variant="danger"
@@ -2071,6 +2072,7 @@ export default function StudentDetailPage() {
                   {admissions.map((adm) => {
                     const isBatchCancelled = adm.status === 'REVOKED' || adm.status === 'CANCELLED';
                     const validity = getValidityStatus(adm);
+                    const canCancelBatch = Boolean(adm.can_cancel && (adm.items?.length > 0 ? adm.items.every((i) => i.can_cancel) : true));
                     return (
                       <tr key={adm.id} className={`hover:bg-slate-50 transition ${isBatchCancelled ? 'bg-rose-50/40 opacity-85' : ''}`}>
                         <td className="p-2.5 font-mono font-bold text-black">
@@ -2277,7 +2279,7 @@ export default function StudentDetailPage() {
                               </>
                             ) : (
                               <>
-                                {isAdmin && (
+                                {isAdmin && canCancelBatch && (
                                   <Button
                                     size="xs"
                                     variant="danger"
