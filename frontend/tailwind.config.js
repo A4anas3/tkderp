@@ -2,7 +2,13 @@
 export default {
   content: [
     "./index.html",
-    "./src/**/*.{js,jsx}",
+    "./src/**/*.{js,jsx,ts,tsx}",
+  ],
+  safelist: [
+    {
+      pattern: /(bg|text|border|ring|from|to|via)-(odoo)(-[a-z0-9]+)?/,
+      variants: ['hover', 'focus', 'active', 'disabled', 'sm', 'md', 'lg'],
+    },
   ],
   theme: {
     extend: {
@@ -19,6 +25,7 @@ export default {
           700: '#5e3c55',
           800: '#4b3044',
           900: '#382433',
+          950: '#241421',
           teal: '#017e84',
           'teal-dark': '#006b70',
           'teal-light': '#e6f4f4',

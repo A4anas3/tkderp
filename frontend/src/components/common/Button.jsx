@@ -14,11 +14,11 @@ export default function Button({
 }) {
   const variants = {
     primary:
-      'bg-odoo-600 hover:bg-odoo-700 active:bg-odoo-800 text-white shadow-2xs font-semibold disabled:bg-odoo-300 disabled:cursor-not-allowed',
+      'btn-odoo-primary bg-odoo-600 hover:bg-odoo-700 active:bg-odoo-800 text-white shadow-2xs font-semibold disabled:bg-odoo-300 disabled:cursor-not-allowed',
     secondary:
       'bg-white hover:bg-slate-50 active:bg-slate-100 text-black border border-slate-300 shadow-2xs font-semibold disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed',
     teal:
-      'bg-odoo-teal hover:bg-odoo-teal-dark active:bg-teal-800 text-white shadow-2xs font-semibold disabled:bg-teal-300 disabled:cursor-not-allowed',
+      'btn-odoo-teal bg-odoo-teal hover:bg-odoo-teal-dark active:bg-teal-800 text-white shadow-2xs font-semibold disabled:bg-teal-300 disabled:cursor-not-allowed',
     success:
       'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-2xs font-semibold disabled:bg-emerald-300 disabled:cursor-not-allowed',
     danger:

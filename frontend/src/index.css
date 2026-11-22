@@ -33,6 +33,73 @@ input:focus, select:focus, textarea:focus {
   box-shadow: 0 0 0 1px #714b67;
 }
 
+/* Explicit Odoo palette & primary button styles (fail-safe durable baseline) */
+.btn-odoo-primary {
+  background-color: #714b67 !important;
+  color: #ffffff !important;
+}
+.btn-odoo-primary:hover:not(:disabled) {
+  background-color: #5e3c55 !important;
+}
+.btn-odoo-primary:active:not(:disabled) {
+  background-color: #4b3044 !important;
+}
+.btn-odoo-primary:disabled {
+  background-color: #c99ebf !important;
+  color: #ffffff !important;
+  cursor: not-allowed !important;
+}
+
+.btn-odoo-teal {
+  background-color: #017e84 !important;
+  color: #ffffff !important;
+}
+.btn-odoo-teal:hover:not(:disabled) {
+  background-color: #006b70 !important;
+}
+.btn-odoo-teal:active:not(:disabled) {
+  background-color: #005256 !important;
+}
+.btn-odoo-teal:disabled {
+  background-color: #5cc2c7 !important;
+  color: #ffffff !important;
+  cursor: not-allowed !important;
+}
+
+/* Fallback definitions for odoo brand utilities */
+.bg-odoo-50 { background-color: #f8f4f7; }
+.bg-odoo-100 { background-color: #efe7ed; }
+.bg-odoo-200 { background-color: #dec4da; }
+.bg-odoo-300 { background-color: #c99ebf; }
+.bg-odoo-400 { background-color: #a46e96; }
+.bg-odoo-500 { background-color: #8a567c; }
+.bg-odoo-600 { background-color: #714b67; }
+.bg-odoo-700 { background-color: #5e3c55; }
+.bg-odoo-800 { background-color: #4b3044; }
+.bg-odoo-900 { background-color: #382433; }
+.bg-odoo-950 { background-color: #241421; }
+.bg-odoo-teal { background-color: #017e84; }
+.bg-odoo-teal-dark { background-color: #006b70; }
+.bg-odoo-teal-light { background-color: #e6f4f4; }
+
+.text-odoo-400 { color: #a46e96; }
+.text-odoo-500 { color: #8a567c; }
+.text-odoo-600 { color: #714b67; }
+.text-odoo-700 { color: #5e3c55; }
+.text-odoo-800 { color: #4b3044; }
+.text-odoo-900 { color: #382433; }
+.text-odoo-950 { color: #241421; }
+.text-odoo-teal { color: #017e84; }
+
+.border-odoo-200 { border-color: #dec4da; }
+.border-odoo-300 { border-color: #c99ebf; }
+.border-odoo-400 { border-color: #a46e96; }
+.border-odoo-500 { border-color: #8a567c; }
+.border-odoo-600 { border-color: #714b67; }
+.border-odoo-700 { border-color: #5e3c55; }
+.border-odoo-800 { border-color: #4b3044; }
+.border-l-odoo-600 { border-left-color: #714b67; }
+
 /* Clean enterprise print styling for slips & receipts */
 @media print {
   @page {
