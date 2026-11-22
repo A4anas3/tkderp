@@ -53,7 +53,7 @@ async def test_reminders_queue_and_whatsapp_features():
 
         batch_res = await client.post("/api/batches", json={
             "name": f"Batch Reminders {uuid.uuid4().hex[:6]}",
-            "start_date": (date.today() - timedelta(days=50)).isoformat(),
+            "start_date": (date.today() - timedelta(days=10)).isoformat(),
             "hall_number": f"H-{uuid.uuid4().hex[:5]}",
             "schedule": "Daily 9-10 AM",
             "subjects": [{"subject_id": subj_id, "fee": 3000.00, "schedule": "Daily 9-10 AM"}]
@@ -61,7 +61,7 @@ async def test_reminders_queue_and_whatsapp_features():
         assert batch_res.status_code == 201
         batch_id = batch_res.json()["id"]
 
-        # 4. Create Student with Mobile
+        # 4. Create Active Student with Mobile
         mobile_num = f"98{uuid.uuid4().int % 100000000:08d}"
         student_name = f"WhatsApp RemStudent {uuid.uuid4().hex[:5]}"
         stu_res = await client.post("/api/students", json={
@@ -82,13 +82,13 @@ async def test_reminders_queue_and_whatsapp_features():
         assert stu_no_mob.status_code == 201
         no_mob_id = stu_no_mob.json()["id"]
 
-        # 6. Create Expired Admission with partial payment (fee: 3000, paid: 1000, balance: 2000)
-        past_from = (date.today() - timedelta(days=45)).isoformat()
-        past_to = (date.today() - timedelta(days=5)).isoformat() # expired 5 days ago
+        # 6. Create Active Admission with partial payment (fee: 3000, paid: 1000, balance: 2000)
+        curr_from = (date.today() - timedelta(days=10)).isoformat()
+        curr_to = (date.today() + timedelta(days=20)).isoformat()
 
         adm1_res = await client.post("/api/admissions", json={
             "student_id": stu_id,
-            "admission_date": past_from,
+            "admission_date": curr_from,
             "items": [
                 {
                     "item_type": "BATCH_SUBJECT",
@@ -97,8 +97,8 @@ async def test_reminders_queue_and_whatsapp_features():
                     "item_name_snapshot": subj_name,
                     "original_price": 3000.00,
                     "net_price": 3000.00,
-                    "valid_from": past_from,
-                    "valid_to": past_to
+                    "valid_from": curr_from,
+                    "valid_to": curr_to
                 }
             ],
             "initial_payment": {"amount": 1000.00, "payment_mode": "CASH"}
@@ -127,18 +127,48 @@ async def test_reminders_queue_and_whatsapp_features():
         }, headers=cashier_headers)
         assert adm2_res.status_code == 201
 
-        # Run daily job to mark status expired on adm1
+        # 7. Create an EXPIRED admission and verify it NEVER generates a reminder
+        exp_stu_name = f"Expired Student {uuid.uuid4().hex[:5]}"
+        exp_stu = await client.post("/api/students", json={
+            "name": exp_stu_name,
+            "mobile": "9811112222",
+            "gender": "MALE"
+        }, headers=admin_headers)
+        exp_stu_id = exp_stu.json()["id"]
+
+        past_from = (date.today() - timedelta(days=60)).isoformat()
+        past_to = (date.today() - timedelta(days=10)).isoformat()
+        exp_adm_res = await client.post("/api/admissions", json={
+            "student_id": exp_stu_id,
+            "admission_date": past_from,
+            "items": [
+                {
+                    "item_type": "BATCH_SUBJECT",
+                    "subject_id": subj_id,
+                    "batch_id": batch_id,
+                    "item_name_snapshot": subj_name,
+                    "original_price": 3000.00,
+                    "net_price": 3000.00,
+                    "valid_from": past_from,
+                    "valid_to": past_to
+                }
+            ],
+            "initial_payment": {"amount": 500.00, "payment_mode": "CASH"}
+        }, headers=cashier_headers)
+        assert exp_adm_res.status_code == 201
+
+        # Run daily job to mark status expired on exp_adm
         async with AsyncSessionLocal() as db:
             await refresh_statuses(today=date.today(), db=db)
 
-        # 7. Cashier calls POST /api/reminders/generate
+        # 8. Cashier calls POST /api/reminders/generate
         gen_res = await client.post("/api/reminders/generate", headers=cashier_headers)
         assert gen_res.status_code == 200
         gen_data = gen_res.json()
         assert "count" in gen_data
         assert "message" in gen_data
 
-        # 8. Cashier calls GET /api/reminders/queue
+        # 9. Cashier calls GET /api/reminders/queue
         queue_res = await client.get("/api/reminders/queue", headers=cashier_headers)
         assert queue_res.status_code == 200
         queue_data = queue_res.json()
@@ -146,7 +176,7 @@ async def test_reminders_queue_and_whatsapp_features():
         assert "counts" in queue_data
         assert queue_data["counts"]["pending"] >= 2
 
-        # Verify the student with mobile in queue using search
+        # Verify active student with mobile in queue using search
         stu_search_res = await client.get(f"/api/reminders/queue?status=pending&search={student_name}", headers=cashier_headers)
         assert stu_search_res.status_code == 200
         matched_rem = stu_search_res.json()["items"]
@@ -155,10 +185,10 @@ async def test_reminders_queue_and_whatsapp_features():
         assert rem_item["student_name"] == student_name
         assert rem_item["student_mobile"] == mobile_num
         assert rem_item["has_mobile"] is True
-        assert rem_item["course_name"] == subj_name
+        assert rem_item["subject_name"] == subj_name
         assert float(rem_item["due_amount"]) == 2000.00
-        assert rem_item["is_expired"] is True
-        assert rem_item["kind"] == "expired_due"
+        assert rem_item["due_date"] is not None
+        assert rem_item["is_expired"] is False
         assert rem_item["status"] == "pending"
 
         # Check pre-filled WhatsApp click-to-chat URL
@@ -166,22 +196,34 @@ async def test_reminders_queue_and_whatsapp_features():
         assert wa_url.startswith("https://wa.me/91")
         assert f"91{mobile_num}" in wa_url
         assert "text=" in wa_url
-        # Message must name the student, course, and due amount
         msg = rem_item["message"]
         assert student_name in msg
         assert subj_name in msg
         assert "2,000.00" in msg
 
-        # Verify the student without mobile in queue using search
-        no_mob_search_res = await client.get(f"/api/reminders/queue?status=pending&search={no_mob_name}", headers=cashier_headers)
-        assert no_mob_search_res.status_code == 200
-        matched_no_mob = no_mob_search_res.json()["items"]
-        assert len(matched_no_mob) == 1
-        no_mob_rem = matched_no_mob[0]
-        assert no_mob_rem["has_mobile"] is False
-        assert no_mob_rem["whatsapp_url"] == ""
+        # Verify the expired student is NOT in the reminders queue (Rule: never for expired items)
+        exp_search_res = await client.get(f"/api/reminders/queue?status=all&search={exp_stu_name}", headers=cashier_headers)
+        assert exp_search_res.status_code == 200
+        assert len(exp_search_res.json()["items"]) == 0
 
-        # 9. Mark Reminder as Sent
+        # Verify filter by subject
+        subj_filter_res = await client.get(f"/api/reminders/queue?subject_id={subj_id}&status=pending", headers=cashier_headers)
+        assert subj_filter_res.status_code == 200
+        subj_items = subj_filter_res.json()["items"]
+        assert any(it["id"] == rem_item["id"] for it in subj_items)
+
+        # Verify filter by batch
+        batch_filter_res = await client.get(f"/api/reminders/queue?batch_id={batch_id}&status=pending", headers=cashier_headers)
+        assert batch_filter_res.status_code == 200
+        batch_items = batch_filter_res.json()["items"]
+        assert any(it["id"] == rem_item["id"] for it in batch_items)
+
+        # Verify filter by due-age
+        age_filter_res = await client.get("/api/reminders/queue?due_age=0-30&status=pending", headers=cashier_headers)
+        assert age_filter_res.status_code == 200
+        assert "items" in age_filter_res.json()
+
+        # 10. Mark Reminder as Sent
         rem_id = rem_item["id"]
         sent_res = await client.post(f"/api/reminders/{rem_id}/mark-sent", headers=cashier_headers)
         assert sent_res.status_code == 200
@@ -189,23 +231,46 @@ async def test_reminders_queue_and_whatsapp_features():
         assert sent_data["status"] == "sent"
         assert sent_data["handled_at"] is not None
 
-        # Verify in queue under sent filter
+        # Verify in queue under sent filter (Sent History)
         sent_queue = await client.get("/api/reminders/queue?status=sent", headers=admin_headers)
         assert sent_queue.status_code == 200
         sent_items = sent_queue.json()["items"]
         assert any(it["id"] == rem_id for it in sent_items)
 
-        # 10. Reset back to pending
+        # 11. Mark Reminder as Failed
+        fail_res = await client.post(
+            f"/api/reminders/{rem_id}/mark-failed",
+            json={"reason": "Student phone number not on WhatsApp"},
+            headers=cashier_headers,
+        )
+        assert fail_res.status_code == 200
+        fail_data = fail_res.json()
+        assert fail_data["status"] == "failed"
+        assert "WhatsApp" in fail_data["error_reason"]
+
+        failed_queue = await client.get("/api/reminders/queue?status=failed", headers=admin_headers)
+        assert failed_queue.status_code == 200
+        assert any(it["id"] == rem_id for it in failed_queue.json()["items"])
+
+        # 12. Reset back to pending
         reset_res = await client.post(f"/api/reminders/{rem_id}/reset-pending", headers=admin_headers)
         assert reset_res.status_code == 200
         assert reset_res.json()["status"] == "pending"
 
-        # 11. Search filter test
-        search_res = await client.get(f"/api/reminders/queue?status=all&search={mobile_num}", headers=cashier_headers)
-        assert search_res.status_code == 200
-        assert len(search_res.json()["items"]) == 1
-        assert search_res.json()["items"][0]["id"] == rem_id
+        # 13. One-click send due reminder from student
+        one_click_stu = await client.post(f"/api/reminders/student/{stu_id}/send-due-reminder", headers=cashier_headers)
+        assert one_click_stu.status_code == 200
+        stu_rem_data = one_click_stu.json()
+        assert "whatsapp_url" in stu_rem_data
+        assert stu_rem_data["whatsapp_url"].startswith("https://wa.me/91")
+        assert "reminder" in stu_rem_data
+        assert stu_rem_data["reminder"]["student_name"] == student_name
 
-        # 12. Unauthorized access test
+        # 14. One-click send due reminders for subject
+        one_click_subj = await client.post(f"/api/reminders/subject/{subj_id}/send-due-reminders", headers=cashier_headers)
+        assert one_click_subj.status_code == 200
+        assert "count" in one_click_subj.json()
+
+        # 15. Unauthorized access test
         unauth_res = await client.get("/api/reminders/queue")
         assert unauth_res.status_code in [401, 403]

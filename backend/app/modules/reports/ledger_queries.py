@@ -1082,6 +1082,16 @@ async def get_admissions_conversion_detailed(
         conds.append(Enquiry.created_at >= start_dt)
     if end_dt:
         conds.append(Enquiry.created_at < end_dt)
+    if subject_id:
+        sub_obj = await db.get(Subject, subject_id)
+        if sub_obj:
+            from app.modules.enquiries.models import EnquiryDemoItem
+            conds.append(
+                or_(
+                    Enquiry.interested_subject.ilike(f"%{sub_obj.name}%"),
+                    Enquiry.demo_items.any(EnquiryDemoItem.subject_id == subject_id)
+                )
+            )
 
     stmt = (
         select(Enquiry, Student, Admission)

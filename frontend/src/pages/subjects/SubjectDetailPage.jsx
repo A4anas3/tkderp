@@ -17,26 +17,57 @@ import {
   Layers,
   Calendar,
   RefreshCw,
-  X
+  X,
+  MessageSquare,
 } from 'lucide-react';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
 import QuickPaymentModal from '../../components/modals/QuickPaymentModal';
 import PaymentReceiptModal from '../../components/receipts/PaymentReceiptModal';
-import { subjectApi, reportApi } from '../../services/allApis';
+import { subjectApi, reportApi, remindersApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 import { formatIndianDate, formatCycleLabel } from '../../utils/dateCycleUtils';
+import { WhatsAppIcon } from '../../utils/whatsappHelpers';
 
 const PAGE_SIZE = 10;
 
 export default function SubjectDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { error } = useToast();
+  const { success, error } = useToast();
 
   const [subject, setSubject] = useState(null);
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [sendingSubjectReminders, setSendingSubjectReminders] = useState(false);
+
+  const handleSendSubjectReminders = async () => {
+    if (!subject?.subject_id) return;
+    try {
+      setSendingSubjectReminders(true);
+      const res = await remindersApi.sendSubjectReminders(subject.subject_id);
+      success(res?.message || 'Queued due reminders for this subject');
+      navigate(`/reminders?subject_id=${subject.subject_id}`);
+    } catch (err) {
+      console.error('Failed to send subject reminders:', err);
+      error(err?.response?.data?.detail || err?.message || 'Failed to queue subject reminders');
+    } finally {
+      setSendingSubjectReminders(false);
+    }
+  };
+
+  const handleSendStudentReminder = async (studentId) => {
+    try {
+      const res = await remindersApi.sendStudentReminder(studentId);
+      success(res?.message || 'WhatsApp reminder ready');
+      if (res?.whatsapp_url) {
+        window.open(res.whatsapp_url, '_blank', 'noopener,noreferrer');
+      }
+    } catch (err) {
+      console.error('Failed to send student reminder:', err);
+      error(err?.response?.data?.detail || err?.message || 'Failed to trigger reminder');
+    }
+  };
 
   // Status & Search Filtering for Course Enrollments
   const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL' | 'ACTIVE' | 'INACTIVE'
@@ -216,6 +247,19 @@ export default function SubjectDetailPage() {
 
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          {/* One-Click Send Subject Dues Reminders */}
+          <Button
+            variant="primary"
+            icon={MessageSquare}
+            onClick={handleSendSubjectReminders}
+            loading={sendingSubjectReminders}
+            size="sm"
+            className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+            title="Queue WhatsApp reminders for all students with dues in this subject"
+          >
+            Send Due Reminders
+          </Button>
+
           <Button
             variant="secondary"
             icon={Layers}
@@ -566,6 +610,18 @@ export default function SubjectDetailPage() {
                     {/* Actions */}
                     <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-center gap-1.5 whitespace-nowrap">
+                        {Number(s.balance_due || 0) > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => handleSendStudentReminder(s.student_id)}
+                            className="h-8 min-h-[32px] px-2.5 py-1 text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold rounded-md border border-emerald-300 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shadow-2xs transition-colors"
+                            title={`Send WhatsApp due reminder to ${s.student_name}`}
+                          >
+                            <WhatsAppIcon className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                            <span>Remind</span>
+                          </button>
+                        )}
+
                         {Number(s.balance_due || 0) > 0 && (
                           <button
                             onClick={() => setPayAdmissionId(s.admission_id)}

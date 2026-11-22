@@ -1,8 +1,8 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, date
 from decimal import Decimal
 from typing import Optional
-from sqlalchemy import String, Text, ForeignKey, DateTime, Numeric, Index
+from sqlalchemy import String, Text, ForeignKey, DateTime, Date, Numeric, Index
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base import BaseModel
@@ -19,15 +19,23 @@ class ReminderQueue(BaseModel):
     admission_item_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("admission_items.id", ondelete="SET NULL"), nullable=True
     )
+    subject_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("subjects.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    batch_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("batches.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     kind: Mapped[str] = mapped_column(
         String(30), nullable=False, default="due", index=True
-    )  # due, due_soon, due_today, overdue_3, overdue_7, expired_due
+    )  # due, due_soon, due_today, overdue_3, overdue_7
     course_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    due_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True, index=True)
     due_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="pending", index=True
-    )  # pending, sent, skipped
+    )  # pending, sent, failed
+    error_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     handled_by: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
@@ -39,6 +47,12 @@ class ReminderQueue(BaseModel):
     )
     admission: Mapped["app.modules.admissions.models.Admission"] = relationship(
         "app.modules.admissions.models.Admission", lazy="joined"
+    )
+    subject: Mapped[Optional["app.modules.subjects.models.Subject"]] = relationship(
+        "app.modules.subjects.models.Subject", foreign_keys=[subject_id], lazy="joined"
+    )
+    batch: Mapped[Optional["app.modules.batches.models.Batch"]] = relationship(
+        "app.modules.batches.models.Batch", foreign_keys=[batch_id], lazy="joined"
     )
     handler: Mapped[Optional["app.modules.users.models.User"]] = relationship(
         "app.modules.users.models.User", foreign_keys=[handled_by], lazy="joined"

@@ -43,7 +43,7 @@ import {
 } from 'lucide-react';
 import StatCard from '../../components/common/StatCard';
 import Badge from '../../components/common/Badge';
-import { reportApi } from '../../services/allApis';
+import { reportApi, subjectApi, batchApi } from '../../services/allApis';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 
@@ -88,12 +88,38 @@ export default function ReportsHubPage() {
   const [selectedMonth, setSelectedMonth] = useState('');
   const [selectedYear, setSelectedYear] = useState(currentYear);
 
+  // Preloaded metadata
+  const [subjectsList, setSubjectsList] = useState([]);
+  const [batchesList, setBatchesList] = useState([]);
+
   // Per-report filters
   const [searchQuery, setSearchQuery] = useState('');
   const [paymentModeFilter, setPaymentModeFilter] = useState('ALL');
+  const [cashierFilter, setCashierFilter] = useState('ALL');
   const [ageingBucketFilter, setAgeingBucketFilter] = useState('ALL');
+  const [selectedSubjectFilter, setSelectedSubjectFilter] = useState('ALL');
+  const [selectedBatchFilter, setSelectedBatchFilter] = useState('ALL');
   const [enquirySourceFilter, setEnquirySourceFilter] = useState('ALL');
+  const [expenseCategoryFilter, setExpenseCategoryFilter] = useState('ALL');
+  const [refundModeFilter, setRefundModeFilter] = useState('ALL');
   const [summaryPeriod, setSummaryPeriod] = useState('daily'); // 'daily' | 'monthly'
+
+  // Preload subjects and batches once on mount
+  useEffect(() => {
+    async function loadMeta() {
+      try {
+        const [subs, bats] = await Promise.all([
+          subjectApi.getAll(),
+          batchApi.getAll(),
+        ]);
+        setSubjectsList(Array.isArray(subs) ? subs : []);
+        setBatchesList(Array.isArray(bats) ? bats : []);
+      } catch (err) {
+        console.warn('Failed to preload metadata for reports filters:', err);
+      }
+    }
+    loadMeta();
+  }, []);
 
   // Data & loading states
   const [data, setData] = useState(null);
@@ -165,17 +191,25 @@ export default function ReportsHubPage() {
     if (selectedYear) params.year = selectedYear;
     if (searchQuery.trim()) params.search = searchQuery.trim();
 
-    if (activeTab === 'collections' && paymentModeFilter !== 'ALL') {
-      params.payment_mode = paymentModeFilter;
+    if (activeTab === 'collections') {
+      if (paymentModeFilter !== 'ALL') params.payment_mode = paymentModeFilter;
+      if (cashierFilter !== 'ALL') params.cashier_id = cashierFilter;
     }
-    if (activeTab === 'dues-ageing' && ageingBucketFilter !== 'ALL') {
-      params.ageing_bucket = ageingBucketFilter;
+    if (activeTab === 'dues-ageing') {
+      if (ageingBucketFilter !== 'ALL') params.ageing_bucket = ageingBucketFilter;
+      if (selectedSubjectFilter !== 'ALL') params.subject_id = selectedSubjectFilter;
+      if (selectedBatchFilter !== 'ALL') params.batch_id = selectedBatchFilter;
     }
-    if (activeTab === 'admissions-conversion' && enquirySourceFilter !== 'ALL') {
-      params.source = enquirySourceFilter;
+    if (activeTab === 'admissions-conversion') {
+      if (enquirySourceFilter !== 'ALL') params.source = enquirySourceFilter;
+      if (selectedSubjectFilter !== 'ALL') params.subject_id = selectedSubjectFilter;
     }
-    if (activeTab === 'refunds' && paymentModeFilter !== 'ALL') {
-      params.refund_mode = paymentModeFilter;
+    if (activeTab === 'refunds') {
+      if (refundModeFilter !== 'ALL') params.refund_mode = refundModeFilter;
+    }
+    if (activeTab === 'expenses') {
+      if (expenseCategoryFilter !== 'ALL') params.category_id = expenseCategoryFilter;
+      if (paymentModeFilter !== 'ALL') params.payment_mode = paymentModeFilter;
     }
     if (activeTab === 'summary-dashboard') {
       params.period = summaryPeriod;
@@ -189,8 +223,13 @@ export default function ReportsHubPage() {
     searchQuery,
     activeTab,
     paymentModeFilter,
+    cashierFilter,
     ageingBucketFilter,
+    selectedSubjectFilter,
+    selectedBatchFilter,
     enquirySourceFilter,
+    expenseCategoryFilter,
+    refundModeFilter,
     summaryPeriod,
   ]);
 
@@ -445,15 +484,149 @@ export default function ReportsHubPage() {
             />
           </div>
 
-          {/* Per-Report Specific Filter (Payment mode, Ageing bucket, etc.) */}
+          {/* Per-Report Specific Filters */}
           {activeTab === 'collections' && (
+            <>
+              <div>
+                <label className="block text-[11px] font-bold text-black mb-1">
+                  Payment Mode
+                </label>
+                <select
+                  value={paymentModeFilter}
+                  onChange={(e) => setPaymentModeFilter(e.target.value)}
+                  className="w-full h-8 px-2 text-xs font-semibold text-black bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#714B67]"
+                >
+                  <option value="ALL">All Modes</option>
+                  <option value="CASH">Cash</option>
+                  <option value="UPI">UPI / QR</option>
+                  <option value="BANK_TRANSFER">Bank Transfer</option>
+                  <option value="CARD">Card</option>
+                  <option value="OTHER">Other</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-black mb-1">
+                  Cashier Desk
+                </label>
+                <select
+                  value={cashierFilter}
+                  onChange={(e) => setCashierFilter(e.target.value)}
+                  className="w-full h-8 px-2 text-xs font-semibold text-black bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#714B67]"
+                >
+                  <option value="ALL">All Cashiers</option>
+                  {data?.by_cashier?.map((c) => (
+                    <option key={c.cashier_id || c.username} value={c.cashier_id || c.user_id}>
+                      {c.cashier_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
+
+          {activeTab === 'dues-ageing' && (
+            <>
+              <div>
+                <label className="block text-[11px] font-bold text-black mb-1">
+                  Ageing Bucket
+                </label>
+                <select
+                  value={ageingBucketFilter}
+                  onChange={(e) => setAgeingBucketFilter(e.target.value)}
+                  className="w-full h-8 px-2 text-xs font-semibold text-black bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#714B67]"
+                >
+                  <option value="ALL">All Buckets</option>
+                  <option value="0-30">0 - 30 Days (Current)</option>
+                  <option value="31-60">31 - 60 Days</option>
+                  <option value="61-90">61 - 90 Days</option>
+                  <option value="90+">90+ Days (High Overdue)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-black mb-1">
+                  Course Subject
+                </label>
+                <select
+                  value={selectedSubjectFilter}
+                  onChange={(e) => setSelectedSubjectFilter(e.target.value)}
+                  className="w-full h-8 px-2 text-xs font-semibold text-black bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#714B67]"
+                >
+                  <option value="ALL">All Subjects</option>
+                  {subjectsList.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-black mb-1">
+                  Batch Schedule
+                </label>
+                <select
+                  value={selectedBatchFilter}
+                  onChange={(e) => setSelectedBatchFilter(e.target.value)}
+                  className="w-full h-8 px-2 text-xs font-semibold text-black bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#714B67]"
+                >
+                  <option value="ALL">All Batches</option>
+                  {batchesList.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
+
+          {activeTab === 'admissions-conversion' && (
+            <>
+              <div>
+                <label className="block text-[11px] font-bold text-black mb-1">
+                  Lead Source
+                </label>
+                <select
+                  value={enquirySourceFilter}
+                  onChange={(e) => setEnquirySourceFilter(e.target.value)}
+                  className="w-full h-8 px-2 text-xs font-semibold text-black bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#714B67]"
+                >
+                  <option value="ALL">All Sources</option>
+                  <option value="Direct Walk-in">Direct Walk-in</option>
+                  <option value="Referral">Student / Teacher Referral</option>
+                  <option value="School Visit">School / College Visit</option>
+                  <option value="Social Media / Digital">Social Media / Online</option>
+                  <option value="Phone Enquiry">Phone Enquiry</option>
+                  <option value="Demo Pass">Demo Pass Attended</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-black mb-1">
+                  Subject
+                </label>
+                <select
+                  value={selectedSubjectFilter}
+                  onChange={(e) => setSelectedSubjectFilter(e.target.value)}
+                  className="w-full h-8 px-2 text-xs font-semibold text-black bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#714B67]"
+                >
+                  <option value="ALL">All Subjects</option>
+                  {subjectsList.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
+
+          {activeTab === 'refunds' && (
             <div>
               <label className="block text-[11px] font-bold text-black mb-1">
-                Payment Mode
+                Refund Mode
               </label>
               <select
-                value={paymentModeFilter}
-                onChange={(e) => setPaymentModeFilter(e.target.value)}
+                value={refundModeFilter}
+                onChange={(e) => setRefundModeFilter(e.target.value)}
                 className="w-full h-8 px-2 text-xs font-semibold text-black bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#714B67]"
               >
                 <option value="ALL">All Modes</option>
@@ -466,44 +639,43 @@ export default function ReportsHubPage() {
             </div>
           )}
 
-          {activeTab === 'dues-ageing' && (
-            <div>
-              <label className="block text-[11px] font-bold text-black mb-1">
-                Ageing Bucket
-              </label>
-              <select
-                value={ageingBucketFilter}
-                onChange={(e) => setAgeingBucketFilter(e.target.value)}
-                className="w-full h-8 px-2 text-xs font-semibold text-black bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#714B67]"
-              >
-                <option value="ALL">All Buckets</option>
-                <option value="0-30">0 - 30 Days (Current)</option>
-                <option value="31-60">31 - 60 Days</option>
-                <option value="61-90">61 - 90 Days</option>
-                <option value="90+">90+ Days (High Overdue)</option>
-              </select>
-            </div>
-          )}
-
-          {activeTab === 'admissions-conversion' && (
-            <div>
-              <label className="block text-[11px] font-bold text-black mb-1">
-                Lead Source
-              </label>
-              <select
-                value={enquirySourceFilter}
-                onChange={(e) => setEnquirySourceFilter(e.target.value)}
-                className="w-full h-8 px-2 text-xs font-semibold text-black bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#714B67]"
-              >
-                <option value="ALL">All Sources</option>
-                <option value="Direct Walk-in">Direct Walk-in</option>
-                <option value="Referral">Student / Teacher Referral</option>
-                <option value="School Visit">School / College Visit</option>
-                <option value="Social Media / Digital">Social Media / Online</option>
-                <option value="Phone Enquiry">Phone Enquiry</option>
-                <option value="Demo Pass">Demo Pass Attended</option>
-              </select>
-            </div>
+          {activeTab === 'expenses' && (
+            <>
+              <div>
+                <label className="block text-[11px] font-bold text-black mb-1">
+                  Expense Category
+                </label>
+                <select
+                  value={expenseCategoryFilter}
+                  onChange={(e) => setExpenseCategoryFilter(e.target.value)}
+                  className="w-full h-8 px-2 text-xs font-semibold text-black bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#714B67]"
+                >
+                  <option value="ALL">All Categories</option>
+                  {data?.by_category?.map((c) => (
+                    <option key={c.category_name} value={c.category_name}>
+                      {c.category_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-black mb-1">
+                  Payment Mode
+                </label>
+                <select
+                  value={paymentModeFilter}
+                  onChange={(e) => setPaymentModeFilter(e.target.value)}
+                  className="w-full h-8 px-2 text-xs font-semibold text-black bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#714B67]"
+                >
+                  <option value="ALL">All Modes</option>
+                  <option value="CASH">Cash</option>
+                  <option value="UPI">UPI / QR</option>
+                  <option value="BANK_TRANSFER">Bank Transfer</option>
+                  <option value="CHEQUE">Cheque</option>
+                  <option value="OTHER">Other</option>
+                </select>
+              </div>
+            </>
           )}
 
           {activeTab === 'summary-dashboard' && (

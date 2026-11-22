@@ -41,6 +41,17 @@ async def lifespan(app: FastAPI):
     # Ensure all tables (including reminder_queue) are created
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        from sqlalchemy import text
+        try:
+            await conn.execute(text("ALTER TABLE reminder_queue ADD COLUMN IF NOT EXISTS subject_id uuid REFERENCES subjects(id) ON DELETE SET NULL;"))
+            await conn.execute(text("ALTER TABLE reminder_queue ADD COLUMN IF NOT EXISTS batch_id uuid REFERENCES batches(id) ON DELETE SET NULL;"))
+            await conn.execute(text("ALTER TABLE reminder_queue ADD COLUMN IF NOT EXISTS due_date date;"))
+            await conn.execute(text("ALTER TABLE reminder_queue ADD COLUMN IF NOT EXISTS error_reason text;"))
+            await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_reminder_queue_subject_id ON reminder_queue(subject_id);"))
+            await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_reminder_queue_batch_id ON reminder_queue(batch_id);"))
+            await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_reminder_queue_due_date ON reminder_queue(due_date);"))
+        except Exception:
+            pass
     
     # Initialize and start APScheduler for daily 00:05 IST status refresh
     scheduler = AsyncIOScheduler()

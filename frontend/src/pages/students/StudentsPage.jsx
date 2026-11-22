@@ -21,8 +21,9 @@ import Badge from '../../components/common/Badge';
 import Avatar from '../../components/common/Avatar';
 import QuickStudentModal from '../../components/modals/QuickStudentModal';
 import EditStudentModal from '../../components/modals/EditStudentModal';
-import { studentApi } from '../../services/allApis';
+import { studentApi, remindersApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
+import { WhatsAppIcon } from '../../utils/whatsappHelpers';
 
 export default function StudentsPage() {
   const navigate = useNavigate();
@@ -167,6 +168,27 @@ export default function StudentsPage() {
       className: 'text-right w-36 whitespace-nowrap',
       render: (s) => (
         <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+          {Number(s.total_balance_due || 0) > 0 && (
+            <button
+              type="button"
+              onClick={async (e) => {
+                e.stopPropagation();
+                try {
+                  const res = await remindersApi.sendStudentReminder(s.id);
+                  if (res?.whatsapp_url) {
+                    window.open(res.whatsapp_url, '_blank', 'noopener,noreferrer');
+                  }
+                } catch (err) {
+                  console.error('Failed to send reminder:', err);
+                }
+              }}
+              title={`Send WhatsApp due reminder (Due: ₹${Number(s.total_balance_due).toFixed(0)})`}
+              className="h-7 px-2 rounded bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-300 font-bold inline-flex items-center gap-1 text-[11px] shadow-2xs cursor-pointer"
+            >
+              <WhatsAppIcon className="w-3.5 h-3.5 text-emerald-700" />
+              <span>Remind</span>
+            </button>
+          )}
           <Button
             size="xs"
             variant="amber"

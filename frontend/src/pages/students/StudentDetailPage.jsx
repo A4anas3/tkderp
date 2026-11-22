@@ -49,10 +49,11 @@ import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
 import StatCard from '../../components/common/StatCard';
 import Avatar from '../../components/common/Avatar';
-import { studentApi, admissionApi, paymentApi } from '../../services/allApis';
+import { studentApi, admissionApi, paymentApi, remindersApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 import { compressImage } from '../../utils/imageCompressor';
 import { useAuth } from '../../context/AuthContext';
+import { WhatsAppIcon } from '../../utils/whatsappHelpers';
 import QuickPaymentModal from '../../components/modals/QuickPaymentModal';
 import PaymentReceiptModal from '../../components/receipts/PaymentReceiptModal';
 import AdmissionReceiptModal from '../../components/receipts/AdmissionReceiptModal';
@@ -255,6 +256,24 @@ export default function StudentDetailPage() {
   // All Slips Modal
   const [allSlipsModalOpen, setAllSlipsModalOpen] = useState(false);
   const [selectedAdmissionForSlips, setSelectedAdmissionForSlips] = useState(null);
+
+  const [sendingReminder, setSendingReminder] = useState(false);
+
+  const handleSendStudentReminder = async () => {
+    try {
+      setSendingReminder(true);
+      const res = await remindersApi.sendStudentReminder(id);
+      success(res?.message || 'WhatsApp reminder ready');
+      if (res?.whatsapp_url) {
+        window.open(res.whatsapp_url, '_blank', 'noopener,noreferrer');
+      }
+    } catch (err) {
+      console.error('Failed to send reminder:', err);
+      error(err?.response?.data?.detail || err?.message || 'Failed to trigger reminder');
+    } finally {
+      setSendingReminder(false);
+    }
+  };
 
   const fetchStudentProfile = async () => {
     setLoading(true);
@@ -673,6 +692,20 @@ export default function StudentDetailPage() {
               >
                 Collect Due Fee
               </Button>
+            )}
+
+            {/* One-Click Send Due Reminder Button */}
+            {!isRevoked && Number(student.total_balance_due) > 0 && (
+              <button
+                type="button"
+                onClick={handleSendStudentReminder}
+                disabled={sendingReminder}
+                title="Send WhatsApp due reminder to student"
+                className="min-h-[30px] px-3 py-1 rounded-md text-xs font-bold inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <WhatsAppIcon className="w-3.5 h-3.5 text-white" />
+                <span>{sendingReminder ? 'Preparing...' : 'Send Due Reminder'}</span>
+              </button>
             )}
 
             {/* Waive Due Fee Button (Admin Only) */}

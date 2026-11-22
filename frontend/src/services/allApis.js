@@ -537,8 +537,20 @@ export const remindersApi = {
     const res = await api.post(`/reminders/${id}/mark-sent`);
     return res.data;
   },
+  markFailed: async (id, reason) => {
+    const res = await api.post(`/reminders/${id}/mark-failed`, { reason });
+    return res.data;
+  },
   resetPending: async (id) => {
     const res = await api.post(`/reminders/${id}/reset-pending`);
+    return res.data;
+  },
+  sendStudentReminder: async (studentId) => {
+    const res = await api.post(`/reminders/student/${studentId}/send-due-reminder`);
+    return res.data;
+  },
+  sendSubjectReminders: async (subjectId) => {
+    const res = await api.post(`/reminders/subject/${subjectId}/send-due-reminders`);
     return res.data;
   },
 };
