@@ -2413,7 +2413,7 @@ export default function EnquiriesPage() {
           <div className="pt-2 flex items-center justify-between border-t border-slate-100">
             <Button
               type="button"
-              variant="secondary"
+              variant="primary"
               size="xs"
               onClick={() => {
                 setCourseUpdateModalOpen(false);

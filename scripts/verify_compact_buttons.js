@@ -116,6 +116,7 @@ async function checkBackendHealth() {
   await scrollTableRight();
   await page.screenshot({ path: 'verification_screenshots/after_batches_actions.png' });
   await inspectButton(page.locator('td button:has-text("Edit")'), 'Batches Edit');
+  await inspectButton(page.locator('td button:has-text("Detail")'), 'Batches Detail');
 
   // 5. Check Admissions Page
   console.log('\n--- Checking Admissions Page (390px phone view) ---');

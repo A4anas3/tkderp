@@ -638,7 +638,7 @@ export default function StudentDetailPage() {
               isRevoked ? (
                 <Button
                   size="xs"
-                  variant="secondary"
+                  variant="success-soft"
                   onClick={handleRestore}
                   loading={restoring}
                   className="flex-1 sm:flex-initial justify-center"
@@ -856,7 +856,7 @@ export default function StudentDetailPage() {
                 {!isRevoked && (
                   <Button
                     size="xs"
-                    variant="secondary"
+                    variant="teal-soft"
                     onClick={() =>
                       navigate(
                         `/admissions/new?student_id=${student.id}&item_type=GREEN_CARD`
@@ -1052,7 +1052,7 @@ export default function StudentDetailPage() {
             {!isRevoked && (
               <Button
                 size="xs"
-                variant="secondary"
+                variant="primary"
                 icon={Plus}
                 className="mt-2"
                 onClick={() =>

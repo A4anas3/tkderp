@@ -342,10 +342,10 @@ export default function EnquiryDetailPage() {
 
           {enquiry.has_course_purchase ? (
             <Button
-              variant="secondary"
+              variant="info"
               size="sm"
               onClick={() => navigate(`/admissions/${enquiry.course_admission_id || ''}`)}
-              className="text-emerald-700 bg-emerald-50 border-emerald-300 hover:bg-emerald-100 font-bold"
+              className="font-bold"
             >
               View Course Bill ({enquiry.course_admission_number || 'Enrolled ✓'}) ↗
             </Button>

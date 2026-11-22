@@ -911,7 +911,7 @@ export default function TeacherDetailPage() {
               <Button
                 type="button"
                 size="xs"
-                variant="secondary"
+                variant="info"
                 onClick={() => {
                   setEditModalOpen(false);
                   navigate(`/teachers/${existingTeacherWithMobile.id}`);

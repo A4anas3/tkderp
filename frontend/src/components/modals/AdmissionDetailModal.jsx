@@ -289,13 +289,13 @@ export default function AdmissionDetailModal({
           {isAdmin && Number(admission.balance_due) > 0 && !isInactive && onWaiveDue && (
             <Button
               size="sm"
-              variant="warning"
+              variant="amber"
               icon={Sparkles}
               onClick={() => {
                 onClose();
                 onWaiveDue(admission);
               }}
-              className="w-full sm:w-auto bg-amber-500 hover:bg-amber-600 text-black font-bold border-amber-600"
+              className="w-full sm:w-auto"
             >
               Waive Due
             </Button>

@@ -118,7 +118,7 @@ export default function BatchDetailModal({
           {onToggleRoster && (
             <Button
               size="sm"
-              variant="primary"
+              variant="info"
               icon={Users}
               className="w-full sm:w-auto"
               onClick={() => {

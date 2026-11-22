@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   LayoutGrid,
   List,
   Plus,
   Edit2,
+  ExternalLink,
   Calendar,
   MapPin,
   Users,
@@ -24,6 +26,7 @@ import { batchApi, teacherApi, subjectApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 
 export default function BatchesPage() {
+  const navigate = useNavigate();
   const { success, error } = useToast();
   const [batches, setBatches] = useState([]);
   const [total, setTotal] = useState(0);
@@ -298,16 +301,31 @@ export default function BatchesPage() {
     },
     {
       header: 'Actions',
-      className: 'text-right w-24 whitespace-nowrap',
+      className: 'text-right w-36 whitespace-nowrap',
       render: (b) => (
         <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
           <Button
             size="xs"
             variant="amber"
             icon={Edit2}
-            onClick={() => handleOpenEdit(b)}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpenEdit(b);
+            }}
           >
             Edit
+          </Button>
+          <Button
+            size="xs"
+            variant="info"
+            icon={ExternalLink}
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate(`/batches/${b.id}`);
+            }}
+            title="Open Batch Roster"
+          >
+            Detail
           </Button>
         </div>
       ),
@@ -477,9 +495,19 @@ export default function BatchesPage() {
                       variant="amber"
                       icon={Edit2}
                       onClick={() => handleOpenEdit(b)}
-                      className="w-full justify-center"
+                      className="flex-1 justify-center"
                     >
-                      Edit Configuration
+                      Edit
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="info"
+                      icon={ExternalLink}
+                      onClick={() => navigate(`/batches/${b.id}`)}
+                      className="flex-1 justify-center"
+                      title="Open Batch Roster"
+                    >
+                      Detail
                     </Button>
                   </div>
                 </div>

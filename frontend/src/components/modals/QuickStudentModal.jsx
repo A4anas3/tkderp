@@ -322,7 +322,7 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
               <Button
                 type="button"
                 size="xs"
-                variant="secondary"
+                variant="info"
                 icon={User}
                 onClick={() => {
                   onClose();

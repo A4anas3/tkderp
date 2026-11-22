@@ -673,7 +673,7 @@ export default function TeachersPage() {
               <Button
                 type="button"
                 size="xs"
-                variant="secondary"
+                variant="info"
                 onClick={() => {
                   setModalOpen(false);
                   navigate(`/teachers/${existingTeacherWithMobile.id}`);
