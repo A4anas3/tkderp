@@ -243,13 +243,17 @@ input:focus, select:focus, textarea:focus {
     display: block !important;
   }
 
-  /* For non-modal print (e.g. PublicVerifyPage), hide everything except #printable-verification */
+  /* For non-modal print (e.g. PublicVerifyPage or Reports), hide everything except printable containers */
   body:not(.modal-open):not(:has(.modal-backdrop-container)) * {
     visibility: hidden;
   }
   body:not(.modal-open):not(:has(.modal-backdrop-container)) #printable-verification,
-  body:not(.modal-open):not(:has(.modal-backdrop-container)) #printable-verification * {
-    visibility: visible;
+  body:not(.modal-open):not(:has(.modal-backdrop-container)) #printable-verification *,
+  body:not(.modal-open):not(:has(.modal-backdrop-container)) #printable-report,
+  body:not(.modal-open):not(:has(.modal-backdrop-container)) #printable-report *,
+  body:not(.modal-open):not(:has(.modal-backdrop-container)) .printable-report,
+  body:not(.modal-open):not(:has(.modal-backdrop-container)) .printable-report * {
+    visibility: visible !important;
   }
   body:not(.modal-open):not(:has(.modal-backdrop-container)) #printable-verification {
     position: absolute;
@@ -258,6 +262,16 @@ input:focus, select:focus, textarea:focus {
     width: 100%;
     margin: 0;
     padding: 0;
+    background: #ffffff !important;
+  }
+  body:not(.modal-open):not(:has(.modal-backdrop-container)) #printable-report,
+  body:not(.modal-open):not(:has(.modal-backdrop-container)) .printable-report {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 10mm;
     background: #ffffff !important;
   }
 

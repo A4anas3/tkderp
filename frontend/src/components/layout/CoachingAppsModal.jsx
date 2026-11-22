@@ -98,12 +98,12 @@ export default function CoachingAppsModal({ isOpen, onClose }) {
     },
     {
       id: 'reports',
-      name: 'Reports',
-      desc: 'Revenue & Analytics',
+      name: 'Reports Hub',
+      desc: '10 Ledger Reports & Analytics',
       icon: BarChart3,
       route: '/reports',
       color: 'bg-cyan-600',
-      roles: ['ADMIN'],
+      roles: ['ADMIN', 'CASHIER'],
     },
     {
       id: 'verify',

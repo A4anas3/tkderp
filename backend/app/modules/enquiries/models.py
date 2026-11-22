@@ -15,6 +15,7 @@ class Enquiry(BaseModel):
     father_name: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
     school_college: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     purpose: Mapped[str] = mapped_column(String(150), nullable=False, default="Admission Enquiry")
+    source: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, default="Direct Walk-in", server_default="Direct Walk-in")
     interested_subject: Mapped[str] = mapped_column(String(150), nullable=False)
     demo_start_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     demo_duration_days: Mapped[int] = mapped_column(Integer, nullable=False, default=3)

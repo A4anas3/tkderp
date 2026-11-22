@@ -388,6 +388,47 @@ export const expenseApi = {
 };
 
 export const reportApi = {
+  getCollections: async (params) => {
+    const res = await api.get('/reports/collections', { params });
+    return res.data;
+  },
+  getDuesAgeing: async (params) => {
+    const res = await api.get('/reports/dues-ageing', { params });
+    return res.data;
+  },
+  getSubjectBreakup: async (params) => {
+    const res = await api.get('/reports/subject-breakup', { params });
+    return res.data;
+  },
+  getTeacherBreakup: async (params) => {
+    const res = await api.get('/reports/teacher-breakup', { params });
+    return res.data;
+  },
+  getBatchBreakup: async (params) => {
+    const res = await api.get('/reports/batch-breakup', { params });
+    return res.data;
+  },
+  getAdmissionsConversion: async (params) => {
+    const res = await api.get('/reports/admissions-conversion', { params });
+    return res.data;
+  },
+  getWaivers: async (params) => {
+    const res = await api.get('/reports/waivers', { params });
+    return res.data;
+  },
+  getRefunds: async (params) => {
+    const res = await api.get('/reports/refunds', { params });
+    return res.data;
+  },
+  getExpenses: async (params) => {
+    const res = await api.get('/reports/expenses', { params });
+    return res.data;
+  },
+  getSummaryDashboard: async (params) => {
+    const res = await api.get('/reports/summary-dashboard', { params });
+    return res.data;
+  },
+  // Legacy / detail aliases
   getSubjectRevenue: async (params) => {
     const res = await api.get('/reports/subject-revenue', { params });
     return res.data;

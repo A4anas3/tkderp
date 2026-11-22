@@ -1,14 +1,17 @@
 import uuid
 import zoneinfo
+import calendar
 from decimal import Decimal
 from datetime import date, datetime, timedelta
 from typing import Optional, List, Dict, Any, Tuple
-from sqlalchemy import select, func, and_, or_, case
+from sqlalchemy import select, func, and_, or_, case, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.models import (
-    PaymentAllocation, AdmissionItem, Admission, Payment, Refund, User, Subject, Teacher, Batch, TeacherEarning
+    PaymentAllocation, AdmissionItem, Admission, Payment, Refund, User, Subject, Teacher, Batch, TeacherEarning,
+    Student, Expense, ExpenseCategory, SalaryRecord, FinancialTransaction, Enquiry, EnquiryDemoItem
 )
+from app.common.active_student import today_kolkata
 
 IST_TZ = zoneinfo.ZoneInfo("Asia/Kolkata")
 
@@ -219,7 +222,7 @@ async def get_collections_by_mode(
             func.count(Payment.id),
             func.coalesce(func.sum(Payment.amount), Decimal("0.00"))
         )
-        .where(and_(*p_conds))
+        .where(*p_conds)
         .group_by(Payment.payment_mode)
     )
     p_rows = (await db.execute(p_stmt)).all()
@@ -237,7 +240,7 @@ async def get_collections_by_mode(
             func.count(Refund.id),
             func.coalesce(func.sum(Refund.amount), Decimal("0.00"))
         )
-        .where(and_(*r_conds))
+        .where(*r_conds)
         .group_by(Refund.refund_mode)
     )
     r_rows = (await db.execute(r_stmt)).all()
@@ -473,4 +476,916 @@ async def get_dues_by_subject(
         })
 
     return report
+
+
+def resolve_enquiry_source(enq: Enquiry) -> str:
+    s = getattr(enq, "source", None)
+    if s and str(s).strip():
+        return str(s).strip()
+    txt = f"{enq.purpose or ''} {enq.notes or ''} {enq.school_college or ''}".lower()
+    if "referral" in txt or "friend" in txt or "relative" in txt:
+        return "Referral"
+    if "school" in txt or "college" in txt or enq.school_college:
+        return "School Visit"
+    if "social" in txt or "instagram" in txt or "facebook" in txt or "online" in txt or "web" in txt:
+        return "Social Media / Digital"
+    if "phone" in txt or "tele" in txt or "call" in txt:
+        return "Phone Enquiry"
+    if "demo" in txt:
+        return "Demo Pass"
+    return "Direct Walk-in"
+
+
+async def get_dues_and_ageing(
+    db: AsyncSession,
+    from_date: Optional[date] = None,
+    to_date: Optional[date] = None,
+    subject_id: Optional[uuid.UUID] = None,
+    batch_id: Optional[uuid.UUID] = None,
+    ageing_bucket: Optional[str] = None,
+    search: Optional[str] = None,
+    limit: Optional[int] = 500
+) -> Dict[str, Any]:
+    """
+    Dues & Ageing Report:
+    Outstanding dues by student, subject and batch, with ageing buckets:
+    0-30 days, 31-60 days, 61-90 days, 90+ days.
+    """
+    today = today_kolkata()
+    start_col = func.coalesce(AdmissionItem.valid_from, Admission.valid_from, Admission.admission_date)
+
+    conds = [
+        AdmissionItem.balance_due > Decimal("0.00"),
+        Admission.status != "CANCELLED",
+        Admission.document_status == "VALID"
+    ]
+    if from_date:
+        conds.append(start_col >= from_date)
+    if to_date:
+        conds.append(start_col <= to_date)
+    if subject_id:
+        conds.append(AdmissionItem.subject_id == subject_id)
+    if batch_id:
+        conds.append(AdmissionItem.batch_id == batch_id)
+
+    stmt = (
+        select(AdmissionItem, Admission, Student, Subject, Batch, Teacher)
+        .join(Admission, AdmissionItem.admission_id == Admission.id)
+        .join(Student, Admission.student_id == Student.id)
+        .outerjoin(Subject, AdmissionItem.subject_id == Subject.id)
+        .outerjoin(Batch, AdmissionItem.batch_id == Batch.id)
+        .outerjoin(Teacher, AdmissionItem.teacher_id == Teacher.id)
+        .where(*conds)
+        .order_by(start_col.desc(), Student.name.asc())
+    )
+    res = await db.execute(stmt)
+    rows = res.all()
+
+    bucket_counts = {"0-30": 0, "31-60": 0, "61-90": 0, "90+": 0}
+    bucket_amounts = {"0-30": Decimal("0.00"), "31-60": Decimal("0.00"), "61-90": Decimal("0.00"), "90+": Decimal("0.00")}
+    unique_students = set()
+    total_due = Decimal("0.00")
+
+    all_items = []
+    for itm, adm, stu, sub, bch, tch in rows:
+        ref_d = itm.valid_from or adm.valid_from or adm.admission_date
+        age_days = (today - ref_d).days if ref_d else 0
+        if age_days < 0:
+            age_days = 0
+
+        if age_days <= 30:
+            b_key = "0-30"
+        elif age_days <= 60:
+            b_key = "31-60"
+        elif age_days <= 90:
+            b_key = "61-90"
+        else:
+            b_key = "90+"
+
+        due_val = itm.balance_due or Decimal("0.00")
+        bucket_counts[b_key] += 1
+        bucket_amounts[b_key] += due_val
+        total_due += due_val
+        unique_students.add(stu.id)
+
+        all_items.append({
+            "item_id": str(itm.id),
+            "admission_id": str(adm.id),
+            "admission_number": adm.admission_number,
+            "admission_date": str(adm.admission_date),
+            "valid_from": str(itm.valid_from) if itm.valid_from else (str(adm.valid_from) if adm.valid_from else None),
+            "valid_to": str(itm.valid_to) if itm.valid_to else (str(adm.valid_to) if adm.valid_to else None),
+            "student_id": str(stu.id),
+            "student_name": stu.name,
+            "student_code": stu.student_code,
+            "mobile": stu.mobile or "",
+            "father_name": stu.father_name or "",
+            "subject_id": str(sub.id) if sub else (str(itm.subject_id) if itm.subject_id else None),
+            "subject_name": sub.name if sub else (itm.item_name_snapshot or "Subject"),
+            "subject_code": sub.subject_code if sub else "",
+            "batch_id": str(bch.id) if bch else (str(itm.batch_id) if itm.batch_id else None),
+            "batch_name": bch.name if bch else (itm.item_name_snapshot or "Direct Subject"),
+            "teacher_name": itm.teacher_name_snapshot or (tch.name if tch else (bch.teacher_name_snapshot if bch else "Faculty")),
+            "net_price": float(itm.net_price),
+            "amount_collected": float(itm.amount_collected),
+            "balance_due": float(itm.balance_due),
+            "written_off_amount": float(itm.written_off_amount or Decimal("0.00")),
+            "age_days": age_days,
+            "ageing_bucket": b_key
+        })
+
+    filtered_items = all_items
+    if ageing_bucket and ageing_bucket.upper() != "ALL":
+        filtered_items = [i for i in filtered_items if i["ageing_bucket"] == ageing_bucket]
+    if search and search.strip():
+        q = search.strip().lower()
+        filtered_items = [
+            i for i in filtered_items
+            if q in i["student_name"].lower()
+            or q in i["student_code"].lower()
+            or q in i["mobile"].lower()
+            or q in i["admission_number"].lower()
+            or q in i["subject_name"].lower()
+            or q in i["batch_name"].lower()
+        ]
+
+    total_matching = len(filtered_items)
+    if limit and len(filtered_items) > limit:
+        filtered_items = filtered_items[:limit]
+
+    return {
+        "summary": {
+            "total_due": float(total_due),
+            "total_students": len(unique_students),
+            "total_records": len(all_items),
+            "total_matching": total_matching,
+            "buckets": {
+                "0-30": {"count": bucket_counts["0-30"], "amount": float(bucket_amounts["0-30"])},
+                "31-60": {"count": bucket_counts["31-60"], "amount": float(bucket_amounts["31-60"])},
+                "61-90": {"count": bucket_counts["61-90"], "amount": float(bucket_amounts["61-90"])},
+                "90+": {"count": bucket_counts["90+"], "amount": float(bucket_amounts["90+"])}
+            }
+        },
+        "items": filtered_items
+    }
+
+
+async def get_collections_detailed(
+    db: AsyncSession,
+    from_date: Optional[date] = None,
+    to_date: Optional[date] = None,
+    payment_mode: Optional[str] = None,
+    cashier_id: Optional[uuid.UUID] = None,
+    search: Optional[str] = None,
+    limit: Optional[int] = 500
+) -> Dict[str, Any]:
+    """
+    Collections Report:
+    Total collected by date range, broken down by payment mode and cashier,
+    with full transaction list from ledger.
+    """
+    start_dt, end_dt = ist_day_boundaries(from_date, to_date)
+    by_mode = await get_collections_by_mode(db, from_date, to_date)
+    by_cashier = await get_collections_by_cashier(db, from_date, to_date)
+
+    conds = []
+    if start_dt:
+        conds.append(Payment.payment_date >= start_dt)
+    if end_dt:
+        conds.append(Payment.payment_date < end_dt)
+    if payment_mode and payment_mode.upper() != "ALL":
+        conds.append(Payment.payment_mode == payment_mode.upper())
+    if cashier_id:
+        conds.append(Payment.collected_by == cashier_id)
+
+    stmt = (
+        select(Payment, Student, Admission, User)
+        .join(Student, Payment.student_id == Student.id)
+        .join(Admission, Payment.admission_id == Admission.id)
+        .outerjoin(User, Payment.collected_by == User.id)
+        .where(*conds)
+        .order_by(Payment.payment_date.desc())
+    )
+    res = await db.execute(stmt)
+    rows = res.all()
+
+    txns = []
+    for p, stu, adm, usr in rows:
+        c_name = usr.full_name if usr else (p.collector_name_snapshot or "Staff")
+        txns.append({
+            "id": str(p.id),
+            "payment_number": p.payment_number,
+            "payment_date": p.payment_date.isoformat() if p.payment_date else None,
+            "amount": float(p.amount),
+            "payment_mode": p.payment_mode,
+            "transaction_reference": p.transaction_reference or "",
+            "cashier_id": str(p.collected_by) if p.collected_by else None,
+            "cashier_name": c_name,
+            "student_id": str(stu.id),
+            "student_name": stu.name,
+            "student_code": stu.student_code,
+            "mobile": stu.mobile or "",
+            "admission_id": str(adm.id),
+            "admission_number": adm.admission_number,
+            "fee_period": p.fee_period or "",
+            "notes": p.notes or ""
+        })
+
+    if search and search.strip():
+        q = search.strip().lower()
+        txns = [
+            t for t in txns
+            if q in t["payment_number"].lower()
+            or q in t["student_name"].lower()
+            or q in t["student_code"].lower()
+            or q in t["mobile"].lower()
+            or q in t["admission_number"].lower()
+            or q in t["cashier_name"].lower()
+            or q in t["transaction_reference"].lower()
+        ]
+
+    gross = sum((m["gross_collected"] for m in by_mode), Decimal("0.00"))
+    ref = sum((m["total_refunded"] for m in by_mode), Decimal("0.00"))
+    net = gross - ref
+    p_count = sum((m["payment_count"] for m in by_mode), 0)
+
+    total_matching = len(txns)
+    if limit and len(txns) > limit:
+        txns = txns[:limit]
+
+    return {
+        "summary": {
+            "gross_collected": float(gross),
+            "total_refunded": float(ref),
+            "net_collected": float(net),
+            "payment_count": p_count,
+            "total_matching": total_matching,
+            "filtered_transactions_count": len(txns)
+        },
+        "by_mode": [
+            {
+                "mode": m["mode"],
+                "payment_count": m["payment_count"],
+                "gross_collected": float(m["gross_collected"]),
+                "refund_count": m["refund_count"],
+                "total_refunded": float(m["total_refunded"]),
+                "net_collected": float(m["net_collected"])
+            }
+            for m in by_mode
+        ],
+        "by_cashier": [
+            {
+                "user_id": c["user_id"],
+                "cashier_name": c["cashier_name"],
+                "username": c["username"],
+                "payment_count": c["payment_count"],
+                "gross_collected": float(c["gross_collected"]),
+                "refund_count": c["refund_count"],
+                "total_refunded": float(c["total_refunded"]),
+                "net_collected": float(c["net_collected"])
+            }
+            for c in by_cashier
+        ],
+        "transactions": txns
+    }
+
+
+async def get_waivers_detailed(
+    db: AsyncSession,
+    from_date: Optional[date] = None,
+    to_date: Optional[date] = None,
+    admin_id: Optional[uuid.UUID] = None,
+    search: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Waivers Report:
+    All waived dues with authorizing admin, reason and audit reference.
+    """
+    start_dt, end_dt = ist_day_boundaries(from_date, to_date)
+    conds = [FinancialTransaction.txn_type == "WAIVER"]
+    if start_dt:
+        conds.append(FinancialTransaction.txn_at >= start_dt)
+    if end_dt:
+        conds.append(FinancialTransaction.txn_at < end_dt)
+    if admin_id:
+        conds.append(FinancialTransaction.created_by == admin_id)
+
+    stmt = (
+        select(FinancialTransaction, Student, Admission, User)
+        .join(Student, FinancialTransaction.student_id == Student.id)
+        .join(Admission, FinancialTransaction.admission_id == Admission.id)
+        .outerjoin(User, FinancialTransaction.created_by == User.id)
+        .where(*conds)
+        .order_by(FinancialTransaction.txn_at.desc())
+    )
+    res = await db.execute(stmt)
+    rows = res.all()
+
+    waivers = []
+    total_amount = Decimal("0.00")
+    unique_students = set()
+
+    for tx, stu, adm, usr in rows:
+        amt = abs(tx.signed_amount) if tx.signed_amount else Decimal("0.00")
+        total_amount += amt
+        unique_students.add(stu.id)
+        admin_name = usr.full_name if usr else (usr.username if usr else "System Administrator")
+
+        waivers.append({
+            "id": str(tx.id),
+            "waiver_number": tx.txn_number,
+            "date": tx.txn_at.isoformat() if tx.txn_at else None,
+            "student_id": str(stu.id),
+            "student_name": stu.name,
+            "student_code": stu.student_code,
+            "mobile": stu.mobile or "",
+            "admission_id": str(adm.id),
+            "admission_number": adm.admission_number,
+            "waived_amount": float(amt),
+            "admin_id": str(tx.created_by) if tx.created_by else None,
+            "admin_name": admin_name,
+            "admin_role": usr.role if usr else "ADMIN",
+            "reason": tx.reason or "Fee due waived by admin",
+            "audit_reference": tx.txn_number
+        })
+
+    if search and search.strip():
+        q = search.strip().lower()
+        waivers = [
+            w for w in waivers
+            if q in w["waiver_number"].lower()
+            or q in w["student_name"].lower()
+            or q in w["student_code"].lower()
+            or q in w["mobile"].lower()
+            or q in w["admission_number"].lower()
+            or q in w["admin_name"].lower()
+            or q in w["reason"].lower()
+        ]
+
+    return {
+        "summary": {
+            "total_waived_amount": float(total_amount),
+            "waivers_count": len(waivers),
+            "unique_students_count": len(unique_students)
+        },
+        "items": waivers
+    }
+
+
+async def get_refunds_detailed(
+    db: AsyncSession,
+    from_date: Optional[date] = None,
+    to_date: Optional[date] = None,
+    refund_mode: Optional[str] = None,
+    search: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Refunds Report:
+    All refunded fees with deductions, mode, reason, cashier and student info.
+    """
+    start_dt, end_dt = ist_day_boundaries(from_date, to_date)
+    conds = []
+    if start_dt:
+        conds.append(Refund.refund_date >= start_dt)
+    if end_dt:
+        conds.append(Refund.refund_date < end_dt)
+    if refund_mode and refund_mode.upper() != "ALL":
+        conds.append(Refund.refund_mode == refund_mode.upper())
+
+    stmt = (
+        select(Refund, Student, Admission, User, Payment)
+        .join(Student, Refund.student_id == Student.id)
+        .join(Admission, Refund.admission_id == Admission.id)
+        .outerjoin(User, Refund.processed_by == User.id)
+        .outerjoin(Payment, Refund.payment_id == Payment.id)
+        .where(*conds)
+        .order_by(Refund.refund_date.desc())
+    )
+    res = await db.execute(stmt)
+    rows = res.all()
+
+    total_net = Decimal("0.00")
+    total_gross = Decimal("0.00")
+    total_ded = Decimal("0.00")
+
+    items = []
+    for rf, stu, adm, usr, pay in rows:
+        net_amt = rf.amount or Decimal("0.00")
+        gross_amt = rf.refund_amount_requested or net_amt
+        ded_amt = rf.deduction_amount or Decimal("0.00")
+        total_net += net_amt
+        total_gross += gross_amt
+        total_ded += ded_amt
+
+        proc_name = usr.full_name if usr else (rf.processor_name_snapshot or "Administrator")
+        items.append({
+            "id": str(rf.id),
+            "refund_number": rf.refund_number,
+            "refund_date": rf.refund_date.isoformat() if rf.refund_date else None,
+            "student_id": str(stu.id),
+            "student_name": stu.name,
+            "student_code": stu.student_code,
+            "mobile": stu.mobile or "",
+            "admission_id": str(adm.id),
+            "admission_number": adm.admission_number,
+            "payment_number": pay.payment_number if pay else None,
+            "amount": float(net_amt),
+            "refund_amount_requested": float(gross_amt),
+            "deduction_amount": float(ded_amt),
+            "deduction_reason": rf.deduction_reason or "",
+            "refund_mode": rf.refund_mode,
+            "reason": rf.reason or "",
+            "processor_id": str(rf.processed_by) if rf.processed_by else None,
+            "processor_name": proc_name,
+            "notes": rf.notes or ""
+        })
+
+    if search and search.strip():
+        q = search.strip().lower()
+        items = [
+            r for r in items
+            if q in r["refund_number"].lower()
+            or q in r["student_name"].lower()
+            or q in r["student_code"].lower()
+            or q in r["mobile"].lower()
+            or q in r["admission_number"].lower()
+            or q in r["reason"].lower()
+            or q in r["processor_name"].lower()
+        ]
+
+    return {
+        "summary": {
+            "total_refunded_amount": float(total_net),
+            "gross_requested_amount": float(total_gross),
+            "total_deductions_amount": float(total_ded),
+            "total_refunds_count": len(items)
+        },
+        "items": items
+    }
+
+
+async def get_expenses_detailed(
+    db: AsyncSession,
+    from_date: Optional[date] = None,
+    to_date: Optional[date] = None,
+    category_id: Optional[uuid.UUID] = None,
+    payment_mode: Optional[str] = None,
+    search: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Expenses Report:
+    Daily operating expenses and salaries disbursed by category and payment mode.
+    """
+    exp_conds = []
+    if from_date:
+        exp_conds.append(Expense.expense_date >= from_date)
+    if to_date:
+        exp_conds.append(Expense.expense_date <= to_date)
+    if category_id:
+        exp_conds.append(Expense.category_id == category_id)
+    if payment_mode and payment_mode.upper() != "ALL":
+        exp_conds.append(Expense.payment_mode == payment_mode.upper())
+
+    exp_stmt = (
+        select(Expense, ExpenseCategory, User)
+        .join(ExpenseCategory, Expense.category_id == ExpenseCategory.id)
+        .outerjoin(User, Expense.added_by == User.id)
+        .where(*exp_conds)
+        .order_by(Expense.expense_date.desc())
+    )
+    exp_rows = (await db.execute(exp_stmt)).all()
+
+    sal_conds = [SalaryRecord.status == "PAID", SalaryRecord.paid_amount > Decimal("0.00")]
+    if from_date:
+        sal_conds.append(SalaryRecord.payment_date >= from_date)
+    if to_date:
+        sal_conds.append(SalaryRecord.payment_date <= to_date)
+    if payment_mode and payment_mode.upper() != "ALL":
+        sal_conds.append(SalaryRecord.payment_mode == payment_mode.upper())
+
+    sal_rows = []
+    if not category_id:
+        sal_stmt = (
+            select(SalaryRecord)
+            .where(*sal_conds)
+            .order_by(SalaryRecord.payment_date.desc())
+        )
+        sal_rows = (await db.execute(sal_stmt)).scalars().all()
+
+    total_operational = Decimal("0.00")
+    total_salaries = Decimal("0.00")
+    by_category_map: Dict[str, Dict[str, Any]] = {}
+    by_mode_map: Dict[str, Dict[str, Any]] = {}
+    items = []
+
+    for exp, cat, usr in exp_rows:
+        amt = exp.amount or Decimal("0.00")
+        total_operational += amt
+        cat_name = cat.name if cat else "General"
+        mode_name = exp.payment_mode.upper() if exp.payment_mode else "CASH"
+
+        by_category_map.setdefault(cat_name, {"category_name": cat_name, "count": 0, "amount": Decimal("0.00")})
+        by_category_map[cat_name]["count"] += 1
+        by_category_map[cat_name]["amount"] += amt
+
+        by_mode_map.setdefault(mode_name, {"mode": mode_name, "count": 0, "amount": Decimal("0.00")})
+        by_mode_map[mode_name]["count"] += 1
+        by_mode_map[mode_name]["amount"] += amt
+
+        items.append({
+            "id": str(exp.id),
+            "type": "EXPENSE",
+            "date": str(exp.expense_date),
+            "title": exp.title,
+            "category_name": cat_name,
+            "amount": float(amt),
+            "payment_mode": mode_name,
+            "reference": exp.transaction_reference or "",
+            "added_by_name": usr.full_name if usr else "Staff",
+            "notes": exp.notes or ""
+        })
+
+    for sal in sal_rows:
+        amt = sal.paid_amount or Decimal("0.00")
+        total_salaries += amt
+        cat_name = f"Salary ({sal.employee_type.title()})"
+        mode_name = sal.payment_mode.upper() if sal.payment_mode else "BANK_TRANSFER"
+
+        by_category_map.setdefault(cat_name, {"category_name": cat_name, "count": 0, "amount": Decimal("0.00")})
+        by_category_map[cat_name]["count"] += 1
+        by_category_map[cat_name]["amount"] += amt
+
+        by_mode_map.setdefault(mode_name, {"mode": mode_name, "count": 0, "amount": Decimal("0.00")})
+        by_mode_map[mode_name]["count"] += 1
+        by_mode_map[mode_name]["amount"] += amt
+
+        items.append({
+            "id": str(sal.id),
+            "type": "SALARY",
+            "date": str(sal.payment_date or sal.due_date),
+            "title": f"Salary: {sal.employee_name_snapshot} ({sal.month_year})",
+            "category_name": cat_name,
+            "amount": float(amt),
+            "payment_mode": mode_name,
+            "reference": sal.month_year,
+            "added_by_name": "Payroll Administrator",
+            "notes": sal.notes or ""
+        })
+
+    if search and search.strip():
+        q = search.strip().lower()
+        items = [
+            i for i in items
+            if q in i["title"].lower()
+            or q in i["category_name"].lower()
+            or q in i["reference"].lower()
+            or q in i["payment_mode"].lower()
+            or q in i["added_by_name"].lower()
+        ]
+
+    items.sort(key=lambda x: x["date"], reverse=True)
+
+    return {
+        "summary": {
+            "total_expenses": float(total_operational + total_salaries),
+            "total_operational_expenses": float(total_operational),
+            "total_salaries_paid": float(total_salaries),
+            "expense_count": len(items)
+        },
+        "by_category": [
+            {"category_name": c["category_name"], "count": c["count"], "amount": float(c["amount"])}
+            for c in by_category_map.values()
+        ],
+        "by_mode": [
+            {"mode": m["mode"], "count": m["count"], "amount": float(m["amount"])}
+            for m in by_mode_map.values()
+        ],
+        "items": items
+    }
+
+
+async def get_admissions_conversion_detailed(
+    db: AsyncSession,
+    from_date: Optional[date] = None,
+    to_date: Optional[date] = None,
+    subject_id: Optional[uuid.UUID] = None,
+    source: Optional[str] = None,
+    search: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Admissions & Conversion Report:
+    Enquiries received, converted to admissions, conversion rate, by subject and by source.
+    """
+    start_dt, end_dt = ist_day_boundaries(from_date, to_date)
+    conds = []
+    if start_dt:
+        conds.append(Enquiry.created_at >= start_dt)
+    if end_dt:
+        conds.append(Enquiry.created_at < end_dt)
+
+    stmt = (
+        select(Enquiry, Student, Admission)
+        .outerjoin(Student, Enquiry.converted_student_id == Student.id)
+        .outerjoin(Admission, Student.id == Admission.student_id)
+        .where(*conds)
+        .order_by(Enquiry.created_at.desc())
+    )
+    res = await db.execute(stmt)
+    rows = res.all()
+
+    by_subject_map: Dict[str, Dict[str, Any]] = {}
+    by_source_map: Dict[str, Dict[str, Any]] = {}
+    items = []
+
+    total_enquiries = 0
+    total_converted = 0
+    seen_enq = set()
+
+    for enq, stu, adm in rows:
+        if enq.id in seen_enq:
+            continue
+        seen_enq.add(enq.id)
+
+        is_conv = (enq.status == "CONVERTED" or enq.converted_student_id is not None)
+        total_enquiries += 1
+        if is_conv:
+            total_converted += 1
+
+        subj_name = enq.interested_subject or "General Coaching"
+        src_name = resolve_enquiry_source(enq)
+
+        by_subject_map.setdefault(subj_name, {"subject_name": subj_name, "enquiries_count": 0, "converted_count": 0})
+        by_subject_map[subj_name]["enquiries_count"] += 1
+        if is_conv:
+            by_subject_map[subj_name]["converted_count"] += 1
+
+        by_source_map.setdefault(src_name, {"source_name": src_name, "enquiries_count": 0, "converted_count": 0})
+        by_source_map[src_name]["enquiries_count"] += 1
+        if is_conv:
+            by_source_map[src_name]["converted_count"] += 1
+
+        items.append({
+            "id": str(enq.id),
+            "enquiry_code": enq.enquiry_code,
+            "student_name": enq.student_name,
+            "mobile": enq.mobile or "",
+            "father_name": enq.father_name or "",
+            "school_college": enq.school_college or "",
+            "purpose": enq.purpose or "",
+            "interested_subject": subj_name,
+            "source": src_name,
+            "status": enq.status,
+            "is_converted": is_conv,
+            "converted_student_id": str(enq.converted_student_id) if enq.converted_student_id else None,
+            "converted_student_name": stu.name if stu else None,
+            "converted_student_code": stu.student_code if stu else None,
+            "admission_number": adm.admission_number if adm else None,
+            "created_at": enq.created_at.isoformat() if enq.created_at else None
+        })
+
+    filtered_items = items
+    if source and source.upper() != "ALL":
+        filtered_items = [i for i in filtered_items if i["source"].lower() == source.lower()]
+    if search and search.strip():
+        q = search.strip().lower()
+        filtered_items = [
+            i for i in filtered_items
+            if q in i["enquiry_code"].lower()
+            or q in i["student_name"].lower()
+            or q in i["mobile"].lower()
+            or q in i["interested_subject"].lower()
+            or q in i["source"].lower()
+        ]
+
+    overall_rate = round((total_converted / total_enquiries * 100), 1) if total_enquiries > 0 else 0.0
+
+    by_subject = []
+    for s in by_subject_map.values():
+        cnt = s["enquiries_count"]
+        conv = s["converted_count"]
+        rate = round((conv / cnt * 100), 1) if cnt > 0 else 0.0
+        by_subject.append({**s, "conversion_rate_pct": rate})
+    by_subject.sort(key=lambda x: x["enquiries_count"], reverse=True)
+
+    by_source = []
+    for s in by_source_map.values():
+        cnt = s["enquiries_count"]
+        conv = s["converted_count"]
+        rate = round((conv / cnt * 100), 1) if cnt > 0 else 0.0
+        by_source.append({**s, "conversion_rate_pct": rate})
+    by_source.sort(key=lambda x: x["enquiries_count"], reverse=True)
+
+    return {
+        "summary": {
+            "total_enquiries": total_enquiries,
+            "total_converted": total_converted,
+            "overall_conversion_rate": overall_rate
+        },
+        "by_subject": by_subject,
+        "by_source": by_source,
+        "items": filtered_items
+    }
+
+
+async def get_summary_dashboard_detailed(
+    db: AsyncSession,
+    period: str = "daily",
+    from_date: Optional[date] = None,
+    to_date: Optional[date] = None,
+    month: Optional[int] = None,
+    year: Optional[int] = None
+) -> Dict[str, Any]:
+    """
+    Daily / Monthly Summary Dashboard:
+    Billed, collected, due, expenses, refunds, net cash with interval trends.
+    """
+    today = today_kolkata()
+    if month and year:
+        _, last_day = calendar.monthrange(year, month)
+        f_date, t_date = date(year, month, 1), date(year, month, last_day)
+    elif year and not month and not from_date and not to_date:
+        f_date, t_date = date(year, 1, 1), date(year, 12, 31)
+    else:
+        if from_date and not to_date:
+            to_date = today
+        elif to_date and not from_date:
+            from_date = date(to_date.year, 1, 1)
+        f_date, t_date = from_date, to_date
+
+    if not f_date and not t_date:
+        if period == "daily":
+            f_date = today - timedelta(days=29)
+            t_date = today
+        else:
+            f_date = date(today.year, 1, 1)
+            t_date = date(today.year, 12, 31)
+
+    start_dt, end_dt = ist_day_boundaries(f_date, t_date)
+
+    # 1. Total Inflows (Payments) in period
+    pay_conds = []
+    if start_dt:
+        pay_conds.append(Payment.payment_date >= start_dt)
+    if end_dt:
+        pay_conds.append(Payment.payment_date < end_dt)
+    tot_collected = (await db.execute(select(func.coalesce(func.sum(Payment.amount), Decimal("0.00"))).where(*pay_conds))).scalar_one()
+
+    # 2. Total Billed & Due (Admissions booked in period)
+    adm_conds = [Admission.status != "CANCELLED", Admission.document_status == "VALID"]
+    if f_date:
+        adm_conds.append(Admission.admission_date >= f_date)
+    if t_date:
+        adm_conds.append(Admission.admission_date <= t_date)
+    tot_billed = (await db.execute(select(func.coalesce(func.sum(Admission.total_payable), Decimal("0.00"))).where(*adm_conds))).scalar_one()
+    tot_due = (await db.execute(select(func.coalesce(func.sum(Admission.balance_due), Decimal("0.00"))).where(*adm_conds))).scalar_one()
+
+    # 3. Total Expenses in period
+    exp_conds = []
+    if f_date:
+        exp_conds.append(Expense.expense_date >= f_date)
+    if t_date:
+        exp_conds.append(Expense.expense_date <= t_date)
+    tot_exp = (await db.execute(select(func.coalesce(func.sum(Expense.amount), Decimal("0.00"))).where(*exp_conds))).scalar_one()
+
+    sal_conds = [SalaryRecord.status == "PAID"]
+    if f_date:
+        sal_conds.append(SalaryRecord.payment_date >= f_date)
+    if t_date:
+        sal_conds.append(SalaryRecord.payment_date <= t_date)
+    tot_sal = (await db.execute(select(func.coalesce(func.sum(SalaryRecord.paid_amount), Decimal("0.00"))).where(*sal_conds))).scalar_one()
+
+    # 4. Refunds in period
+    ref_conds = []
+    if start_dt:
+        ref_conds.append(Refund.refund_date >= start_dt)
+    if end_dt:
+        ref_conds.append(Refund.refund_date < end_dt)
+    tot_ref = (await db.execute(select(func.coalesce(func.sum(Refund.amount), Decimal("0.00"))).where(*ref_conds))).scalar_one()
+
+    total_outflows = tot_exp + tot_sal + tot_ref
+    net_cash = tot_collected - total_outflows
+
+    intervals = []
+    if period == "daily":
+        cur = f_date
+        while cur <= t_date:
+            d_start_dt, d_end_dt = ist_day_boundaries(cur, cur)
+
+            d_billed = (await db.execute(
+                select(func.coalesce(func.sum(Admission.total_payable), Decimal("0.00")))
+                .where(and_(Admission.admission_date == cur, Admission.status != "CANCELLED", Admission.document_status == "VALID"))
+            )).scalar_one()
+
+            d_due = (await db.execute(
+                select(func.coalesce(func.sum(Admission.balance_due), Decimal("0.00")))
+                .where(and_(Admission.admission_date == cur, Admission.status != "CANCELLED", Admission.document_status == "VALID"))
+            )).scalar_one()
+
+            d_coll = (await db.execute(
+                select(func.coalesce(func.sum(Payment.amount), Decimal("0.00")))
+                .where(and_(Payment.payment_date >= d_start_dt, Payment.payment_date < d_end_dt))
+            )).scalar_one()
+
+            d_exp = (await db.execute(
+                select(func.coalesce(func.sum(Expense.amount), Decimal("0.00")))
+                .where(Expense.expense_date == cur)
+            )).scalar_one()
+
+            d_sal = (await db.execute(
+                select(func.coalesce(func.sum(SalaryRecord.paid_amount), Decimal("0.00")))
+                .where(and_(SalaryRecord.status == "PAID", SalaryRecord.payment_date == cur))
+            )).scalar_one()
+
+            d_ref = (await db.execute(
+                select(func.coalesce(func.sum(Refund.amount), Decimal("0.00")))
+                .where(and_(Refund.refund_date >= d_start_dt, Refund.refund_date < d_end_dt))
+            )).scalar_one()
+
+            d_outflow = d_exp + d_sal + d_ref
+            intervals.append({
+                "period_key": str(cur),
+                "period_label": cur.strftime("%d %b %Y"),
+                "billed": float(d_billed),
+                "collected": float(d_coll),
+                "due": float(d_due),
+                "expenses": float(d_exp + d_sal),
+                "refunds": float(d_ref),
+                "net_cash": float(d_coll - d_outflow)
+            })
+            cur += timedelta(days=1)
+    else:
+        cur_year = f_date.year
+        cur_month = f_date.month
+        end_year = t_date.year
+        end_month = t_date.month
+        while (cur_year < end_year) or (cur_year == end_year and cur_month <= end_month):
+            _, last_d = calendar.monthrange(cur_year, cur_month)
+            m_start = max(f_date, date(cur_year, cur_month, 1))
+            m_end = min(t_date, date(cur_year, cur_month, last_d))
+            m_start_dt, m_end_dt = ist_day_boundaries(m_start, m_end)
+
+            m_billed = (await db.execute(
+                select(func.coalesce(func.sum(Admission.total_payable), Decimal("0.00")))
+                .where(and_(Admission.admission_date >= m_start, Admission.admission_date <= m_end, Admission.status != "CANCELLED", Admission.document_status == "VALID"))
+            )).scalar_one()
+
+            m_due = (await db.execute(
+                select(func.coalesce(func.sum(Admission.balance_due), Decimal("0.00")))
+                .where(and_(Admission.admission_date >= m_start, Admission.admission_date <= m_end, Admission.status != "CANCELLED", Admission.document_status == "VALID"))
+            )).scalar_one()
+
+            m_coll = (await db.execute(
+                select(func.coalesce(func.sum(Payment.amount), Decimal("0.00")))
+                .where(and_(Payment.payment_date >= m_start_dt, Payment.payment_date < m_end_dt))
+            )).scalar_one()
+
+            m_exp = (await db.execute(
+                select(func.coalesce(func.sum(Expense.amount), Decimal("0.00")))
+                .where(and_(Expense.expense_date >= m_start, Expense.expense_date <= m_end))
+            )).scalar_one()
+
+            m_sal = (await db.execute(
+                select(func.coalesce(func.sum(SalaryRecord.paid_amount), Decimal("0.00")))
+                .where(and_(SalaryRecord.status == "PAID", SalaryRecord.payment_date >= m_start, SalaryRecord.payment_date <= m_end))
+            )).scalar_one()
+
+            m_ref = (await db.execute(
+                select(func.coalesce(func.sum(Refund.amount), Decimal("0.00")))
+                .where(and_(Refund.refund_date >= m_start_dt, Refund.refund_date < m_end_dt))
+            )).scalar_one()
+
+            m_outflow = m_exp + m_sal + m_ref
+            intervals.append({
+                "period_key": f"{cur_year}-{cur_month:02d}",
+                "period_label": date(cur_year, cur_month, 1).strftime("%b %Y"),
+                "billed": float(m_billed),
+                "collected": float(m_coll),
+                "due": float(m_due),
+                "expenses": float(m_exp + m_sal),
+                "refunds": float(m_ref),
+                "net_cash": float(m_coll - m_outflow)
+            })
+            if cur_month == 12:
+                cur_month = 1
+                cur_year += 1
+            else:
+                cur_month += 1
+
+    return {
+        "filters": {
+            "from_date": str(f_date) if f_date else None,
+            "to_date": str(t_date) if t_date else None,
+            "period": period
+        },
+        "summary": {
+            "total_billed": float(tot_billed),
+            "total_collected": float(tot_collected),
+            "total_due": float(tot_due),
+            "total_expenses": float(tot_exp + tot_sal),
+            "total_refunds": float(tot_ref),
+            "net_cash": float(net_cash)
+        },
+        "intervals": intervals
+    }
+
 

@@ -112,6 +112,12 @@ export default function Sidebar({ isOpen, onClose }) {
           show: isAdmin,
         },
         {
+          to: '/reports',
+          label: 'Reports Hub',
+          icon: BarChart3,
+          show: isAdmin || isCashier,
+        },
+        {
           to: '/reports/subject-revenue',
           label: 'Subject Revenue',
           icon: BarChart3,

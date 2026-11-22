@@ -51,6 +51,7 @@ class EnquiryBase(BaseModel):
     father_name: Optional[str] = None
     school_college: Optional[str] = None
     purpose: str = Field(default="Admission Enquiry", max_length=150)
+    source: Optional[str] = Field(default="Direct Walk-in", max_length=100)
     interested_subject: Optional[str] = None
     demo_start_date: Optional[date] = None
     demo_duration_days: int = Field(default=3, ge=1, le=30)

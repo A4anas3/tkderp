@@ -614,6 +614,7 @@ async def create_enquiry(
         father_name=payload.father_name,
         school_college=payload.school_college,
         purpose=payload.purpose or "Admission Enquiry",
+        source=payload.source or "Direct Walk-in",
         interested_subject=summary_subject or "General Course Demo",
         demo_start_date=demo_start,
         demo_duration_days=demo_duration,

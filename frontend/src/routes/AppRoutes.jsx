@@ -26,6 +26,7 @@ import RemindersPage from '../pages/reminders/RemindersPage';
 import ExpensesPage from '../pages/expenses/ExpensesPage';
 import SubjectRevenuePage from '../pages/reports/SubjectRevenuePage';
 import CashFlowPage from '../pages/reports/CashFlowPage';
+import ReportsHubPage from '../pages/reports/ReportsHubPage';
 import StaffUsersPage from '../pages/users/StaffUsersPage';
 import AuditLogPage from '../pages/audit/AuditLogPage';
 import PublicVerifyPage from '../pages/verify/PublicVerifyPage';
@@ -268,7 +269,19 @@ export default function AppRoutes() {
         />
         <Route
           path="reports"
-          element={<Navigate to="/reports/subject-revenue" replace />}
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER']}>
+              <ReportsHubPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="reports/:reportTab"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER']}>
+              <ReportsHubPage />
+            </ProtectedRoute>
+          }
         />
         <Route
           path="reports/subject-revenue"
