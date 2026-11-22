@@ -39,9 +39,10 @@ export default function StudentIDCardModal({
     activeCourses[0]?.admission_number ||
     student.student_code;
 
-  // Online verification URL for QR code
+  // Online public ID card page URL for QR code (pre-filled with admission number)
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  const verifyUrl = `${origin}/verify/${encodeURIComponent(admissionNo)}`;
+  const publicIdCardUrl = `${origin}/id-card/${encodeURIComponent(admissionNo)}`;
+  const verifyUrl = publicIdCardUrl;
 
   // WhatsApp share link
   const whatsAppUrl = buildWhatsAppShareUrl({
@@ -286,10 +287,10 @@ export default function StudentIDCardModal({
                     />
                   </div>
                   <div className="space-y-0.5 text-[9px] sm:text-[10px] leading-tight">
-                    <p className="font-black text-black uppercase">SCAN TO VERIFY</p>
-                    <p className="text-slate-700 font-medium">Instant Authenticity</p>
+                    <p className="font-black text-black uppercase">SCAN FOR ID CARD</p>
+                    <p className="text-slate-700 font-medium">Instant Online Credential</p>
                     <p className="font-mono text-[8px] text-slate-600 break-all max-w-[130px]">
-                      /verify/{admissionNo}
+                      /id-card/{admissionNo}
                     </p>
                   </div>
                 </div>

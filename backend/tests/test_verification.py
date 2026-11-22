@@ -103,3 +103,103 @@ async def test_student_detail_contains_latest_admission_number(admin_token):
         detail = detail_res.json()
         assert detail["latest_admission_number"] is not None
         assert detail["latest_admission_number"] == student_with_adm["latest_admission_number"]
+
+@pytest.mark.asyncio
+async def test_public_id_card_active_student(admin_token):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        stu_res = await client.get("/api/students", headers={"Authorization": f"Bearer {admin_token}"})
+        assert stu_res.status_code == 200
+        students = stu_res.json()["items"]
+        
+        # Find active student with admission number
+        active_student = None
+        for s in students:
+            if s.get("latest_admission_number") and s.get("status") == "ACTIVE":
+                res = await client.get(f"/api/public/id-card/{s['latest_admission_number']}")
+                if res.status_code == 200:
+                    active_student = s
+                    break
+        assert active_student is not None, "Should find at least one student with active ID card"
+        
+        adm_no = active_student["latest_admission_number"]
+        card_res = await client.get(f"/api/public/id-card/{adm_no}")
+        assert card_res.status_code == 200
+        data = card_res.json()
+        assert data["verified"] is True
+        assert data["is_valid"] is True
+        assert data["student"]["name"] == active_student["name"]
+        assert data["student"]["student_code"] == active_student["student_code"]
+        assert data["student"]["admission_number"] == adm_no
+        assert len(data["active_courses"]) > 0
+        assert data["total_active_courses"] == len(data["active_courses"])
+        assert "THAKURDWARA COACHING INSTITUTE" in data["institute_name"]
+        
+        # Test alias route /api/id-card/{identifier}
+        alias_res = await client.get(f"/api/id-card/{adm_no}")
+        assert alias_res.status_code == 200
+        assert alias_res.json()["student"]["admission_number"] == adm_no
+        
+        # Test query parameter format
+        query_res = await client.get(f"/api/public/id-card?admission_no={adm_no}")
+        assert query_res.status_code == 200
+        assert query_res.json()["student"]["name"] == active_student["name"]
+
+@pytest.mark.asyncio
+async def test_public_id_card_no_sensitive_data(admin_token):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        stu_res = await client.get("/api/students", headers={"Authorization": f"Bearer {admin_token}"})
+        students = stu_res.json()["items"]
+        student_with_adm = next((s for s in students if s.get("latest_admission_number")), None)
+        assert student_with_adm is not None
+        
+        res = await client.get(f"/api/public/id-card/{student_with_adm['latest_admission_number']}")
+        if res.status_code == 200:
+            data = res.json()
+            # Verify no sensitive data leaked
+            assert "password" not in data
+            assert "password_hash" not in data
+            assert "mobile" not in data["student"]
+            assert "email" not in data["student"]
+            assert "dues" not in data
+            assert "payments" not in data
+            assert "discount" not in data
+
+@pytest.mark.asyncio
+async def test_public_id_card_expired_student_fails_with_404(admin_token):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # ENR-2026-0002 has no active courses
+        res = await client.get("/api/public/id-card/ENR-2026-0002")
+        assert res.status_code == 404
+        assert "No active enrolment" in res.json()["detail"]
+        # Never leak student name or details
+        assert "Ananya" not in res.text
+        assert "student" not in res.json()
+
+@pytest.mark.asyncio
+async def test_public_id_card_not_found():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        res = await client.get("/api/public/id-card/NONEXISTENT-CODE-99999")
+        assert res.status_code == 404
+        assert "No matching student" in res.json()["detail"]
+        assert "student" not in res.json()
+
+@pytest.mark.asyncio
+async def test_rate_limiter_blocks_abuse():
+    from app.core.rate_limit import RateLimiter, reset_rate_limits
+    
+    reset_rate_limits()
+    limiter = RateLimiter(times=3, seconds=60, prefix="test_abuse")
+    
+    class MockRequest:
+        headers = {"x-forwarded-for": "198.51.100.1"}
+        client = None
+    
+    req = MockRequest()
+    await limiter(req)
+    await limiter(req)
+    await limiter(req)
+    
+    with pytest.raises(Exception) as excinfo:
+        await limiter(req)
+    assert "Rate limit exceeded" in str(excinfo.value.detail)
+

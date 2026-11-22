@@ -30,6 +30,7 @@ import ReportsHubPage from '../pages/reports/ReportsHubPage';
 import StaffUsersPage from '../pages/users/StaffUsersPage';
 import AuditLogPage from '../pages/audit/AuditLogPage';
 import PublicVerifyPage from '../pages/verify/PublicVerifyPage';
+import PublicIDCardPage from '../pages/idcard/PublicIDCardPage';
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { user, loading, role } = useAuth();
@@ -62,6 +63,14 @@ export default function AppRoutes() {
       {/* Public Verification Portal (No login required) */}
       <Route path="/verify" element={<PublicVerifyPage />} />
       <Route path="/verify/:identifier" element={<PublicVerifyPage />} />
+
+      {/* Public ID Card Portal (No login required) */}
+      <Route path="/id-card" element={<PublicIDCardPage />} />
+      <Route path="/id-card/:identifier" element={<PublicIDCardPage />} />
+      <Route path="/idcard" element={<PublicIDCardPage />} />
+      <Route path="/idcard/:identifier" element={<PublicIDCardPage />} />
+      <Route path="/public/id-card" element={<PublicIDCardPage />} />
+      <Route path="/public/id-card/:identifier" element={<PublicIDCardPage />} />
 
       {/* Protected App Routes */}
       <Route

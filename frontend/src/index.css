@@ -247,6 +247,10 @@ input:focus, select:focus, textarea:focus {
   body:not(.modal-open):not(:has(.modal-backdrop-container)) * {
     visibility: hidden;
   }
+  body:not(.modal-open):not(:has(.modal-backdrop-container)) #printable-id-card,
+  body:not(.modal-open):not(:has(.modal-backdrop-container)) #printable-id-card *,
+  body:not(.modal-open):not(:has(.modal-backdrop-container)) .printable-id-card,
+  body:not(.modal-open):not(:has(.modal-backdrop-container)) .printable-id-card *,
   body:not(.modal-open):not(:has(.modal-backdrop-container)) #printable-verification,
   body:not(.modal-open):not(:has(.modal-backdrop-container)) #printable-verification *,
   body:not(.modal-open):not(:has(.modal-backdrop-container)) #printable-report,

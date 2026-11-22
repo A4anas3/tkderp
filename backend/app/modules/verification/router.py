@@ -1,8 +1,8 @@
 from datetime import date, datetime, timezone
 import uuid
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from decimal import Decimal
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc, or_
 from sqlalchemy.orm import selectinload
@@ -15,10 +15,17 @@ from app.modules.verification.schemas import (
     PublicVerificationResponse,
     StudentVerificationData,
     VerificationCourseItem,
+    PublicIDCardResponse,
+    IDCardStudentData,
+    IDCardCourseItem,
 )
 from app.common.active_lines import today_kolkata
+from app.core.rate_limit import RateLimiter
 
-router = APIRouter(tags=["Public Verification"])
+router = APIRouter(tags=["Public Verification & ID Card"])
+
+# Rate limiter for public ID card lookup: 60 requests per minute per IP
+id_card_rate_limiter = RateLimiter(times=60, seconds=60, prefix="id_card")
 
 def format_period(v_from: Optional[date], v_to: Optional[date]) -> str:
     if v_from and v_to:
@@ -29,20 +36,18 @@ def format_period(v_from: Optional[date], v_to: Optional[date]) -> str:
         return f"Valid from: {v_from.strftime('%d %b %Y')}"
     return "Valid: Active Academic Session"
 
-@router.get("/api/verify/{identifier}", response_model=PublicVerificationResponse)
-@router.get("/api/public/verify/{identifier}", response_model=PublicVerificationResponse)
-async def verify_student_credential(
+async def get_student_and_active_courses(
     identifier: str,
-    db: AsyncSession = Depends(get_db)
-):
+    db: AsyncSession
+) -> Tuple[Optional[Student], Optional[str], List[VerificationCourseItem], bool]:
     """
-    Public verification endpoint (no authentication required).
-    Verifies a student identity card and returns active course validity.
-    Supports lookup by admission number, student ID code, or UUID.
+    Look up student by admission number, student code, or UUID,
+    and resolve active enrolled course items.
+    Returns: (student, matched_adm_number, active_courses_list, is_overall_valid)
     """
     ident = identifier.strip()
     if not ident:
-        raise HTTPException(status_code=400, detail="Identifier cannot be empty")
+        return None, None, [], False
 
     today = today_kolkata()
     student = None
@@ -71,12 +76,10 @@ async def verify_student_credential(
     if not student:
         try:
             val_uuid = uuid.UUID(ident)
-            # Try student by ID
             stu_by_id = (await db.execute(select(Student).where(Student.id == val_uuid))).scalar_one_or_none()
             if stu_by_id:
                 student = stu_by_id
             else:
-                # Try admission by ID
                 adm_by_id = (await db.execute(
                     select(Admission)
                     .options(selectinload(Admission.student), selectinload(Admission.items))
@@ -89,10 +92,7 @@ async def verify_student_credential(
             pass
 
     if not student:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No matching student or admission record found for identifier '{identifier}'."
-        )
+        return None, None, [], False
 
     # Load all admissions and items for this student to determine active courses
     items_stmt = (
@@ -166,7 +166,6 @@ async def verify_student_credential(
     # Consolidate chained active cycles for each subject
     active_courses_list: List[VerificationCourseItem] = []
     for clean_key, cycle_list in active_courses_dict.items():
-        # Sort chronologically by valid_from
         cycle_list.sort(key=lambda x: (x[0].valid_from or x[1].valid_from or x[1].admission_date or date.min))
 
         valid_froms = [x[0].valid_from or x[1].valid_from for x in cycle_list if (x[0].valid_from or x[1].valid_from)]
@@ -213,6 +212,31 @@ async def verify_student_credential(
         and len(active_courses_list) > 0
     )
 
+    return student, matched_adm_number, active_courses_list, is_overall_valid
+
+@router.get("/api/verify/{identifier}", response_model=PublicVerificationResponse)
+@router.get("/api/public/verify/{identifier}", response_model=PublicVerificationResponse)
+async def verify_student_credential(
+    identifier: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Public verification endpoint (no authentication required).
+    Verifies a student identity card and returns active course validity.
+    Supports lookup by admission number, student ID code, or UUID.
+    """
+    ident = identifier.strip()
+    if not ident:
+        raise HTTPException(status_code=400, detail="Identifier cannot be empty")
+
+    student, matched_adm_number, active_courses_list, is_overall_valid = await get_student_and_active_courses(ident, db)
+
+    if not student:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No matching student or admission record found for identifier '{identifier}'."
+        )
+
     student_data = StudentVerificationData(
         name=student.name,
         student_code=student.student_code,
@@ -230,4 +254,87 @@ async def verify_student_credential(
         active_courses=active_courses_list,
         total_active_courses=len(active_courses_list),
         verified_at=datetime.now(timezone.utc)
+    )
+
+@router.get("/api/public/id-card/{identifier}", response_model=PublicIDCardResponse)
+@router.get("/api/id-card/{identifier}", response_model=PublicIDCardResponse)
+@router.get("/api/public/idcard/{identifier}", response_model=PublicIDCardResponse)
+@router.get("/api/idcard/{identifier}", response_model=PublicIDCardResponse)
+@router.get("/api/public/id-card", response_model=PublicIDCardResponse)
+@router.get("/api/id-card", response_model=PublicIDCardResponse)
+@router.get("/api/public/idcard", response_model=PublicIDCardResponse)
+@router.get("/api/idcard", response_model=PublicIDCardResponse)
+async def get_public_id_card(
+    identifier: Optional[str] = None,
+    admission_no: Optional[str] = Query(None),
+    student_id: Optional[str] = Query(None),
+    ident_param: Optional[str] = Query(None, alias="identifier"),
+    db: AsyncSession = Depends(get_db),
+    _limiter: None = Depends(id_card_rate_limiter),
+):
+    """
+    Public student ID card endpoint (no authentication required).
+    Returns the student ID card data ONLY if that student has an active subject/enrolment.
+    If the student has no active subject, returns 404 with a clear message and leaks no student data.
+    Equipped with rate limiting and returns only non-sensitive card-visible attributes.
+    """
+    target_ident = (identifier or admission_no or student_id or ident_param or "").strip()
+    if not target_ident:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Identifier (admission number or student ID) cannot be empty."
+        )
+
+    student, matched_adm_number, active_courses_list, is_overall_valid = await get_student_and_active_courses(target_ident, db)
+
+    if not student:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No matching student or admission record found for '{target_ident}'."
+        )
+
+    # Return ID card data ONLY if the student has an active subject/enrolment
+    if not is_overall_valid or len(active_courses_list) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active enrolment or ID card is available for this student."
+        )
+
+    student_data = IDCardStudentData(
+        name=student.name,
+        student_code=student.student_code,
+        admission_number=matched_adm_number or student.student_code,
+        photo_url=student.photo_url,
+        father_name=student.father_name,
+        status=student.status,
+    )
+
+    course_items = [
+        IDCardCourseItem(
+            course_name=c.course_name,
+            subject_name=c.subject_name,
+            batch_name=c.batch_name,
+            teacher_name=c.teacher_name,
+            hall_number=c.hall_number,
+            valid_from=c.valid_from,
+            valid_to=c.valid_to,
+            validity_period=c.validity_period,
+            days_remaining=c.days_remaining,
+            status=c.status,
+            admission_number=c.admission_number,
+        )
+        for c in active_courses_list
+    ]
+
+    return PublicIDCardResponse(
+        verified=True,
+        is_valid=True,
+        student=student_data,
+        active_courses=course_items,
+        total_active_courses=len(course_items),
+        institute_name="THAKURDWARA COACHING INSTITUTE",
+        institute_tagline="Civil Lines, Thakurdwara (U.P.) • ISO 9001:2015 Certified",
+        institute_address="Civil Lines, Thakurdwara (U.P.)",
+        institute_phone="+91 98765 43210",
+        issued_at=datetime.now(timezone.utc)
     )

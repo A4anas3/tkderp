@@ -40,3 +40,42 @@ class PublicVerificationResponse(BaseModel):
     verified_at: datetime = Field(default_factory=datetime.now)
 
     model_config = ConfigDict(from_attributes=True)
+
+class IDCardCourseItem(BaseModel):
+    course_name: str
+    subject_name: Optional[str] = None
+    batch_name: Optional[str] = None
+    teacher_name: Optional[str] = None
+    hall_number: Optional[str] = None
+    valid_from: Optional[date] = None
+    valid_to: Optional[date] = None
+    validity_period: str
+    days_remaining: Optional[int] = None
+    status: str = "ACTIVE"
+    admission_number: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+class IDCardStudentData(BaseModel):
+    name: str
+    student_code: str
+    admission_number: str
+    photo_url: Optional[str] = None
+    father_name: Optional[str] = None
+    status: str = "ACTIVE"
+
+    model_config = ConfigDict(from_attributes=True)
+
+class PublicIDCardResponse(BaseModel):
+    verified: bool = True
+    is_valid: bool = True
+    student: IDCardStudentData
+    active_courses: List[IDCardCourseItem]
+    total_active_courses: int
+    institute_name: str = "THAKURDWARA COACHING INSTITUTE"
+    institute_tagline: str = "Civil Lines, Thakurdwara (U.P.) • ISO 9001:2015 Certified"
+    institute_address: str = "Civil Lines, Thakurdwara (U.P.)"
+    institute_phone: str = "+91 98765 43210"
+    issued_at: datetime = Field(default_factory=datetime.now)
+
+    model_config = ConfigDict(from_attributes=True)
