@@ -50,7 +50,7 @@ export default function Topbar({ onToggleSidebar, onQuickStudent, onQuickPayment
             icon={CreditCard}
             onClick={onQuickPayment}
             className="min-h-[36px] sm:min-h-[32px] px-3 sm:px-2.5 py-1.5 sm:py-1 text-xs font-bold whitespace-nowrap shadow-2xs"
-            title="Collect Fee / Record Payment"
+            title="Collect Outstanding Fee (Select Student & Invoice)"
           >
             Collect Fee
           </Button>

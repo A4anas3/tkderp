@@ -125,14 +125,11 @@ export default function QuickPaymentModal({
             }
           } else {
             setAdmissions(dues);
-            if (dues.length > 0) {
-              setSelectedAdmissionId(dues[0].id);
-              setAmount(Number(dues[0].balance_due || 0).toFixed(2));
-              initPeriodFromAdmission(dues[0]);
-            } else {
-              setSelectedAdmissionId('');
-              setAmount('0.00');
-            }
+            setSelectedAdmissionId('');
+            setAmount('0.00');
+            setValidFrom('');
+            setValidTo('');
+            setFeePeriod('');
           }
         } catch (err) {
           error(err.message || 'Failed to load unpaid admissions');
@@ -189,20 +186,26 @@ export default function QuickPaymentModal({
     if (found) {
       setAmount(Number(found.balance_due || 0).toFixed(2));
       initPeriodFromAdmission(found);
+    } else {
+      setAmount('0.00');
+      setValidFrom('');
+      setValidTo('');
+      setFeePeriod('');
     }
   };
 
-  const selectedAdmission =
-    admissions.find((a) => a.id === selectedAdmissionId) ||
-    (admissions.length > 0 ? admissions[0] : null);
+  const selectedAdmission = admissions.find((a) => a.id === selectedAdmissionId) || null;
 
   // Filter admissions for search
   const filteredAdmissions = admissions.filter((a) => {
     if (!searchFilter.trim()) return true;
     const term = searchFilter.toLowerCase();
     const nameMatch = (a.student_name_snapshot || '').toLowerCase().includes(term);
+    const codeMatch = (a.student_code_snapshot || '').toLowerCase().includes(term);
+    const mobileMatch = (a.student_mobile || '').toLowerCase().includes(term);
     const admMatch = (a.purchase_transaction_id || a.admission_number || '').toLowerCase().includes(term);
-    return nameMatch || admMatch;
+    const itemMatch = (a.items || []).some((itm) => (itm.item_name_snapshot || '').toLowerCase().includes(term));
+    return nameMatch || codeMatch || mobileMatch || admMatch || itemMatch;
   });
 
   const handleSubmit = async (e) => {
@@ -252,8 +255,16 @@ export default function QuickPaymentModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Collect Full Fee Payment"
-      subtitle="Record full outstanding fee settlement with complete payment history and coverage period"
+      title={
+        selectedAdmission
+          ? `Collect Fee: ${selectedAdmission.student_name_snapshot}`
+          : 'Collect Outstanding Student Fee'
+      }
+      subtitle={
+        selectedAdmission
+          ? `Invoice: ${selectedAdmission.purchase_transaction_id || selectedAdmission.admission_number} • Outstanding Due: ₹${Number(selectedAdmission.balance_due || 0).toFixed(2)}`
+          : 'Select an enrolled student with pending balance to collect their fee payment'
+      }
       maxWidth="max-w-lg"
     >
       <form onSubmit={handleSubmit} className="space-y-3.5">
@@ -262,7 +273,7 @@ export default function QuickPaymentModal({
             Loading student fee records...
           </div>
         ) : admissions.length === 0 ? (
-          <div className="p-4 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg text-xs space-y-1">
+          <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-lg text-xs space-y-1">
             <span className="font-bold flex items-center gap-1.5">
               <CheckCircle2 className="w-4 h-4 text-emerald-600" /> All Fees Clear!
             </span>
@@ -272,78 +283,85 @@ export default function QuickPaymentModal({
           </div>
         ) : (
           <>
-            {/* 1. Student / Course Purchase Search & Select */}
-            <div className="space-y-1.5">
+            {/* 1. Student / Course Purchase Search & Select (Which Fee Picker) */}
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2 shadow-2xs">
               <div className="flex items-center justify-between">
-                <label className="block text-xs font-bold text-black">
-                  Select Student & Course Purchase (Txn ID) <span className="text-rose-600">*</span>
+                <label className="block text-xs font-bold text-black flex items-center gap-1.5">
+                  <User className="w-4 h-4 text-odoo-700" />
+                  <span>Select Student & Outstanding Fee</span>
+                  <span className="text-rose-600 font-bold">*</span>
                 </label>
-                <span className="text-[10px] text-slate-500 font-mono">
-                  {filteredAdmissions.length} record{filteredAdmissions.length !== 1 ? 's' : ''} found
+                <span className="text-[10px] text-slate-600 font-semibold font-mono">
+                  {filteredAdmissions.length} pending record{filteredAdmissions.length !== 1 ? 's' : ''}
                 </span>
               </div>
 
               {/* Search filter input */}
               <div className="relative">
-                <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
+                <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400 pointer-events-none" />
                 <input
                   type="text"
                   value={searchFilter}
                   onChange={(e) => setSearchFilter(e.target.value)}
-                  placeholder="Type student name or Txn ID to filter..."
-                  className="w-full pl-8 pr-3 py-1 text-xs rounded border border-slate-300 bg-white placeholder-slate-400 focus:outline-none focus:border-odoo-600"
+                  placeholder="Search student name, phone, course, or Txn ID..."
+                  className="w-full pl-8 pr-3 py-1.5 text-xs rounded border border-slate-300 bg-white placeholder-slate-400 text-black font-medium focus:outline-none focus:border-odoo-600 focus:ring-1 focus:ring-odoo-600 shadow-2xs"
                 />
               </div>
 
-              {/* Dropdown */}
+              {/* Dropdown picker */}
               <select
                 value={selectedAdmissionId}
                 onChange={(e) => handleAdmissionChange(e.target.value)}
-                className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-black font-medium focus:outline-none focus:border-odoo-600 focus:ring-1 focus:ring-odoo-600 shadow-2xs"
+                className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-2 text-xs text-black font-semibold focus:outline-none focus:border-odoo-600 focus:ring-1 focus:ring-odoo-600 shadow-2xs"
               >
-                {filteredAdmissions.length === 0 ? (
-                  <option disabled value="">No matching student found</option>
-                ) : (
-                  filteredAdmissions.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.purchase_transaction_id || a.admission_number} — {a.student_name_snapshot} (Due: ₹
-                      {Number(a.balance_due).toFixed(2)}{a.status === 'EXPIRED' ? ' • Expired' : ''} | Paid: ₹
-                      {Number(a.amount_paid).toFixed(2)})
-                    </option>
-                  ))
-                )}
+                <option value="">-- Choose Student & Fee to Collect ({filteredAdmissions.length} available) --</option>
+                {filteredAdmissions.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.student_name_snapshot} {a.student_mobile ? `(${a.student_mobile})` : ''} — Due: ₹{Number(a.balance_due).toFixed(2)} — Inv: {a.purchase_transaction_id || a.admission_number}
+                  </option>
+                ))}
               </select>
             </div>
 
-            {/* 2. Comprehensive Financial Breakdown Box (Shows Previously Paid Fees!) */}
-            {selectedAdmission && (
-              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2.5 text-xs shadow-2xs">
-                {/* Header row */}
-                <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                  <div className="flex items-center gap-2">
-                    <User className="w-4 h-4 text-odoo-700" />
-                    <div>
-                      <span className="font-bold text-black text-sm block">
-                        {selectedAdmission.student_name_snapshot}
-                      </span>
-                      <span className="font-mono text-[10px] text-odoo-800 font-bold bg-purple-50 border border-odoo-200 px-1 py-0.2 rounded">
-                        Txn: {selectedAdmission.purchase_transaction_id || selectedAdmission.admission_number}
-                      </span>
+            {/* When NO student is selected yet: Show Clear Instructions */}
+            {!selectedAdmission ? (
+              <div className="py-8 px-4 bg-slate-50 border border-dashed border-slate-300 rounded-lg text-center space-y-2">
+                <CreditCard className="w-8 h-8 text-slate-400 mx-auto" />
+                <p className="text-xs font-bold text-black">Please select a student and outstanding fee record above</p>
+                <p className="text-[11px] text-slate-600 max-w-sm mx-auto">
+                  Choose an enrolled student from the dropdown above to view their total billed fee, past payments, and current outstanding balance due for collection.
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* 2. Comprehensive Financial Breakdown Box (Shows Previously Paid Fees!) */}
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2.5 text-xs shadow-2xs">
+                  {/* Header row */}
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                    <div className="flex items-center gap-2">
+                      <User className="w-4 h-4 text-odoo-700" />
+                      <div>
+                        <span className="font-bold text-black text-sm block">
+                          {selectedAdmission.student_name_snapshot}
+                        </span>
+                        <span className="font-mono text-[10px] text-odoo-800 font-bold bg-purple-50 border border-odoo-200 px-1 py-0.2 rounded">
+                          Txn: {selectedAdmission.purchase_transaction_id || selectedAdmission.admission_number}
+                        </span>
+                      </div>
                     </div>
+                    <Badge
+                      size="xs"
+                      variant={
+                        selectedAdmission.payment_status === 'PARTIALLY_PAID'
+                          ? 'warning'
+                          : selectedAdmission.payment_status === 'PAID'
+                          ? 'success'
+                          : 'danger'
+                      }
+                    >
+                      {selectedAdmission.payment_status}
+                    </Badge>
                   </div>
-                  <Badge
-                    size="xs"
-                    variant={
-                      selectedAdmission.payment_status === 'PARTIALLY_PAID'
-                        ? 'warning'
-                        : selectedAdmission.payment_status === 'PAID'
-                        ? 'success'
-                        : 'danger'
-                    }
-                  >
-                    {selectedAdmission.payment_status}
-                  </Badge>
-                </div>
 
                 {/* The 3 Pillars of Fee: Billed, Previously Paid, and Remaining Due */}
                 <div className="grid grid-cols-3 gap-2 text-center">
@@ -454,9 +472,8 @@ export default function QuickPaymentModal({
                   )}
                 </div>
               </div>
-            )}
 
-            {/* 3. Fee Month & Date-to-Date Coverage ("When to When") */}
+              {/* 3. Fee Month & Date-to-Date Coverage ("When to When") */}
             <div className="bg-white border border-slate-200 rounded-lg p-3 space-y-2 shadow-2xs">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-slate-100 pb-1.5">
                 <label className="text-xs font-bold text-black flex items-center gap-1.5">
@@ -579,9 +596,11 @@ export default function QuickPaymentModal({
                 disabled={submitting || !selectedAdmission || Number(selectedAdmission?.balance_due || 0) <= 0}
                 className="w-full sm:w-auto"
               >
-                Record Payment & Print Receipt
+                Confirm & Collect ₹{selectedAdmission ? Number(selectedAdmission.balance_due || 0).toFixed(2) : '0.00'} Fee
               </Button>
             </div>
+              </>
+            )}
           </>
         )}
       </form>

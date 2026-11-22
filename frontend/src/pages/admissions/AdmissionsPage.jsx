@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, CreditCard, Printer, Eye, Ban, ExternalLink, Search, RefreshCw, Loader2, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
+import { CreditCard, Printer, Eye, Ban, ExternalLink, Search, RefreshCw, Loader2, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
 import DataTable from '../../components/common/DataTable';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
@@ -261,10 +261,6 @@ export default function AdmissionsPage() {
             Multi-batch course purchases, itemized discounts, inclusive GST, and fee settlement
           </p>
         </div>
-
-        <Button variant="primary" icon={Plus} onClick={() => navigate('/admissions/new')} className="w-full sm:w-auto min-h-[40px] text-xs font-bold">
-          + New Admission
-        </Button>
       </div>
 
       {/* Filter Tabs */}

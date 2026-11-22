@@ -262,8 +262,8 @@ export default function StudentsPage() {
             <option value="INACTIVE">Inactive / Revoked Students</option>
           </select>
 
-          <Button variant="primary" icon={UserPlus} onClick={() => setAddModalOpen(true)} className="w-full sm:w-auto">
-            New Admission
+          <Button variant="primary" icon={UserPlus} onClick={() => setAddModalOpen(true)} className="w-full sm:w-auto font-bold">
+            Register Student
           </Button>
         </div>
       </div>
