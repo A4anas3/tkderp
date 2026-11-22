@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 export default function Modal({
@@ -18,29 +19,31 @@ export default function Modal({
     };
     if (isOpen) {
       document.body.style.overflow = 'hidden';
+      document.body.classList.add('modal-open');
       window.addEventListener('keydown', handleKeyDown);
     }
     return () => {
       document.body.style.overflow = 'unset';
+      document.body.classList.remove('modal-open');
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-xs flex flex-col justify-end sm:justify-center sm:items-center p-0 sm:p-4">
+  const modalNode = (
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-xs flex flex-col justify-end sm:justify-center sm:items-center p-0 sm:p-4 modal-backdrop-container">
       <div
-        className="fixed inset-0"
+        className="fixed inset-0 modal-overlay-bg"
         onClick={onClose}
         aria-hidden="true"
       />
       <div
-        className={`relative w-full ${maxWidth} bg-white h-[100dvh] sm:h-auto sm:max-h-[90vh] rounded-none sm:rounded-xl shadow-2xl border-0 sm:border border-slate-200 overflow-hidden transform transition-all z-10 flex flex-col`}
+        className={`relative w-full ${maxWidth} bg-white h-[100dvh] sm:h-auto sm:max-h-[90vh] rounded-none sm:rounded-xl shadow-2xl border-0 sm:border border-slate-200 overflow-hidden transform transition-all z-10 flex flex-col modal-dialog-box`}
       >
         {/* Header */}
         {(title || showClose) && (
-          <div className="sticky top-0 z-20 flex items-center justify-between px-4 py-3 sm:py-3.5 border-b border-slate-200 bg-slate-50 shrink-0">
+          <div className="sticky top-0 z-20 flex items-center justify-between px-4 py-3 sm:py-3.5 border-b border-slate-200 bg-slate-50 shrink-0 modal-header-bar">
             <div className="min-w-0 flex-1 pr-2">
               {title && <h3 className="text-sm sm:text-base font-bold text-black break-words leading-tight">{title}</h3>}
               {subtitle && <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{subtitle}</p>}
@@ -59,8 +62,10 @@ export default function Modal({
         )}
 
         {/* Content body */}
-        <div className="p-4 sm:p-6 overflow-y-auto flex-1 overscroll-contain">{children}</div>
+        <div className="p-4 sm:p-6 overflow-y-auto flex-1 overscroll-contain modal-content-body">{children}</div>
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalNode, document.body) : modalNode;
 }

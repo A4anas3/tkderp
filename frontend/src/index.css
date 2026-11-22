@@ -127,17 +127,77 @@ input:focus, select:focus, textarea:focus {
 @media print {
   @page {
     size: A4 portrait;
-    margin: 8mm 10mm;
+    margin: 6mm 8mm;
   }
-  body {
+  html, body {
     background: #ffffff !important;
     color: #000000 !important;
+    overflow: visible !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-width: 100% !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
-  body * {
-    visibility: hidden;
+
+  /* When a modal is open, completely hide the background app so it consumes 0 space/pages */
+  body.modal-open #root,
+  body:has(.modal-backdrop-container) #root {
+    display: none !important;
   }
+
+  /* Modal backdrop container becomes an unconstrained block flow */
+  .modal-backdrop-container {
+    position: static !important;
+    overflow: visible !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    transform: none !important;
+    display: block !important;
+  }
+
+  .modal-overlay-bg,
+  .modal-header-bar,
+  .no-print,
+  .no-print-cut {
+    display: none !important;
+  }
+
+  /* Modal dialog box renders transparently with full width and natural height */
+  .modal-dialog-box {
+    position: static !important;
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    transform: none !important;
+    display: block !important;
+  }
+
+  /* Modal content body expands naturally without scroll clipping */
+  .modal-content-body {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: block !important;
+  }
+
+  /* Fail-safe visibility for printable slip documents */
   .printable-slip-document,
   .printable-slip-document *,
   #printable-receipt,
@@ -152,13 +212,46 @@ input:focus, select:focus, textarea:focus {
   .printable-id-card *,
   #printable-verification,
   #printable-verification * {
-    visibility: visible;
+    visibility: visible !important;
   }
+
+  /* Printable receipt document styling */
   .printable-slip-document,
   #printable-receipt,
   #printable-refund-voucher,
-  #printable-combined-statement,
-  #printable-verification {
+  #printable-combined-statement {
+    position: static !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: block !important;
+    background: #ffffff !important;
+  }
+
+  /* Student ID Card printable styling */
+  #printable-id-card,
+  .printable-id-card {
+    position: static !important;
+    margin: 8mm auto !important;
+    width: 105mm !important;
+    max-width: 105mm !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+    border: 2px solid #000000 !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
+    display: block !important;
+  }
+
+  /* For non-modal print (e.g. PublicVerifyPage), hide everything except #printable-verification */
+  body:not(.modal-open):not(:has(.modal-backdrop-container)) * {
+    visibility: hidden;
+  }
+  body:not(.modal-open):not(:has(.modal-backdrop-container)) #printable-verification,
+  body:not(.modal-open):not(:has(.modal-backdrop-container)) #printable-verification * {
+    visibility: visible;
+  }
+  body:not(.modal-open):not(:has(.modal-backdrop-container)) #printable-verification {
     position: absolute;
     left: 0;
     top: 0;
@@ -167,33 +260,28 @@ input:focus, select:focus, textarea:focus {
     padding: 0;
     background: #ffffff !important;
   }
-  #printable-id-card {
-    position: absolute !important;
-    left: 50% !important;
-    top: 15mm !important;
-    transform: translateX(-50%) !important;
-    width: 105mm !important;
-    max-width: 105mm !important;
-    margin: 0 !important;
-    background: #ffffff !important;
-    box-shadow: none !important;
-    border: 2px solid #000000 !important;
-    page-break-inside: avoid;
-    break-inside: avoid;
-  }
+
+  /* Document slip box container */
   .slip-box {
     border: 2px solid #000000 !important;
     border-radius: 4px !important;
     box-shadow: none !important;
     page-break-inside: avoid;
     break-inside: avoid;
+    background: #ffffff !important;
   }
-  .no-print {
-    display: none !important;
+
+  /* Ensure no table or scroll container clips in print */
+  .overflow-x-auto,
+  .overflow-y-auto {
+    overflow: visible !important;
   }
+
   table {
     border-collapse: collapse !important;
+    width: 100% !important;
   }
+
   table, tr, td, th, .summary-box {
     page-break-inside: avoid;
     break-inside: avoid;

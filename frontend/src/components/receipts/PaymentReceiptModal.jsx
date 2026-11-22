@@ -98,9 +98,9 @@ export default function PaymentReceiptModal({ isOpen, onClose, receipt, payment 
         />
 
         {/* Student & Bill Details: 2-Column Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs border border-slate-300 rounded-lg p-3 bg-slate-50/70">
+        <div className="grid grid-cols-1 sm:grid-cols-2 print:grid-cols-2 gap-3 text-xs border border-slate-300 rounded-lg p-3 bg-slate-50/70">
           {/* Left Column: Student Details */}
-          <div className="space-y-1 sm:border-r border-slate-300 sm:pr-3">
+          <div className="space-y-1 sm:border-r print:border-r border-slate-300 sm:pr-3 print:pr-3">
             <div>
               <span className="text-slate-600 text-[10px] uppercase font-bold tracking-wider block">
                 Student Full Name:
@@ -140,7 +140,7 @@ export default function PaymentReceiptModal({ isOpen, onClose, receipt, payment 
           </div>
 
           {/* Right Column: Billing / Receipt Voucher Details */}
-          <div className="space-y-1 sm:pl-1 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-200">
+          <div className="space-y-1 sm:pl-1 print:pl-1 border-t sm:border-t-0 print:border-t-0 pt-2 sm:pt-0 print:pt-0 border-slate-200">
             <div>
               <span className="text-slate-600 text-[10px] uppercase font-bold tracking-wider block">
                 Receipt Voucher No:
@@ -182,7 +182,7 @@ export default function PaymentReceiptModal({ isOpen, onClose, receipt, payment 
         </div>
 
         {/* Date Range The Fee Covers (valid_from to valid_to) Banner */}
-        <div className="bg-purple-50/80 border border-odoo-300 rounded-lg p-2.5 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+        <div className="bg-purple-50/80 border border-odoo-300 rounded-lg p-2.5 text-xs flex flex-col sm:flex-row print:flex-row sm:items-center print:items-center justify-between gap-1.5">
           <span className="text-odoo-950 font-bold uppercase tracking-wider text-[11px] flex items-center gap-1.5">
             <Calendar className="w-4 h-4 text-odoo-700 shrink-0" />
             Fee Coverage & Validity Period:

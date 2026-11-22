@@ -8,7 +8,7 @@ export default function ReceiptHeader({
   return (
     <div className="border-b-2 border-black pb-3 text-black">
       {/* Top Bar: Institute Emblem + Institute Name & Details */}
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+      <div className="flex flex-col sm:flex-row print:flex-row sm:items-start print:items-start justify-between gap-3">
         {/* Emblem + Institute Identity */}
         <div className="flex items-center gap-3">
           {/* Institute Seal SVG */}
@@ -54,7 +54,7 @@ export default function ReceiptHeader({
         </div>
 
         {/* Right Info: Copy Badge & Address/Helpline */}
-        <div className="text-left sm:text-right shrink-0 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-200">
+        <div className="text-left sm:text-right print:text-right shrink-0 border-t sm:border-t-0 print:border-t-0 pt-2 sm:pt-0 print:pt-0 border-slate-200">
           {copyType && (
             <span className="inline-block bg-black text-white font-mono font-bold text-[10px] sm:text-[11px] uppercase px-2.5 py-0.5 rounded tracking-widest mb-1 shadow-xs">
               [{copyType}]
@@ -73,7 +73,7 @@ export default function ReceiptHeader({
       </div>
 
       {/* Document Classification Title Strip */}
-      <div className="mt-2.5 bg-slate-100 border-y-2 border-black py-1.5 px-3 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+      <div className="mt-2.5 bg-slate-100 border-y-2 border-black py-1.5 px-3 flex flex-col sm:flex-row print:flex-row sm:items-center print:items-center justify-between gap-1">
         <span className="text-xs sm:text-sm font-black tracking-wider uppercase text-black font-mono">
           {documentTitle}
         </span>

@@ -70,9 +70,9 @@ export default function RefundReceiptModal({ isOpen, onClose, refund, refundData
         />
 
         {/* Student & Refund Details: 2-Column Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs border border-slate-300 rounded-lg p-3 bg-slate-50/70">
+        <div className="grid grid-cols-1 sm:grid-cols-2 print:grid-cols-2 gap-3 text-xs border border-slate-300 rounded-lg p-3 bg-slate-50/70">
           {/* Left Column: Student Details */}
-          <div className="space-y-1 sm:border-r border-slate-300 sm:pr-3">
+          <div className="space-y-1 sm:border-r print:border-r border-slate-300 sm:pr-3 print:pr-3">
             <div>
               <span className="text-slate-600 text-[10px] uppercase font-bold tracking-wider block">
                 Student Full Name:
@@ -112,7 +112,7 @@ export default function RefundReceiptModal({ isOpen, onClose, refund, refundData
           </div>
 
           {/* Right Column: Refund Voucher Details */}
-          <div className="space-y-1 sm:pl-1 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-200">
+          <div className="space-y-1 sm:pl-1 print:pl-1 border-t sm:border-t-0 print:border-t-0 pt-2 sm:pt-0 print:pt-0 border-slate-200">
             <div>
               <span className="text-slate-600 text-[10px] uppercase font-bold tracking-wider block">
                 Refund Voucher No:

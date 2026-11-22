@@ -33,7 +33,7 @@ export default function ReceiptFooter({
       {/* Amount In Indian Words Box */}
       {displayWords && (
         <div className="bg-slate-50 border border-slate-300 rounded p-2.5 text-xs">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+          <div className="flex flex-col sm:flex-row print:flex-row sm:items-center print:items-center gap-1 sm:gap-2 print:gap-2">
             <span className="font-bold text-slate-800 uppercase tracking-wider text-[10px] shrink-0">
               Amount in Words:
             </span>
@@ -52,9 +52,9 @@ export default function ReceiptFooter({
       )}
 
       {/* Terms and Authentic Signatures & Stamp */}
-      <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-2.5 border-t border-slate-300 items-end">
+      <div className="grid grid-cols-1 sm:grid-cols-12 print:grid-cols-12 gap-3 pt-2.5 border-t border-slate-300 items-end">
         {/* Left: Statutory Terms */}
-        <div className="sm:col-span-7 space-y-1 text-[10px] leading-tight text-slate-700">
+        <div className="sm:col-span-7 print:col-span-7 space-y-1 text-[10px] leading-tight text-slate-700">
           <span className="font-bold text-black uppercase tracking-wider block text-[10px]">
             Statutory Terms & Rules:
           </span>
@@ -69,7 +69,7 @@ export default function ReceiptFooter({
         </div>
 
         {/* Right: Authentic Signatures & Stamp Simulation */}
-        <div className="sm:col-span-5 flex items-end justify-between gap-3 text-center pt-2 sm:pt-0">
+        <div className="sm:col-span-5 print:col-span-5 flex items-end justify-between gap-3 text-center pt-2 sm:pt-0 print:pt-0">
           {/* Depositor / Student Sign */}
           <div className="flex-1">
             <div className="h-10 border-b border-dashed border-slate-400"></div>
