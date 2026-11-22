@@ -22,11 +22,13 @@ import NewAdmissionPage from '../pages/admissions/NewAdmissionPage';
 import AdmissionDetailPage from '../pages/admissions/AdmissionDetailPage';
 import PaymentsPage from '../pages/payments/PaymentsPage';
 import PaymentDetailPage from '../pages/payments/PaymentDetailPage';
+import RemindersPage from '../pages/reminders/RemindersPage';
 import ExpensesPage from '../pages/expenses/ExpensesPage';
 import SubjectRevenuePage from '../pages/reports/SubjectRevenuePage';
 import CashFlowPage from '../pages/reports/CashFlowPage';
 import StaffUsersPage from '../pages/users/StaffUsersPage';
 import AuditLogPage from '../pages/audit/AuditLogPage';
+import PublicVerifyPage from '../pages/verify/PublicVerifyPage';
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { user, loading, role } = useAuth();
@@ -55,6 +57,10 @@ export default function AppRoutes() {
     <Routes>
       {/* Public Login */}
       <Route path="/login" element={<LoginPage />} />
+
+      {/* Public Verification Portal (No login required) */}
+      <Route path="/verify" element={<PublicVerifyPage />} />
+      <Route path="/verify/:identifier" element={<PublicVerifyPage />} />
 
       {/* Protected App Routes */}
       <Route
@@ -108,6 +114,24 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER']}>
               <PaymentDetailPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Due Reminders & WhatsApp Queue (Admin & Cashier) */}
+        <Route
+          path="reminders"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER']}>
+              <RemindersPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="due-reminders"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER']}>
+              <RemindersPage />
             </ProtectedRoute>
           }
         />

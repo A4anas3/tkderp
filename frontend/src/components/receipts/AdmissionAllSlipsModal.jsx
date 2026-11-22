@@ -6,6 +6,7 @@ import {
   Printer,
   Calendar,
   ChevronRight,
+  Sparkles,
 } from 'lucide-react';
 import Modal from '../common/Modal';
 import Button from '../common/Button';
@@ -16,6 +17,11 @@ import PaymentReceiptModal from './PaymentReceiptModal';
 import RefundReceiptModal from './RefundReceiptModal';
 import ReceiptHeader from './ReceiptHeader';
 import ReceiptFooter from './ReceiptFooter';
+import {
+  WhatsAppIcon,
+  buildWhatsAppLink,
+  buildAdmissionReceiptWhatsAppMessage,
+} from '../../utils/whatsappHelpers';
 
 const formatCurrency = (amount) => {
   const num = Number(amount);
@@ -104,6 +110,7 @@ export default function AdmissionAllSlipsModal({
     if (activeTab === 'INVOICE') return s.slip_type === 'ADMISSION_INVOICE';
     if (activeTab === 'PAYMENT') return s.slip_type === 'PAYMENT_RECEIPT';
     if (activeTab === 'REFUND') return s.slip_type === 'REFUND_VOUCHER';
+    if (activeTab === 'WAIVER') return s.slip_type === 'WAIVER_VOUCHER';
     return true;
   });
 
@@ -118,14 +125,34 @@ export default function AdmissionAllSlipsModal({
       setViewingReceipt(slip.data);
     } else if (slip.slip_type === 'REFUND_VOUCHER') {
       setViewingRefund(slip.data);
+    } else if (slip.slip_type === 'WAIVER_VOUCHER') {
+      setViewingAdmission({ ...data, ...slip.data });
     }
   };
 
   const admNo = data?.admission_number || admissionData?.admission_number || 'Admission';
   const totalBilled = Number(data?.total_payable || 0);
   const totalPaid = Number(data?.amount_paid || 0);
+  const totalWaived = Number(data?.written_off_amount || admissionData?.written_off_amount || 0);
   const balanceDue = Number(data?.balance_due || 0);
   const feeCoverage = formatFeePeriod(data?.valid_from, data?.valid_to);
+
+  const studentMobile =
+    data?.student_mobile ||
+    data?.student?.mobile ||
+    admissionData?.student_mobile ||
+    admissionData?.student?.mobile ||
+    '';
+  const whatsAppStatementUrl = buildWhatsAppLink(
+    studentMobile,
+    buildAdmissionReceiptWhatsAppMessage(data || admissionData || {})
+  );
+
+  const handleWhatsAppStatement = () => {
+    if (whatsAppStatementUrl) {
+      window.open(whatsAppStatementUrl, '_blank', 'noopener,noreferrer');
+    }
+  };
 
   return (
     <>
@@ -151,6 +178,23 @@ export default function AdmissionAllSlipsModal({
                   >
                     Back to Slips List
                   </Button>
+                  <button
+                    onClick={handleWhatsAppStatement}
+                    disabled={!studentMobile}
+                    title={
+                      studentMobile
+                        ? `Share statement with ${studentMobile} on WhatsApp`
+                        : 'Student has no mobile number recorded'
+                    }
+                    className={`min-h-[30px] px-2.5 py-1 rounded text-xs font-bold inline-flex items-center gap-1.5 transition-colors shadow-2xs ${
+                      studentMobile
+                        ? 'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white cursor-pointer'
+                        : 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                    }`}
+                  >
+                    <WhatsAppIcon className="w-3.5 h-3.5 shrink-0" />
+                    <span>WhatsApp Statement</span>
+                  </button>
                   <Button
                     size="xs"
                     variant="primary"
@@ -346,7 +390,13 @@ export default function AdmissionAllSlipsModal({
                         {slips.map((s, idx) => (
                           <tr
                             key={idx}
-                            className={s.slip_type === 'REFUND_VOUCHER' ? 'bg-rose-50/40' : 'hover:bg-slate-50'}
+                            className={
+                              s.slip_type === 'REFUND_VOUCHER'
+                                ? 'bg-rose-50/40'
+                                : s.slip_type === 'WAIVER_VOUCHER'
+                                ? 'bg-amber-50/50'
+                                : 'hover:bg-slate-50'
+                            }
                           >
                             <td className="p-1.5 font-mono font-bold text-black border-r border-slate-200">
                               {s.slip_number}
@@ -370,6 +420,8 @@ export default function AdmissionAllSlipsModal({
                                 <span className="text-black">{formatCurrency(s.amount)}</span>
                               ) : s.slip_type === 'REFUND_VOUCHER' ? (
                                 <span className="text-rose-700">-{formatCurrency(s.amount)}</span>
+                              ) : s.slip_type === 'WAIVER_VOUCHER' ? (
+                                <span className="text-amber-800 font-bold">≈{formatCurrency(s.amount)} (Waived)</span>
                               ) : (
                                 <span className="text-emerald-800">+{formatCurrency(s.amount)}</span>
                               )}
@@ -412,6 +464,16 @@ export default function AdmissionAllSlipsModal({
                             {formatCurrency(totalPaid)}
                           </td>
                         </tr>
+                        {totalWaived > 0 && (
+                          <tr className="bg-amber-50 border-t border-amber-300">
+                            <td className="p-2 border-r border-amber-200 font-black text-amber-950 uppercase text-xs">
+                              Fee Waived / Forgiven (Admin Waiver)
+                            </td>
+                            <td className="p-2 text-right font-mono font-black text-sm sm:text-base text-amber-900">
+                              {formatCurrency(totalWaived)}
+                            </td>
+                          </tr>
+                        )}
                         <tr className={balanceDue > 0 ? 'bg-rose-50 border-t-2 border-rose-300' : 'bg-emerald-50/50 border-t border-emerald-200'}>
                           <td className="p-2 border-r border-slate-200 font-black uppercase text-xs text-black">
                             Current Outstanding Balance Due
@@ -544,6 +606,18 @@ export default function AdmissionAllSlipsModal({
                           Refunds ({slips.filter((s) => s.slip_type === 'REFUND_VOUCHER').length})
                         </button>
                       )}
+                      {slips.some((s) => s.slip_type === 'WAIVER_VOUCHER') && (
+                        <button
+                          onClick={() => setActiveTab('WAIVER')}
+                          className={`min-h-[32px] px-3 py-1 rounded text-xs font-bold transition-colors ${
+                            activeTab === 'WAIVER'
+                              ? 'bg-amber-600 text-white shadow-xs'
+                              : 'bg-slate-100 text-slate-800 hover:bg-slate-200'
+                          }`}
+                        >
+                          Waivers ({slips.filter((s) => s.slip_type === 'WAIVER_VOUCHER').length})
+                        </button>
+                      )}
                     </div>
 
                     <Button
@@ -567,6 +641,7 @@ export default function AdmissionAllSlipsModal({
                         const isInvoice = slip.slip_type === 'ADMISSION_INVOICE';
                         const isPayment = slip.slip_type === 'PAYMENT_RECEIPT';
                         const isRefund = slip.slip_type === 'REFUND_VOUCHER';
+                        const isWaiver = slip.slip_type === 'WAIVER_VOUCHER';
 
                         return (
                           <div
@@ -576,6 +651,8 @@ export default function AdmissionAllSlipsModal({
                                 ? 'bg-rose-50/40 border-rose-300'
                                 : isPayment
                                 ? 'bg-emerald-50/30 border-emerald-300'
+                                : isWaiver
+                                ? 'bg-amber-50/50 border-amber-300'
                                 : 'bg-white border-slate-300 hover:border-slate-400'
                             }`}
                           >
@@ -586,6 +663,8 @@ export default function AdmissionAllSlipsModal({
                                     ? 'bg-rose-100 text-rose-800'
                                     : isPayment
                                     ? 'bg-emerald-100 text-emerald-900'
+                                    : isWaiver
+                                    ? 'bg-amber-100 text-amber-900'
                                     : 'bg-purple-100 text-odoo-800'
                                 }`}
                               >
@@ -593,6 +672,8 @@ export default function AdmissionAllSlipsModal({
                                   <RotateCcw className="w-4 h-4" />
                                 ) : isPayment ? (
                                   <CreditCard className="w-4 h-4" />
+                                ) : isWaiver ? (
+                                  <Sparkles className="w-4 h-4" />
                                 ) : (
                                   <FileText className="w-4 h-4" />
                                 )}
@@ -610,6 +691,8 @@ export default function AdmissionAllSlipsModal({
                                         ? 'danger'
                                         : isPayment
                                         ? 'success'
+                                        : isWaiver
+                                        ? 'warning'
                                         : 'info'
                                     }
                                   >
@@ -617,6 +700,8 @@ export default function AdmissionAllSlipsModal({
                                       ? 'Enrollment Slip'
                                       : isPayment
                                       ? 'Payment Receipt'
+                                      : isWaiver
+                                      ? 'Waiver Voucher'
                                       : 'Refund Voucher'}
                                   </Badge>
                                 </div>
@@ -656,13 +741,15 @@ export default function AdmissionAllSlipsModal({
                                       ? 'text-rose-700'
                                       : isPayment
                                       ? 'text-emerald-700'
+                                      : isWaiver
+                                      ? 'text-amber-800'
                                       : 'text-black'
                                   }`}
                                 >
-                                  {isRefund ? '-' : isPayment ? '+' : ''}{formatCurrency(slip.amount)}
+                                  {isRefund ? '-' : isPayment ? '+' : isWaiver ? '≈' : ''}{formatCurrency(slip.amount)}
                                 </div>
                                 <span className="text-[10px] text-slate-600 block uppercase font-bold tracking-wider">
-                                  {isInvoice ? 'Total Billed' : isPayment ? 'Paid' : 'Refunded'}
+                                  {isInvoice ? 'Total Billed' : isPayment ? 'Paid' : isWaiver ? 'Waived (Maaf)' : 'Refunded'}
                                 </span>
                               </div>
 

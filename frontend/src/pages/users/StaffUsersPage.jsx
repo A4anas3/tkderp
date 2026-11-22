@@ -160,7 +160,7 @@ export default function StaffUsersPage() {
       render: (u) => (
         <div>
           <span className="font-bold text-black block">{u.full_name}</span>
-          <span className="text-[11px] text-slate-500 font-mono">{u.email}</span>
+          <span className="text-[11px] text-slate-700 font-mono font-medium">{u.email}</span>
         </div>
       ),
     },

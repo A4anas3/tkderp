@@ -79,6 +79,8 @@ class StudentLineResponse(BaseModel):
     payment_status: str = "UNPAID"
     access_status: str = "ACTIVE"
     item_type: str = "BATCH_SUBJECT"
+    is_expired: bool = False
+    is_overdue: bool = False
 
     @field_validator("last_paid_date", mode="before")
     @classmethod
@@ -95,6 +97,7 @@ class StudentDetailResponse(StudentResponse):
     total_refunded: Decimal = Decimal("0.00")
     net_paid: Decimal = Decimal("0.00")
     total_balance_due: Decimal = Decimal("0.00")
+    expired_balance_due: Decimal = Decimal("0.00")
     admissions_count: int = 0
     active_admissions_count: int = 0
     revoked_admissions_count: int = 0

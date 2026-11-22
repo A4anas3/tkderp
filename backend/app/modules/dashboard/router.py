@@ -42,7 +42,10 @@ async def get_admin_dashboard(
     # Financial sums
     total_revenue_booked = (await db.execute(
         select(func.coalesce(func.sum(Admission.total_payable), Decimal("0.00")))
-        .where(Admission.status == "ACTIVE")
+        .where(
+            Admission.status.notin_(["REVOKED", "CANCELLED"]),
+            Admission.document_status == "VALID"
+        )
     )).scalar_one()
 
     total_pay = (await db.execute(
@@ -147,10 +150,15 @@ async def get_cashier_dashboard(
         select(func.count(Admission.id)).where(Admission.admission_date == today)
     )).scalar_one()
 
-    # Total pending balance across all admissions
+    # Total pending balance across all admissions (including expired admissions with unpaid balance)
     total_due = (await db.execute(
         select(func.coalesce(func.sum(Admission.balance_due), Decimal("0.00")))
-        .where(Admission.payment_status.in_(["UNPAID", "PARTIALLY_PAID"]), Admission.status == "ACTIVE")
+        .where(
+            Admission.payment_status.in_(["UNPAID", "PARTIALLY_PAID"]),
+            Admission.status.notin_(["REVOKED", "CANCELLED"]),
+            Admission.document_status == "VALID",
+            Admission.balance_due > Decimal("0.00")
+        )
     )).scalar_one()
 
     # Upcoming Demos
@@ -177,22 +185,30 @@ async def get_cashier_dashboard(
         for e in demo_res.scalars().all()
     ]
 
-    # Partial / Unpaid admissions needing follow-up
+    # Partial / Unpaid admissions needing follow-up (including expired admissions with dues)
     unpaid_res = await db.execute(
         select(Admission)
-        .where(Admission.payment_status.in_(["UNPAID", "PARTIALLY_PAID"]), Admission.status == "ACTIVE")
-        .order_by(desc(Admission.admission_date))
-        .limit(6)
+        .where(
+            Admission.payment_status.in_(["UNPAID", "PARTIALLY_PAID"]),
+            Admission.status.notin_(["REVOKED", "CANCELLED"]),
+            Admission.document_status == "VALID",
+            Admission.balance_due > Decimal("0.00")
+        )
+        .order_by(desc(Admission.created_at), desc(Admission.admission_date))
+        .limit(15)
     )
     due_admissions = [
         {
             "id": str(a.id),
             "admission_number": a.admission_number,
+            "purchase_transaction_id": a.purchase_transaction_id or a.admission_number,
             "student_name": a.student_name_snapshot,
             "total_payable": float(a.total_payable),
             "amount_paid": float(a.amount_paid),
             "balance_due": float(a.balance_due),
-            "payment_status": a.payment_status
+            "payment_status": a.payment_status,
+            "status": a.status,
+            "is_expired": a.status == "EXPIRED" or (a.valid_to is not None and a.valid_to < today)
         }
         for a in unpaid_res.scalars().all()
     ]

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, CreditCard, Printer, Eye, Ban, ExternalLink, Search, RefreshCw, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, CreditCard, Printer, Eye, Ban, ExternalLink, Search, RefreshCw, Loader2, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
 import DataTable from '../../components/common/DataTable';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
@@ -11,6 +11,7 @@ import AdmissionReceiptModal from '../../components/receipts/AdmissionReceiptMod
 import QuickPaymentModal from '../../components/modals/QuickPaymentModal';
 import PaymentReceiptModal from '../../components/receipts/PaymentReceiptModal';
 import AdmissionDetailModal from '../../components/modals/AdmissionDetailModal';
+import WaiveDueModal from '../../components/modals/WaiveDueModal';
 import { formatCycleLabel, evaluateCycleStatus } from '../../utils/dateCycleUtils';
 
 export default function AdmissionsPage() {
@@ -29,6 +30,8 @@ export default function AdmissionsPage() {
   const [payAdmissionId, setPayAdmissionId] = useState(null);
   const [paymentReceiptToShow, setPaymentReceiptToShow] = useState(null);
   const [detailModalAdmission, setDetailModalAdmission] = useState(null);
+  const [waiveModalOpen, setWaiveModalOpen] = useState(false);
+  const [selectedAdmissionForWaive, setSelectedAdmissionForWaive] = useState(null);
 
   const loadAdmissions = useCallback(async () => {
     setLoading(true);
@@ -85,7 +88,7 @@ export default function AdmissionsPage() {
       render: (a) => (
         <div>
           <span className="font-bold text-black block">{a.student_name_snapshot}</span>
-          <span className="text-[11px] text-slate-500 font-mono">Date: {a.admission_date}</span>
+          <span className="text-[11px] text-slate-700 font-mono font-medium">Date: {a.admission_date}</span>
         </div>
       ),
     },
@@ -143,7 +146,14 @@ export default function AdmissionsPage() {
       render: (a) => (a.status === 'REVOKED' || a.status === 'CANCELLED') ? (
         <span className="text-slate-400 line-through">₹0.00</span>
       ) : (
-        `₹${Number(a.balance_due).toFixed(2)}`
+        <div className="flex flex-col items-end">
+          <span>₹{Number(a.balance_due).toFixed(2)}</span>
+          {Number(a.balance_due) > 0 && (a.status === 'EXPIRED' || (a.valid_to && new Date(a.valid_to) < new Date())) && (
+            <span className="inline-block text-[9px] font-bold uppercase tracking-wider px-1 py-0.2 rounded bg-rose-100 text-rose-800 border border-rose-300 mt-0.5">
+              Expired
+            </span>
+          )}
+        </div>
       ),
     },
     {
@@ -199,7 +209,7 @@ export default function AdmissionsPage() {
             Slip
           </Button>
 
-          {Number(a.balance_due) > 0 && a.status === 'ACTIVE' && (
+          {Number(a.balance_due) > 0 && a.status !== 'REVOKED' && a.status !== 'CANCELLED' && (
             <Button
               size="xs"
               variant="success"
@@ -207,6 +217,22 @@ export default function AdmissionsPage() {
               title="Collect Remaining Fee"
             >
               Pay
+            </Button>
+          )}
+
+          {isAdmin && Number(a.balance_due) > 0 && a.status !== 'REVOKED' && a.status !== 'CANCELLED' && (
+            <Button
+              size="xs"
+              variant="warning"
+              icon={Sparkles}
+              onClick={() => {
+                setSelectedAdmissionForWaive(a);
+                setWaiveModalOpen(true);
+              }}
+              title="Admin only: Waive / forgive pending fee due"
+              className="bg-amber-500 hover:bg-amber-600 text-black font-bold border-amber-600"
+            >
+              Waive
             </Button>
           )}
 
@@ -230,7 +256,7 @@ export default function AdmissionsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
           <h1 className="text-xl font-bold text-black tracking-tight">Course Purchases & Batch Invoices</h1>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-xs text-slate-700 mt-0.5 font-medium">
             Multi-batch course purchases, itemized discounts, inclusive GST, and fee settlement
           </p>
         </div>
@@ -332,9 +358,9 @@ export default function AdmissionsPage() {
                   {/* Student Info */}
                   <div>
                     <div className="font-bold text-sm text-black">{a.student_name_snapshot}</div>
-                    <div className="text-[11px] text-slate-500 font-mono flex items-center justify-between mt-0.5">
+                    <div className="text-[11px] text-slate-700 font-mono flex items-center justify-between mt-0.5 font-medium">
                       <span>Date: {a.admission_date}</span>
-                      <span className="text-odoo-800 font-medium">{formatCycleLabel(vFrom, vTo)}</span>
+                      <span className="text-odoo-800 font-semibold">{formatCycleLabel(vFrom, vTo)}</span>
                     </div>
                   </div>
 
@@ -343,7 +369,7 @@ export default function AdmissionsPage() {
                     {(a.items || []).map((itm, i) => (
                       <span
                         key={i}
-                        className="bg-slate-100 border border-slate-200 text-black px-1.5 py-0.5 rounded text-[10px] font-medium"
+                        className="bg-slate-100 border border-slate-200 text-black px-1.5 py-0.5 rounded text-[10px] font-semibold"
                       >
                         {itm.item_name_snapshot}
                       </span>
@@ -353,18 +379,23 @@ export default function AdmissionsPage() {
                   {/* Financials Strip */}
                   <div className="bg-slate-50 rounded-md p-2 flex items-center justify-between text-xs border border-slate-200/80">
                     <div>
-                      <span className="text-[10px] text-slate-500 block uppercase">Total</span>
+                      <span className="text-[10px] text-slate-700 block uppercase font-bold">Total</span>
                       <span className="font-mono font-bold text-black">₹{Number(a.total_payable).toFixed(0)}</span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-slate-500 block uppercase">Paid</span>
-                      <span className="font-mono font-bold text-emerald-700">₹{Number(a.amount_paid).toFixed(0)}</span>
+                      <span className="text-[10px] text-slate-700 block uppercase font-bold">Paid</span>
+                      <span className="font-mono font-bold text-emerald-800">₹{Number(a.amount_paid).toFixed(0)}</span>
                     </div>
                     <div className="text-right">
-                      <span className="text-[10px] text-slate-500 block uppercase">Balance Due</span>
-                      <span className={`font-mono font-bold ${Number(a.balance_due) > 0 && !isCancelled ? 'text-rose-700' : 'text-slate-400'}`}>
+                      <span className="text-[10px] text-slate-700 block uppercase font-bold">Balance Due</span>
+                      <span className={`font-mono font-bold ${Number(a.balance_due) > 0 && !isCancelled ? 'text-rose-700' : 'text-slate-500'}`}>
                         {isCancelled ? '₹0' : `₹${Number(a.balance_due).toFixed(0)}`}
                       </span>
+                      {Number(a.balance_due) > 0 && !isCancelled && (a.status === 'EXPIRED' || (a.valid_to && new Date(a.valid_to) < new Date())) && (
+                        <span className="block text-[9px] font-bold uppercase text-rose-800 bg-rose-100 border border-rose-300 px-1 rounded mt-0.5">
+                          Expired
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -380,7 +411,7 @@ export default function AdmissionsPage() {
                       Slip
                     </Button>
 
-                    {Number(a.balance_due) > 0 && a.status === 'ACTIVE' && (
+                    {Number(a.balance_due) > 0 && !isCancelled && (
                       <Button
                         size="xs"
                         variant="success"
@@ -388,6 +419,22 @@ export default function AdmissionsPage() {
                         className="flex-1 min-h-[36px] justify-center text-xs font-bold"
                       >
                         Pay Due
+                      </Button>
+                    )}
+
+                    {isAdmin && Number(a.balance_due) > 0 && !isCancelled && (
+                      <Button
+                        size="xs"
+                        variant="warning"
+                        icon={Sparkles}
+                        onClick={() => {
+                          setSelectedAdmissionForWaive(a);
+                          setWaiveModalOpen(true);
+                        }}
+                        className="flex-1 min-h-[36px] justify-center text-xs font-bold bg-amber-500 hover:bg-amber-600 text-black border-amber-600"
+                        title="Admin only: Waive / forgive pending fee due"
+                      >
+                        Waive
                       </Button>
                     )}
 
@@ -474,6 +521,23 @@ export default function AdmissionsPage() {
         admission={detailModalAdmission}
         onPrintSlip={(adm) => setSlipToShow(adm)}
         onCollectFee={(admId) => setPayAdmissionId(admId)}
+        onWaiveDue={(adm) => {
+          setSelectedAdmissionForWaive(adm);
+          setWaiveModalOpen(true);
+        }}
+      />
+
+      {/* Waive Due Modal */}
+      <WaiveDueModal
+        isOpen={waiveModalOpen}
+        onClose={() => {
+          setWaiveModalOpen(false);
+          setSelectedAdmissionForWaive(null);
+        }}
+        admission={selectedAdmissionForWaive}
+        onSuccess={() => {
+          loadAdmissions();
+        }}
       />
 
       {/* Admission Slip Modal */}

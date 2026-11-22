@@ -142,7 +142,7 @@ export default function TeacherDashboard() {
                 <h2 className="text-sm sm:text-base font-bold text-black">
                   {activeBatch ? `Student Roster: ${activeBatch.name}` : 'Select a Batch'}
                 </h2>
-                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                <p className="text-[11px] text-slate-700 font-medium mt-0.5">
                   {activeBatch?.schedule || ''} {activeBatch?.hall_number ? `• Hall: ${activeBatch.hall_number}` : ''}
                 </p>
               </div>
@@ -156,12 +156,12 @@ export default function TeacherDashboard() {
 
             <div className="mt-3.5 overflow-x-auto -webkit-overflow-scrolling-touch flex-1 rounded-lg border border-slate-200">
               {!activeBatch || (activeBatch.students || []).length === 0 ? (
-                <p className="py-10 text-center text-xs text-slate-500 font-medium bg-white">
+                <p className="py-10 text-center text-xs text-slate-700 font-semibold bg-white">
                   No students currently enrolled in this batch.
                 </p>
               ) : (
                 <table className="w-full text-left text-xs min-w-[500px]">
-                  <thead className="bg-slate-50/90 text-slate-700 font-bold uppercase tracking-wider text-[11px] border-b border-slate-200">
+                  <thead className="bg-slate-100 text-slate-900 font-bold uppercase tracking-wider text-[11px] border-b border-slate-200">
                     <tr>
                       <th className="p-3">Student Code</th>
                       <th className="p-3">Full Name</th>
@@ -178,13 +178,13 @@ export default function TeacherDashboard() {
                         <td className="p-3 font-semibold text-black">
                           {st.name || st.student_name || '—'}
                         </td>
-                        <td className="p-3 font-mono text-slate-700">
+                        <td className="p-3 font-mono text-slate-800 font-medium">
                           {st.mobile ? (
                             <span className="flex items-center gap-1.5">
-                              <Phone className="w-3 h-3 text-slate-400" /> {st.mobile}
+                              <Phone className="w-3 h-3 text-slate-600" /> {st.mobile}
                             </span>
                           ) : (
-                            <span className="text-slate-400 font-sans">None</span>
+                            <span className="text-slate-600 font-sans">None</span>
                           )}
                         </td>
                         <td className="p-3 text-center">

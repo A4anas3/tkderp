@@ -267,6 +267,10 @@ export const admissionApi = {
     const res = await api.post(`/admissions/${id}/restore`);
     return res.data;
   },
+  waiveDue: async (id, data) => {
+    const res = await api.post(`/admissions/${id}/waive`, data);
+    return res.data;
+  },
   getSlips: async (id) => {
     const res = await api.get(`/admissions/${id}/slips`);
     return res.data;
@@ -467,4 +471,31 @@ export const auditApi = {
     return res.data;
   },
 };
+
+export const verificationApi = {
+  verify: async (identifier) => {
+    const res = await api.get(`/verify/${encodeURIComponent(identifier)}`);
+    return res.data;
+  },
+};
+
+export const remindersApi = {
+  getQueue: async (params) => {
+    const res = await api.get('/reminders/queue', { params });
+    return res.data;
+  },
+  generate: async () => {
+    const res = await api.post('/reminders/generate');
+    return res.data;
+  },
+  markSent: async (id) => {
+    const res = await api.post(`/reminders/${id}/mark-sent`);
+    return res.data;
+  },
+  resetPending: async (id) => {
+    const res = await api.post(`/reminders/${id}/reset-pending`);
+    return res.data;
+  },
+};
+
 

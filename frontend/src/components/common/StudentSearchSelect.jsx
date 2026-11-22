@@ -114,19 +114,19 @@ export default function StudentSearchSelect({
     <div ref={containerRef} className="relative w-full space-y-1.5">
       {/* If student is selected, show selected summary card */}
       {selectedStudent ? (
-        <div className="flex items-center justify-between p-2.5 rounded-lg border-2 border-odoo-500 bg-purple-50/40 shadow-xs">
-          <div className="flex items-center gap-2.5">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between p-3 rounded-lg border-2 border-odoo-500 bg-purple-50/50 shadow-xs gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-9 h-9 rounded-full bg-odoo-600 text-white flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
               {selectedStudent.name ? selectedStudent.name.charAt(0).toUpperCase() : 'S'}
             </div>
-            <div>
+            <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="font-bold text-black text-sm">{selectedStudent.name}</span>
-                <span className="font-mono text-[11px] font-bold px-1.5 py-0.5 rounded bg-white text-odoo-700 border border-odoo-200">
+                <span className="font-mono text-[11px] font-bold px-1.5 py-0.5 rounded bg-white text-odoo-800 border border-odoo-300">
                   {selectedStudent.student_code}
                 </span>
                 {selectedStudent.latest_admission_number && (
-                  <span className="font-mono text-[11px] font-semibold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                  <span className="font-mono text-[11px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-900 border border-emerald-300 flex items-center gap-1">
                     <FileText className="w-3 h-3 text-emerald-700" />
                     Adm: {selectedStudent.latest_admission_number}
                   </span>
@@ -137,15 +137,15 @@ export default function StudentSearchSelect({
                   </Badge>
                 )}
               </div>
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-700 mt-0.5">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-800 mt-0.5">
                 {selectedStudent.mobile && (
-                  <span className="flex items-center gap-1 font-mono text-black">
-                    <Phone className="w-3 h-3 text-slate-500" />
+                  <span className="flex items-center gap-1 font-mono text-black font-semibold">
+                    <Phone className="w-3 h-3 text-slate-600" />
                     {selectedStudent.mobile}
                   </span>
                 )}
                 {selectedStudent.father_name && (
-                  <span className="text-slate-600">
+                  <span className="text-slate-700 font-medium">
                     Father: <strong className="text-black">{selectedStudent.father_name}</strong>
                   </span>
                 )}
@@ -153,11 +153,11 @@ export default function StudentSearchSelect({
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto w-full sm:w-auto">
             <button
               type="button"
               onClick={() => navigate(`/students/${selectedStudent.id}`)}
-              className="px-2 py-1 text-xs font-semibold rounded bg-white text-odoo-700 hover:bg-purple-50 border border-slate-300 hover:border-odoo-300 transition flex items-center gap-1 cursor-pointer"
+              className="flex-1 sm:flex-initial min-h-[36px] px-3 py-1.5 text-xs font-bold rounded-md bg-white text-odoo-800 hover:bg-purple-50 border border-slate-300 hover:border-odoo-300 transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
               title="View student profile"
             >
               <User className="w-3.5 h-3.5 text-odoo-600" />
@@ -167,7 +167,7 @@ export default function StudentSearchSelect({
             <button
               type="button"
               onClick={handleClear}
-              className="px-2 py-1 text-xs font-semibold rounded bg-white text-rose-700 hover:bg-rose-50 border border-slate-300 hover:border-rose-300 transition flex items-center gap-1 cursor-pointer"
+              className="flex-1 sm:flex-initial min-h-[36px] px-3 py-1.5 text-xs font-bold rounded-md bg-white text-rose-700 hover:bg-rose-50 border border-slate-300 hover:border-rose-300 transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
               title="Change or remove selected student"
             >
               <X className="w-3.5 h-3.5 text-rose-600" />

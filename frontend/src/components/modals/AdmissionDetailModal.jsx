@@ -11,11 +11,13 @@ import {
   Clock,
   ExternalLink,
   BookOpen,
-  Award
+  Award,
+  Sparkles
 } from 'lucide-react';
 import Modal from '../common/Modal';
 import Button from '../common/Button';
 import Badge from '../common/Badge';
+import { useAuth } from '../../context/AuthContext';
 import { formatIndianDate, formatCycleLabel, evaluateCycleStatus } from '../../utils/dateCycleUtils';
 
 export default function AdmissionDetailModal({
@@ -24,8 +26,10 @@ export default function AdmissionDetailModal({
   admission,
   onPrintSlip,
   onCollectFee,
+  onWaiveDue,
 }) {
   const navigate = useNavigate();
+  const { isAdmin } = useAuth();
   if (!admission) return null;
 
   const isActive = admission.status === 'ACTIVE';
@@ -197,7 +201,7 @@ export default function AdmissionDetailModal({
         </div>
 
         {/* Financial Summary */}
-        <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+        <div className={`bg-slate-50 p-3.5 rounded-lg border border-slate-200 grid grid-cols-2 sm:grid-cols-${Number(admission.written_off_amount || 0) > 0 ? '5' : '4'} gap-2 text-xs`}>
           <div>
             <span className="text-slate-500 block text-[11px]">Total Payable</span>
             <span className="font-mono font-bold text-black text-sm">
@@ -216,6 +220,14 @@ export default function AdmissionDetailModal({
               ₹{Number(admission.balance_due || 0).toFixed(2)}
             </span>
           </div>
+          {Number(admission.written_off_amount || 0) > 0 && (
+            <div>
+              <span className="text-amber-800 block text-[11px] font-bold">Fee Waived</span>
+              <span className="font-mono font-bold text-amber-900 text-sm">
+                ₹{Number(admission.written_off_amount).toFixed(2)}
+              </span>
+            </div>
+          )}
           <div>
             <span className="text-slate-500 block text-[11px]">Payment Status</span>
             <Badge
@@ -271,6 +283,21 @@ export default function AdmissionDetailModal({
               className="w-full sm:w-auto"
             >
               Collect Remaining Fee
+            </Button>
+          )}
+
+          {isAdmin && Number(admission.balance_due) > 0 && !isInactive && onWaiveDue && (
+            <Button
+              size="sm"
+              variant="warning"
+              icon={Sparkles}
+              onClick={() => {
+                onClose();
+                onWaiveDue(admission);
+              }}
+              className="w-full sm:w-auto bg-amber-500 hover:bg-amber-600 text-black font-bold border-amber-600"
+            >
+              Waive Due
             </Button>
           )}
         </div>

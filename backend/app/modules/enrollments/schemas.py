@@ -31,6 +31,8 @@ class EnrollmentItemResponse(BaseModel):
     payment_status: str = "UNPAID" # PAID, PARTIAL, UNPAID
     access_status: str = "ACTIVE" # ACTIVE, SUSPENDED, EXPIRED, REVOKED
     item_type: str = "BATCH_SUBJECT"
+    is_expired: bool = False
+    is_overdue: bool = False
 
     @field_validator("last_paid_date", mode="before")
     @classmethod

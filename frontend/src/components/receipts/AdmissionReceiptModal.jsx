@@ -5,6 +5,11 @@ import Button from '../common/Button';
 import Badge from '../common/Badge';
 import ReceiptHeader from './ReceiptHeader';
 import ReceiptFooter from './ReceiptFooter';
+import {
+  WhatsAppIcon,
+  buildWhatsAppLink,
+  buildAdmissionReceiptWhatsAppMessage,
+} from '../../utils/whatsappHelpers';
 
 const formatCurrency = (amount) => {
   const num = Number(amount);
@@ -66,8 +71,21 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission, admi
   const totalDiscount = Number(data.total_discount || 0);
   const totalPayable = Number(data.total_payable || 0);
   const amountPaid = Number(data.amount_paid || 0);
+  const writtenOffAmount = Number(data.written_off_amount || 0);
   const balanceDue = Number(data.balance_due !== undefined ? data.balance_due : totalPayable - amountPaid);
   const isRevoked = data.status === 'REVOKED' || data.status === 'CANCELLED';
+
+  const studentMobile = data.student_mobile || data.student?.mobile || '';
+  const whatsAppUrl = buildWhatsAppLink(
+    studentMobile,
+    buildAdmissionReceiptWhatsAppMessage(data)
+  );
+
+  const handleWhatsAppShare = () => {
+    if (whatsAppUrl) {
+      window.open(whatsAppUrl, '_blank', 'noopener,noreferrer');
+    }
+  };
 
   const renderSingleSlip = (copyType) => {
     return (
@@ -348,6 +366,18 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission, admi
                   </td>
                 </tr>
 
+                {/* Waived / Written Off Amount */}
+                {writtenOffAmount > 0 && (
+                  <tr className="bg-amber-50 border-t border-amber-300">
+                    <td className="p-2 border-r border-amber-200 font-black text-amber-950 uppercase text-xs">
+                      Fee Waived / Forgiven (Admin Waiver)
+                    </td>
+                    <td className="p-2 text-right font-mono font-black text-sm sm:text-base text-amber-900">
+                      {formatCurrency(writtenOffAmount)}
+                    </td>
+                  </tr>
+                )}
+
                 {/* Remaining Balance Due */}
                 <tr className={balanceDue > 0 ? 'bg-rose-50 border-t-2 border-rose-300' : 'bg-emerald-50/50 border-t border-emerald-200'}>
                   <td className="p-2 border-r border-slate-200 font-black uppercase text-xs text-black">
@@ -421,9 +451,28 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission, admi
             </button>
           </div>
 
-          <Button variant="primary" size="xs" icon={Printer} onClick={handlePrint} className="w-full sm:w-auto">
-            Print Invoice
-          </Button>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <button
+              onClick={handleWhatsAppShare}
+              disabled={!studentMobile}
+              title={
+                studentMobile
+                  ? `Share enrollment invoice with ${studentMobile} on WhatsApp`
+                  : 'Student has no mobile number recorded'
+              }
+              className={`min-h-[32px] px-3 py-1 rounded text-xs font-bold inline-flex items-center justify-center gap-1.5 transition-colors shadow-2xs w-full sm:w-auto ${
+                studentMobile
+                  ? 'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white cursor-pointer'
+                  : 'bg-slate-200 text-slate-500 cursor-not-allowed'
+              }`}
+            >
+              <WhatsAppIcon className="w-3.5 h-3.5 shrink-0" />
+              <span>WhatsApp Invoice</span>
+            </button>
+            <Button variant="primary" size="xs" icon={Printer} onClick={handlePrint} className="w-full sm:w-auto">
+              Print Invoice
+            </Button>
+          </div>
         </div>
 
         {/* Printable Receipt Paper Container */}
@@ -445,13 +494,37 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission, admi
         </div>
 
         {/* Footer controls */}
-        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2 border-t border-slate-200 no-print">
-          <Button variant="secondary" onClick={onClose} className="w-full sm:w-auto">
-            Close
-          </Button>
-          <Button variant="primary" icon={Printer} onClick={handlePrint} className="w-full sm:w-auto">
-            Print Enrollment Slip
-          </Button>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-slate-200 no-print">
+          <div>
+            <Badge variant={balanceDue > 0 ? 'warning' : 'success'}>
+              {balanceDue > 0 ? 'Admission with Balance Due' : 'Admission Fully Paid'}
+            </Badge>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            <button
+              onClick={handleWhatsAppShare}
+              disabled={!studentMobile}
+              title={
+                studentMobile
+                  ? `Share enrollment invoice with ${studentMobile} on WhatsApp`
+                  : 'Student has no mobile number recorded'
+              }
+              className={`min-h-[34px] px-3 py-1.5 rounded-lg text-xs font-bold inline-flex items-center justify-center gap-1.5 transition-colors shadow-2xs ${
+                studentMobile
+                  ? 'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white cursor-pointer'
+                  : 'bg-slate-200 text-slate-500 cursor-not-allowed'
+              }`}
+            >
+              <WhatsAppIcon className="w-3.5 h-3.5 shrink-0" />
+              <span>WhatsApp Invoice</span>
+            </button>
+            <Button variant="secondary" onClick={onClose} className="flex-1 sm:flex-initial">
+              Close
+            </Button>
+            <Button variant="primary" icon={Printer} onClick={handlePrint} className="flex-1 sm:flex-initial">
+              Print Enrollment Slip
+            </Button>
+          </div>
         </div>
       </div>
     </Modal>

@@ -150,7 +150,7 @@ export default function PaymentsPage() {
       render: (p) => (
         <div>
           <span className="font-bold text-black block">{p.student_name}</span>
-          <span className="text-[11px] text-slate-500 font-mono">
+          <span className="text-[11px] text-slate-700 font-mono font-medium">
             Admission: {p.admission_number}
           </span>
         </div>
@@ -178,7 +178,7 @@ export default function PaymentsPage() {
             {p.payment_mode}
           </Badge>
           {p.transaction_reference && (
-            <span className="text-[10px] text-slate-500 block font-mono">
+            <span className="text-[10px] text-slate-700 block font-mono font-semibold">
               Ref: {p.transaction_reference}
             </span>
           )}
@@ -262,7 +262,7 @@ export default function PaymentsPage() {
       render: (r) => (
         <div>
           <span className="font-bold text-black block">{r.student_name}</span>
-          <span className="text-[11px] text-slate-500 font-mono">
+          <span className="text-[11px] text-slate-700 font-mono font-medium">
             Admission: {r.admission_number}
           </span>
         </div>
@@ -326,7 +326,7 @@ export default function PaymentsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
           <h1 className="text-xl font-bold text-black tracking-tight">Fee Collection & Refund Management</h1>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-xs text-slate-700 mt-0.5 font-medium">
             Realized cash collections, editable payment receipts, and fee refund audit logs
           </p>
         </div>

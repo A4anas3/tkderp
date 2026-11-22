@@ -455,36 +455,36 @@ export default function TeachersPage() {
 
                     <div className="mt-3 space-y-1.5 text-xs border-t border-slate-100 pt-2.5">
                       {t.specialization && (
-                        <div className="text-[11px] text-slate-700 font-medium truncate">
-                          <span className="text-slate-400">Subject:</span> {t.specialization}
+                        <div className="text-[11px] text-slate-800 font-medium truncate">
+                          <span className="text-slate-700 font-bold">Subject:</span> {t.specialization}
                         </div>
                       )}
 
                       {t.qualification && (
-                        <div className="text-[11px] text-slate-600 truncate">
-                          <span className="text-slate-400">Qualification:</span> {t.qualification}
+                        <div className="text-[11px] text-slate-800 truncate">
+                          <span className="text-slate-700 font-bold">Qualification:</span> {t.qualification}
                         </div>
                       )}
 
                       <div className="flex items-center justify-between text-[11px]">
-                        <span className="text-slate-400">Mobile:</span>
+                        <span className="text-slate-700 font-bold">Mobile:</span>
                         {t.mobile ? (
                           <a
                             href={`tel:${t.mobile}`}
-                            className="font-mono font-semibold text-slate-800 hover:text-odoo-600 flex items-center gap-0.5"
+                            className="font-mono font-bold text-slate-900 hover:text-odoo-600 flex items-center gap-1"
                           >
-                            <Phone className="w-2.5 h-2.5 text-slate-400" />
+                            <Phone className="w-3 h-3 text-odoo-600" />
                             {t.mobile}
                           </a>
                         ) : (
-                          <span className="text-slate-400 italic">None</span>
+                          <span className="text-slate-500 italic">None</span>
                         )}
                       </div>
 
                       {t.email && (
                         <div className="flex items-center justify-between text-[11px] truncate">
-                          <span className="text-slate-400">Email:</span>
-                          <span className="text-slate-600 truncate max-w-[140px]">{t.email}</span>
+                          <span className="text-slate-700 font-bold">Email:</span>
+                          <span className="text-slate-800 truncate max-w-[140px] font-medium">{t.email}</span>
                         </div>
                       )}
                     </div>

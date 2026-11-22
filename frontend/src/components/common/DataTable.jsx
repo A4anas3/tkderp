@@ -40,13 +40,13 @@ export default function DataTable({
       {/* Odoo-style Search and Action Bar */}
       <div className="p-3 sm:p-3.5 border-b border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 bg-slate-50/70">
         <div className="relative flex-1 w-full sm:max-w-md">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
             value={localSearch}
             onChange={(e) => setLocalSearch(e.target.value)}
             placeholder={searchPlaceholder}
-            className="w-full pl-9 pr-3 py-1.5 text-xs sm:text-sm min-h-[36px] sm:min-h-[32px] border border-slate-300 rounded-md bg-white text-black placeholder:text-slate-400 focus:outline-none focus:border-odoo-600 focus:ring-1 focus:ring-odoo-600 shadow-2xs transition-colors"
+            className="w-full pl-9 pr-3 py-1.5 text-xs sm:text-sm min-h-[38px] sm:min-h-[34px] border border-slate-300 rounded-md bg-white text-black placeholder:text-slate-500 focus:outline-none focus:border-odoo-600 focus:ring-1 focus:ring-odoo-600 shadow-2xs transition-colors font-medium"
           />
         </div>
 
@@ -56,9 +56,9 @@ export default function DataTable({
               onClick={onRefresh}
               disabled={loading}
               title="Refresh table"
-              className="min-h-[34px] min-w-[34px] p-1.5 rounded-md border border-slate-300 bg-white text-slate-600 hover:text-black hover:bg-slate-50 active:bg-slate-100 transition flex items-center justify-center shrink-0 shadow-2xs"
+              className="min-h-[38px] min-w-[38px] sm:min-h-[34px] sm:min-w-[34px] p-2 sm:p-1.5 rounded-md border border-slate-300 bg-white text-slate-700 hover:text-black hover:bg-slate-50 active:bg-slate-100 transition flex items-center justify-center shrink-0 shadow-2xs touch-manipulation cursor-pointer"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-4 h-4 sm:w-3.5 sm:h-3.5 ${loading ? 'animate-spin' : ''}`} />
             </button>
           )}
           {headerActions}
@@ -69,7 +69,7 @@ export default function DataTable({
       <div className="overflow-x-auto min-h-[200px] w-full -webkit-overflow-scrolling-touch">
         <table className="w-full text-left border-collapse text-xs sm:text-sm min-w-[620px] sm:min-w-full">
           <thead>
-            <tr className="border-b border-slate-200 bg-slate-100/80 text-slate-700 font-bold uppercase tracking-wider text-[11px]">
+            <tr className="border-b border-slate-200 bg-slate-100 text-slate-900 font-bold uppercase tracking-wider text-[11px]">
               {columns.map((col, idx) => (
                 <th
                   key={idx}
@@ -93,7 +93,7 @@ export default function DataTable({
               </tr>
             ) : data.length === 0 ? (
               <tr>
-                <td colSpan={columns.length} className="py-12 text-center text-slate-500 text-xs sm:text-sm">
+                <td colSpan={columns.length} className="py-12 text-center text-slate-700 text-xs sm:text-sm font-semibold">
                   {emptyMessage}
                 </td>
               </tr>
@@ -135,50 +135,50 @@ export default function DataTable({
 
       {/* Pagination Footer */}
       {total > 0 && onPageChange && (
-        <div className="px-3.5 py-2.5 border-t border-slate-200 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs text-slate-600">
+        <div className="px-3.5 py-2.5 border-t border-slate-200 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs text-slate-700 font-medium">
           <div className="text-center sm:text-left">
-            Showing <span className="font-semibold text-black">{(page - 1) * pageSize + 1}</span> to{' '}
-            <span className="font-semibold text-black">{Math.min(page * pageSize, total)}</span> of{' '}
-            <span className="font-semibold text-black">{total}</span> records
+            Showing <span className="font-bold text-black">{(page - 1) * pageSize + 1}</span> to{' '}
+            <span className="font-bold text-black">{Math.min(page * pageSize, total)}</span> of{' '}
+            <span className="font-bold text-black">{total}</span> records
           </div>
 
           <div className="flex items-center gap-1.5">
             <button
               onClick={() => onPageChange(1)}
               disabled={page <= 1 || loading}
-              className="min-h-[32px] min-w-[32px] p-1.5 rounded-md border border-slate-300 bg-white hover:bg-slate-50 active:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-colors shadow-2xs"
+              className="min-h-[36px] min-w-[36px] sm:min-h-[32px] sm:min-w-[32px] p-2 sm:p-1.5 rounded-md border border-slate-300 bg-white hover:bg-slate-50 active:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-colors shadow-2xs touch-manipulation cursor-pointer"
               title="First Page"
             >
-              <ChevronsLeft className="w-3.5 h-3.5 text-black" />
+              <ChevronsLeft className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-black" />
             </button>
             <button
               onClick={() => onPageChange(page - 1)}
               disabled={page <= 1 || loading}
-              className="min-h-[32px] min-w-[32px] p-1.5 rounded-md border border-slate-300 bg-white hover:bg-slate-50 active:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-colors shadow-2xs"
+              className="min-h-[36px] min-w-[36px] sm:min-h-[32px] sm:min-w-[32px] p-2 sm:p-1.5 rounded-md border border-slate-300 bg-white hover:bg-slate-50 active:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-colors shadow-2xs touch-manipulation cursor-pointer"
               title="Previous Page"
             >
-              <ChevronLeft className="w-3.5 h-3.5 text-black" />
+              <ChevronLeft className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-black" />
             </button>
 
-            <span className="px-2.5 py-1 text-xs font-semibold text-black bg-white border border-slate-200 rounded-md shadow-2xs">
+            <span className="px-3 py-1.5 text-xs font-bold text-black bg-white border border-slate-300 rounded-md shadow-2xs">
               Page {page} of {totalPages}
             </span>
 
             <button
               onClick={() => onPageChange(page + 1)}
               disabled={page >= totalPages || loading}
-              className="min-h-[32px] min-w-[32px] p-1.5 rounded-md border border-slate-300 bg-white hover:bg-slate-50 active:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-colors shadow-2xs"
+              className="min-h-[36px] min-w-[36px] sm:min-h-[32px] sm:min-w-[32px] p-2 sm:p-1.5 rounded-md border border-slate-300 bg-white hover:bg-slate-50 active:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-colors shadow-2xs touch-manipulation cursor-pointer"
               title="Next Page"
             >
-              <ChevronRight className="w-3.5 h-3.5 text-black" />
+              <ChevronRight className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-black" />
             </button>
             <button
               onClick={() => onPageChange(totalPages)}
               disabled={page >= totalPages || loading}
-              className="min-h-[32px] min-w-[32px] p-1.5 rounded-md border border-slate-300 bg-white hover:bg-slate-50 active:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-colors shadow-2xs"
+              className="min-h-[36px] min-w-[36px] sm:min-h-[32px] sm:min-w-[32px] p-2 sm:p-1.5 rounded-md border border-slate-300 bg-white hover:bg-slate-50 active:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-colors shadow-2xs touch-manipulation cursor-pointer"
               title="Last Page"
             >
-              <ChevronsRight className="w-3.5 h-3.5 text-black" />
+              <ChevronsRight className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-black" />
             </button>
           </div>
         </div>

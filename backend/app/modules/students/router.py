@@ -300,9 +300,17 @@ async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db),
     active_adm_count = sum(1 for a in admissions if a.status == "ACTIVE" and getattr(a, "access_status", "ACTIVE") == "ACTIVE")
     revoked_adm_count = sum(1 for a in admissions if a.status in ["REVOKED", "CANCELLED"] or getattr(a, "access_status", "ACTIVE") == "REVOKED")
 
-    active_adms = [a for a in admissions if a.status == "ACTIVE" and getattr(a, "document_status", "VALID") == "VALID"]
-    active_billed = sum((a.total_payable for a in active_adms), Decimal("0.00"))
-    active_due = sum((a.balance_due for a in active_adms), Decimal("0.00"))
+    valid_adms = [
+        a for a in admissions
+        if a.status not in ["REVOKED", "CANCELLED"]
+        and getattr(a, "document_status", "VALID") != "VOID"
+    ]
+    total_billed = sum((a.total_payable for a in valid_adms), Decimal("0.00"))
+    total_due = sum((a.balance_due for a in valid_adms), Decimal("0.00"))
+    expired_due = sum(
+        (a.balance_due for a in valid_adms if a.status == "EXPIRED" or (a.valid_to is not None and a.valid_to < today)),
+        Decimal("0.00")
+    )
 
     total_paid = (await db.execute(
         select(func.coalesce(func.sum(Payment.amount), Decimal("0.00")))
@@ -361,6 +369,16 @@ async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db),
         else:
             pay_st = "UNPAID"
 
+        is_line_revoked = (
+            itm.access_status == "REVOKED"
+            or getattr(itm.admission, "document_status", "VALID") == "VOID"
+        )
+        is_line_expired = (
+            itm.access_status == "EXPIRED"
+            or (itm.valid_to is not None and itm.valid_to < today)
+        )
+        is_line_overdue = is_line_expired and itm.balance_due > Decimal("0.00")
+
         line_resp = StudentLineResponse(
             id=itm.id,
             admission_id=itm.admission_id,
@@ -382,16 +400,9 @@ async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db),
             last_paid_amount=last_p_amt,
             payment_status=pay_st,
             access_status=itm.access_status,
-            item_type=itm.item_type
-        )
-
-        is_line_revoked = (
-            itm.access_status == "REVOKED"
-            or getattr(itm.admission, "document_status", "VALID") == "VOID"
-        )
-        is_line_expired = (
-            itm.access_status == "EXPIRED"
-            or (itm.valid_to is not None and itm.valid_to < today)
+            item_type=itm.item_type,
+            is_expired=is_line_expired,
+            is_overdue=is_line_overdue
         )
 
         if is_line_revoked:
@@ -413,14 +424,18 @@ async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db),
     txns = list((await db.execute(tx_stmt)).scalars().all())
 
     res = StudentDetailResponse.model_validate(student)
+    if admissions:
+        active_adms_list = [a for a in admissions if a.status == "ACTIVE" and getattr(a, "document_status", "VALID") != "VOID"]
+        res.latest_admission_number = active_adms_list[0].admission_number if active_adms_list else admissions[0].admission_number
     res.admissions_count = total_adm_count
     res.active_admissions_count = active_adm_count
     res.revoked_admissions_count = revoked_adm_count
-    res.total_billed = active_billed
+    res.total_billed = total_billed
     res.total_paid = total_paid
     res.total_refunded = total_refunded
     res.net_paid = net_paid
-    res.total_balance_due = active_due
+    res.total_balance_due = total_due
+    res.expired_balance_due = expired_due
 
     res.active = active_lines
     res.expiring = expiring_lines
@@ -951,6 +966,9 @@ async def get_student_active_enrollment(
         if raw_name.startswith("[Renewal] "):
             raw_name = raw_name[len("[Renewal] "):]
 
+        is_item_expired = (days_remaining is not None and days_remaining < 0) or item.status == "EXPIRED" or adm.status == "EXPIRED"
+        is_item_overdue = is_item_expired and item.balance_due > Decimal("0.00")
+
         item_dict = {
             "id": str(item.id),
             "admission_id": str(adm.id),
@@ -967,10 +985,11 @@ async def get_student_active_enrollment(
             "net_price": float(item.net_price),
             "amount_collected": float(item.amount_collected),
             "balance_due": float(item.balance_due),
-            "status": item.status if adm.status == "ACTIVE" else adm.status,
+            "status": "EXPIRED" if is_item_expired and item.status not in ["REVOKED", "CANCELLED", "SUSPENDED", "DISCONTINUED"] else (item.status if adm.status == "ACTIVE" else adm.status),
             "days_remaining": days_remaining,
             "is_expiring_soon": days_remaining is not None and 0 <= days_remaining <= 7,
-            "is_expired": days_remaining is not None and days_remaining < 0,
+            "is_expired": is_item_expired,
+            "is_overdue": is_item_overdue,
             "lifecycle_reason": item.lifecycle_reason or adm.revocation_reason
         }
 
@@ -988,8 +1007,10 @@ async def get_student_active_enrollment(
                 active_subjects_dict[subj_key].append((item, adm, item_dict))
             else:
                 hist_item = dict(item_dict)
-                if hist_item["status"] == "ACTIVE" and (item.valid_to and item.valid_to < today):
+                if hist_item["status"] in ["ACTIVE", "UPCOMING"] and ((item.valid_to and item.valid_to < today) or is_item_expired):
                     hist_item["status"] = "EXPIRED"
+                hist_item["is_expired"] = is_item_expired
+                hist_item["is_overdue"] = is_item_overdue
                 historical_subjects.append(hist_item)
 
     # Consolidate chained active cycles for each subject (e.g. Month 1 + Month 2 renewal)
@@ -1036,6 +1057,7 @@ async def get_student_active_enrollment(
             "days_remaining": days_remaining,
             "is_expiring_soon": days_remaining is not None and 0 <= days_remaining <= 7,
             "is_expired": False,
+            "is_overdue": False,
             "is_renewed": len(cycle_list) > 1,
             "cycle_count": len(cycle_list),
             "lifecycle_reason": latest_dict["lifecycle_reason"]
@@ -1045,6 +1067,19 @@ async def get_student_active_enrollment(
         active_fee_total += total_net
         active_paid_total += total_paid
         active_due_total += total_due
+
+    expired_due_total = sum(
+        Decimal(str(h.get("balance_due", 0)))
+        for h in historical_subjects
+        if h.get("status") not in ["CANCELLED", "REVOKED"] and Decimal(str(h.get("balance_due", 0))) > Decimal("0.00")
+    )
+    if historical_memberships:
+        expired_due_total += sum(
+            Decimal(str(h.get("balance_due", 0)))
+            for h in historical_memberships
+            if h.get("status") not in ["CANCELLED", "REVOKED"] and Decimal(str(h.get("balance_due", 0))) > Decimal("0.00")
+        )
+    total_due_all = active_due_total + expired_due_total
 
     # Permanent enrollment code (stable)
     enrollment_number = f"ENR-{student.student_code}" if student.student_code else f"ENR-{student.id.hex[:8]}"
@@ -1059,10 +1094,16 @@ async def get_student_active_enrollment(
         "is_student_active": len(active_subjects) > 0 or active_green_card is not None,
         "active_subjects": active_subjects,
         "historical_subjects": historical_subjects,
+        "historical_memberships": historical_memberships,
+        "expired_due_total": float(expired_due_total),
+        "total_due": float(total_due_all),
         "active_totals": {
             "total_fee": float(active_fee_total),
             "total_paid": float(active_paid_total),
-            "total_due": float(active_due_total)
+            "total_due": float(active_due_total),
+            "expired_due": float(expired_due_total),
+            "total_due": float(total_due_all),
+            "total_outstanding_due": float(total_due_all)
         }
     }
 

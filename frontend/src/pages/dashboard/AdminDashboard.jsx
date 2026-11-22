@@ -62,7 +62,7 @@ export default function AdminDashboard() {
           <h1 className="text-xl sm:text-2xl font-black text-black tracking-tight">
             Institute Admin Overview
           </h1>
-          <p className="text-xs text-slate-500 mt-0.5 font-medium">
+          <p className="text-xs text-slate-700 mt-0.5 font-medium">
             Real-time operations, financial health, and admission analytics
           </p>
         </div>
@@ -148,12 +148,12 @@ export default function AdminDashboard() {
               <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-black">
                 Institute Cash Movement & Financial Position
               </h2>
-              <p className="text-[11px] text-slate-500 font-medium">
+              <p className="text-[11px] text-slate-700 font-medium">
                 Live summary of gross billings, realized collections, expenditures, and retained operating cash
               </p>
             </div>
           </div>
-          <div className="hidden sm:flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200">
+          <div className="hidden sm:flex items-center gap-1.5 text-[11px] font-bold text-slate-700 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200">
             <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
             <span>Real-time Ledger</span>
           </div>
@@ -253,7 +253,7 @@ export default function AdminDashboard() {
               </div>
               <div>
                 <h2 className="text-sm sm:text-base font-bold text-black">Recent Admissions</h2>
-                <p className="text-[11px] text-slate-500 font-medium">Latest enrolled students & fee validity</p>
+                <p className="text-[11px] text-slate-700 font-medium">Latest enrolled students & fee validity</p>
               </div>
             </div>
             <button
@@ -266,7 +266,7 @@ export default function AdminDashboard() {
 
           <div className="divide-y divide-slate-100 overflow-x-auto flex-1 mt-1">
             {(data?.recent_admissions || []).length === 0 ? (
-              <p className="py-8 text-center text-xs text-slate-500 font-medium">No admissions recorded yet.</p>
+              <p className="py-8 text-center text-xs text-slate-700 font-semibold">No admissions recorded yet.</p>
             ) : (
               data.recent_admissions.map((adm) => (
                 <div
@@ -289,7 +289,7 @@ export default function AdminDashboard() {
                     <div className="mt-1 flex items-center justify-end gap-1.5">
                       {adm.payment_status !== 'PAID' && adm.balance_due > 0 && (
                         <span className="text-[10px] font-mono text-rose-700 font-semibold hidden sm:inline">
-                          Due: ₹{adm.balance_due.toFixed(0)}
+                          Due: ₹{adm.balance_due.toFixed(0)}{adm.status === 'EXPIRED' ? ' (Expired)' : ''}
                         </span>
                       )}
                       <Badge
@@ -321,7 +321,7 @@ export default function AdminDashboard() {
               </div>
               <div>
                 <h2 className="text-sm sm:text-base font-bold text-black">Recent Fee Collections</h2>
-                <p className="text-[11px] text-slate-500 font-medium">Realized payments & ledger entries</p>
+                <p className="text-[11px] text-slate-700 font-medium">Realized payments & ledger entries</p>
               </div>
             </div>
             <button
@@ -334,7 +334,7 @@ export default function AdminDashboard() {
 
           <div className="divide-y divide-slate-100 overflow-x-auto flex-1 mt-1">
             {(data?.recent_payments || []).length === 0 ? (
-              <p className="py-8 text-center text-xs text-slate-500 font-medium">No payments recorded yet.</p>
+              <p className="py-8 text-center text-xs text-slate-700 font-semibold">No payments recorded yet.</p>
             ) : (
               data.recent_payments.map((p) => (
                 <div
@@ -346,15 +346,15 @@ export default function AdminDashboard() {
                     <span className="font-bold text-black text-xs sm:text-sm truncate block hover:text-emerald-700 transition-colors">
                       {p.student_name}
                     </span>
-                    <div className="text-[11px] text-slate-600 font-mono truncate mt-0.5">
-                      {p.payment_number} • <span className="uppercase font-semibold text-slate-700">{p.payment_mode}</span>
+                    <div className="text-[11px] text-slate-700 font-mono truncate mt-0.5 font-medium">
+                      {p.payment_number} • <span className="uppercase font-bold text-slate-900">{p.payment_mode}</span>
                     </div>
                   </div>
                   <div className="text-right shrink-0">
                     <span className="font-mono font-black text-emerald-800 text-xs sm:text-sm block">
                       +₹{p.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </span>
-                    <span className="text-[10px] text-slate-500 font-medium mt-0.5 block">{p.date}</span>
+                    <span className="text-[10px] text-slate-600 font-semibold mt-0.5 block">{p.date}</span>
                   </div>
                 </div>
               ))

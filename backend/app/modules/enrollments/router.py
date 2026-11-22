@@ -177,6 +177,8 @@ async def list_enrollments(
         if isinstance(last_p_date, datetime):
             last_p_date = last_p_date.date()
         days_left = (itm.valid_to - today).days if itm.valid_to else None
+        is_item_expired = itm.access_status == "EXPIRED" or (days_left is not None and days_left < 0)
+        is_item_overdue = is_item_expired and itm.balance_due > Decimal("0.00")
 
         if itm.amount_collected >= itm.net_price:
             pay_st = "PAID"
@@ -212,7 +214,9 @@ async def list_enrollments(
                 last_paid_amount=last_p_amt,
                 payment_status=pay_st,
                 access_status=itm.access_status,
-                item_type=itm.item_type
+                item_type=itm.item_type,
+                is_expired=is_item_expired,
+                is_overdue=is_item_overdue
             )
         )
 

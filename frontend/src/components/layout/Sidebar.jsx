@@ -9,6 +9,7 @@ import {
   CalendarDays,
   CreditCard,
   ReceiptIndianRupee,
+  MessageSquare,
   Wallet,
   BarChart3,
   TrendingUp,
@@ -50,6 +51,12 @@ export default function Sidebar({ isOpen, onClose }) {
           to: '/payments',
           label: 'Fee Payments',
           icon: ReceiptIndianRupee,
+          show: isAdmin || isCashier,
+        },
+        {
+          to: '/reminders',
+          label: 'Due Reminders',
+          icon: MessageSquare,
           show: isAdmin || isCashier,
         },
         {
@@ -174,7 +181,7 @@ export default function Sidebar({ isOpen, onClose }) {
             <div className="flex-1 min-w-0">
               <p className="text-xs font-bold text-black truncate">{user?.full_name}</p>
               <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="text-[11px] text-slate-500 font-mono">
+                <span className="text-[11px] text-slate-700 font-mono font-semibold">
                   {user?.employee_id}
                 </span>
                 <Badge
@@ -196,7 +203,7 @@ export default function Sidebar({ isOpen, onClose }) {
 
             return (
               <div key={sIdx} className="space-y-1">
-                <div className="px-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                <div className="px-2.5 text-[10px] font-black uppercase tracking-wider text-slate-600">
                   {sec.title}
                 </div>
                 {visibleItems.map((item) => (
@@ -205,10 +212,10 @@ export default function Sidebar({ isOpen, onClose }) {
                     to={item.to}
                     onClick={onClose}
                     className={({ isActive }) =>
-                      `flex items-center justify-between min-h-[36px] px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                      `flex items-center justify-between min-h-[38px] px-3 py-2 rounded-lg text-xs font-semibold transition-colors touch-manipulation cursor-pointer ${
                         isActive
-                          ? 'bg-odoo-600 text-white shadow-2xs font-semibold'
-                          : 'text-slate-700 hover:text-black hover:bg-slate-100 active:bg-slate-200'
+                          ? 'bg-odoo-600 text-white shadow-2xs font-bold'
+                          : 'text-slate-800 hover:text-black hover:bg-slate-100 active:bg-slate-200'
                       }`
                     }
                   >

@@ -5,6 +5,11 @@ import Button from '../common/Button';
 import Badge from '../common/Badge';
 import ReceiptHeader from './ReceiptHeader';
 import ReceiptFooter from './ReceiptFooter';
+import {
+  WhatsAppIcon,
+  buildWhatsAppLink,
+  buildPaymentReceiptWhatsAppMessage,
+} from '../../utils/whatsappHelpers';
 
 const formatCurrency = (amount) => {
   const num = Number(amount);
@@ -67,7 +72,20 @@ export default function PaymentReceiptModal({ isOpen, onClose, receipt, payment 
   const currentPaid = Number(data.amount || 0);
   const totalPaidToDate = Number(data.total_amount_paid_so_far !== undefined ? data.total_amount_paid_so_far : currentPaid);
   const priorPaid = Math.max(0, totalPaidToDate - currentPaid);
+  const writtenOffAmount = Number(data.written_off_amount || 0);
   const balanceDue = Number(data.remaining_balance_due !== undefined ? data.remaining_balance_due : 0);
+
+  const studentMobile = data.student_mobile || data.student?.mobile || '';
+  const whatsAppUrl = buildWhatsAppLink(
+    studentMobile,
+    buildPaymentReceiptWhatsAppMessage(data)
+  );
+
+  const handleWhatsAppShare = () => {
+    if (whatsAppUrl) {
+      window.open(whatsAppUrl, '_blank', 'noopener,noreferrer');
+    }
+  };
 
   const renderSingleSlip = (copyType) => {
     return (
@@ -263,6 +281,18 @@ export default function PaymentReceiptModal({ isOpen, onClose, receipt, payment 
                   </td>
                 </tr>
 
+                {/* Waived / Written Off Amount */}
+                {writtenOffAmount > 0 && (
+                  <tr className="bg-amber-50">
+                    <td className="p-2 border-r border-slate-200 text-amber-950 font-semibold">
+                      Fee Waived / Forgiven (Admin Waiver)
+                    </td>
+                    <td className="p-2 text-right font-mono font-bold text-amber-900">
+                      {formatCurrency(writtenOffAmount)}
+                    </td>
+                  </tr>
+                )}
+
                 {/* Balance Due Row */}
                 <tr className={balanceDue > 0 ? 'bg-rose-50 border-t-2 border-rose-300' : 'bg-emerald-50/50 border-t border-emerald-200'}>
                   <td className="p-2 border-r border-slate-200 font-black uppercase text-xs text-black">
@@ -336,9 +366,28 @@ export default function PaymentReceiptModal({ isOpen, onClose, receipt, payment 
             </button>
           </div>
 
-          <Button variant="primary" size="xs" icon={Printer} onClick={handlePrint} className="w-full sm:w-auto">
-            Print Receipt
-          </Button>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <button
+              onClick={handleWhatsAppShare}
+              disabled={!studentMobile}
+              title={
+                studentMobile
+                  ? `Share receipt with ${studentMobile} on WhatsApp`
+                  : 'Student has no mobile number recorded'
+              }
+              className={`min-h-[32px] px-3 py-1 rounded text-xs font-bold inline-flex items-center justify-center gap-1.5 transition-colors shadow-2xs w-full sm:w-auto ${
+                studentMobile
+                  ? 'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white cursor-pointer'
+                  : 'bg-slate-200 text-slate-500 cursor-not-allowed'
+              }`}
+            >
+              <WhatsAppIcon className="w-3.5 h-3.5 shrink-0" />
+              <span>WhatsApp Slip</span>
+            </button>
+            <Button variant="primary" size="xs" icon={Printer} onClick={handlePrint} className="w-full sm:w-auto">
+              Print Receipt
+            </Button>
+          </div>
         </div>
 
         {/* Printable Receipt Paper Container */}
@@ -366,7 +415,24 @@ export default function PaymentReceiptModal({ isOpen, onClose, receipt, payment 
               {balanceDue > 0 ? 'Partially Paid' : 'Payment Cleared & Fully Settled'}
             </Badge>
           </div>
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            <button
+              onClick={handleWhatsAppShare}
+              disabled={!studentMobile}
+              title={
+                studentMobile
+                  ? `Share receipt with ${studentMobile} on WhatsApp`
+                  : 'Student has no mobile number recorded'
+              }
+              className={`min-h-[34px] px-3 py-1.5 rounded-lg text-xs font-bold inline-flex items-center justify-center gap-1.5 transition-colors shadow-2xs ${
+                studentMobile
+                  ? 'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white cursor-pointer'
+                  : 'bg-slate-200 text-slate-500 cursor-not-allowed'
+              }`}
+            >
+              <WhatsAppIcon className="w-3.5 h-3.5 shrink-0" />
+              <span>WhatsApp Slip</span>
+            </button>
             <Button variant="secondary" onClick={onClose} className="flex-1 sm:flex-initial">
               Close
             </Button>

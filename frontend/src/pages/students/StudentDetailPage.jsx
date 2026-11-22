@@ -43,6 +43,7 @@ import {
   Eye,
   Copy,
   Check,
+  IdCard,
 } from 'lucide-react';
 import Modal from '../../components/common/Modal';
 import { getActionMeta, formatDateTime, AuditDetailsSummary } from '../audit/AuditLogPage';
@@ -67,6 +68,8 @@ import EditValidityModal from '../../components/modals/EditValidityModal';
 import SuspendDiscontinueModal from '../../components/modals/SuspendDiscontinueModal';
 import RenewSubjectModal from '../../components/modals/RenewSubjectModal';
 import ChangeSubjectModal from '../../components/modals/ChangeSubjectModal';
+import WaiveDueModal from '../../components/modals/WaiveDueModal';
+import StudentIDCardModal from '../../components/modals/StudentIDCardModal';
 
 function getValidityStatus(adm) {
   if (adm.status === 'SUSPENDED') {
@@ -196,9 +199,12 @@ export default function StudentDetailPage() {
 
   // Modals
   const [payModalOpen, setPayModalOpen] = useState(false);
+  const [waiveModalOpen, setWaiveModalOpen] = useState(false);
+  const [selectedAdmissionForWaive, setSelectedAdmissionForWaive] = useState(null);
   const [targetAdmissionId, setTargetAdmissionId] = useState(null);
   const [receiptToShow, setReceiptToShow] = useState(null);
   const [admissionSlipToShow, setAdmissionSlipToShow] = useState(null);
+  const [idCardModalOpen, setIdCardModalOpen] = useState(false);
 
   // Lifecycle Modals (Edit Validity, Suspend, Discontinue)
   const [selectedAdmissionForValidity, setSelectedAdmissionForValidity] = useState(null);
@@ -425,6 +431,12 @@ export default function StudentDetailPage() {
       } catch (e) {
         error(e.message || 'Failed to fetch payment receipt');
       }
+    } else if (txn.type === 'WAIVER') {
+      if (txn.admission_id) {
+        const adm = admissions.find((a) => a.id === txn.admission_id);
+        setSelectedAdmissionForSlips(adm || { id: txn.admission_id, admission_number: txn.admission_number });
+        setAllSlipsModalOpen(true);
+      }
     } else {
       try {
         const rcpt = await paymentApi.getRefundReceipt(txn.id);
@@ -620,6 +632,18 @@ export default function StudentDetailPage() {
               Edit Profile
             </Button>
 
+            {/* Student ID Card Button */}
+            <Button
+              size="xs"
+              variant="secondary"
+              icon={IdCard}
+              onClick={() => setIdCardModalOpen(true)}
+              title="View, Print & WhatsApp Student ID Card"
+              className="flex-1 sm:flex-initial justify-center bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border-indigo-200 font-bold"
+            >
+              ID Card
+            </Button>
+
             {/* Revoke / Restore Button (Admin Only) */}
             {isAdmin && (
               isRevoked ? (
@@ -659,6 +683,24 @@ export default function StudentDetailPage() {
                 className="flex-1 sm:flex-initial justify-center"
               >
                 Collect Due Fee
+              </Button>
+            )}
+
+            {/* Waive Due Fee Button (Admin Only) */}
+            {!isRevoked && isAdmin && Number(student.total_balance_due) > 0 && (
+              <Button
+                size="xs"
+                variant="warning"
+                icon={Sparkles}
+                onClick={() => {
+                  const firstDue = admissions.find((a) => Number(a.balance_due) > 0);
+                  setSelectedAdmissionForWaive(firstDue || null);
+                  setWaiveModalOpen(true);
+                }}
+                className="flex-1 sm:flex-initial justify-center bg-amber-500 hover:bg-amber-600 text-black font-bold border-amber-600"
+                title="Admin only: Waive / forgive pending fee due"
+              >
+                Waive Due
               </Button>
             )}
 
@@ -742,14 +784,25 @@ export default function StudentDetailPage() {
         )}
 
         <div className={`bg-white rounded-xl border ${Number(student.total_balance_due) > 0 ? 'border-rose-300 border-l-4 border-l-rose-600' : 'border-slate-200 border-l-4 border-l-slate-400'} p-3 sm:p-3.5 shadow-xs ${Number(student.total_refunded) > 0 ? 'col-span-2 sm:col-span-1' : 'col-span-2 sm:col-span-1 lg:col-span-1'}`}>
-          <span className={`text-[11px] font-bold uppercase tracking-wider block ${Number(student.total_balance_due) > 0 ? 'text-rose-900' : 'text-slate-700'}`}>
-            Current Balance Due
-          </span>
+          <div className="flex items-center justify-between">
+            <span className={`text-[11px] font-bold uppercase tracking-wider block ${Number(student.total_balance_due) > 0 ? 'text-rose-900' : 'text-slate-700'}`}>
+              Current Balance Due
+            </span>
+            {Number(student.expired_balance_due || enrollmentData?.expired_due_total || 0) > 0 && (
+              <span className="text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300 px-1.5 py-0.2 rounded uppercase">
+                Overdue
+              </span>
+            )}
+          </div>
           <div className={`text-lg sm:text-xl font-bold mt-0.5 break-all sm:break-normal ${Number(student.total_balance_due) > 0 ? 'text-rose-700' : 'text-black'}`}>
             ₹{Number(student.total_balance_due).toFixed(2)}
           </div>
           <span className={`text-[10px] sm:text-[11px] font-medium block ${Number(student.total_balance_due) > 0 ? 'text-rose-700 font-semibold' : 'text-slate-700'}`}>
-            {Number(student.total_balance_due) > 0 ? 'Pending payment • Due' : 'All active fees cleared ✓'}
+            {Number(student.expired_balance_due || enrollmentData?.expired_due_total || 0) > 0
+              ? `Includes ₹${Number(student.expired_balance_due || enrollmentData?.expired_due_total).toFixed(2)} Overdue / Expired`
+              : Number(student.total_balance_due) > 0
+              ? 'Pending payment • Due'
+              : 'All active fees cleared ✓'}
           </span>
         </div>
       </div>
@@ -830,6 +883,68 @@ export default function StudentDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Overdue / Expired Fees Due Banner */}
+      {Number(enrollmentData?.expired_due_total || student?.expired_balance_due || 0) > 0 && (
+        <div className="bg-rose-50/90 border-2 border-rose-300 rounded-xl p-3.5 sm:p-4 text-xs shadow-xs space-y-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-rose-700 shrink-0" />
+              <div>
+                <span className="font-bold text-rose-900 text-sm">
+                  Overdue / Expired Course Fee Due: ₹{Number(enrollmentData?.expired_due_total || student?.expired_balance_due).toFixed(2)}
+                </span>
+                <span className="ml-2 inline-block text-[10px] font-bold uppercase px-1.5 py-0.2 rounded bg-rose-100 text-rose-800 border border-rose-300">
+                  Expired Due
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
+              {!isRevoked && (
+                <Button
+                  size="xs"
+                  variant="success"
+                  icon={CreditCard}
+                  onClick={() => {
+                    const overdueItem = (enrollmentData?.historical_subjects || []).find((h) => Number(h.balance_due) > 0);
+                    if (overdueItem?.admission_id) {
+                      setTargetAdmissionId(overdueItem.admission_id);
+                    }
+                    setPayModalOpen(true);
+                  }}
+                  className="font-bold"
+                >
+                  Pay Expired Due (₹{Number(enrollmentData?.expired_due_total || student?.expired_balance_due).toFixed(0)})
+                </Button>
+              )}
+              {isAdmin && (
+                <Button
+                  size="xs"
+                  variant="warning"
+                  icon={Sparkles}
+                  onClick={() => {
+                    const overdueItem = (enrollmentData?.historical_subjects || []).find((h) => Number(h.balance_due) > 0);
+                    const dueAdm = overdueItem?.admission_id
+                      ? admissions.find((a) => a.id === overdueItem.admission_id)
+                      : admissions.find((a) => Number(a.balance_due) > 0);
+                    if (dueAdm) {
+                      setSelectedAdmissionForWaive(dueAdm);
+                    }
+                    setWaiveModalOpen(true);
+                  }}
+                  className="bg-amber-500 hover:bg-amber-600 text-black font-bold border-amber-600"
+                  title="Admin only: Waive / forgive pending fee due"
+                >
+                  Waive Due
+                </Button>
+              )}
+            </div>
+          </div>
+          <p className="text-[11px] text-rose-800 font-medium">
+            Course validity period has expired, but outstanding unpaid dues remain active and collectible. Review subject details below or collect fee payment.
+          </p>
+        </div>
+      )}
 
       {/* 1. Prominent Current Enrollment Card */}
       <div className="bg-white border-2 border-purple-200 rounded-xl p-3.5 sm:p-5 shadow-xs space-y-4">
@@ -1288,8 +1403,13 @@ export default function StudentDetailPage() {
                   Total Paid: ₹{Number(enrollmentData.active_totals.total_paid).toFixed(2)}
                 </span>
                 <span className={`bg-white px-2 py-0.5 rounded border ${Number(enrollmentData.active_totals.total_due) > 0 ? 'text-rose-700 border-rose-200' : 'text-slate-700 border-slate-200'}`}>
-                  Outstanding Due: ₹{Number(enrollmentData.active_totals.total_due).toFixed(2)}
+                  Active Due: ₹{Number(enrollmentData.active_totals.total_due).toFixed(2)}
                 </span>
+                {Number(enrollmentData.expired_due_total || 0) > 0 && (
+                  <span className="bg-rose-100 text-rose-800 px-2 py-0.5 rounded border border-rose-300 font-bold">
+                    Expired Due: ₹{Number(enrollmentData.expired_due_total).toFixed(2)}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -1416,7 +1536,8 @@ export default function StudentDetailPage() {
                   const isSuspended = item.status === 'SUSPENDED';
                   const isDiscontinued = item.status === 'DISCONTINUED';
                   const isCancelled = item.status === 'REVOKED' || item.status === 'CANCELLED';
-                  const isExpired = item.is_expired;
+                  const isExpired = item.is_expired || item.status === 'EXPIRED';
+                  const hasDue = Number(item.balance_due) > 0;
 
                   let statusBadge = (
                     <Badge variant="neutral">{item.status}</Badge>
@@ -1424,6 +1545,7 @@ export default function StudentDetailPage() {
                   if (isSuspended) statusBadge = <Badge variant="warning">Suspended</Badge>;
                   else if (isDiscontinued) statusBadge = <Badge variant="neutral">Discontinued</Badge>;
                   else if (isCancelled) statusBadge = <Badge variant="danger">Cancelled</Badge>;
+                  else if (isExpired && hasDue) statusBadge = <Badge variant="danger">Expired (Overdue)</Badge>;
                   else if (isExpired) statusBadge = <Badge variant="danger">Expired</Badge>;
 
                   return (
@@ -1465,7 +1587,9 @@ export default function StudentDetailPage() {
                         </div>
                         {Number(item.balance_due) > 0 && (
                           <div className="text-right">
-                            <span className="text-[10px] text-slate-700 font-sans font-semibold block">Due</span>
+                            <span className="text-[10px] text-rose-700 font-sans font-bold block uppercase">
+                              {isExpired ? 'Expired Due' : 'Due'}
+                            </span>
                             <span className="font-bold text-rose-700">₹{Number(item.balance_due).toFixed(2)}</span>
                           </div>
                         )}
@@ -1482,6 +1606,20 @@ export default function StudentDetailPage() {
                             className="flex-1 justify-center"
                           >
                             Resume
+                          </Button>
+                        )}
+                        {hasDue && !isCancelled && !isRevoked && (
+                          <Button
+                            size="xs"
+                            variant="success"
+                            icon={CreditCard}
+                            onClick={() => {
+                              setTargetAdmissionId(item.admission_id);
+                              setPayModalOpen(true);
+                            }}
+                            className="flex-1 justify-center"
+                          >
+                            Pay Due (₹{Number(item.balance_due).toFixed(0)})
                           </Button>
                         )}
                         {!isCancelled && (
@@ -1523,7 +1661,8 @@ export default function StudentDetailPage() {
                       const isSuspended = item.status === 'SUSPENDED';
                       const isDiscontinued = item.status === 'DISCONTINUED';
                       const isCancelled = item.status === 'REVOKED' || item.status === 'CANCELLED';
-                      const isExpired = item.is_expired;
+                      const isExpired = item.is_expired || item.status === 'EXPIRED';
+                      const hasDue = Number(item.balance_due) > 0;
 
                       let statusBadge = (
                         <Badge variant="neutral">{item.status}</Badge>
@@ -1531,6 +1670,7 @@ export default function StudentDetailPage() {
                       if (isSuspended) statusBadge = <Badge variant="warning">Suspended</Badge>;
                       else if (isDiscontinued) statusBadge = <Badge variant="neutral">Discontinued</Badge>;
                       else if (isCancelled) statusBadge = <Badge variant="danger">Cancelled</Badge>;
+                      else if (isExpired && hasDue) statusBadge = <Badge variant="danger">Expired (Overdue)</Badge>;
                       else if (isExpired) statusBadge = <Badge variant="danger">Expired</Badge>;
 
                       return (
@@ -1555,7 +1695,7 @@ export default function StudentDetailPage() {
                             <span className="text-black font-bold">₹{Number(item.net_price).toFixed(2)}</span>
                             {Number(item.balance_due) > 0 && (
                               <span className="block text-[10px] text-rose-700 font-bold">
-                                Due: ₹{Number(item.balance_due).toFixed(2)}
+                                {isExpired ? 'Expired Due: ' : 'Due: '}₹{Number(item.balance_due).toFixed(2)}
                               </span>
                             )}
                           </td>
@@ -1570,6 +1710,20 @@ export default function StudentDetailPage() {
                                   onClick={() => handleResumeItem(item)}
                                 >
                                   Resume
+                                </Button>
+                              )}
+                              {hasDue && !isCancelled && !isRevoked && (
+                                <Button
+                                  size="xs"
+                                  variant="success"
+                                  icon={CreditCard}
+                                  onClick={() => {
+                                    setTargetAdmissionId(item.admission_id);
+                                    setPayModalOpen(true);
+                                  }}
+                                  title="Collect outstanding balance"
+                                >
+                                  Pay Due
                                 </Button>
                               )}
                               {!isCancelled && (
@@ -1786,6 +1940,16 @@ export default function StudentDetailPage() {
                         <span className={`font-bold ${isBatchCancelled ? 'line-through text-slate-400' : Number(adm.balance_due) > 0 ? 'text-rose-700' : 'text-slate-600'}`}>
                           ₹{isBatchCancelled ? '0.00' : Number(adm.balance_due).toFixed(2)}
                         </span>
+                        {Number(adm.balance_due) > 0 && !isBatchCancelled && (adm.status === 'EXPIRED' || validity.isExpired) && (
+                          <span className="block text-[9px] font-bold text-rose-800 uppercase bg-rose-100 border border-rose-300 px-1 rounded mt-0.5">
+                            Expired
+                          </span>
+                        )}
+                        {Number(adm.written_off_amount) > 0 && !isBatchCancelled && (
+                          <span className="block text-[9px] font-bold text-amber-900 bg-amber-100 border border-amber-300 px-1 rounded mt-0.5">
+                            ₹{Number(adm.written_off_amount).toFixed(0)} waived
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -1816,6 +1980,22 @@ export default function StudentDetailPage() {
                           className="flex-1 justify-center"
                         >
                           Pay Due (₹{Number(adm.balance_due).toFixed(0)})
+                        </Button>
+                      )}
+
+                      {isAdmin && Number(adm.balance_due) > 0 && !isBatchCancelled && (
+                        <Button
+                          size="xs"
+                          variant="warning"
+                          icon={Sparkles}
+                          onClick={() => {
+                            setSelectedAdmissionForWaive(adm);
+                            setWaiveModalOpen(true);
+                          }}
+                          className="flex-1 justify-center bg-amber-500 hover:bg-amber-600 text-black font-bold border-amber-600"
+                          title="Admin only: Waive / forgive pending fee due"
+                        >
+                          Waive Due
                         </Button>
                       )}
 
@@ -1972,7 +2152,19 @@ export default function StudentDetailPage() {
                           {isBatchCancelled ? (
                             <span className="line-through text-slate-400">₹0.00</span>
                           ) : (
-                            `₹${Number(adm.balance_due).toFixed(2)}`
+                            <div>
+                              <span>₹{Number(adm.balance_due).toFixed(2)}</span>
+                              {Number(adm.balance_due) > 0 && (adm.status === 'EXPIRED' || validity.isExpired) && (
+                                <span className="block text-[9px] font-bold uppercase text-rose-800 bg-rose-100 border border-rose-300 px-1 rounded mt-0.5 w-fit ml-auto">
+                                  Expired
+                                </span>
+                              )}
+                              {Number(adm.written_off_amount) > 0 && (
+                                <span className="block text-[9px] font-bold text-amber-900 bg-amber-100 border border-amber-300 px-1 rounded mt-0.5 w-fit ml-auto">
+                                  ₹{Number(adm.written_off_amount).toFixed(0)} waived
+                                </span>
+                              )}
+                            </div>
                           )}
                         </td>
                         <td className="p-2.5 text-center">
@@ -2045,6 +2237,23 @@ export default function StudentDetailPage() {
                                 title="Collect outstanding balance (2nd Payment)"
                               >
                                 Pay Due (₹{Number(adm.balance_due).toFixed(0)})
+                              </Button>
+                            )}
+
+                            {/* Waive Due if pending (Admin only) */}
+                            {isAdmin && Number(adm.balance_due) > 0 && !isBatchCancelled && (
+                              <Button
+                                size="xs"
+                                variant="warning"
+                                icon={Sparkles}
+                                onClick={() => {
+                                  setSelectedAdmissionForWaive(adm);
+                                  setWaiveModalOpen(true);
+                                }}
+                                className="bg-amber-500 hover:bg-amber-600 text-black font-bold border-amber-600"
+                                title="Admin only: Waive / forgive pending fee due"
+                              >
+                                Waive Due
                               </Button>
                             )}
 
@@ -2308,27 +2517,34 @@ export default function StudentDetailPage() {
             <div className="block sm:hidden space-y-2.5">
               {transactions.map((txn) => {
                 const isRefund = txn.type === 'REFUND';
+                const isWaiver = txn.type === 'WAIVER';
                 return (
                   <div
                     key={txn.id}
                     className={`border rounded-xl p-3 space-y-2 ${
-                      isRefund ? 'bg-rose-50/50 border-rose-200' : 'bg-slate-50 border-slate-200'
+                      isRefund
+                        ? 'bg-rose-50/50 border-rose-200'
+                        : isWaiver
+                        ? 'bg-amber-50/60 border-amber-300'
+                        : 'bg-slate-50 border-slate-200'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-1.5 font-mono font-bold text-xs">
                         {isRefund ? (
                           <ArrowDownLeft className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                        ) : isWaiver ? (
+                          <Sparkles className="w-3.5 h-3.5 text-amber-700 shrink-0" />
                         ) : (
                           <ArrowUpRight className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                         )}
-                        <span className={isRefund ? 'text-rose-700' : 'text-odoo-900'}>
+                        <span className={isRefund ? 'text-rose-700' : isWaiver ? 'text-amber-900' : 'text-odoo-900'}>
                           {txn.number}
                         </span>
                       </div>
                       <div className="text-right">
-                        <span className={`font-mono font-bold text-sm block ${isRefund ? 'text-rose-700' : 'text-emerald-800'}`}>
-                          {isRefund ? '-' : '+'}₹{Math.abs(Number(txn.amount) || 0).toFixed(2)}
+                        <span className={`font-mono font-bold text-sm block ${isRefund ? 'text-rose-700' : isWaiver ? 'text-amber-800' : 'text-emerald-800'}`}>
+                          {isRefund ? '-' : isWaiver ? '≈' : '+'}₹{Math.abs(Number(txn.amount) || 0).toFixed(2)}
                         </span>
                       </div>
                     </div>
@@ -2337,6 +2553,10 @@ export default function StudentDetailPage() {
                       {isRefund ? (
                         <span className="inline-block px-1.5 py-0.2 rounded text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
                           Refund Voucher
+                        </span>
+                      ) : isWaiver ? (
+                        <span className="inline-block px-1.5 py-0.2 rounded text-[11px] font-bold bg-amber-100 text-amber-950 border border-amber-300">
+                          Fee Due Waived
                         </span>
                       ) : (
                         <span className="inline-block px-1.5 py-0.2 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
@@ -2414,19 +2634,24 @@ export default function StudentDetailPage() {
                 <tbody className="divide-y divide-slate-100 bg-white">
                   {transactions.map((txn) => {
                     const isRefund = txn.type === 'REFUND';
+                    const isWaiver = txn.type === 'WAIVER';
                     return (
                       <tr
                         key={txn.id}
-                        className={`hover:bg-slate-50 transition ${isRefund ? 'bg-rose-50/30' : ''}`}
+                        className={`hover:bg-slate-50 transition ${
+                          isRefund ? 'bg-rose-50/30' : isWaiver ? 'bg-amber-50/40' : ''
+                        }`}
                       >
                         <td className="p-2.5 font-mono font-bold">
                           <span className="flex items-center gap-1.5">
                             {isRefund ? (
                               <ArrowDownLeft className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                            ) : isWaiver ? (
+                              <Sparkles className="w-3.5 h-3.5 text-amber-700 shrink-0" />
                             ) : (
                               <ArrowUpRight className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                             )}
-                            <span className={isRefund ? 'text-rose-700' : 'text-odoo-900'}>
+                            <span className={isRefund ? 'text-rose-700' : isWaiver ? 'text-amber-900' : 'text-odoo-900'}>
                               {txn.number}
                             </span>
                           </span>
@@ -2443,6 +2668,10 @@ export default function StudentDetailPage() {
                           {isRefund ? (
                             <span className="inline-block px-1.5 py-0.5 rounded text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
                               Refund Voucher
+                            </span>
+                          ) : isWaiver ? (
+                            <span className="inline-block px-1.5 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-950 border border-amber-300">
+                              Fee Due Waived
                             </span>
                           ) : (
                             <span className="inline-block px-1.5 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
@@ -2948,6 +3177,21 @@ export default function StudentDetailPage() {
         }}
       />
 
+      {/* Waive Due Modal */}
+      <WaiveDueModal
+        isOpen={waiveModalOpen}
+        onClose={() => {
+          setWaiveModalOpen(false);
+          setSelectedAdmissionForWaive(null);
+        }}
+        admission={selectedAdmissionForWaive || admissions.find((a) => Number(a.balance_due) > 0)}
+        student={student}
+        onSuccess={() => {
+          fetchStudentData();
+          fetchStudentAuditLogs(auditPage, auditPageSize, auditSearch, auditActionFilter);
+        }}
+      />
+
       {/* Payment Receipt Modal */}
       <PaymentReceiptModal
         isOpen={!!receiptToShow}
@@ -3078,6 +3322,14 @@ export default function StudentDetailPage() {
         item={selectedItemForSuspend}
         mode={suspendMode}
         onSuccess={() => fetchStudentData()}
+      />
+
+      {/* Student ID Card Modal */}
+      <StudentIDCardModal
+        isOpen={idCardModalOpen}
+        onClose={() => setIdCardModalOpen(false)}
+        student={student}
+        enrollmentData={enrollmentData}
       />
     </div>
   );

@@ -15,14 +15,14 @@ export default function Topbar({ onToggleSidebar, onQuickStudent, onQuickPayment
       <div className="flex items-center gap-2 sm:gap-3 shrink-0">
         <button
           onClick={onToggleSidebar}
-          className="lg:hidden min-h-[36px] min-w-[36px] p-2 rounded-md border border-slate-300 text-slate-700 hover:text-black hover:bg-slate-100 active:bg-slate-200 transition flex items-center justify-center shadow-2xs"
+          className="lg:hidden min-h-[38px] min-w-[38px] p-2 rounded-md border border-slate-300 text-slate-700 hover:text-black hover:bg-slate-100 active:bg-slate-200 transition flex items-center justify-center shadow-2xs touch-manipulation cursor-pointer"
           aria-label="Toggle menu"
         >
           <Menu className="w-4 h-4" />
         </button>
 
         <div className="hidden sm:flex items-center gap-2">
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+          <span className="text-xs font-black uppercase tracking-wider text-slate-700">
             Thakurdwara ERP
           </span>
         </div>
@@ -36,7 +36,7 @@ export default function Topbar({ onToggleSidebar, onQuickStudent, onQuickPayment
             variant="primary"
             icon={Plus}
             onClick={() => navigate('/admissions/new')}
-            className="min-h-[32px] px-2.5 py-1 text-xs font-semibold whitespace-nowrap"
+            className="min-h-[36px] sm:min-h-[32px] px-3 sm:px-2.5 py-1.5 sm:py-1 text-xs font-bold whitespace-nowrap shadow-2xs"
             title="Purchase & Pay for Course Batches"
           >
             Course Paid
@@ -49,7 +49,7 @@ export default function Topbar({ onToggleSidebar, onQuickStudent, onQuickPayment
             variant="success"
             icon={CreditCard}
             onClick={onQuickPayment}
-            className="min-h-[32px] px-2.5 py-1 text-xs font-semibold whitespace-nowrap"
+            className="min-h-[36px] sm:min-h-[32px] px-3 sm:px-2.5 py-1.5 sm:py-1 text-xs font-bold whitespace-nowrap shadow-2xs"
             title="Collect Fee / Record Payment"
           >
             Collect Fee
@@ -62,7 +62,7 @@ export default function Topbar({ onToggleSidebar, onQuickStudent, onQuickPayment
             variant="secondary"
             icon={UserPlus}
             onClick={onQuickStudent}
-            className="hidden md:inline-flex min-h-[32px] whitespace-nowrap"
+            className="hidden md:inline-flex min-h-[32px] whitespace-nowrap font-bold"
             title="Admit / Register New Student"
           >
             New Admission
@@ -76,7 +76,7 @@ export default function Topbar({ onToggleSidebar, onQuickStudent, onQuickPayment
             <div className="w-6 h-6 rounded-full bg-slate-100 border border-slate-300 flex items-center justify-center text-xs font-bold text-black">
               {user?.full_name?.charAt(0) || 'U'}
             </div>
-            <span className="text-xs text-slate-600">
+            <span className="text-xs text-slate-700">
               <strong className="text-black font-semibold">{user?.full_name}</strong>
             </span>
           </div>
@@ -84,7 +84,7 @@ export default function Topbar({ onToggleSidebar, onQuickStudent, onQuickPayment
           <button
             onClick={logout}
             title="Sign out"
-            className="min-h-[34px] min-w-[34px] p-1.5 rounded-md text-slate-500 hover:text-rose-600 hover:bg-rose-50 active:bg-rose-100 transition flex items-center justify-center shrink-0 border border-slate-200"
+            className="min-h-[36px] min-w-[36px] p-2 rounded-md text-slate-600 hover:text-rose-700 hover:bg-rose-50 active:bg-rose-100 transition flex items-center justify-center shrink-0 border border-slate-300 shadow-2xs touch-manipulation cursor-pointer"
           >
             <LogOut className="w-3.5 h-3.5" />
           </button>

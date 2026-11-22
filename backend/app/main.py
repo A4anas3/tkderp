@@ -24,6 +24,10 @@ from app.modules.dashboard.router import router as dashboard_router
 from app.modules.assessments.router import router as assessments_router
 from app.modules.enrollments.router import router as enrollments_router
 from app.modules.audit.router import router as audit_router
+from app.modules.verification.router import router as verification_router
+from app.modules.reminders.router import router as reminders_router
+from app.database.session import engine
+from app.database.models import Base
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -33,6 +37,10 @@ from app.services.daily_jobs import refresh_statuses
 async def lifespan(app: FastAPI):
     # Ensure uploads directory exists
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+
+    # Ensure all tables (including reminder_queue) are created
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
     
     # Initialize and start APScheduler for daily 00:05 IST status refresh
     scheduler = AsyncIOScheduler()
@@ -89,6 +97,8 @@ app.include_router(dashboard_router)
 app.include_router(assessments_router)
 app.include_router(enrollments_router)
 app.include_router(audit_router)
+app.include_router(verification_router)
+app.include_router(reminders_router)
 
 # Direct root alias for batches active summary
 @app.get("/batches/active-summary", tags=["Batches"])

@@ -13,13 +13,13 @@ from app.core.config import settings
 from app.core.dependencies import require_staff, require_cashier_or_admin, require_admin
 from app.database.models import (
     Admission, AdmissionItem, Student, Payment, PaymentAllocation, GreenCardProduct, User, BatchSubject, Refund, AuditLog,
-    Subject, Batch, Teacher
+    Subject, Batch, Teacher, FinancialTransaction
 )
 from app.modules.admissions.schemas import (
     AdmissionCreate, AdmissionResponse, AdmissionCalculatePreviewRequest, AdmissionItemResponse, AdmissionRevokeRequest,
     AdmissionSlipsResponse, SlipItemResponse, AdmissionValidityUpdate, AdmissionLifecycleAction,
     AdmissionItemValidityUpdate, AdmissionItemLifecycleAction, SubjectRenewalRequest, SubjectChangeRequest,
-    ItemRenewalRequest, RenewalsDueItemResponse, ItemRenewalSpec
+    ItemRenewalRequest, RenewalsDueItemResponse, ItemRenewalSpec, AdmissionWaiveDueRequest
 )
 from app.common.calculations import (
     calculate_admission_financials, allocate_payment_proportionally, compute_rolling_cycle_end
@@ -31,7 +31,7 @@ from app.common.active_lines import today_kolkata, is_active_line
 from app.modules.ledger.service import (
     record_payment_service, process_refund_service, recompute_admission_totals,
     update_student_green_card_status, cancel_admission_service, revoke_admission_service,
-    restore_admission_service, renew_admission_items_service
+    restore_admission_service, renew_admission_items_service, waive_due_service
 )
 
 async def update_student_green_card_flag(student_id: uuid.UUID, db: AsyncSession) -> None:
@@ -565,6 +565,7 @@ async def get_admission_slips(
         "total_payable": float(admission.total_payable),
         "amount_paid": float(admission.amount_paid),
         "balance_due": float(admission.balance_due),
+        "written_off_amount": float(admission.written_off_amount or Decimal("0.00")),
         "payment_status": admission.payment_status,
         "status": admission.status,
         "notes": admission.notes,
@@ -585,6 +586,7 @@ async def get_admission_slips(
                 "net_price": float(itm.net_price),
                 "amount_collected": float(itm.amount_collected),
                 "balance_due": float(itm.balance_due),
+                "written_off_amount": float(itm.written_off_amount or Decimal("0.00")),
                 "valid_from": itm.valid_from.isoformat() if itm.valid_from else None,
                 "valid_to": itm.valid_to.isoformat() if itm.valid_to else None,
             }
@@ -633,6 +635,7 @@ async def get_admission_slips(
             "total_admission_payable": float(admission.total_payable),
             "total_amount_paid_so_far": float(admission.amount_paid),
             "remaining_balance_due": float(admission.balance_due),
+            "written_off_amount": float(admission.written_off_amount or Decimal("0.00")),
             "valid_from": p.valid_from.isoformat() if p.valid_from else (admission.valid_from.isoformat() if admission.valid_from else None),
             "valid_to": p.valid_to.isoformat() if p.valid_to else (admission.valid_to.isoformat() if admission.valid_to else None),
             "fee_period": p.fee_period,
@@ -694,6 +697,50 @@ async def get_admission_slips(
             )
         )
 
+    # 4. Waivers (FinancialTransaction with txn_type == "WAIVER")
+    w_query = (
+        select(FinancialTransaction)
+        .where(
+            FinancialTransaction.admission_id == admission_id,
+            FinancialTransaction.txn_type == "WAIVER"
+        )
+        .order_by(FinancialTransaction.txn_at.asc())
+    )
+    waivers = (await db.execute(w_query)).scalars().all()
+    for w in waivers:
+        w_receipt_data = {
+            "voucher_number": w.txn_number,
+            "waiver_number": w.txn_number,
+            "date": w.txn_at.isoformat(),
+            "amount": float(w.signed_amount),
+            "reason": w.reason,
+            "student_name": admission.student.full_name if admission.student else admission.student_name_snapshot,
+            "student_reg_no": admission.student.registration_no if admission.student else "—",
+            "student_mobile": admission.student.mobile if admission.student else None,
+            "student_father_name": admission.student.father_name if admission.student else None,
+            "admission_number": admission.admission_number,
+            "total_admission_payable": float(admission.total_payable),
+            "total_amount_paid": float(admission.amount_paid),
+            "total_written_off": float(admission.written_off_amount or 0),
+            "remaining_balance_due": float(admission.balance_due),
+        }
+        slips.append(
+            SlipItemResponse(
+                id=w.id,
+                slip_type="WAIVER_VOUCHER",
+                slip_number=w.txn_number,
+                date=w.txn_at,
+                title="Fee Due Waiver Voucher (Maaf)",
+                amount=w.signed_amount,
+                mode="WAIVER",
+                ref=w.reference or admission.admission_number,
+                collector_or_processor=admission.student_name_snapshot,
+                notes=w.reason,
+                status_badge="WAIVED",
+                data=w_receipt_data
+            )
+        )
+
     return AdmissionSlipsResponse(
         admission_id=admission.id,
         admission_number=admission.admission_number,
@@ -710,6 +757,7 @@ async def get_admission_slips(
         status=admission.status,
         valid_from=admission.valid_from,
         valid_to=admission.valid_to,
+        written_off_amount=admission.written_off_amount or Decimal("0.00"),
         items=admission.items,
         slips=slips
     )
@@ -791,6 +839,43 @@ async def restore_batch_purchase(
         raise HTTPException(status_code=404, detail="Course purchase / admission not found")
 
     admission = await restore_admission_service(admission, db, current_user)
+    await db.commit()
+    await db.refresh(admission)
+    return admission
+
+
+@router.post("/{admission_id}/waive", response_model=AdmissionResponse)
+async def waive_admission_due(
+    admission_id: uuid.UUID,
+    payload: AdmissionWaiveDueRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    """
+    Directly waive / forgive (maaf) an outstanding due balance on an admission.
+    Restricted to ADMIN role (HTTP 403 otherwise).
+    Generates append-only FinancialTransaction with txn_type='WAIVER' and AuditLog entry.
+    """
+    query = (
+        select(Admission)
+        .options(selectinload(Admission.items), selectinload(Admission.student))
+        .where(Admission.id == admission_id)
+        .with_for_update(of=Admission)
+    )
+    res = await db.execute(query)
+    admission = res.scalar_one_or_none()
+    if not admission:
+        raise HTTPException(status_code=404, detail="Course purchase / admission not found")
+
+    admission, f_txn = await waive_due_service(
+        admission=admission,
+        db=db,
+        current_user=current_user,
+        reason=payload.reason,
+        amount=payload.amount,
+        item_id=payload.item_id
+    )
+
     await db.commit()
     await db.refresh(admission)
     return admission

@@ -11,6 +11,7 @@ from app.modules.payments.models import Payment, PaymentAllocation, Refund, Fina
 from app.modules.expenses.models import ExpenseCategory, Expense, SalaryRecord
 from app.modules.assessments.models import Assessment, StudentMark
 from app.modules.audit.models import AuditLog
+from app.modules.reminders.models import ReminderQueue
 from app.common.models import NumberSequence, IdempotencyRecord
 
 __all__ = [
@@ -38,6 +39,7 @@ __all__ = [
     "Assessment",
     "StudentMark",
     "AuditLog",
+    "ReminderQueue",
     "NumberSequence",
     "IdempotencyRecord"
 ]

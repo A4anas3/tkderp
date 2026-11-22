@@ -93,7 +93,7 @@ export default function QuickPaymentModal({
         try {
           const res = await admissionApi.list({ page: 1, page_size: 100 });
           let dues = (res.items || []).filter(
-            (a) => Number(a.balance_due) > 0 && a.status === 'ACTIVE'
+            (a) => Number(a.balance_due) > 0 && a.status !== 'REVOKED' && a.status !== 'CANCELLED'
           );
 
           if (initialAdmissionId) {
@@ -307,7 +307,7 @@ export default function QuickPaymentModal({
                   filteredAdmissions.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.purchase_transaction_id || a.admission_number} — {a.student_name_snapshot} (Due: ₹
-                      {Number(a.balance_due).toFixed(2)} | Paid: ₹
+                      {Number(a.balance_due).toFixed(2)}{a.status === 'EXPIRED' ? ' • Expired' : ''} | Paid: ₹
                       {Number(a.amount_paid).toFixed(2)})
                     </option>
                   ))

@@ -17,7 +17,8 @@ import {
   Phone,
   ShieldAlert,
   RotateCcw,
-  FileText
+  FileText,
+  Sparkles
 } from 'lucide-react';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
@@ -30,6 +31,7 @@ import QuickPaymentModal from '../../components/modals/QuickPaymentModal';
 import PaymentReceiptModal from '../../components/receipts/PaymentReceiptModal';
 import IssueRefundModal from '../../components/modals/IssueRefundModal';
 import RefundReceiptModal from '../../components/receipts/RefundReceiptModal';
+import WaiveDueModal from '../../components/modals/WaiveDueModal';
 import { formatIndianDate, formatCycleLabel, evaluateCycleStatus } from '../../utils/dateCycleUtils';
 
 export default function AdmissionDetailPage() {
@@ -45,6 +47,7 @@ export default function AdmissionDetailPage() {
   const [slipModalOpen, setSlipModalOpen] = useState(false);
   const [allSlipsModalOpen, setAllSlipsModalOpen] = useState(false);
   const [payModalOpen, setPayModalOpen] = useState(false);
+  const [waiveModalOpen, setWaiveModalOpen] = useState(false);
   const [paymentReceiptToShow, setPaymentReceiptToShow] = useState(null);
   const [refundModalOpen, setRefundModalOpen] = useState(false);
   const [refundReceiptToShow, setRefundReceiptToShow] = useState(null);
@@ -188,7 +191,7 @@ export default function AdmissionDetailPage() {
             Print Enrollment Slip
           </Button>
 
-          {Number(admission.balance_due || 0) > 0 && isActive && (
+          {Number(admission.balance_due || 0) > 0 && admission.status !== 'REVOKED' && admission.status !== 'CANCELLED' && (
             <Button
               variant="success"
               icon={CreditCard}
@@ -196,6 +199,19 @@ export default function AdmissionDetailPage() {
               size="sm"
             >
               Collect Fee (₹{Number(admission.balance_due || 0).toLocaleString('en-IN')})
+            </Button>
+          )}
+
+          {isAdmin && Number(admission.balance_due || 0) > 0 && admission.status !== 'REVOKED' && admission.status !== 'CANCELLED' && (
+            <Button
+              variant="warning"
+              icon={Sparkles}
+              onClick={() => setWaiveModalOpen(true)}
+              size="sm"
+              className="bg-amber-500 hover:bg-amber-600 text-black font-bold border-amber-600"
+              title="Admin only: Waive / forgive pending fee due"
+            >
+              Waive Due
             </Button>
           )}
 
@@ -402,7 +418,12 @@ export default function AdmissionDetailPage() {
                     ₹{Number(itm.amount_collected ?? 0).toFixed(2)}
                   </td>
                   <td className="p-3 text-right font-mono font-bold text-rose-700">
-                    ₹{Number(itm.balance_due ?? 0).toFixed(2)}
+                    <div>₹{Number(itm.balance_due ?? 0).toFixed(2)}</div>
+                    {Number(itm.written_off_amount ?? 0) > 0 && (
+                      <span className="block text-[10px] font-bold text-amber-900 bg-amber-100 border border-amber-300 px-1 rounded mt-0.5 w-fit ml-auto">
+                        ₹{Number(itm.written_off_amount).toFixed(0)} waived
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -411,7 +432,7 @@ export default function AdmissionDetailPage() {
         </div>
 
         {/* Financial KPI Summary Bar */}
-        <div className="p-4 bg-slate-50 border-t border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+        <div className={`p-4 bg-slate-50 border-t border-slate-200 grid grid-cols-2 sm:grid-cols-${Number(admission.written_off_amount || 0) > 0 ? '5' : '4'} gap-3 text-xs`}>
           <div>
             <span className="text-slate-500 block text-[11px]">Total Net Payable</span>
             <span className="font-mono font-black text-black text-base">
@@ -430,6 +451,14 @@ export default function AdmissionDetailPage() {
               ₹{Number(admission.balance_due ?? 0).toFixed(2)}
             </span>
           </div>
+          {Number(admission.written_off_amount ?? 0) > 0 && (
+            <div>
+              <span className="text-amber-800 block text-[11px] font-bold">Fee Waived (Forgiven)</span>
+              <span className="font-mono font-black text-amber-900 text-base">
+                ₹{Number(admission.written_off_amount).toFixed(2)}
+              </span>
+            </div>
+          )}
           <div>
             <span className="text-slate-500 block text-[11px]">Payment Status</span>
             <Badge
@@ -540,6 +569,16 @@ export default function AdmissionDetailPage() {
         initialAdmissionId={admission.id}
         onPaymentSuccess={(receipt) => {
           setPaymentReceiptToShow(receipt);
+          loadAdmission();
+        }}
+      />
+
+      {/* Waive Due Modal */}
+      <WaiveDueModal
+        isOpen={waiveModalOpen}
+        onClose={() => setWaiveModalOpen(false)}
+        admission={admission}
+        onSuccess={() => {
           loadAdmission();
         }}
       />

@@ -64,14 +64,14 @@ export default function StatCard({
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <p className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-600 leading-tight truncate">
+          <p className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-slate-800 leading-tight truncate">
             {title}
           </p>
           <div className="text-xl sm:text-2xl lg:text-[22px] xl:text-2xl font-black text-black mt-1 tracking-tight truncate font-sans">
             {value}
           </div>
           {subtext && (
-            <p className="text-[10px] sm:text-[11px] text-slate-500 mt-1 font-semibold leading-tight truncate">
+            <p className="text-[10px] sm:text-[11px] text-slate-700 mt-1 font-semibold leading-tight truncate">
               {subtext}
             </p>
           )}

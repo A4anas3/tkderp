@@ -163,6 +163,8 @@ async def recompute_admission_totals(admission: Admission, db: AsyncSession) -> 
         else:
             if admission.amount_paid >= admission.total_payable:
                 admission.payment_status = "PAID"
+            elif admission.balance_due == Decimal("0.00") and total_written_off > Decimal("0.00"):
+                admission.payment_status = "PAID"
             elif admission.amount_paid > Decimal("0.00"):
                 admission.payment_status = "PARTIALLY_PAID"
             else:
@@ -200,10 +202,10 @@ async def record_payment_service(
 
     items = await _ensure_items_loaded(admission, db)
     has_keep_due = any(getattr(itm, "keep_due", False) for itm in items)
-    if admission.status != "ACTIVE" and not (admission.status == "REVOKED" and has_keep_due):
+    if admission.status not in ("ACTIVE", "EXPIRED") and not (admission.status == "REVOKED" and has_keep_due):
         raise HTTPException(
             status_code=400,
-            detail=f"Cannot record payment: admission status is {admission.status} (must be ACTIVE)"
+            detail=f"Cannot record payment: admission status is {admission.status} (must be ACTIVE or EXPIRED)"
         )
 
     amount = round_money(amount)
@@ -1045,6 +1047,28 @@ async def revoke_admission_service(
     await recompute_admission_totals(admission, db)
     await update_student_green_card_status(admission.student_id, db)
 
+    # If pending due was waived on revocation, record FinancialTransaction (TXN series)
+    if pending_due_action == "WAIVE":
+        waived_total = sum((itm.written_off_amount for itm in target_items), Decimal("0.00"))
+        if waived_total > Decimal("0.00"):
+            w_txn_no = await next_number(db, "TXN")
+            w_txn = FinancialTransaction(
+                txn_number=w_txn_no,
+                txn_type="WAIVER",
+                student_id=admission.student_id,
+                admission_id=admission.id,
+                payment_id=None,
+                refund_id=None,
+                mode="WAIVER",
+                reference=f"WAIVE-{admission.admission_number}",
+                signed_amount=waived_total,
+                txn_at=datetime.now(timezone.utc),
+                created_by=current_user.id,
+                reason=f"Fee due waived on revocation: {reason.strip()}"
+            )
+            db.add(w_txn)
+            await db.flush()
+
     audit = AuditLog(
         user_id=current_user.id,
         action="BATCH_PURCHASE_REVOKED",
@@ -1161,6 +1185,156 @@ async def restore_admission_service(
     )
     db.add(audit)
     return admission
+
+
+async def waive_due_service(
+    admission: Admission,
+    db: AsyncSession,
+    current_user: User,
+    reason: str,
+    amount: Optional[Decimal] = None,
+    item_id: Optional[uuid.UUID] = None
+) -> Tuple[Admission, FinancialTransaction]:
+    """
+    Waives (forgives / maaf) an outstanding balance due on an admission.
+    Rules:
+    - Only administrators can waive dues (enforced in router and service).
+    - Cannot waive a VOID admission document.
+    - Admission must have balance_due > 0.
+    - Reason is mandatory.
+    - Amount, if specified, must be > 0 and <= admission.balance_due.
+    - Can target a specific item line or distribute across items with balance due.
+    - Sets written_off_amount on target admission_item(s) and admission.
+    - Recomputes totals from ledger.
+    - Creates an append-only FinancialTransaction (txn_type='WAIVER', signed_amount=waived_amount, mode='WAIVER').
+    - Writes an AuditLog entry with action='FEE_DUE_WAIVED', details including student, admission, who waived, when, how much, and reason.
+    """
+    if current_user.role != "ADMIN":
+        raise HTTPException(status_code=403, detail="Only administrators can waive pending dues")
+
+    if getattr(admission, "document_status", "VALID") == "VOID":
+        raise HTTPException(status_code=400, detail="Cannot waive due on a VOID admission document")
+
+    if admission.balance_due <= Decimal("0.00"):
+        raise HTTPException(status_code=400, detail="Cannot waive due: admission has no outstanding balance due")
+
+    if not reason or not reason.strip():
+        raise HTTPException(status_code=400, detail="Reason for fee due waiver is mandatory")
+
+    items = await _ensure_items_loaded(admission, db)
+    before_status = admission.status
+    before_paid = admission.amount_paid
+    before_due = admission.balance_due
+    before_written_off = admission.written_off_amount or Decimal("0.00")
+
+    if amount is not None and amount > Decimal("0.00"):
+        waive_amt = round_money(amount)
+        if waive_amt > admission.balance_due:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Waiver amount ₹{waive_amt} cannot exceed outstanding balance due ₹{admission.balance_due}"
+            )
+    else:
+        waive_amt = admission.balance_due
+
+    # Target specific item or distribute across items with balance_due
+    if item_id:
+        target_item = next((i for i in items if i.id == item_id), None)
+        if not target_item:
+            raise HTTPException(status_code=404, detail="Target subject line not found on this admission")
+        if target_item.balance_due <= Decimal("0.00"):
+            raise HTTPException(status_code=400, detail="Target subject line has no outstanding balance due")
+        if waive_amt > target_item.balance_due:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Waiver amount ₹{waive_amt} exceeds subject line balance due ₹{target_item.balance_due}"
+            )
+        target_item.written_off_amount = (target_item.written_off_amount or Decimal("0.00")) + waive_amt
+        target_item.balance_due = max(Decimal("0.00"), target_item.balance_due - waive_amt)
+        if target_item.balance_due == Decimal("0.00"):
+            target_item.keep_due = False
+    else:
+        items_with_due = [itm for itm in items if itm.balance_due > Decimal("0.00")]
+        if not items_with_due:
+            raise HTTPException(status_code=400, detail="No subject lines with outstanding balance due found")
+
+        if waive_amt == admission.balance_due:
+            for itm in items_with_due:
+                itm.written_off_amount = (itm.written_off_amount or Decimal("0.00")) + itm.balance_due
+                itm.balance_due = Decimal("0.00")
+                itm.keep_due = False
+        else:
+            allocs = allocate_payment_proportionally(
+                waive_amt,
+                [{"id": itm.id, "balance_due": itm.balance_due} for itm in items_with_due],
+                mode="PROPORTIONAL"
+            )
+            itm_map = {itm.id: itm for itm in items_with_due}
+            for itm_id, a_amt in allocs:
+                itm_obj = itm_map.get(itm_id)
+                if itm_obj and a_amt > Decimal("0.00"):
+                    itm_obj.written_off_amount = (itm_obj.written_off_amount or Decimal("0.00")) + a_amt
+                    itm_obj.balance_due = max(Decimal("0.00"), itm_obj.balance_due - a_amt)
+                    if itm_obj.balance_due == Decimal("0.00"):
+                        itm_obj.keep_due = False
+
+    # Recompute admission totals from ledger
+    await recompute_admission_totals(admission, db)
+    await update_student_green_card_status(admission.student_id, db)
+
+    # 3. Append-only FinancialTransaction (TXN series)
+    txn_no = await next_number(db, "TXN")
+    f_txn = FinancialTransaction(
+        txn_number=txn_no,
+        txn_type="WAIVER",
+        student_id=admission.student_id,
+        admission_id=admission.id,
+        payment_id=None,
+        refund_id=None,
+        mode="WAIVER",
+        reference=f"WAIVE-{admission.admission_number}",
+        signed_amount=waive_amt,
+        txn_at=datetime.now(timezone.utc),
+        created_by=current_user.id,
+        reason=f"Fee due waived: {reason.strip()}"
+    )
+    db.add(f_txn)
+    await db.flush()
+
+    # 4. Audit Log
+    user_name = current_user.full_name or current_user.email
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="FEE_DUE_WAIVED",
+        entity_type="ADMISSION",
+        entity_id=admission.id,
+        details=json.dumps({
+            "admission_number": admission.admission_number,
+            "student_id": str(admission.student_id),
+            "student_name": admission.student_name_snapshot,
+            "waived_amount": float(waive_amt),
+            "reason": reason.strip(),
+            "waived_by": user_name,
+            "waived_by_role": current_user.role,
+            "txn_number": txn_no,
+            "before": {
+                "balance_due": float(before_due),
+                "written_off_amount": float(before_written_off),
+                "status": before_status,
+                "amount_paid": float(before_paid)
+            },
+            "after": {
+                "balance_due": float(admission.balance_due),
+                "written_off_amount": float(admission.written_off_amount or 0),
+                "status": admission.status,
+                "amount_paid": float(admission.amount_paid)
+            }
+        })
+    )
+    db.add(audit)
+    await db.flush()
+
+    return admission, f_txn
 
 
 async def renew_admission_items_service(

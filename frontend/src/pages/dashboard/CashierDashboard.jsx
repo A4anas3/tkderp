@@ -64,7 +64,7 @@ export default function CashierDashboard() {
           <h1 className="text-xl sm:text-2xl font-black text-black tracking-tight">
             Cashier Front Desk & Fee Portal
           </h1>
-          <p className="text-xs text-slate-500 mt-0.5 font-medium">
+          <p className="text-xs text-slate-700 mt-0.5 font-medium">
             Admissions, manual fee collection, receipt generation, and demo follow-ups
           </p>
         </div>
@@ -134,7 +134,7 @@ export default function CashierDashboard() {
             </div>
             <div>
               <h2 className="text-sm sm:text-base font-bold text-black">Upcoming Demo Trial Deadlines</h2>
-              <p className="text-[11px] text-slate-500 font-medium">Students with demos ending soon or expired</p>
+              <p className="text-[11px] text-slate-700 font-medium">Students with demos ending soon or expired</p>
             </div>
           </div>
           <button
@@ -147,7 +147,7 @@ export default function CashierDashboard() {
 
         <div className="mt-1 divide-y divide-slate-100">
           {(data?.upcoming_demos || []).length === 0 ? (
-            <p className="py-6 text-center text-xs text-slate-500 font-medium">
+            <p className="py-6 text-center text-xs text-slate-700 font-semibold">
               No demo deadlines in the next 5 days.
             </p>
           ) : (
@@ -160,10 +160,10 @@ export default function CashierDashboard() {
                   <span className="font-bold text-black text-xs sm:text-sm truncate block">
                     {d.student_name}
                   </span>
-                  <div className="text-[11px] text-slate-600 truncate mt-0.5">
+                  <div className="text-[11px] text-slate-700 truncate mt-0.5 font-medium">
                     Subject: <strong className="text-black font-semibold">{d.interested_subject || 'General'}</strong>
                     {d.mobile && (
-                      <span className="ml-2 font-mono text-slate-500">
+                      <span className="ml-2 font-mono text-slate-700 font-semibold">
                         • Mob: {d.mobile}
                       </span>
                     )}
@@ -218,7 +218,7 @@ export default function CashierDashboard() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3.5 border-b border-slate-100">
           <div>
             <h2 className="text-sm sm:text-base font-bold text-black">Purchases with Outstanding Fee Balances</h2>
-            <p className="text-[11px] text-slate-500 font-medium">Follow up with students and record partial or full fee collections</p>
+            <p className="text-[11px] text-slate-700 font-medium">Follow up with students and record partial or full fee collections</p>
           </div>
           <button
             onClick={() => navigate('/admissions')}
@@ -230,7 +230,7 @@ export default function CashierDashboard() {
 
         <div className="mt-3.5 overflow-x-auto -webkit-overflow-scrolling-touch rounded-lg border border-slate-200">
           <table className="w-full text-left text-xs min-w-[650px]">
-            <thead className="bg-slate-50/90 text-slate-700 font-bold uppercase tracking-wider text-[11px] border-b border-slate-200">
+            <thead className="bg-slate-100 text-slate-900 font-bold uppercase tracking-wider text-[11px] border-b border-slate-200">
               <tr>
                 <th className="p-3">Purchase Txn ID</th>
                 <th className="p-3">Student Name</th>
@@ -244,7 +244,7 @@ export default function CashierDashboard() {
             <tbody className="divide-y divide-slate-100 bg-white">
               {(data?.due_admissions || []).length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-slate-500 font-medium">
+                  <td colSpan={7} className="py-8 text-center text-slate-700 font-semibold">
                     No pending fee purchases!
                   </td>
                 </tr>
@@ -261,13 +261,29 @@ export default function CashierDashboard() {
                     <td className="p-3 text-right font-mono text-emerald-800 font-semibold">
                       ₹{adm.amount_paid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </td>
-                    <td className="p-3 text-right font-mono text-rose-700 font-black">
-                      ₹{adm.balance_due.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    <td className="p-3 text-right font-mono">
+                      <div className="flex flex-col items-end">
+                        <span className="text-rose-700 font-black">
+                          ₹{adm.balance_due.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </span>
+                        {(adm.is_expired || adm.status === 'EXPIRED') && (
+                          <span className="inline-flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-rose-100 text-rose-800 border border-rose-300 mt-0.5">
+                            Expired
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="p-3 text-center">
-                      <Badge size="xs" variant={adm.payment_status === 'PARTIALLY_PAID' ? 'warning' : 'danger'}>
-                        {adm.payment_status}
-                      </Badge>
+                      <div className="flex flex-col items-center gap-1">
+                        <Badge size="xs" variant={adm.payment_status === 'PARTIALLY_PAID' ? 'warning' : 'danger'}>
+                          {adm.payment_status}
+                        </Badge>
+                        {(adm.is_expired || adm.status === 'EXPIRED') && (
+                          <Badge size="xs" variant="danger">
+                            OVERDUE
+                          </Badge>
+                        )}
+                      </div>
                     </td>
                     <td className="p-3 text-right">
                       <Button

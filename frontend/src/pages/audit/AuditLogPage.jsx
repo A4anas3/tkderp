@@ -30,6 +30,7 @@ import {
   Eye,
   SlidersHorizontal,
   ArrowLeftRight,
+  Sparkles,
 } from 'lucide-react';
 import { auditApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
@@ -86,6 +87,8 @@ export function getActionMeta(action) {
       return { label: 'Teacher Payout', variant: 'purple', icon: Wallet };
     case 'REFRESH_STATUSES_JOB_RUN':
       return { label: 'Daily Status Refresh', variant: 'neutral', icon: Clock };
+    case 'FEE_DUE_WAIVED':
+      return { label: 'Fee Due Waived', variant: 'warning', icon: Sparkles };
     default:
       return {
         label: action ? action.replace(/_/g, ' ') : 'System Action',
@@ -115,6 +118,26 @@ export function formatDateTime(dateStr) {
 export function AuditDetailsSummary({ audit }) {
   const parsed = audit.parsed_details;
   if (!parsed) return <span className="text-slate-600 text-xs truncate max-w-xs">{audit.details || '—'}</span>;
+
+  if (parsed.waived_amount !== undefined) {
+    return (
+      <div className="flex flex-wrap items-center gap-1.5 text-xs">
+        <span className="font-bold text-amber-900 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-300">
+          ₹{Number(parsed.waived_amount).toLocaleString('en-IN')} Waived
+        </span>
+        {parsed.admission_number && (
+          <span className="font-mono text-[10px] text-black bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 font-bold">
+            {parsed.admission_number}
+          </span>
+        )}
+        {parsed.reason && (
+          <span className="text-slate-800 text-xs italic truncate max-w-xs">
+            "{parsed.reason}"
+          </span>
+        )}
+      </div>
+    );
+  }
 
   if (parsed.amount !== undefined) {
     return (
@@ -334,7 +357,7 @@ export default function AuditLogPage() {
   };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+    <div className="w-full min-w-0 max-w-7xl mx-auto space-y-5 sm:space-y-6">
       {/* 1. Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200">
         <div>

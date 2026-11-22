@@ -114,6 +114,11 @@ class AdmissionRevokeRequest(BaseModel):
     refund_mode: str = Field(default="CASH", pattern="^(CASH|UPI|BANK_TRANSFER|OTHER)$")
     line_refunds: Optional[List[LineRefundAmount]] = None
 
+class AdmissionWaiveDueRequest(BaseModel):
+    reason: str = Field(..., min_length=2, max_length=500, description="Mandatory reason for waiving the fee due")
+    amount: Optional[Decimal] = Field(None, gt=Decimal("0.00"), description="Optional partial amount to waive. Defaults to total balance due.")
+    item_id: Optional[uuid.UUID] = Field(None, description="Optional specific admission subject line to waive.")
+
 class AdmissionResponse(BaseModel):
     id: uuid.UUID
     admission_number: str
@@ -193,6 +198,7 @@ class AdmissionSlipsResponse(BaseModel):
     status: str
     valid_from: Optional[date] = None
     valid_to: Optional[date] = None
+    written_off_amount: Decimal = Decimal("0.00")
     items: List[AdmissionItemResponse] = Field(default_factory=list)
     slips: List[SlipItemResponse] = Field(default_factory=list)
 

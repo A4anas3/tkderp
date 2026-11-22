@@ -429,28 +429,28 @@ export default function BatchesPage() {
 
                     <div className="mt-3 space-y-1.5 text-xs border-t border-slate-100 pt-2.5">
                       <div className="flex items-center justify-between text-[11px]">
-                        <span className="text-slate-400">Category:</span>
-                        <span className="font-medium text-black">{b.class_category}</span>
+                        <span className="text-slate-700 font-bold">Category:</span>
+                        <span className="font-semibold text-black">{b.class_category}</span>
                       </div>
                       <div className="flex items-center justify-between text-[11px]">
-                        <span className="text-slate-400">Faculty:</span>
-                        <span className="font-medium text-black truncate max-w-[140px]">
+                        <span className="text-slate-700 font-bold">Faculty:</span>
+                        <span className="font-semibold text-black truncate max-w-[140px]">
                           {b.teacher_name_snapshot || 'Unassigned'}
                         </span>
                       </div>
                       <div className="flex items-center justify-between text-[11px]">
-                        <span className="text-slate-400">Hall:</span>
-                        <span className="text-slate-700">{b.hall_number || 'Hall 13'}</span>
+                        <span className="text-slate-700 font-bold">Hall:</span>
+                        <span className="text-slate-900 font-semibold">{b.hall_number || 'Hall 13'}</span>
                       </div>
                       <div className="flex items-center justify-between text-[11px]">
-                        <span className="text-slate-400">Schedule:</span>
-                        <span className="text-slate-600 truncate max-w-[140px]">{b.schedule || 'Flexible'}</span>
+                        <span className="text-slate-700 font-bold">Schedule:</span>
+                        <span className="text-slate-900 font-semibold truncate max-w-[140px]">{b.schedule || 'Flexible'}</span>
                       </div>
 
                       {/* Included Subjects */}
                       {(b.subjects || []).length > 0 && (
                         <div className="pt-2 border-t border-slate-100">
-                          <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
+                          <span className="text-[10px] font-black uppercase text-slate-700 block mb-1">
                             Subjects ({b.subjects.length}):
                           </span>
                           <div className="flex flex-wrap gap-1">

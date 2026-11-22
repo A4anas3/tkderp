@@ -101,35 +101,35 @@ export default function LoginPage() {
 
           {/* Quick Demo Logins for Fast Evaluation */}
           <div className="mt-6 pt-5 border-t border-slate-200">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">
+            <p className="text-[11px] font-black uppercase tracking-wider text-slate-700 mb-2.5">
               Fast One-Click Demo Access
             </p>
             <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
                 onClick={() => handleQuickFill('ADM001', 'Admin@1234')}
-                className="p-2 text-left rounded-md border border-slate-200 bg-slate-50 hover:bg-purple-50 hover:border-odoo-300 transition"
+                className="p-2.5 min-h-[44px] text-left rounded-lg border border-slate-200 bg-slate-50 hover:bg-purple-50 hover:border-odoo-400 active:bg-purple-100 transition-all touch-manipulation cursor-pointer shadow-2xs"
               >
                 <span className="block text-xs font-bold text-black">Admin</span>
-                <span className="block text-[10px] text-slate-500 font-mono">ADM001</span>
+                <span className="block text-[10px] text-slate-700 font-mono font-semibold">ADM001</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => handleQuickFill('CSH001', 'Cashier@1234')}
-                className="p-2 text-left rounded-md border border-slate-200 bg-slate-50 hover:bg-amber-50 hover:border-amber-300 transition"
+                className="p-2.5 min-h-[44px] text-left rounded-lg border border-slate-200 bg-slate-50 hover:bg-amber-50 hover:border-amber-400 active:bg-amber-100 transition-all touch-manipulation cursor-pointer shadow-2xs"
               >
                 <span className="block text-xs font-bold text-black">Cashier</span>
-                <span className="block text-[10px] text-slate-500 font-mono">CSH001</span>
+                <span className="block text-[10px] text-slate-700 font-mono font-semibold">CSH001</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => handleQuickFill('TCH001', 'Teacher@1234')}
-                className="p-2 text-left rounded-md border border-slate-200 bg-slate-50 hover:bg-emerald-50 hover:border-emerald-300 transition"
+                className="p-2.5 min-h-[44px] text-left rounded-lg border border-slate-200 bg-slate-50 hover:bg-emerald-50 hover:border-emerald-400 active:bg-emerald-100 transition-all touch-manipulation cursor-pointer shadow-2xs"
               >
                 <span className="block text-xs font-bold text-black">Teacher</span>
-                <span className="block text-[10px] text-slate-500 font-mono">TCH001</span>
+                <span className="block text-[10px] text-slate-700 font-mono font-semibold">TCH001</span>
               </button>
             </div>
           </div>

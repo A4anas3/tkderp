@@ -147,26 +147,26 @@ export default function GreenCardPage() {
                 </div>
 
                 <h2 className="text-base font-bold text-black mt-3">{c.name}</h2>
-                <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                <p className="text-xs text-slate-700 mt-1 leading-relaxed font-medium">
                   {c.description || 'All-access coaching pass'}
                 </p>
 
                 <div className="mt-4 pt-3 border-t border-slate-100 space-y-2 text-xs">
                   <div className="flex justify-between items-center">
-                    <span className="text-slate-500">Membership Fee:</span>
+                    <span className="text-slate-700 font-bold">Membership Fee:</span>
                     <span className="font-mono text-xl font-black text-black">
                       ₹{Number(c.price).toFixed(2)}
                     </span>
                   </div>
 
                   <div className="flex justify-between items-center">
-                    <span className="text-slate-500">Validity Duration:</span>
+                    <span className="text-slate-700 font-bold">Validity Duration:</span>
                     <span className="font-bold text-black">{formatValidityDuration(c.validity_days)}</span>
                   </div>
 
                   <div className="flex justify-between items-center">
-                    <span className="text-slate-500">Access Scope:</span>
-                    <span className="font-semibold text-odoo-700">All Active Batches</span>
+                    <span className="text-slate-700 font-bold">Access Scope:</span>
+                    <span className="font-bold text-odoo-800">All Active Batches</span>
                   </div>
                 </div>
               </div>
