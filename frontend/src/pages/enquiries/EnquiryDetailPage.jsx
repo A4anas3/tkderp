@@ -325,9 +325,8 @@ export default function EnquiryDetailPage() {
 
           {!isConverted && !isNotInterested && (
             <Button
-              variant="secondary"
+              variant="danger-soft"
               icon={ThumbsDown}
-              className="text-rose-700 hover:text-rose-800 hover:bg-rose-50 border-rose-200"
               onClick={() => {
                 setDropReason('Fee too high / Budget issue');
                 setCustomDropNotes('');

@@ -253,9 +253,9 @@ function StudentRosterSubtable({ students = [], contextType = 'subject', onColle
                       <button
                         onClick={() => onCollectFee(s.admission_id)}
                         title="Collect Fee Payment"
-                        className="h-8 min-h-[32px] px-2.5 py-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-md shadow-2xs inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap transition-colors"
+                        className="h-8 min-h-[32px] px-2.5 py-1 text-xs bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 text-emerald-800 font-bold rounded-md border border-emerald-300 shadow-2xs inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap transition-colors"
                       >
-                        <CreditCard className="w-3.5 h-3.5 shrink-0" />
+                        <CreditCard className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
                         <span>Pay Fee</span>
                       </button>
                     )}

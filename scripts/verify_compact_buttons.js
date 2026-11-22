@@ -146,6 +146,20 @@ async function checkBackendHealth() {
   await inspectButton(page.locator('td button:has-text("Edit")'), 'Staff Edit');
   await inspectButton(page.locator('td button:has-text("Reset")'), 'Staff Reset');
 
+  // 8. Check Reminders Page
+  console.log('\n--- Checking Reminders Page (390px phone view) ---');
+  await page.goto('http://localhost:5173/reminders', { waitUntil: 'networkidle' });
+  await page.waitForTimeout(800);
+  await scrollTableRight();
+  await inspectButton(page.locator('td button:has-text("WhatsApp")'), 'Reminders WhatsApp');
+  await inspectButton(page.locator('td button:has-text("Pay")'), 'Reminders Pay');
+
+  // 9. Check Audit Log Page
+  console.log('\n--- Checking Audit Log Page (390px phone view) ---');
+  await page.goto('http://localhost:5173/audit', { waitUntil: 'networkidle' });
+  await page.waitForTimeout(800);
+  await inspectButton(page.locator('button:has-text("Inspect")'), 'Audit Inspect');
+
   console.log('\n========================================');
   console.log('ALL COLOR-CODED ROW ACTIONS VERIFIED WITH 100% SUCCESS!');
   console.log('========================================');

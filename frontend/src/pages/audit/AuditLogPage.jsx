@@ -617,17 +617,18 @@ export default function AuditLogPage() {
                         </td>
 
                         <td className="py-3 px-4 text-right whitespace-nowrap">
-                          <button
-                            type="button"
+                          <Button
+                            size="xs"
+                            variant="info"
+                            icon={Eye}
                             onClick={(e) => {
                               e.stopPropagation();
                               setSelectedLog(log);
                             }}
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-black hover:bg-slate-200 transition"
                             title="Inspect Details"
                           >
-                            <Eye className="w-4 h-4" />
-                          </button>
+                            Inspect
+                          </Button>
                         </td>
                       </tr>
                     );
@@ -667,9 +668,23 @@ export default function AuditLogPage() {
                         <span className="font-bold text-black">{log.user_name || 'System'}</span>
                         {log.user_role && <span className="text-[10px] text-slate-400">({log.user_role})</span>}
                       </div>
-                      <span className="font-mono text-[10px] bg-slate-100 px-1 py-0.5 rounded border border-slate-200 text-slate-700 font-bold">
-                        {log.entity_type}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[10px] bg-slate-100 px-1 py-0.5 rounded border border-slate-200 text-slate-700 font-bold">
+                          {log.entity_type}
+                        </span>
+                        <Button
+                          size="xs"
+                          variant="info"
+                          icon={Eye}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedLog(log);
+                          }}
+                          title="Inspect Details"
+                        >
+                          Inspect
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 );

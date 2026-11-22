@@ -288,7 +288,7 @@ export default function CashierDashboard() {
                     <td className="p-3 text-right">
                       <Button
                         size="xs"
-                        variant="success"
+                        variant="success-soft"
                         onClick={() => setSelectedAdmissionForPay(adm.id)}
                         className="min-h-[30px] px-3 text-xs font-semibold shadow-2xs"
                       >
