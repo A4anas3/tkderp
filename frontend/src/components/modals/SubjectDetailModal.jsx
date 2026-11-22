@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   BookOpen,
   Users,
@@ -7,7 +8,10 @@ import {
   Award,
   Layers,
   TrendingUp,
-  BarChart3
+  BarChart3,
+  ExternalLink,
+  History,
+  PieChart
 } from 'lucide-react';
 import Modal from '../common/Modal';
 import Button from '../common/Button';
@@ -19,6 +23,7 @@ export default function SubjectDetailModal({
   subject,
   onToggleRoster,
 }) {
+  const navigate = useNavigate();
   if (!subject) return null;
 
   // Active status
@@ -82,26 +87,44 @@ export default function SubjectDetailModal({
           </div>
         </div>
 
-        {/* Revenue KPI Summary */}
+        {/* Revenue & Breakup KPI Summary */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
           <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs">
-            <span className="text-slate-500 block text-[11px]">Total Billed</span>
+            <span className="text-slate-500 block text-[11px] font-semibold">Total Billed</span>
             <span className="font-mono font-bold text-black text-base">
               ₹{Number(subject.total_booked || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
             </span>
           </div>
 
           <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs">
-            <span className="text-slate-500 block text-[11px]">Cash Realized</span>
+            <span className="text-slate-500 block text-[11px] font-semibold">Cash Realized</span>
             <span className="font-mono font-bold text-emerald-800 text-base">
               ₹{Number(subject.total_collected || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
             </span>
           </div>
 
           <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs">
-            <span className="text-slate-500 block text-[11px]">Outstanding Due</span>
+            <span className="text-slate-500 block text-[11px] font-semibold">Outstanding Due</span>
             <span className="font-mono font-bold text-rose-700 text-base">
               ₹{Number(subject.balance_due || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+            </span>
+          </div>
+        </div>
+
+        {/* History & Conversion Overview */}
+        <div className="bg-purple-50/60 p-3 rounded-lg border border-purple-200 flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2">
+            <History className="w-4 h-4 text-odoo-600 shrink-0" />
+            <span className="text-slate-700 font-medium">
+              Enrollments: <strong className="text-black font-mono">{subject.enrolled_count || 0}</strong> scholars
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span className="text-slate-700 font-medium">
+              Collection: <strong className="text-emerald-800 font-mono">
+                {subject.total_booked ? `${Math.min(100, Math.round((subject.total_collected / subject.total_booked) * 100))}%` : '100%'}
+              </strong>
             </span>
           </div>
         </div>
@@ -126,6 +149,19 @@ export default function SubjectDetailModal({
               Inspect Student Roster ({subject.enrolled_count})
             </Button>
           )}
+
+          <Button
+            size="sm"
+            variant="primary"
+            icon={ExternalLink}
+            className="w-full sm:w-auto"
+            onClick={() => {
+              onClose();
+              navigate(`/subjects/${subject.subject_id || subject.id}`);
+            }}
+          >
+            Open Full Subject & Conversion History
+          </Button>
         </div>
       </div>
     </Modal>

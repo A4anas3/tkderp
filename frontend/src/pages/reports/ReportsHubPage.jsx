@@ -1125,7 +1125,12 @@ export default function ReportsHubPage() {
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-semibold">
                       {data?.items?.map((s) => (
-                        <tr key={s.subject_id} className="hover:bg-slate-50">
+                        <tr
+                          key={s.subject_id}
+                          onClick={() => s.subject_id && navigate(`/subjects/${s.subject_id}`)}
+                          className="hover:bg-purple-50/50 cursor-pointer transition"
+                          title="Click to view subject history, breakup & conversion"
+                        >
                           <td className="p-2.5">
                             <p className="font-bold text-black">{s.subject_name}</p>
                             <span className="text-[10px] text-slate-500 font-mono">{s.subject_code}</span>

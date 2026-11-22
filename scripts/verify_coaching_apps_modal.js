@@ -1,6 +1,20 @@
-const { chromium } = require('playwright');
 const path = require('path');
 const fs = require('fs');
+
+if (!process.env.PLAYWRIGHT_BROWSERS_PATH && fs.existsSync('/home/ubuntu/antigravity/profiles/a4anaskhanshab_at_gmail_com/.cache/ms-playwright')) {
+  process.env.PLAYWRIGHT_BROWSERS_PATH = '/home/ubuntu/antigravity/profiles/a4anaskhanshab_at_gmail_com/.cache/ms-playwright';
+}
+
+let chromium;
+try {
+  chromium = require('playwright').chromium;
+} catch (e) {
+  try {
+    chromium = require('/home/ubuntu/antigravity/profiles/a4anaskhanshab_at_gmail_com/.npm/_npx/e41f203b7505f1fb/node_modules/playwright').chromium;
+  } catch (err) {
+    throw new Error('Playwright is not available: ' + err.message);
+  }
+}
 
 const BASE_URL = 'http://localhost:5173';
 const SCREENSHOT_DIR = path.join(__dirname, '..', 'verification_screenshots');

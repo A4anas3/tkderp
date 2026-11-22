@@ -32,3 +32,7 @@ frontend/.env
 .DS_Store
 .secret
 *.secret
+
+# UI reference screenshots
+/*.jpg
+/*-verification.png
