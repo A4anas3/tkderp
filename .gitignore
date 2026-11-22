@@ -32,6 +32,8 @@ frontend/.env
 .DS_Store
 .secret
 *.secret
+backups/
+*.dump
 
 # UI reference screenshots
 /*.jpg
