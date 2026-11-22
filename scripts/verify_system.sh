@@ -7,9 +7,9 @@ LOG_FILE="$DIR/verification.log"
 echo "=======================================================" >> "$LOG_FILE"
 echo "Verification started at $(date -u)" >> "$LOG_FILE"
 
-# 1. Run Backend Pytest Suite
+# 1. Run Backend Pytest Suite with isolated test database
 cd "$DIR/backend"
-if "$DIR/backend/venv/bin/pytest" >> "$LOG_FILE" 2>&1; then
+if DATABASE_URL="postgresql+asyncpg://brightloop_user:brightloop_password@localhost:5432/thakurdwara_erp_test" "$DIR/backend/venv/bin/pytest" >> "$LOG_FILE" 2>&1; then
     echo "Backend pytest: PASSED" >> "$LOG_FILE"
 else
     echo "Backend pytest: FAILED" >> "$LOG_FILE"
