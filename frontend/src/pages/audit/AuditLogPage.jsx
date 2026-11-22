@@ -25,8 +25,6 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Download,
-  Copy,
-  Check,
   Eye,
   SlidersHorizontal,
   ArrowLeftRight,
@@ -251,7 +249,6 @@ export default function AuditLogPage() {
 
   // Inspector Modal State
   const [selectedLog, setSelectedLog] = useState(null);
-  const [copied, setCopied] = useState(false);
 
   // Fetch Filter Dropdowns & Stats
   useEffect(() => {
@@ -318,15 +315,6 @@ export default function AuditLogPage() {
     setFromDate('');
     setToDate('');
     setPage(1);
-  };
-
-  const handleCopyJson = () => {
-    if (!selectedLog) return;
-    const text = JSON.stringify(selectedLog, null, 2);
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-    toast?.success('Copied full event payload to clipboard');
   };
 
   const handleExportCsv = () => {
@@ -636,7 +624,7 @@ export default function AuditLogPage() {
                               setSelectedLog(log);
                             }}
                             className="p-1.5 rounded-lg text-slate-500 hover:text-black hover:bg-slate-200 transition"
-                            title="Inspect Payload"
+                            title="Inspect Details"
                           >
                             <Eye className="w-4 h-4" />
                           </button>
@@ -757,7 +745,7 @@ export default function AuditLogPage() {
         )}
       </div>
 
-      {/* 5. Detailed Event Payload Modal */}
+      {/* 5. Detailed Event Modal */}
       {selectedLog && (
         <Modal
           isOpen={Boolean(selectedLog)}
@@ -791,7 +779,7 @@ export default function AuditLogPage() {
             </div>
 
             {/* Parsed Fields (if JSON) */}
-            {selectedLog.parsed_details && (
+            {selectedLog.parsed_details ? (
               <div className="space-y-1.5">
                 <h4 className="font-bold text-black text-xs uppercase tracking-wider">Event Details & Parameters</h4>
                 <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100 overflow-hidden">
@@ -805,25 +793,14 @@ export default function AuditLogPage() {
                   ))}
                 </div>
               </div>
-            )}
-
-            {/* Raw JSON Inspector */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <h4 className="font-bold text-black text-xs uppercase tracking-wider">Complete Raw JSON Payload</h4>
-                <button
-                  type="button"
-                  onClick={handleCopyJson}
-                  className="flex items-center gap-1 text-[11px] font-semibold text-odoo-700 hover:text-odoo-900 bg-odoo-50 px-2 py-0.5 rounded border border-odoo-200 transition"
-                >
-                  {copied ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                  {copied ? 'Copied' : 'Copy JSON'}
-                </button>
+            ) : selectedLog.details ? (
+              <div className="space-y-1.5">
+                <h4 className="font-bold text-black text-xs uppercase tracking-wider">Event Details & Parameters</h4>
+                <div className="bg-white border border-slate-200 rounded-lg p-2.5">
+                  <span className="font-medium text-black break-all">{selectedLog.details}</span>
+                </div>
               </div>
-              <pre className="p-3 bg-slate-900 text-slate-100 rounded-lg overflow-x-auto text-[11px] font-mono leading-relaxed max-h-60">
-                {JSON.stringify(selectedLog, null, 2)}
-              </pre>
-            </div>
+            ) : null}
 
             <div className="pt-2 flex justify-end">
               <Button variant="secondary" size="sm" onClick={() => setSelectedLog(null)}>

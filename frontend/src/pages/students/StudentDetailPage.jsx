@@ -41,8 +41,6 @@ import {
   Sparkles,
   ShieldCheck,
   Eye,
-  Copy,
-  Check,
   IdCard,
 } from 'lucide-react';
 import Modal from '../../components/common/Modal';
@@ -253,7 +251,6 @@ export default function StudentDetailPage() {
   const [auditSearch, setAuditSearch] = useState('');
   const [auditActionFilter, setAuditActionFilter] = useState('ALL');
   const [selectedAuditForInspection, setSelectedAuditForInspection] = useState(null);
-  const [auditCopied, setAuditCopied] = useState(false);
 
   // All Slips Modal
   const [allSlipsModalOpen, setAllSlipsModalOpen] = useState(false);
@@ -381,14 +378,6 @@ export default function StudentDetailPage() {
     } finally {
       setAuditLoading(false);
     }
-  };
-
-  const handleCopyAuditJson = () => {
-    if (!selectedAuditForInspection) return;
-    navigator.clipboard.writeText(JSON.stringify(selectedAuditForInspection, null, 2));
-    setAuditCopied(true);
-    setTimeout(() => setAuditCopied(false), 2000);
-    success('Copied audit event JSON to clipboard');
   };
 
   const fetchStudentData = async () => {
@@ -3113,7 +3102,7 @@ export default function StudentDetailPage() {
               </div>
             </div>
 
-            {selectedAuditForInspection.parsed_details && (
+            {selectedAuditForInspection.parsed_details ? (
               <div className="space-y-1">
                 <h4 className="font-bold text-black text-xs uppercase tracking-wider">Event Details</h4>
                 <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100 overflow-hidden">
@@ -3127,24 +3116,14 @@ export default function StudentDetailPage() {
                   ))}
                 </div>
               </div>
-            )}
-
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <h4 className="font-bold text-black text-xs uppercase tracking-wider">Raw Payload</h4>
-                <button
-                  type="button"
-                  onClick={handleCopyAuditJson}
-                  className="flex items-center gap-1 text-[11px] font-semibold text-odoo-700 hover:text-odoo-900 bg-odoo-50 px-2 py-0.5 rounded border border-odoo-200 transition"
-                >
-                  {auditCopied ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                  {auditCopied ? 'Copied' : 'Copy'}
-                </button>
+            ) : selectedAuditForInspection.details ? (
+              <div className="space-y-1">
+                <h4 className="font-bold text-black text-xs uppercase tracking-wider">Event Details</h4>
+                <div className="bg-white border border-slate-200 rounded-lg p-2.5">
+                  <span className="font-medium text-black break-all">{selectedAuditForInspection.details}</span>
+                </div>
               </div>
-              <pre className="p-2.5 bg-slate-900 text-slate-100 rounded-lg overflow-x-auto text-[11px] font-mono leading-relaxed max-h-48">
-                {JSON.stringify(selectedAuditForInspection, null, 2)}
-              </pre>
-            </div>
+            ) : null}
 
             <div className="pt-1 flex justify-end">
               <Button variant="secondary" size="xs" onClick={() => setSelectedAuditForInspection(null)}>
