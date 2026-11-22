@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, useLocation, Link } from 'react-router-dom';
 import {
   ShieldCheck,
   Search,
@@ -22,7 +22,12 @@ import axios from 'axios';
 export default function PublicIDCardPage() {
   const { identifier: pathIdentifier } = useParams();
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const navigate = useNavigate();
+
+  // Route prefix (e.g. /verify or /id-card)
+  const isVerifyRoute = location.pathname.startsWith('/verify');
+  const basePath = isVerifyRoute ? '/verify' : '/id-card';
 
   // Identifier can come from route params or query params (?admission_no=... or ?identifier=...)
   const queryParamIdent = searchParams.get('admission_no') || searchParams.get('identifier') || '';
@@ -118,9 +123,9 @@ export default function PublicIDCardPage() {
     e.preventDefault();
     const trimmed = inputVal.trim();
     if (trimmed) {
-      navigate(`/id-card/${encodeURIComponent(trimmed)}`);
+      navigate(`${basePath}/${encodeURIComponent(trimmed)}`);
     } else {
-      navigate('/id-card');
+      navigate(basePath);
     }
   };
 

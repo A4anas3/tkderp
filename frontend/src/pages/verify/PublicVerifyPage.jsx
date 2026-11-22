@@ -99,7 +99,7 @@ export default function PublicVerifyPage() {
   return (
     <div className="min-h-screen bg-slate-50 text-black font-sans py-6 px-3 sm:px-6 flex flex-col justify-between">
       <div className="max-w-2xl mx-auto w-full space-y-5">
-        {/* Navigation Links Back to ERP & ID Card */}
+        {/* Navigation Link Back to ERP & Public ID Card */}
         <div className="flex items-center justify-between no-print">
           <Link
             to="/dashboard"
@@ -107,7 +107,6 @@ export default function PublicVerifyPage() {
           >
             <ArrowLeft className="w-3.5 h-3.5" /> Back to ERP Dashboard
           </Link>
-
           <Link
             to={identifier ? `/id-card/${encodeURIComponent(identifier)}` : '/id-card'}
             className="inline-flex items-center gap-1.5 text-xs font-semibold text-odoo-700 hover:text-odoo-900 transition"
@@ -370,10 +369,10 @@ export default function PublicVerifyPage() {
               <div className="flex items-center gap-2 no-print">
                 <Link
                   to={`/id-card/${encodeURIComponent(data.student.admission_number || identifier)}`}
-                  className="px-3 py-1.5 rounded-lg bg-odoo-700 hover:bg-odoo-800 text-white font-bold text-xs inline-flex items-center gap-1.5 transition"
+                  className="px-3 py-1.5 rounded-lg bg-odoo-700 hover:bg-odoo-800 text-white font-bold text-xs inline-flex items-center gap-1.5 transition shadow-2xs"
                 >
                   <ShieldCheck className="w-3.5 h-3.5" />
-                  View Updated ID Card
+                  View ID Card
                 </Link>
                 <button
                   onClick={handlePrint}

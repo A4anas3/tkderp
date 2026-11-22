@@ -505,10 +505,17 @@ async def create_student(
                 detail=f"Student already registered{adm_text} with mobile {norm_mob}: {existing.name} ({existing.student_code}). Student ID: {existing.id}"
             )
 
-    # Auto-generate student code STU<Year><Count:04d>
+    # Auto-generate unique student code STU<Year><Count:04d>
     year = req.registration_date.year
     count = (await db.execute(select(func.count(Student.id)))).scalar() or 0
-    code = f"STU{year}{count + 1:04d}"
+    candidate_num = count + 1
+    while True:
+        candidate_code = f"STU{year}{candidate_num:04d}"
+        exists = (await db.execute(select(Student.id).where(Student.student_code == candidate_code).limit(1))).scalar_one_or_none()
+        if not exists:
+            code = candidate_code
+            break
+        candidate_num += 1
 
     new_student = Student(
         student_code=code,

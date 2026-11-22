@@ -27,6 +27,20 @@ def reset_rate_limits() -> None:
     global _in_memory_requests
     _in_memory_requests.clear()
 
+async def reset_rate_limits_async(prefix: Optional[str] = None) -> None:
+    """Clear in-memory and Redis rate limiting tracking."""
+    global _in_memory_requests
+    _in_memory_requests.clear()
+    redis = get_redis_client()
+    if redis:
+        try:
+            pattern = f"{prefix}:*" if prefix else "*ratelimit*"
+            keys = await redis.keys(pattern)
+            if keys:
+                await redis.delete(*keys)
+        except Exception as e:
+            logger.debug(f"Failed to clear redis keys in reset_rate_limits_async: {e}")
+
 class RateLimiter:
     """
     Lightweight rate limiter for public endpoints.

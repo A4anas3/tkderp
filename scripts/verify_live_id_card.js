@@ -164,6 +164,17 @@ async function runLiveVerification() {
     const directCardName = await page.textContent('#printable-id-card h2');
     console.log(`✓ Direct QR link loaded ID card successfully for: ${directCardName.trim()}`);
 
+    // 3e. Test navigation from /verify to /id-card
+    console.log('\nTesting /verify link to ID card portal...');
+    await page.goto(`${FRONTEND_URL}/verify`, { waitUntil: 'networkidle' });
+    const idCardLink = await page.locator('a:has-text("Get Student ID Card")');
+    if (!(await idCardLink.isVisible())) {
+      throw new Error('Link to Student ID Card not found on /verify');
+    }
+    await idCardLink.click();
+    await page.waitForURL(`**/id-card`, { timeout: 10000 });
+    console.log('✓ Successfully navigated from /verify to /id-card portal.');
+
     console.log('\n===============================================================');
     console.log('ALL LIVE VERIFICATIONS PASSED PERFECTLY!');
     console.log('===============================================================');

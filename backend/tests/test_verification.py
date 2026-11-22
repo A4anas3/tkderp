@@ -185,13 +185,17 @@ async def test_public_id_card_not_found():
 
 @pytest.mark.asyncio
 async def test_rate_limiter_blocks_abuse():
-    from app.core.rate_limit import RateLimiter, reset_rate_limits
+    import uuid
+    from app.core.rate_limit import RateLimiter, reset_rate_limits, reset_rate_limits_async
     
+    unique_prefix = f"test_abuse_{uuid.uuid4().hex[:8]}"
+    unique_ip = f"198.51.100.{uuid.uuid4().int % 200 + 10}"
     reset_rate_limits()
-    limiter = RateLimiter(times=3, seconds=60, prefix="test_abuse")
+    await reset_rate_limits_async(unique_prefix)
+    limiter = RateLimiter(times=3, seconds=60, prefix=unique_prefix)
     
     class MockRequest:
-        headers = {"x-forwarded-for": "198.51.100.1"}
+        headers = {"x-forwarded-for": unique_ip}
         client = None
     
     req = MockRequest()

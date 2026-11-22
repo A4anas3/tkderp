@@ -862,11 +862,17 @@ async def convert_enquiry_to_student(
     if enquiry.status == "CONVERTED" and enquiry.converted_student_id:
         raise HTTPException(status_code=400, detail="Enquiry has already been converted to a student")
 
-    # Generate student registration code
+    # Generate unique student registration code
     year_str = date.today().strftime("%Y")
     cnt_res = await db.execute(select(func.count(Student.id)))
-    seq = (cnt_res.scalar_one() or 0) + 1
-    reg_no = f"STU{year_str}{seq:04d}"
+    candidate_seq = (cnt_res.scalar_one() or 0) + 1
+    while True:
+        candidate_code = f"STU{year_str}{candidate_seq:04d}"
+        exists = (await db.execute(select(Student.id).where(Student.student_code == candidate_code).limit(1))).scalar_one_or_none()
+        if not exists:
+            reg_no = candidate_code
+            break
+        candidate_seq += 1
 
     student = Student(
         student_code=reg_no,

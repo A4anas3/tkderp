@@ -216,25 +216,37 @@ async def get_student_and_active_courses(
 
 @router.get("/api/verify/{identifier}", response_model=PublicVerificationResponse)
 @router.get("/api/public/verify/{identifier}", response_model=PublicVerificationResponse)
+@router.get("/api/verify", response_model=PublicVerificationResponse)
+@router.get("/api/public/verify", response_model=PublicVerificationResponse)
 async def verify_student_credential(
-    identifier: str,
+    identifier: Optional[str] = None,
+    admission_no: Optional[str] = Query(None),
+    student_id: Optional[str] = Query(None),
+    ident_param: Optional[str] = Query(None, alias="identifier"),
+    request: Request = None,
     db: AsyncSession = Depends(get_db)
 ):
     """
     Public verification endpoint (no authentication required).
     Verifies a student identity card and returns active course validity.
     Supports lookup by admission number, student ID code, or UUID.
+    Protected with sliding-window rate limiting.
+    Only returns verification data when student has active enrolment.
     """
-    ident = identifier.strip()
-    if not ident:
+    if request:
+        await id_card_rate_limiter(request)
+
+    target_ident = identifier or admission_no or student_id or ident_param
+    if not target_ident or not target_ident.strip():
         raise HTTPException(status_code=400, detail="Identifier cannot be empty")
 
-    student, matched_adm_number, active_courses_list, is_overall_valid = await get_student_and_active_courses(ident, db)
+    target_ident = target_ident.strip()
+    student, matched_adm_number, active_courses_list, is_overall_valid = await get_student_and_active_courses(target_ident, db)
 
     if not student:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No matching student or admission record found for identifier '{identifier}'."
+            detail=f"No matching student or admission record found for identifier '{target_ident}'."
         )
 
     student_data = StudentVerificationData(
@@ -264,6 +276,8 @@ async def verify_student_credential(
 @router.get("/api/id-card", response_model=PublicIDCardResponse)
 @router.get("/api/public/idcard", response_model=PublicIDCardResponse)
 @router.get("/api/idcard", response_model=PublicIDCardResponse)
+@router.get("/api/students/{identifier}/id-card", response_model=PublicIDCardResponse)
+@router.get("/api/students/{identifier}/idcard", response_model=PublicIDCardResponse)
 async def get_public_id_card(
     identifier: Optional[str] = None,
     admission_no: Optional[str] = Query(None),
