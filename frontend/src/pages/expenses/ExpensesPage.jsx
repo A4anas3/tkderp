@@ -341,17 +341,21 @@ export default function ExpensesPage() {
       },
     },
     {
-      header: 'Action',
-      className: 'text-right w-24',
+      header: 'Actions',
+      className: 'text-right w-28 whitespace-nowrap',
       render: (s) =>
         s.status !== 'PAID' ? (
-          <Button size="xs" variant="success" onClick={() => handleOpenPaySalary(s)}>
-            Pay Salary
-          </Button>
+          <div className="flex items-center justify-end whitespace-nowrap">
+            <Button size="xs" variant="success" onClick={() => handleOpenPaySalary(s)}>
+              Pay Salary
+            </Button>
+          </div>
         ) : (
-          <Badge size="xs" variant="success">
-            Paid
-          </Badge>
+          <div className="flex items-center justify-end whitespace-nowrap">
+            <Badge size="xs" variant="success">
+              Paid
+            </Badge>
+          </div>
         ),
     },
   ];

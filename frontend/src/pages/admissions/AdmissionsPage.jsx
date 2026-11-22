@@ -186,9 +186,9 @@ export default function AdmissionsPage() {
     },
     {
       header: 'Actions',
-      className: 'text-right w-48',
+      className: 'text-right w-52 whitespace-nowrap',
       render: (a) => (
-        <div className="flex items-center justify-end gap-1">
+        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
           <Button
             size="xs"
             variant="secondary"
@@ -196,7 +196,7 @@ export default function AdmissionsPage() {
             onClick={() => navigate(`/admissions/${a.id}`)}
             title="Open Full Course Purchase Page"
           >
-            Detail ↗
+            Detail
           </Button>
 
           <Button
@@ -406,7 +406,7 @@ export default function AdmissionsPage() {
                       variant="secondary"
                       icon={Printer}
                       onClick={() => setSlipToShow(a)}
-                      className="flex-1 min-h-[36px] justify-center text-xs font-semibold"
+                      className="flex-1 justify-center text-xs font-semibold"
                     >
                       Slip
                     </Button>
@@ -416,7 +416,7 @@ export default function AdmissionsPage() {
                         size="xs"
                         variant="success"
                         onClick={() => setPayAdmissionId(a.id)}
-                        className="flex-1 min-h-[36px] justify-center text-xs font-bold"
+                        className="flex-1 justify-center text-xs font-bold"
                       >
                         Pay Due
                       </Button>
@@ -431,7 +431,7 @@ export default function AdmissionsPage() {
                           setSelectedAdmissionForWaive(a);
                           setWaiveModalOpen(true);
                         }}
-                        className="flex-1 min-h-[36px] justify-center text-xs font-bold bg-amber-500 hover:bg-amber-600 text-black border-amber-600"
+                        className="flex-1 justify-center text-xs font-bold bg-amber-500 hover:bg-amber-600 text-black border-amber-600"
                         title="Admin only: Waive / forgive pending fee due"
                       >
                         Waive
@@ -443,7 +443,7 @@ export default function AdmissionsPage() {
                       variant="secondary"
                       icon={ExternalLink}
                       onClick={() => navigate(`/admissions/${a.id}`)}
-                      className="flex-1 min-h-[36px] justify-center text-xs font-semibold"
+                      className="flex-1 justify-center text-xs font-semibold"
                     >
                       Detail
                     </Button>

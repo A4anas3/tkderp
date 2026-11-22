@@ -240,22 +240,22 @@ function StudentRosterSubtable({ students = [], contextType = 'subject', onColle
 
                 {/* Actions */}
                 <td className="p-2.5 text-center" data-no-click>
-                  <div className="flex items-center justify-center gap-1.5">
+                  <div className="flex items-center justify-center gap-1.5 whitespace-nowrap">
                     <button
                       onClick={() => navigate(`/students/${s.student_id}`)}
                       title="View Student Profile"
-                      className="px-2 py-1 text-[11px] bg-slate-100 hover:bg-slate-200 text-black font-semibold rounded border border-slate-300 transition-colors flex items-center gap-1 cursor-pointer"
+                      className="h-8 min-h-[32px] px-2.5 py-1 text-xs bg-white hover:bg-slate-100 active:bg-slate-200 text-black font-semibold rounded-md border border-slate-300 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shadow-2xs transition-colors"
                     >
-                      <ExternalLink className="w-3 h-3 text-slate-700" />
+                      <ExternalLink className="w-3.5 h-3.5 text-slate-700 shrink-0" />
                       <span>Profile</span>
                     </button>
                     {(s.balance_due > 0 || s.cycle_status === 'OVERDUE' || s.cycle_status === 'RENEWAL_DUE' || s.cycle_status === 'DUE_SOON') && (
                       <button
                         onClick={() => onCollectFee(s.admission_id)}
                         title="Collect Fee Payment"
-                        className="px-2 py-1 text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded shadow-xs transition-colors flex items-center gap-1 cursor-pointer"
+                        className="h-8 min-h-[32px] px-2.5 py-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-md shadow-2xs inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap transition-colors"
                       >
-                        <CreditCard className="w-3 h-3" />
+                        <CreditCard className="w-3.5 h-3.5 shrink-0" />
                         <span>Pay Fee</span>
                       </button>
                     )}

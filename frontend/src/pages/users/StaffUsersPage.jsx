@@ -191,9 +191,9 @@ export default function StaffUsersPage() {
     },
     {
       header: 'Actions',
-      className: 'text-right w-40',
+      className: 'text-right w-40 whitespace-nowrap',
       render: (u) => (
-        <div className="flex items-center justify-end gap-1">
+        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
           <Button
             size="xs"
             variant="secondary"
@@ -226,7 +226,7 @@ export default function StaffUsersPage() {
           </p>
         </div>
 
-        <Button variant="primary" icon={Plus} onClick={handleOpenAdd} className="w-full sm:w-auto">
+        <Button variant="primary" icon={Plus} onClick={handleOpenAdd} className="w-full sm:w-auto h-9">
           Add Staff Account
         </Button>
       </div>

@@ -203,9 +203,9 @@ export default function PaymentsPage() {
     },
     {
       header: 'Actions',
-      className: 'text-right w-52',
+      className: 'text-right w-56 whitespace-nowrap',
       render: (p) => (
-        <div className="flex items-center justify-end gap-1">
+        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
           <Button
             size="xs"
             variant="secondary"
@@ -213,7 +213,7 @@ export default function PaymentsPage() {
             onClick={() => navigate(`/payments/${p.id}`)}
             title="Open Dedicated Payment Page"
           >
-            Detail ↗
+            Detail
           </Button>
 
           <Button
@@ -306,17 +306,19 @@ export default function PaymentsPage() {
           : '—',
     },
     {
-      header: 'Action',
-      className: 'text-right w-24',
+      header: 'Actions',
+      className: 'text-right w-28 whitespace-nowrap',
       render: (r) => (
-        <Button
-          size="xs"
-          variant="secondary"
-          icon={Printer}
-          onClick={() => handleViewRefundVoucher(r)}
-        >
-          Voucher
-        </Button>
+        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+          <Button
+            size="xs"
+            variant="secondary"
+            icon={Printer}
+            onClick={() => handleViewRefundVoucher(r)}
+          >
+            Voucher
+          </Button>
+        </div>
       ),
     },
   ];

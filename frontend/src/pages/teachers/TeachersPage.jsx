@@ -301,9 +301,9 @@ export default function TeachersPage() {
     },
     {
       header: 'Actions',
-      className: 'text-right w-44',
+      className: 'text-right w-44 whitespace-nowrap',
       render: (t) => (
-        <div className="flex items-center justify-end gap-1">
+        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
           <Button
             size="xs"
             variant="secondary"
@@ -311,7 +311,7 @@ export default function TeachersPage() {
             onClick={() => navigate(`/teachers/${t.id}`)}
             title="Open Dedicated Faculty Roster Page"
           >
-            Detail ↗
+            Detail
           </Button>
           <Button
             size="xs"
@@ -364,7 +364,7 @@ export default function TeachersPage() {
             </button>
           </div>
 
-          <Button variant="primary" icon={Plus} onClick={handleOpenAdd} className="w-full sm:w-auto">
+          <Button variant="primary" icon={Plus} onClick={handleOpenAdd} className="w-full sm:w-auto h-9">
             Add Teacher
           </Button>
         </div>
@@ -507,7 +507,7 @@ export default function TeachersPage() {
                       onClick={() => navigate(`/teachers/${t.id}`)}
                       className="flex-1 justify-center"
                     >
-                      Detail ↗
+                      Detail
                     </Button>
                   </div>
                 </div>

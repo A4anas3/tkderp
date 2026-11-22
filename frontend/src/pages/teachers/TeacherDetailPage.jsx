@@ -733,13 +733,15 @@ export default function TeacherDetailPage() {
 
                     {/* Actions */}
                     <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
-                      <Link
-                        to={`/students/${s.student_id}`}
-                        className="px-2 py-1 text-[11px] bg-slate-100 hover:bg-slate-200 text-black font-semibold rounded border border-slate-300 inline-flex items-center gap-1 cursor-pointer"
-                      >
-                        <ExternalLink className="w-3 h-3 text-slate-600" />
-                        <span>Profile</span>
-                      </Link>
+                      <div className="flex items-center justify-center whitespace-nowrap">
+                        <Link
+                          to={`/students/${s.student_id}`}
+                          className="h-8 min-h-[32px] px-2.5 py-1 text-xs bg-white hover:bg-slate-100 active:bg-slate-200 text-black font-semibold rounded-md border border-slate-300 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shadow-2xs transition-colors"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+                          <span>Profile</span>
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))}

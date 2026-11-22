@@ -163,10 +163,10 @@ export default function StudentsPage() {
       ),
     },
     {
-      header: 'Action',
+      header: 'Actions',
       className: 'text-right w-36 whitespace-nowrap',
       render: (s) => (
-        <div className="flex items-center justify-end gap-1.5">
+        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
           <Button
             size="xs"
             variant="secondary"
@@ -435,14 +435,13 @@ export default function StudentsPage() {
                           setEditModalOpen(true);
                         }}
                         title="Edit Student Information"
-                        className="min-h-[32px]"
                       >
                         Edit
                       </Button>
                       <Button
                         size="xs"
                         variant="secondary"
-                        className="flex-1 justify-center min-h-[32px]"
+                        className="flex-1 justify-center"
                         icon={Eye}
                         onClick={() => navigate(`/students/${s.id}`)}
                       >
@@ -452,7 +451,7 @@ export default function StudentsPage() {
                         <Button
                           size="xs"
                           variant="primary"
-                          className="flex-1 justify-center min-h-[32px]"
+                          className="flex-1 justify-center"
                           icon={Plus}
                           onClick={() =>
                             navigate(

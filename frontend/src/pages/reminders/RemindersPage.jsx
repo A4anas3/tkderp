@@ -505,7 +505,7 @@ export default function RemindersPage() {
                                   ? `Open WhatsApp to send polite reminder to ${rem.student_mobile}`
                                   : 'Student has no mobile number recorded'
                               }
-                              className={`min-h-[36px] px-3 py-1.5 rounded-lg text-xs font-bold inline-flex items-center gap-1.5 transition-colors shadow-2xs touch-manipulation ${
+                              className={`h-8 min-h-[32px] px-2.5 py-1 rounded-md text-xs font-bold inline-flex items-center gap-1.5 whitespace-nowrap transition-colors shadow-2xs touch-manipulation ${
                                 hasMobile
                                   ? 'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white cursor-pointer'
                                   : 'bg-slate-200 text-slate-500 cursor-not-allowed'
@@ -522,7 +522,7 @@ export default function RemindersPage() {
                                 onClick={() => handleMarkSent(rem.id)}
                                 disabled={actionLoadingId === rem.id}
                                 title="Mark this reminder as sent"
-                                className="min-h-[36px] px-3 py-1.5 rounded-lg text-xs font-bold inline-flex items-center gap-1 border border-slate-300 bg-white text-slate-800 hover:text-black hover:bg-slate-50 active:bg-slate-100 transition-colors shadow-2xs touch-manipulation cursor-pointer"
+                                className="h-8 min-h-[32px] px-2.5 py-1 rounded-md text-xs font-bold inline-flex items-center gap-1 whitespace-nowrap border border-slate-300 bg-white text-slate-800 hover:text-black hover:bg-slate-50 active:bg-slate-100 transition-colors shadow-2xs touch-manipulation cursor-pointer"
                               >
                                 <Check className="w-3.5 h-3.5 text-emerald-600" />
                                 <span className="hidden md:inline">Mark Sent</span>
@@ -532,7 +532,7 @@ export default function RemindersPage() {
                                 onClick={() => handleResetPending(rem.id)}
                                 disabled={actionLoadingId === rem.id}
                                 title="Reset reminder back to pending"
-                                className="min-h-[36px] px-3 py-1.5 rounded-lg text-xs font-semibold inline-flex items-center gap-1 border border-slate-300 bg-white text-slate-700 hover:text-black hover:bg-slate-50 active:bg-slate-100 transition-colors shadow-2xs touch-manipulation cursor-pointer"
+                                className="h-8 min-h-[32px] px-2.5 py-1 rounded-md text-xs font-semibold inline-flex items-center gap-1 whitespace-nowrap border border-slate-300 bg-white text-slate-700 hover:text-black hover:bg-slate-50 active:bg-slate-100 transition-colors shadow-2xs touch-manipulation cursor-pointer"
                               >
                                 <RotateCcw className="w-3 h-3" />
                                 <span className="hidden md:inline">Reset</span>
@@ -543,7 +543,7 @@ export default function RemindersPage() {
                             <button
                               onClick={() => setSelectedAdmissionForPay(rem.admission_id)}
                               title="Collect payment now"
-                              className="min-h-[32px] px-2 py-1.5 rounded-lg text-xs font-bold inline-flex items-center gap-1 border border-purple-200 bg-purple-50 text-odoo-800 hover:bg-purple-100 active:bg-purple-200 transition-colors shadow-2xs"
+                              className="h-8 min-h-[32px] px-2.5 py-1 rounded-md text-xs font-bold inline-flex items-center gap-1 whitespace-nowrap border border-purple-200 bg-purple-50 text-odoo-800 hover:bg-purple-100 active:bg-purple-200 transition-colors shadow-2xs"
                             >
                               <CreditCard className="w-3.5 h-3.5 text-odoo-700" />
                               <span className="hidden lg:inline">Pay</span>

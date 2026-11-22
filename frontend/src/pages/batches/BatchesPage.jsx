@@ -298,16 +298,18 @@ export default function BatchesPage() {
     },
     {
       header: 'Actions',
-      className: 'text-right w-20',
+      className: 'text-right w-24 whitespace-nowrap',
       render: (b) => (
-        <Button
-          size="xs"
-          variant="secondary"
-          icon={Edit2}
-          onClick={() => handleOpenEdit(b)}
-        >
-          Edit
-        </Button>
+        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+          <Button
+            size="xs"
+            variant="secondary"
+            icon={Edit2}
+            onClick={() => handleOpenEdit(b)}
+          >
+            Edit
+          </Button>
+        </div>
       ),
     },
   ];
@@ -350,7 +352,7 @@ export default function BatchesPage() {
             </button>
           </div>
 
-          <Button variant="primary" icon={Plus} onClick={handleOpenAdd} className="w-full sm:w-auto">
+          <Button variant="primary" icon={Plus} onClick={handleOpenAdd} className="w-full sm:w-auto h-9">
             New Batch
           </Button>
         </div>

@@ -807,7 +807,7 @@ export default function EnquiriesPage() {
                   onClick={(ev) => handleConvertToAdmission(e, ev)}
                   title="Convert to Admission & Collect Fees"
                 >
-                  Admit ↗
+                  Admit
                 </Button>
 
                 {/* More actions menu */}
@@ -1031,9 +1031,9 @@ export default function EnquiriesPage() {
     },
     {
       header: 'Actions',
-      className: 'text-right w-48',
+      className: 'text-right w-52 whitespace-nowrap',
       render: (d) => (
-        <div className="flex items-center justify-end gap-1.5">
+        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
           <Button
             size="xs"
             variant="secondary"
@@ -1093,7 +1093,7 @@ export default function EnquiriesPage() {
                 }
                 title="Convert to full admission"
               >
-                Admit ↗
+                Admit
               </Button>
               <Button
                 size="xs"

@@ -463,9 +463,9 @@ export default function SubjectsPage() {
     },
     {
       header: 'Actions',
-      className: 'text-right w-36 whitespace-nowrap',
+      className: 'text-right w-40 whitespace-nowrap',
       render: (s) => (
-        <div className="flex items-center justify-end gap-1.5">
+        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
           <Button
             size="xs"
             variant="secondary"
@@ -488,7 +488,7 @@ export default function SubjectsPage() {
             }}
             title="Open Subject Roster"
           >
-            Detail ↗
+            Detail
           </Button>
         </div>
       ),
@@ -558,7 +558,7 @@ export default function SubjectsPage() {
             <option value="INACTIVE">Inactive Subjects</option>
           </select>
 
-          <Button variant="primary" icon={Plus} onClick={handleOpenAdd} className="w-full sm:w-auto">
+          <Button variant="primary" icon={Plus} onClick={handleOpenAdd} className="w-full sm:w-auto h-9">
             New Subject
           </Button>
         </div>
@@ -694,13 +694,13 @@ export default function SubjectsPage() {
                     </div>
 
                     {/* Actions */}
-                    <div className="mt-3.5 pt-2 border-t border-slate-100 flex items-center gap-2">
+                    <div className="mt-3.5 pt-2 border-t border-slate-100 flex items-center gap-1.5">
                       <Button
                         size="xs"
                         variant="secondary"
                         icon={Edit2}
                         onClick={() => handleOpenEdit(s)}
-                        className="flex-1 justify-center min-h-[32px]"
+                        className="flex-1 justify-center"
                       >
                         Edit
                       </Button>
@@ -709,10 +709,10 @@ export default function SubjectsPage() {
                         variant="secondary"
                         icon={ExternalLink}
                         onClick={() => navigate(`/subjects/${s.id}`)}
-                        className="flex-1 justify-center min-h-[32px]"
+                        className="flex-1 justify-center"
                         title="Open Subject Roster"
                       >
-                        Detail ↗
+                        Detail
                       </Button>
                     </div>
                   </div>
