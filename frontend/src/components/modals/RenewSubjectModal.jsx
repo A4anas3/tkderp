@@ -15,7 +15,8 @@ export default function RenewSubjectModal({
   const { success, error } = useToast();
   const [teachers, setTeachers] = useState([]);
   const [teacherId, setTeacherId] = useState('');
-  const [durationPreset, setDurationPreset] = useState('1m'); // '15d', '1m', '2m', '3m', 'custom'
+  const [durationMode, setDurationMode] = useState('months'); // 'months', 'custom'
+  const [customMonths, setCustomMonths] = useState(1);
   const [validFrom, setValidFrom] = useState('');
   const [validTo, setValidTo] = useState('');
   const [fee, setFee] = useState('');
@@ -107,7 +108,8 @@ export default function RenewSubjectModal({
   useEffect(() => {
     if (isOpen && item) {
       setTeacherId(item.teacher_id || '');
-      setDurationPreset('1m');
+      setDurationMode('months');
+      setCustomMonths(1);
       setDiscountType('NONE');
       setDiscountValue('0');
       setCollectPayment(true);
@@ -147,21 +149,15 @@ export default function RenewSubjectModal({
     }
   }, [isOpen, item]);
 
-  const handlePresetChange = (preset) => {
-    setDurationPreset(preset);
-    if (!validFrom || preset === 'custom') return;
+  const handleMonthsChange = (mVal) => {
+    const m = Math.min(3, Math.max(1, parseInt(mVal, 10) || 1));
+    setCustomMonths(m);
+    setDurationMode('months');
+    if (!validFrom) return;
 
     const start = new Date(validFrom);
     const end = new Date(start);
-    if (preset === '15d') {
-      end.setDate(end.getDate() + 15);
-    } else if (preset === '1m') {
-      end.setDate(end.getDate() + 30);
-    } else if (preset === '2m') {
-      end.setDate(end.getDate() + 60);
-    } else if (preset === '3m') {
-      end.setDate(end.getDate() + 90);
-    }
+    end.setDate(end.getDate() + m * 30);
     const endStr = end.toISOString().split('T')[0];
     setValidTo(endStr);
 
@@ -177,13 +173,10 @@ export default function RenewSubjectModal({
   const handleValidFromChange = (e) => {
     const newFrom = e.target.value;
     setValidFrom(newFrom);
-    if (newFrom && durationPreset !== 'custom') {
+    if (newFrom && durationMode === 'months') {
       const start = new Date(newFrom);
       const end = new Date(start);
-      if (durationPreset === '15d') end.setDate(end.getDate() + 15);
-      else if (durationPreset === '1m') end.setDate(end.getDate() + 30);
-      else if (durationPreset === '2m') end.setDate(end.getDate() + 60);
-      else if (durationPreset === '3m') end.setDate(end.getDate() + 90);
+      end.setDate(end.getDate() + customMonths * 30);
       const endStr = end.toISOString().split('T')[0];
       setValidTo(endStr);
       fetchBackendCalculation({
@@ -206,7 +199,7 @@ export default function RenewSubjectModal({
   const handleValidToChange = (e) => {
     const newTo = e.target.value;
     setValidTo(newTo);
-    setDurationPreset('custom');
+    setDurationMode('custom');
     if (validFrom && newTo && newTo >= validFrom) {
       fetchBackendCalculation({
         newFrom: validFrom,
@@ -354,32 +347,37 @@ export default function RenewSubjectModal({
           </select>
         </div>
 
-        {/* Duration Presets */}
-        <div className="space-y-1">
+        {/* Renewal Period / Duration */}
+        <div className="space-y-1.5">
           <label className="block text-slate-700 font-bold text-xs">
             Renewal Period / Duration
           </label>
-          <div className="flex flex-wrap gap-1.5">
-            {[
-              { id: '15d', label: '15 Days' },
-              { id: '1m', label: '1 Month (30d)' },
-              { id: '2m', label: '2 Months (60d)' },
-              { id: '3m', label: '3 Months (90d)' },
-              { id: 'custom', label: 'Custom Dates' },
-            ].map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => handlePresetChange(p.id)}
-                className={`px-2.5 py-1 rounded text-xs font-semibold border transition ${
-                  durationPreset === p.id
-                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className={`flex items-center gap-1.5 p-1 px-2.5 rounded border ${durationMode === 'months' ? 'bg-emerald-50 border-emerald-300 text-emerald-950 font-bold' : 'bg-slate-50 border-slate-200 text-slate-600'}`}>
+              <span className="text-xs font-semibold">Custom Month:</span>
+              <input
+                type="number"
+                min="1"
+                max="3"
+                step="1"
+                value={customMonths}
+                onChange={(e) => handleMonthsChange(e.target.value)}
+                className="w-14 rounded border border-slate-300 bg-white px-2 py-0.5 text-xs text-center font-bold text-black font-mono focus:outline-none focus:border-emerald-500"
+              />
+              <span className="text-xs font-medium">mo ({customMonths * 30}d)</span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setDurationMode('custom')}
+              className={`px-3 py-1.5 rounded text-xs font-semibold border transition ${
+                durationMode === 'custom'
+                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                  : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+              }`}
+            >
+              Custom Dates
+            </button>
           </div>
         </div>
 

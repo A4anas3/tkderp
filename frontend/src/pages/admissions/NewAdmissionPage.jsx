@@ -94,6 +94,8 @@ export default function NewAdmissionPage() {
 
   // Step 4: Payment Settlement & Notes
   const [paymentMode, setPaymentMode] = useState('CASH');
+  const [paymentOption, setPaymentOption] = useState('FULL'); // 'FULL' or 'PARTIAL'
+  const [customPaidAmount, setCustomPaidAmount] = useState('');
   const [paymentRef, setPaymentRef] = useState('');
   const [paymentNotes, setPaymentNotes] = useState('');
   const [notes, setNotes] = useState('');
@@ -107,6 +109,32 @@ export default function NewAdmissionPage() {
   const [quickStudentInitialData, setQuickStudentInitialData] = useState(null);
   const [completedAdmission, setCompletedAdmission] = useState(null);
 
+  // Helper to auto-resolve teacher from subject definition
+  const resolveSubjectTeacher = (subj, teacherList) => {
+    if (!subj) return { teacherId: null, teacherName: null };
+    let tid = subj.teacher_id || null;
+    let tname = subj.teacher_name_snapshot || null;
+
+    if (!tid && tname && teacherList && teacherList.length > 0) {
+      const match = teacherList.find(
+        (t) => t.name.toLowerCase() === tname.toLowerCase()
+      );
+      if (match) {
+        tid = match.id;
+        tname = match.name;
+      }
+    }
+    if (!tid && teacherList && teacherList.length > 0) {
+      tid = teacherList[0].id;
+      tname = teacherList[0].name;
+    }
+    if (tid && !tname && teacherList && teacherList.length > 0) {
+      const match = teacherList.find((t) => t.id === tid);
+      if (match) tname = match.name;
+    }
+    return { teacherId: tid, teacherName: tname };
+  };
+
   // Date calculation helper
   const calculateEndDateFromMonths = (startDateStr, monthsCount) => {
     if (!startDateStr) return '';
@@ -114,47 +142,19 @@ export default function NewAdmissionPage() {
     return rolling ? rolling.endDate : '';
   };
 
-  // Change default billing months
-  const handleBillingMonthsChange = (newMonths) => {
-    const m = Math.max(1, parseInt(newMonths, 10) || 1);
-    setBillingMonths(m);
-
-    const hasGc = items.some((i) => i.item_type === 'GREEN_CARD');
-    if (hasGc) {
-      const d = new Date(validFrom);
-      d.setDate(d.getDate() + 365);
-      setValidTo(d.toISOString().split('T')[0]);
-    } else {
-      setValidTo(calculateEndDateFromMonths(validFrom, m));
-    }
-
-    setItems((prev) =>
-      prev.map((itm) => {
-        if (itm.item_type === 'SUBJECT') {
-          const baseFee = itm.base_monthly_fee !== undefined ? itm.base_monthly_fee : Number(itm.original_price);
-          return {
-            ...itm,
-            base_monthly_fee: baseFee,
-            months: m,
-            original_price: baseFee * m,
-          };
-        }
-        return itm;
-      })
-    );
-  };
-
   const handleItemMonthsChange = (tempId, newMonths) => {
-    const m = Math.max(1, parseInt(newMonths, 10) || 1);
+    const m = Math.min(3, Math.max(1, parseInt(newMonths, 10) || 1));
     setItems((prev) =>
       prev.map((itm) => {
         if (itm.tempId === tempId && itm.item_type === 'SUBJECT') {
-          const baseFee = itm.base_monthly_fee !== undefined ? itm.base_monthly_fee : Number(itm.original_price);
+          const baseFee = itm.base_monthly_fee !== undefined ? itm.base_monthly_fee : (Number(itm.original_price) / (itm.months || 1));
+          const itmFrom = itm.valid_from || validFrom;
           return {
             ...itm,
             base_monthly_fee: baseFee,
             months: m,
             original_price: baseFee * m,
+            valid_to: calculateEndDateFromMonths(itmFrom, m),
           };
         }
         return itm;
@@ -175,10 +175,11 @@ export default function NewAdmissionPage() {
 
       const loadedStudents = stuRes.items || [];
       const loadedSubjects = subRes || [];
+      const loadedTeachers = teachRes.items || [];
       setStudents(loadedStudents);
       setSubjects(loadedSubjects);
       setGreenCards(gcRes || []);
-      setTeachers(teachRes.items || []);
+      setTeachers(loadedTeachers);
 
       // If came from enquiry and student is not yet registered
       if (paramEnquiryId && !paramStudentId && paramName) {
@@ -248,6 +249,7 @@ export default function NewAdmissionPage() {
           : 10;
         const initialMonths = 1;
         const baseFee = Number(firstSub.default_fee);
+        const { teacherId: initTid, teacherName: initTname } = resolveSubjectTeacher(firstSub, loadedTeachers);
         setItems([
           {
             tempId: 'item-1',
@@ -258,8 +260,8 @@ export default function NewAdmissionPage() {
             base_monthly_fee: baseFee,
             months: initialMonths,
             original_price: baseFee * initialMonths,
-            teacher_id: firstSub.teacher_id || null,
-            teacher_name_snapshot: firstSub.teacher_name_snapshot || null,
+            teacher_id: initTid,
+            teacher_name_snapshot: initTname,
             hall_number_snapshot: firstSub.hall_number || 'Main Hall',
             discount_type: defaultDisc > 0 ? 'PERCENTAGE' : 'NONE',
             discount_value: defaultDisc > 0 ? String(defaultDisc) : '10',
@@ -414,7 +416,8 @@ export default function NewAdmissionPage() {
       ? Number(s.default_discount_percentage)
       : 10;
     const baseFee = Number(s.default_fee);
-    const m = billingMonths || 1;
+    const m = 1;
+    const { teacherId: assignedTeacherId, teacherName: assignedTeacherName } = resolveSubjectTeacher(s, teachers);
 
     const activeMatch = activeEnrollment?.active_subjects?.find((as) => as.subject_id === s.id);
     let itemFrom = validFrom;
@@ -439,8 +442,8 @@ export default function NewAdmissionPage() {
       base_monthly_fee: baseFee,
       months: m,
       original_price: baseFee * m,
-      teacher_id: s.teacher_id || null,
-      teacher_name_snapshot: s.teacher_name_snapshot || null,
+      teacher_id: assignedTeacherId,
+      teacher_name_snapshot: assignedTeacherName,
       hall_number_snapshot: s.hall_number || 'Main Hall',
       discount_type: defaultDisc > 0 ? 'PERCENTAGE' : 'NONE',
       discount_value: defaultDisc > 0 ? String(defaultDisc) : '10',
@@ -502,7 +505,8 @@ export default function NewAdmissionPage() {
             ? Number(s.default_discount_percentage)
             : 10;
           const baseFee = Number(s.default_fee);
-          const m = itm.months || billingMonths || 1;
+          const m = itm.months || 1;
+          const { teacherId: assignedTeacherId, teacherName: assignedTeacherName } = resolveSubjectTeacher(s, teachers);
 
           const activeMatch = activeEnrollment?.active_subjects?.find((as) => as.subject_id === s.id);
           let itemFrom = validFrom;
@@ -525,8 +529,8 @@ export default function NewAdmissionPage() {
             base_monthly_fee: baseFee,
             months: m,
             original_price: baseFee * m,
-            teacher_id: s.teacher_id || null,
-            teacher_name_snapshot: s.teacher_name_snapshot || null,
+            teacher_id: assignedTeacherId,
+            teacher_name_snapshot: assignedTeacherName,
             hall_number_snapshot: s.hall_number || 'Main Hall',
             valid_from: itemFrom,
             valid_to: itemTo,
@@ -803,11 +807,19 @@ export default function NewAdmissionPage() {
       const finalOverallFrom = allItemFroms.length > 0 ? allItemFroms.reduce((a, b) => (a < b ? a : b)) : validFrom;
       const finalOverallTo = allItemTos.length > 0 ? allItemTos.reduce((a, b) => (a > b ? a : b)) : overallValidTo;
 
-      const initialPaymentPayload = calculation && calculation.total_payable > 0 ? {
-        amount: calculation.total_payable,
+      const totalPayableAmount = calculation ? Number(calculation.total_payable) : itemsSubtotal;
+      const actualPaidAmount = paymentOption === 'FULL'
+        ? totalPayableAmount
+        : (customPaidAmount !== '' ? Math.min(totalPayableAmount, Math.max(0, parseFloat(customPaidAmount) || 0)) : 0);
+      const balanceDueAmount = Math.max(0, totalPayableAmount - actualPaidAmount);
+
+      const initialPaymentPayload = actualPaidAmount > 0 ? {
+        amount: actualPaidAmount,
         payment_mode: paymentMode,
         transaction_reference: paymentRef.trim() || null,
-        notes: paymentNotes.trim() || 'Full course fee payment at admission',
+        notes: paymentNotes.trim() || (balanceDueAmount > 0
+          ? `Partial payment of ₹${actualPaidAmount.toFixed(2)} at admission (Remaining Due: ₹${balanceDueAmount.toFixed(2)})`
+          : 'Full course fee payment at admission'),
       } : null;
 
       const payload = {
@@ -847,6 +859,11 @@ export default function NewAdmissionPage() {
   const itemsSubtotal = items.reduce((sum, itm) => sum + (parseFloat(itm.original_price) || 0), 0);
   const currentPayable = calculation ? calculation.total_payable : itemsSubtotal;
   const currentDiscounts = calculation ? calculation.total_discount : 0;
+  const totalPayableAmount = calculation ? Number(calculation.total_payable) : itemsSubtotal;
+  const actualPaidAmount = paymentOption === 'FULL'
+    ? totalPayableAmount
+    : (customPaidAmount !== '' ? Math.min(totalPayableAmount, Math.max(0, parseFloat(customPaidAmount) || 0)) : 0);
+  const balanceDueAmount = Math.max(0, totalPayableAmount - actualPaidAmount);
 
   const stepsMeta = [
     { num: 1, title: 'Student', subtitle: 'Select student' },
@@ -1170,93 +1187,6 @@ export default function NewAdmissionPage() {
               </div>
             </div>
 
-            {/* Billing Duration Presets (Whole Months) */}
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                <span className="text-xs font-bold text-black flex items-center gap-1.5">
-                  <CalendarDays className="w-4 h-4 text-odoo-600" />
-                  Default Fee Billing Duration (30 Days / Month):
-                </span>
-                <span className="text-xs text-odoo-800 font-bold">
-                  {billingMonths} Month{billingMonths > 1 ? 's' : ''} ({billingMonths * 30} Days)
-                </span>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                {[
-                  { m: 1, label: '1 Month', days: '30d' },
-                  { m: 2, label: '2 Months', days: '60d' },
-                  { m: 3, label: '3 Months (Quarter)', days: '90d' },
-                  { m: 6, label: '6 Months (Half-Yr)', days: '180d' },
-                  { m: 12, label: '12 Months (Full Yr)', days: '360d' },
-                ].map((preset) => {
-                  const isSelected = billingMonths === preset.m;
-                  return (
-                    <button
-                      key={preset.m}
-                      type="button"
-                      onClick={() => handleBillingMonthsChange(preset.m)}
-                      className={`min-h-[36px] px-2.5 py-1 rounded-md text-xs font-semibold transition flex items-center gap-1.5 border ${
-                        isSelected
-                          ? 'bg-odoo-600 text-white border-odoo-700 shadow-xs'
-                          : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100 hover:border-slate-400'
-                      }`}
-                    >
-                      <span>{preset.label}</span>
-                      <span
-                        className={`text-[10px] px-1 py-0.2 rounded font-mono ${
-                          isSelected ? 'bg-odoo-700 text-purple-100' : 'bg-slate-100 text-slate-500'
-                        }`}
-                      >
-                        {preset.days}
-                      </span>
-                    </button>
-                  );
-                })}
-
-                <div className="flex items-center gap-1.5 ml-auto">
-                  <span className="text-xs text-slate-600 font-medium">Custom:</span>
-                  <input
-                    type="number"
-                    min="1"
-                    max="36"
-                    step="1"
-                    value={billingMonths}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value, 10);
-                      if (!isNaN(val) && val >= 1) {
-                        handleBillingMonthsChange(val);
-                      }
-                    }}
-                    className="w-16 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-center font-bold text-black font-mono focus:outline-none focus:border-odoo-600 min-h-[34px]"
-                  />
-                  <span className="text-xs text-slate-500">mo</span>
-                </div>
-              </div>
-
-              {/* Coverage Dates Row */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-slate-200/80">
-                <Input
-                  label="Coverage Start Date (From Date)"
-                  type="date"
-                  value={validFrom}
-                  onChange={(e) => handleValidFromChange(e.target.value)}
-                  required
-                />
-                <div>
-                  <label className="block text-xs font-semibold text-black mb-1">
-                    Coverage End Date (Auto: +{billingMonths * 30} days)
-                  </label>
-                  <div className="w-full rounded border border-slate-300 bg-slate-100 font-mono font-bold text-black px-3 py-2 text-xs flex items-center justify-between min-h-[36px]">
-                    <span>{validTo}</span>
-                    <span className="text-[10px] bg-purple-100 text-odoo-800 px-1.5 py-0.5 rounded font-sans font-semibold">
-                      {billingMonths} mo • {billingMonths * 30}d
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
             {/* Items List */}
             {items.length === 0 ? (
               <div className="p-8 border-2 border-dashed border-slate-200 rounded-lg text-center space-y-2">
@@ -1333,9 +1263,9 @@ export default function NewAdmissionPage() {
                               <input
                                 type="number"
                                 min="1"
-                                max="36"
+                                max="3"
                                 step="1"
-                                value={itm.months || billingMonths || 1}
+                                value={itm.months || 1}
                                 onChange={(e) => handleItemMonthsChange(itm.tempId, e.target.value)}
                                 className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-center font-bold text-black font-mono focus:outline-none focus:border-odoo-600 min-h-[36px]"
                               />
@@ -1476,9 +1406,9 @@ export default function NewAdmissionPage() {
                               <select
                                 value={itm.teacher_id || ''}
                                 onChange={(e) => handleItemTeacherChange(itm.tempId, e.target.value)}
-                                className="border border-slate-300 rounded px-2 py-0.5 text-[11px] text-black bg-white"
+                                className="border border-slate-300 rounded px-2 py-0.5 text-[11px] text-black bg-white font-medium"
                               >
-                                <option value="">{itm.teacher_name_snapshot || 'Default Faculty'}</option>
+                                {!itm.teacher_id && <option value="">Select Faculty</option>}
                                 {teachers.map((t) => (
                                   <option key={t.id} value={t.id}>
                                     {t.name}
@@ -1560,40 +1490,38 @@ export default function NewAdmissionPage() {
                 {items.map((itm) => (
                   <div
                     key={itm.tempId}
-                    className="p-3 bg-slate-50 border border-slate-200 rounded-lg grid grid-cols-1 sm:grid-cols-12 gap-2 items-center text-xs"
+                    className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
                   >
-                    <div className="sm:col-span-5">
-                      <span className="font-bold text-black block">{itm.item_name_snapshot}</span>
+                    <div className="min-w-0">
+                      <span className="font-bold text-black block truncate">{itm.item_name_snapshot}</span>
                       <span className="text-[11px] text-slate-500 font-mono">
                         Base Fee: ₹{Number(itm.original_price).toFixed(2)}
                       </span>
                     </div>
 
-                    <div className="sm:col-span-4">
+                    <div className="flex items-center gap-1.5 shrink-0">
                       <select
                         value={itm.discount_type}
                         onChange={(e) => handleItemDiscountTypeChange(itm.tempId, e.target.value)}
-                        className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-black min-h-[34px]"
+                        className="h-8 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-black font-medium focus:outline-none focus:border-odoo-600"
                       >
                         <option value="NONE">No Discount</option>
                         <option value="PERCENTAGE">Percentage (%)</option>
                         <option value="FIXED">Fixed Amount (₹)</option>
                       </select>
-                    </div>
 
-                    <div className="sm:col-span-3">
                       {itm.discount_type !== 'NONE' ? (
                         <input
                           type="number"
                           step="0.01"
                           min="0"
-                          placeholder={itm.discount_type === 'PERCENTAGE' ? 'Discount %' : 'Discount ₹'}
+                          placeholder={itm.discount_type === 'PERCENTAGE' ? '%' : '₹'}
                           value={itm.discount_value === 0 || itm.discount_value === '0' ? '' : itm.discount_value}
                           onChange={(e) => handleItemDiscountValueChange(itm.tempId, e.target.value)}
-                          className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-black font-mono font-bold min-h-[34px]"
+                          className="w-24 h-8 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-black font-mono font-bold text-right focus:outline-none focus:border-odoo-600"
                         />
                       ) : (
-                        <span className="text-slate-400 font-mono text-center block text-[11px]">—</span>
+                        <span className="w-24 text-slate-400 font-mono text-center block text-[11px]">—</span>
                       )}
                     </div>
                   </div>
@@ -1604,15 +1532,15 @@ export default function NewAdmissionPage() {
             {/* Overall Discount & GST */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
               {/* Overall Discount */}
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
+              <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
                 <label className="block text-xs font-semibold text-black">
                   B. Overall Admission Discount
                 </label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="flex items-center gap-1.5">
                   <select
                     value={overallDiscountType}
                     onChange={(e) => handleOverallDiscountTypeChange(e.target.value)}
-                    className="rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-black min-h-[34px]"
+                    className="h-8 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-black font-medium focus:outline-none focus:border-odoo-600"
                   >
                     <option value="NONE">No Overall Discount</option>
                     <option value="PERCENTAGE">Percentage (%)</option>
@@ -1626,8 +1554,8 @@ export default function NewAdmissionPage() {
                     disabled={overallDiscountType === 'NONE'}
                     value={overallDiscountValue === '0' || overallDiscountValue === 0 ? '' : overallDiscountValue}
                     onChange={(e) => setOverallDiscountValue(e.target.value)}
-                    placeholder={overallDiscountType === 'PERCENTAGE' ? 'Discount %' : 'Discount ₹'}
-                    className="rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-black font-mono font-bold disabled:bg-slate-100 min-h-[34px]"
+                    placeholder={overallDiscountType === 'PERCENTAGE' ? '%' : '₹'}
+                    className="w-24 h-8 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-black font-mono font-bold text-right disabled:bg-slate-100 focus:outline-none focus:border-odoo-600"
                   />
                 </div>
                 <p className="text-[10px] text-slate-500">
@@ -1636,7 +1564,7 @@ export default function NewAdmissionPage() {
               </div>
 
               {/* GST Inclusive */}
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
+              <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
                 <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-black">
                   <input
                     type="checkbox"
@@ -1656,7 +1584,7 @@ export default function NewAdmissionPage() {
                       min="0"
                       value={gstRate}
                       onChange={(e) => setGstRate(e.target.value)}
-                      className="w-20 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-black font-mono font-bold"
+                      className="w-20 h-8 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-black font-mono font-bold focus:outline-none focus:border-odoo-600"
                     />
                   </div>
                 )}
@@ -1681,16 +1609,29 @@ export default function NewAdmissionPage() {
 
                 <div className="bg-white rounded border border-slate-200 divide-y divide-slate-100 text-xs">
                   {calculation.items.map((ci, idx) => (
-                    <div key={idx} className="p-2 flex items-center justify-between">
-                      <div>
+                    <div key={idx} className="p-2.5 flex items-center justify-between gap-2">
+                      <div className="space-y-0.5">
                         <span className="font-bold text-black block">{ci.item_name_snapshot}</span>
-                        <span className="text-[11px] text-slate-500">
-                          ₹{ci.original_price.toFixed(2)} - (Disc: ₹{(ci.individual_discount + ci.overall_discount_share).toFixed(2)})
-                        </span>
+                        <div className="text-[11px] text-slate-600 flex items-center gap-2 flex-wrap">
+                          <span>Base: ₹{Number(ci.original_price).toFixed(2)}</span>
+                          {ci.individual_discount > 0 && (
+                            <span className="text-emerald-800 font-semibold">
+                              • Individual discount: -₹{Number(ci.individual_discount).toFixed(2)}
+                            </span>
+                          )}
+                          {ci.overall_discount_share > 0 && (
+                            <span className="text-emerald-800 font-semibold">
+                              • Overall discount: -₹{Number(ci.overall_discount_share).toFixed(2)}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <span className="font-mono font-bold text-black text-xs">
-                        ₹{ci.net_price.toFixed(2)}
-                      </span>
+                      <div className="text-right shrink-0">
+                        <span className="font-mono font-black text-black text-xs block">
+                          ₹{Number(ci.net_price).toFixed(2)}
+                        </span>
+                        <span className="text-[10px] text-slate-500">Net Item Fee</span>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1698,24 +1639,36 @@ export default function NewAdmissionPage() {
                 <div className="bg-white rounded border border-slate-200 p-2.5 text-xs space-y-1">
                   <div className="flex justify-between text-slate-600">
                     <span>Gross Subtotal:</span>
-                    <span className="font-mono text-black font-semibold">₹{calculation.subtotal.toFixed(2)}</span>
+                    <span className="font-mono text-black font-semibold">₹{Number(calculation.subtotal).toFixed(2)}</span>
                   </div>
-                  {calculation.total_discount > 0 && (
+                  {calculation.individual_discount_total > 0 && (
                     <div className="flex justify-between text-emerald-800 font-semibold">
+                      <span>Individual Subject Discounts:</span>
+                      <span className="font-mono">-₹{Number(calculation.individual_discount_total).toFixed(2)}</span>
+                    </div>
+                  )}
+                  {calculation.overall_discount_amount > 0 && (
+                    <div className="flex justify-between text-emerald-800 font-semibold">
+                      <span>Overall Admission Discount:</span>
+                      <span className="font-mono">-₹{Number(calculation.overall_discount_amount).toFixed(2)}</span>
+                    </div>
+                  )}
+                  {calculation.total_discount > 0 && (
+                    <div className="flex justify-between text-emerald-900 font-bold border-t border-slate-200 pt-1">
                       <span>Total Savings / Discount:</span>
-                      <span className="font-mono">-₹{calculation.total_discount.toFixed(2)}</span>
+                      <span className="font-mono">-₹{Number(calculation.total_discount).toFixed(2)}</span>
                     </div>
                   )}
                   {calculation.gst_enabled && (
                     <div className="flex justify-between text-slate-600">
                       <span>Inclusive GST ({calculation.gst_rate}%):</span>
-                      <span className="font-mono text-black">₹{calculation.gst_amount.toFixed(2)}</span>
+                      <span className="font-mono text-black">₹{Number(calculation.gst_amount).toFixed(2)}</span>
                     </div>
                   )}
                   <div className="flex justify-between border-t border-slate-300 pt-1 text-sm font-bold text-black">
                     <span>Total Fee Payable:</span>
                     <span className="font-mono text-base font-black text-odoo-700">
-                      ₹{calculation.total_payable.toFixed(2)}
+                      ₹{Number(calculation.total_payable).toFixed(2)}
                     </span>
                   </div>
                 </div>
@@ -1796,6 +1749,84 @@ export default function NewAdmissionPage() {
               )}
             </div>
 
+            {/* Payment Amount Settlement (Full vs Partial) */}
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-3">
+              <label className="block text-xs font-semibold text-black">
+                Payment Settlement Mode <span className="text-rose-600">*</span>
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPaymentOption('FULL');
+                    setCustomPaidAmount(String(totalPayableAmount));
+                  }}
+                  className={`p-2.5 rounded-lg border text-xs font-bold transition flex flex-col items-center justify-center gap-1 ${
+                    paymentOption === 'FULL'
+                      ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs'
+                      : 'bg-white text-slate-800 border-slate-300 hover:bg-slate-100'
+                  }`}
+                >
+                  <span className="text-xs">Paid in Full</span>
+                  <span className="text-[11px] font-mono">₹{totalPayableAmount.toFixed(2)}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPaymentOption('PARTIAL');
+                    if (customPaidAmount === '' || Number(customPaidAmount) === totalPayableAmount) {
+                      setCustomPaidAmount(String(Math.round(totalPayableAmount / 2)));
+                    }
+                  }}
+                  className={`p-2.5 rounded-lg border text-xs font-bold transition flex flex-col items-center justify-center gap-1 ${
+                    paymentOption === 'PARTIAL'
+                      ? 'bg-amber-600 text-white border-amber-700 shadow-xs'
+                      : 'bg-white text-slate-800 border-slate-300 hover:bg-slate-100'
+                  }`}
+                >
+                  <span className="text-xs">Partial Payment</span>
+                  <span className="text-[11px] font-mono">Pay part now, balance due</span>
+                </button>
+              </div>
+
+              {paymentOption === 'PARTIAL' && (
+                <div className="p-3 bg-white border border-amber-200 rounded-md space-y-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+                    <div>
+                      <label className="block text-xs font-bold text-amber-950 mb-1">
+                        Amount Paid Now (₹) <span className="text-rose-600">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max={totalPayableAmount}
+                        step="0.01"
+                        value={customPaidAmount}
+                        onChange={(e) => setCustomPaidAmount(e.target.value)}
+                        placeholder="Enter amount collected..."
+                        className="w-full rounded border border-amber-300 bg-amber-50/50 px-3 py-1.5 text-sm font-mono font-black text-black focus:outline-none focus:border-amber-600 min-h-[38px]"
+                      />
+                    </div>
+                    <div className="bg-slate-50 border border-slate-200 rounded p-2 text-xs space-y-1">
+                      <div className="flex justify-between text-slate-600">
+                        <span>Total Course Fee:</span>
+                        <span className="font-mono font-bold text-black">₹{totalPayableAmount.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-emerald-800 font-semibold">
+                        <span>Amount Paid Now:</span>
+                        <span className="font-mono">₹{actualPaidAmount.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between border-t border-slate-200 pt-1 font-bold text-amber-900">
+                        <span>Remaining Balance Due:</span>
+                        <span className="font-mono text-sm font-black text-amber-700">₹{balanceDueAmount.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Internal Admission Notes */}
             <div>
               <Input
@@ -1849,8 +1880,20 @@ export default function NewAdmissionPage() {
                   <span>Gross Fee Subtotal:</span>
                   <span className="font-mono font-semibold">₹{calculation?.subtotal.toFixed(2)}</span>
                 </div>
+                {calculation && calculation.individual_discount_total > 0 && (
+                  <div className="flex justify-between text-emerald-800">
+                    <span>Individual Discounts:</span>
+                    <span className="font-mono">-₹{calculation.individual_discount_total.toFixed(2)}</span>
+                  </div>
+                )}
+                {calculation && calculation.overall_discount_amount > 0 && (
+                  <div className="flex justify-between text-emerald-800">
+                    <span>Overall Discount:</span>
+                    <span className="font-mono">-₹{calculation.overall_discount_amount.toFixed(2)}</span>
+                  </div>
+                )}
                 {calculation && calculation.total_discount > 0 && (
-                  <div className="flex justify-between text-emerald-800 font-bold">
+                  <div className="flex justify-between text-emerald-800 font-bold border-t border-emerald-200/80 pt-1">
                     <span>Total Discounts:</span>
                     <span className="font-mono">-₹{calculation.total_discount.toFixed(2)}</span>
                   </div>
@@ -1862,14 +1905,35 @@ export default function NewAdmissionPage() {
                   </div>
                 )}
                 <div className="flex justify-between border-t border-emerald-300 pt-1.5 text-sm font-black text-black">
-                  <span>Total Amount Paid:</span>
-                  <span className="font-mono text-base font-black text-emerald-900">
-                    ₹{calculation?.total_payable.toFixed(2)}
+                  <span>Total Course Fee:</span>
+                  <span className="font-mono text-base font-black text-black">
+                    ₹{totalPayableAmount.toFixed(2)}
                   </span>
                 </div>
-                <div className="flex justify-between text-[11px] text-emerald-800 font-bold border-t border-emerald-200 pt-1">
+                <div className="flex justify-between text-sm font-bold text-emerald-950">
+                  <span>Amount Paid Now:</span>
+                  <span className="font-mono text-base font-black text-emerald-700">
+                    ₹{actualPaidAmount.toFixed(2)}
+                  </span>
+                </div>
+                {balanceDueAmount > 0 ? (
+                  <div className="flex justify-between border-t border-amber-300 pt-1.5 text-sm font-bold text-amber-950 bg-amber-100/60 p-1.5 rounded">
+                    <span>Remaining Balance Due:</span>
+                    <span className="font-mono text-base font-black text-amber-800">
+                      ₹{balanceDueAmount.toFixed(2)}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex justify-between text-[11px] text-emerald-800 font-bold border-t border-emerald-200 pt-1">
+                    <span>Balance Due:</span>
+                    <span className="font-mono font-bold text-emerald-700">₹0.00 (Paid in Full)</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-[11px] text-slate-700 font-medium pt-1 border-t border-emerald-200">
                   <span>Settlement Mode:</span>
-                  <span>{paymentMode} (Paid in Full • ₹0.00 Due)</span>
+                  <span className="font-bold">
+                    {paymentMode} {balanceDueAmount > 0 ? `(Partial Payment • ₹${balanceDueAmount.toFixed(2)} Due)` : '(Paid in Full)'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -1883,17 +1947,23 @@ export default function NewAdmissionPage() {
           {/* Total Payable Box */}
           <div className="min-w-0">
             <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
-              Total Payable
+              {currentStep === 4 && paymentOption === 'PARTIAL' && balanceDueAmount > 0
+                ? 'Paying Now (Partial)'
+                : 'Total Payable'}
             </span>
             <div className="flex items-baseline gap-1.5">
               <span className="text-lg sm:text-2xl font-black font-mono text-odoo-800 tracking-tight">
-                ₹{Number(currentPayable).toFixed(2)}
+                ₹{currentStep === 4 && paymentOption === 'PARTIAL' ? actualPaidAmount.toFixed(2) : Number(currentPayable).toFixed(2)}
               </span>
-              {currentDiscounts > 0 && (
+              {currentStep === 4 && paymentOption === 'PARTIAL' && balanceDueAmount > 0 ? (
+                <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.2 rounded-full">
+                  Due: ₹{balanceDueAmount.toFixed(2)}
+                </span>
+              ) : currentDiscounts > 0 ? (
                 <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded-full hidden sm:inline">
                   Save ₹{Number(currentDiscounts).toFixed(0)}
                 </span>
-              )}
+              ) : null}
             </div>
             <span className="text-[10px] text-slate-600 truncate block font-medium">
               {items.length} Subject{items.length === 1 ? '' : 's'} • {selectedStudentObj?.name || 'No student selected'}

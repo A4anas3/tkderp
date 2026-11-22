@@ -92,10 +92,18 @@ async def create_subject(
         code = await generate_unique_subject_code(payload.name, db)
 
     teacher_name = payload.teacher_name_snapshot
-    if payload.teacher_id:
-        t_res = await db.execute(select(Teacher).where(Teacher.id == payload.teacher_id))
+    teacher_id = payload.teacher_id
+    if teacher_id:
+        t_res = await db.execute(select(Teacher).where(Teacher.id == teacher_id))
         t = t_res.scalar_one_or_none()
         if t:
+            teacher_name = t.name
+    else:
+        # Auto-assign active teacher so subject always has an assigned faculty
+        t_res = await db.execute(select(Teacher).where(Teacher.status == "ACTIVE").limit(1))
+        t = t_res.scalar_one_or_none()
+        if t:
+            teacher_id = t.id
             teacher_name = t.name
 
     subject = Subject(
@@ -103,7 +111,7 @@ async def create_subject(
         name=payload.name,
         description=payload.description,
         default_fee=payload.default_fee,
-        teacher_id=payload.teacher_id,
+        teacher_id=teacher_id,
         teacher_name_snapshot=teacher_name,
         hall_number=payload.hall_number or "Main Hall",
         schedule=payload.schedule,
