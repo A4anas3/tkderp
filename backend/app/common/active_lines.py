@@ -40,9 +40,8 @@ def is_active_line(item: Any, today: Optional[date] = None) -> bool:
 def derive_student_status(items: List[Any], today: Optional[date] = None) -> str:
     """
     Student status derived from lines:
-    ACTIVE if any line is active,
-    EXPIRED if all lines expired,
-    REVOKED if all revoked.
+    ACTIVE if any line is active, otherwise ACTIVE.
+    A student is only REVOKED if explicitly revoked at the student level.
     """
     if not items:
         return "ACTIVE"
@@ -51,8 +50,4 @@ def derive_student_status(items: List[Any], today: Optional[date] = None) -> str
     if any(is_active_line(itm, t) for itm in items):
         return "ACTIVE"
     
-    # Check if all lines are revoked
-    if all(getattr(itm, "access_status", "ACTIVE") == "REVOKED" for itm in items):
-        return "REVOKED"
-    
-    return "EXPIRED"
+    return "ACTIVE"

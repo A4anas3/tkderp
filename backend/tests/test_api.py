@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import date, timedelta
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
@@ -531,15 +531,32 @@ async def test_storage_abstraction_providers():
 
 @pytest.mark.asyncio
 async def test_student_revocation_and_restoration():
+    """
+    Test student admission revoke & restore flow:
+    (1) Individual course cancel — cancels only that enrollment, student stays active, other courses unaffected.
+    (2) Student revoke — cancels the admission and all active enrollments, records the reason,
+        and keeps financial history correct (fees paid and due balance stay accurate through cycle).
+    (3) Student restore — brings student back to active AND reactivates ONLY the enrollments the revoke
+        cancelled, with their original fee validity periods and due balances; individually cancelled course stays cancelled.
+    """
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         admin_login = await client.post("/api/auth/login", json={"username": "ADM001", "password": "Admin@1234"})
         token = admin_login.json()["access_token"]
         headers = {"Authorization": f"Bearer {token}"}
 
-        # 1. Create a test student
+        # 1. Create subjects
+        s1_res = await client.post("/api/subjects", json={"name": f"Subj1-{uuid.uuid4().hex[:5]}", "default_fee": 3000.0}, headers=headers)
+        assert s1_res.status_code == 201
+        s1 = s1_res.json()
+
+        s2_res = await client.post("/api/subjects", json={"name": f"Subj2-{uuid.uuid4().hex[:5]}", "default_fee": 2000.0}, headers=headers)
+        assert s2_res.status_code == 201
+        s2 = s2_res.json()
+
+        # 2. Create student
         stu_res = await client.post("/api/students", json={
             "name": "Revoke Test Student",
-            "mobile": "9811199999",
+            "mobile": f"98{uuid.uuid4().int % 100000000:08d}",
             "status": "ACTIVE"
         }, headers=headers)
         assert stu_res.status_code == 201
@@ -547,22 +564,102 @@ async def test_student_revocation_and_restoration():
         student_id = student["id"]
         assert student["status"] == "ACTIVE"
 
-        # 2. Revoke student
+        today = date.today()
+        v_from = today.isoformat()
+        v_to = (today + timedelta(days=30)).isoformat()
+
+        # 3. Create 2 admissions:
+        # Adm 1: 3000 fee, 1000 paid, 2000 due
+        adm1_res = await client.post("/api/admissions", json={
+            "student_id": student_id,
+            "admission_date": v_from,
+            "items": [{"item_type": "BATCH_SUBJECT", "subject_id": s1["id"], "item_name_snapshot": s1["name"], "original_price": 3000.0, "valid_from": v_from, "valid_to": v_to}],
+            "initial_payment": {"amount": 1000.0, "payment_mode": "CASH"}
+        }, headers=headers)
+        assert adm1_res.status_code == 201
+        adm1 = adm1_res.json()
+
+        # Adm 2: 2000 fee, 500 paid, 1500 due
+        adm2_res = await client.post("/api/admissions", json={
+            "student_id": student_id,
+            "admission_date": v_from,
+            "items": [{"item_type": "BATCH_SUBJECT", "subject_id": s2["id"], "item_name_snapshot": s2["name"], "original_price": 2000.0, "valid_from": v_from, "valid_to": v_to}],
+            "initial_payment": {"amount": 500.0, "payment_mode": "CASH"}
+        }, headers=headers)
+        assert adm2_res.status_code == 201
+        adm2 = adm2_res.json()
+
+        # Verify initial active enrollment has both courses
+        enr_init = (await client.get(f"/api/students/{student_id}/active-enrollment", headers=headers)).json()
+        assert len(enr_init["active_subjects"]) == 2
+        assert enr_init["is_student_active"] is True
+
+        # (1) Individual course cancel: Cancel Adm 1 individually
+        can_res = await client.post(f"/api/admissions/{adm1['id']}/revoke", json={
+            "reason": "Cancelled Course 1 individually",
+            "revoke_type": "DROPOUT_NO_REFUND",
+            "pending_due_action": "KEEP_DUE"
+        }, headers=headers)
+        assert can_res.status_code == 200
+
+        # Confirm student stays active and other course keeps running
+        stu_after_can = (await client.get(f"/api/students/{student_id}", headers=headers)).json()
+        assert stu_after_can["status"] == "ACTIVE"
+        assert stu_after_can["revoke_reason"] is None
+        enr_after_can = (await client.get(f"/api/students/{student_id}/active-enrollment", headers=headers)).json()
+        assert len(enr_after_can["active_subjects"]) == 1
+        assert enr_after_can["active_subjects"][0]["subject_id"] == s2["id"]
+        assert len(enr_after_can["historical_subjects"]) == 1
+
+        # (2) Student revoke — cancels admission and all active enrollments
         revoke_res = await client.post(f"/api/students/{student_id}/revoke", json={
-            "reason": "Left institute voluntarily for relocation"
+            "reason": "Administrative action"
         }, headers=headers)
         assert revoke_res.status_code == 200
         revoked_stu = revoke_res.json()
         assert revoked_stu["status"] == "REVOKED"
-        assert revoked_stu["revoke_reason"] == "Left institute voluntarily for relocation"
+        assert revoked_stu["revoke_reason"] == "Administrative action"
         assert revoked_stu["revoked_at"] is not None
 
-        # 3. Restore student
+        # Verify profile and active-enrollment after revoke
+        stu_rev_detail = (await client.get(f"/api/students/{student_id}", headers=headers)).json()
+        assert stu_rev_detail["status"] == "REVOKED"
+        assert stu_rev_detail["active_admissions_count"] == 0
+        assert stu_rev_detail["revoked_admissions_count"] == 2
+        assert float(stu_rev_detail["total_paid"]) == 1500.0  # Financial history preserved
+
+        enr_rev = (await client.get(f"/api/students/{student_id}/active-enrollment", headers=headers)).json()
+        assert len(enr_rev["active_subjects"]) == 0
+        assert enr_rev["is_student_active"] is False
+
+        # (3) Student restore — brings student back to active AND reactivates ONLY enrollments cancelled by revoke
         restore_res = await client.post(f"/api/students/{student_id}/restore", headers=headers)
         assert restore_res.status_code == 200
         restored_stu = restore_res.json()
         assert restored_stu["status"] == "ACTIVE"
         assert restored_stu["revoke_reason"] is None
+
+        # Verify student details and active-enrollment after restore
+        stu_rest_detail = (await client.get(f"/api/students/{student_id}", headers=headers)).json()
+        assert stu_rest_detail["status"] == "ACTIVE"
+        assert stu_rest_detail["revoke_reason"] is None
+        assert stu_rest_detail["active_admissions_count"] == 1
+        assert stu_rest_detail["revoked_admissions_count"] == 1
+        assert float(stu_rest_detail["total_paid"]) == 1500.0
+        assert float(stu_rest_detail["total_balance_due"]) == 1500.0
+
+        enr_rest = (await client.get(f"/api/students/{student_id}/active-enrollment", headers=headers)).json()
+        assert enr_rest["is_student_active"] is True
+        assert len(enr_rest["active_subjects"]) == 1
+        restored_subject = enr_rest["active_subjects"][0]
+        assert restored_subject["subject_id"] == s2["id"]
+        assert restored_subject["valid_to"] == v_to  # Original validity preserved
+        assert float(restored_subject["balance_due"]) == 1500.0  # Original due preserved
+        assert float(restored_subject["amount_collected"]) == 500.0
+
+        # Course 1 (individually cancelled before revoke) STAYS cancelled in historical subjects
+        assert len(enr_rest["historical_subjects"]) == 1
+        assert enr_rest["historical_subjects"][0]["subject_id"] == s1["id"]
 
 
 @pytest.mark.asyncio

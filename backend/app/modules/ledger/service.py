@@ -1229,6 +1229,8 @@ async def restore_admission_service(
             itm.keep_due = False
             itm.discontinued_at = None
             itm.lifecycle_reason = None
+            if admission.valid_to and (itm.valid_to is None or itm.valid_to < admission.valid_to):
+                itm.valid_to = admission.valid_to
 
     # Recompute totals strictly from allocation ledger
     await recompute_admission_totals(admission, db)

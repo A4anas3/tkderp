@@ -165,17 +165,7 @@ async def list_students(
             query = query.where(cond)
             count_query = count_query.where(cond)
         elif status == "REVOKED":
-            revoked_lines_sub = (
-                select(AdmissionItem.student_id)
-                .join(Admission, AdmissionItem.admission_id == Admission.id)
-                .where(
-                    or_(
-                        AdmissionItem.access_status == "REVOKED",
-                        Admission.document_status == "VOID",
-                    )
-                )
-            )
-            cond = and_(or_(Student.status == "REVOKED", Student.id.in_(revoked_lines_sub)), ~Student.id.in_(active_lines_sub))
+            cond = Student.status == "REVOKED"
             query = query.where(cond)
             count_query = count_query.where(cond)
         else:
@@ -683,18 +673,49 @@ async def revoke_student(
     student.revoked_by = user.id
     student.has_green_card = False
 
-    # Automatically revoke/cancel all active batch purchases of this student
-    active_adms_res = await db.execute(
-        select(Admission).where(Admission.student_id == student_id, Admission.status == "ACTIVE")
+    # Automatically revoke/cancel all active batch purchases and active enrollments of this student
+    stmt = (
+        select(Admission)
+        .options(selectinload(Admission.items))
+        .where(Admission.student_id == student_id)
     )
-    for adm in active_adms_res.scalars().all():
-        adm.status = "REVOKED"
-        adm.revocation_reason = f"Student admission revoked: {payload.reason.strip()}"
-        adm.revoked_at = datetime.now(timezone.utc)
-        adm.revoked_by = user.id
-        adm.balance_due = Decimal("0.00")
-        if adm.amount_paid <= Decimal("0.00"):
-            adm.payment_status = "VOID"
+    student_adms_res = await db.execute(stmt)
+    student_admissions = student_adms_res.scalars().all()
+
+    now_utc = datetime.now(timezone.utc)
+    revoke_reason_text = f"Student admission revoked: {payload.reason.strip()}"
+
+    for adm in student_admissions:
+        is_adm_active = (
+            adm.status == "ACTIVE"
+            and getattr(adm, "access_status", "ACTIVE") != "REVOKED"
+            and getattr(adm, "document_status", "VALID") != "VOID"
+        )
+        if is_adm_active:
+            adm.previous_status = adm.status
+            adm.previous_access_status = getattr(adm, "access_status", "ACTIVE")
+            adm.status = "REVOKED"
+            adm.access_status = "REVOKED"
+            adm.revoke_type = "STUDENT_REVOKE"
+            adm.revocation_reason = revoke_reason_text
+            adm.revoked_at = now_utc
+            adm.revoked_by = user.id
+            # Preserve balance_due and payment_status to keep financial history accurate
+
+        for itm in adm.items:
+            is_item_active = (
+                itm.status not in ("DISCONTINUED", "COMPLETED", "CANCELLED", "REVOKED")
+                and getattr(itm, "access_status", "ACTIVE") != "REVOKED"
+            )
+            if is_item_active:
+                itm.previous_status = itm.status
+                itm.previous_access_status = getattr(itm, "access_status", "ACTIVE")
+                itm.status = "DISCONTINUED"
+                itm.access_status = "REVOKED"
+                itm.revoke_type = "STUDENT_REVOKE"
+                itm.lifecycle_reason = revoke_reason_text
+                itm.discontinued_at = now_utc
+                # Preserve valid_from, valid_to, and balance_due
 
     audit = AuditLog(
         user_id=user.id,
@@ -728,28 +749,77 @@ async def restore_student(
     student.revoked_at = None
     student.revoked_by = None
 
-    # Automatically restore admissions that were revoked due to student revocation
-    revoked_adms_res = await db.execute(
-        select(Admission).where(
-            Admission.student_id == student_id,
-            Admission.status.in_(["REVOKED", "CANCELLED"]),
-            Admission.revocation_reason.like("Student admission revoked:%")
-        )
+    # Load all admissions with items
+    stmt = (
+        select(Admission)
+        .options(selectinload(Admission.items))
+        .where(Admission.student_id == student_id)
     )
-    for adm in revoked_adms_res.scalars().all():
-        adm.status = "ACTIVE"
-        adm.revocation_reason = None
-        adm.revoked_at = None
-        adm.revoked_by = None
-        adm.balance_due = max(Decimal("0.00"), adm.total_payable - adm.amount_paid)
-        if adm.balance_due == Decimal("0.00"):
-            adm.payment_status = "PAID"
-        elif adm.amount_paid > Decimal("0.00"):
-            adm.payment_status = "PARTIALLY_PAID"
-        else:
-            adm.payment_status = "UNPAID"
-    student.revoked_at = None
-    student.revoked_by = None
+    student_adms_res = await db.execute(stmt)
+    student_admissions = student_adms_res.scalars().all()
+
+    for adm in student_admissions:
+        is_adm_revoked_by_revoke = (
+            adm.revoke_type == "STUDENT_REVOKE"
+            or (adm.revocation_reason and adm.revocation_reason.startswith("Student admission revoked:"))
+        )
+
+        has_restored_item = False
+        for itm in adm.items:
+            was_item_cancelled_by_revoke = (
+                itm.revoke_type == "STUDENT_REVOKE"
+                or (itm.lifecycle_reason and itm.lifecycle_reason.startswith("Student admission revoked:"))
+                or (
+                    is_adm_revoked_by_revoke
+                    and itm.revoke_type in (None, "STUDENT_REVOKE")
+                    and (
+                        not itm.lifecycle_reason
+                        or itm.lifecycle_reason.startswith("Student admission revoked:")
+                        or (old_reason and itm.lifecycle_reason == old_reason)
+                    )
+                )
+            )
+            if was_item_cancelled_by_revoke:
+                itm.status = itm.previous_status or "ACTIVE"
+                itm.access_status = getattr(itm, "previous_access_status", None) or "ACTIVE"
+                itm.previous_status = None
+                itm.previous_access_status = None
+                itm.revoke_type = None
+                itm.lifecycle_reason = None
+                itm.discontinued_at = None
+                itm.balance_due = max(Decimal("0.00"), itm.net_price - itm.amount_collected)
+                if adm.valid_to and (itm.valid_to is None or itm.valid_to < adm.valid_to):
+                    itm.valid_to = adm.valid_to
+                has_restored_item = True
+
+        if is_adm_revoked_by_revoke or has_restored_item:
+            has_active_items = any(
+                i.status not in ("DISCONTINUED", "COMPLETED", "CANCELLED", "REVOKED")
+                and getattr(i, "access_status", "ACTIVE") != "REVOKED"
+                for i in adm.items
+            )
+            if has_active_items or not adm.items:
+                adm.status = adm.previous_status or "ACTIVE"
+                adm.access_status = getattr(adm, "previous_access_status", None) or "ACTIVE"
+            adm.previous_status = None
+            adm.previous_access_status = None
+            adm.revoke_type = None
+            adm.revocation_reason = None
+            adm.revoked_at = None
+            adm.revoked_by = None
+            if getattr(adm, "document_status", "VALID") == "VOID":
+                adm.document_status = "VALID"
+            adm.balance_due = max(Decimal("0.00"), adm.total_payable - adm.amount_paid)
+            if adm.balance_due == Decimal("0.00"):
+                adm.payment_status = "PAID"
+            elif adm.amount_paid > Decimal("0.00"):
+                adm.payment_status = "PARTIALLY_PAID"
+            else:
+                adm.payment_status = "UNPAID"
+
+    # Restore Green Card status if applicable
+    from app.modules.ledger.service import update_student_green_card_status
+    await update_student_green_card_status(student.id, db)
 
     audit = AuditLog(
         user_id=user.id,
@@ -1047,7 +1117,9 @@ async def get_student_active_enrollment(
         # Determine active status: parent admission and item must both be ACTIVE, and valid_to must cover today or future
         is_active = (
             adm.status == "ACTIVE" and
+            getattr(adm, "access_status", "ACTIVE") == "ACTIVE" and
             item.status == "ACTIVE" and
+            getattr(item, "access_status", "ACTIVE") == "ACTIVE" and
             (item.valid_to is None or item.valid_to >= today)
         )
 
