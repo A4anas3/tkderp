@@ -119,8 +119,8 @@ async def batches_active_summary_alias(
 ):
     return await get_batches_active_summary(db=db, current_user=current_user)
 
-@app.get("/health", tags=["Health"])
-@app.get("/api/health", tags=["Health"])
+@app.api_route("/health", methods=["GET", "HEAD"], tags=["Health"])
+@app.api_route("/api/health", methods=["GET", "HEAD"], tags=["Health"])
 async def health_check():
     return {
         "status": "healthy",
