@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Calendar,
   ChevronLeft,
@@ -26,6 +26,7 @@ import { getDaysInMonth, parseMonthYear } from '../../utils/calendarUtils';
 export default function TeacherAttendanceCalendar({
   teacherId,
   teacherName,
+  monthYear: propMonthYear,
   initialMonthYear,
   onAttendanceChange,
   onMonthChange,
@@ -39,20 +40,36 @@ export default function TeacherAttendanceCalendar({
     return `${y}-${m}`;
   };
 
-  const [monthYear, setMonthYear] = useState(initialMonthYear || getCurrentMonthYear());
+  const [internalMonthYear, setInternalMonthYear] = useState(
+    propMonthYear || initialMonthYear || getCurrentMonthYear()
+  );
   const [absentDays, setAbsentDays] = useState([]); // Array of 'YYYY-MM-DD'
   const [loading, setLoading] = useState(true);
   const [togglingDate, setTogglingDate] = useState(null);
 
-  // Sync internal monthYear if initialMonthYear prop changes
+  // Active month is prop if provided, else internal state
+  const activeMonthYear = propMonthYear || internalMonthYear;
+
+  // Sync internal state when initialMonthYear changes (if propMonthYear not provided)
   useEffect(() => {
-    if (initialMonthYear && initialMonthYear !== monthYear) {
-      setMonthYear(initialMonthYear);
+    if (initialMonthYear && !propMonthYear) {
+      setInternalMonthYear(initialMonthYear);
     }
-  }, [initialMonthYear]);
+  }, [initialMonthYear, propMonthYear]);
+
+  // Keep callbacks in refs to avoid recreating callbacks or triggering effects
+  const onAttendanceChangeRef = useRef(onAttendanceChange);
+  useEffect(() => {
+    onAttendanceChangeRef.current = onAttendanceChange;
+  }, [onAttendanceChange]);
+
+  const onMonthChangeRef = useRef(onMonthChange);
+  useEffect(() => {
+    onMonthChangeRef.current = onMonthChange;
+  }, [onMonthChange]);
 
   // Real calendar calculations for selected month & year
-  const { yearNum, monthNum, daysInMonth } = parseMonthYear(monthYear);
+  const { yearNum, monthNum, daysInMonth } = parseMonthYear(activeMonthYear);
   const firstDayOfWeek = new Date(yearNum, monthNum - 1, 1).getDay(); // 0 is Sun
 
   const monthLabel = new Date(yearNum, monthNum - 1, 1).toLocaleDateString('en-IN', {
@@ -66,43 +83,40 @@ export default function TeacherAttendanceCalendar({
 
   const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-  // Load attendance records for teacher & monthYear
+  // Load attendance records for teacher & activeMonthYear
   const loadAttendance = useCallback(async () => {
-    if (!teacherId || !monthYear) return;
+    if (!teacherId || !activeMonthYear) return;
     setLoading(true);
     try {
-      const res = await teacherApi.getTeacherAttendance(teacherId, { month_year: monthYear });
+      const res = await teacherApi.getTeacherAttendance(teacherId, { month_year: activeMonthYear });
       const rawList = res.absent_days || res.absent_dates || [];
       const normalized = rawList.map((d) => (typeof d === 'string' ? d : String(d)));
       setAbsentDays(normalized);
-      if (onAttendanceChange) {
-        const absCount = res.absent_days_count || normalized.length;
-        const realDays = res.days_in_month || daysInMonth;
-        const presCount = res.present_days_count ?? Math.max(0, realDays - absCount);
-        onAttendanceChange(absCount, presCount, realDays);
-      }
     } catch (err) {
       console.error('Failed to load teacher attendance:', err);
       error(err.message || 'Failed to load teacher attendance');
     } finally {
       setLoading(false);
     }
-  }, [teacherId, monthYear, error, onAttendanceChange, daysInMonth]);
+  }, [teacherId, activeMonthYear, error]);
 
   useEffect(() => {
     loadAttendance();
   }, [loadAttendance]);
 
   const updateMonth = (newMy) => {
-    setMonthYear(newMy);
-    if (onMonthChange) {
-      onMonthChange(newMy);
+    setInternalMonthYear(newMy);
+    if (onMonthChangeRef.current) {
+      onMonthChangeRef.current(newMy);
     }
   };
 
   // Navigate months
   const handlePrevMonth = () => {
-    const [y, m] = monthYear.split('-').map(Number);
+    const parts = (activeMonthYear || '').split('-');
+    if (parts.length !== 2) return;
+    const y = Number(parts[0]);
+    const m = Number(parts[1]);
     const date = new Date(y, m - 2, 1);
     const newY = date.getFullYear();
     const newM = String(date.getMonth() + 1).padStart(2, '0');
@@ -110,7 +124,10 @@ export default function TeacherAttendanceCalendar({
   };
 
   const handleNextMonth = () => {
-    const [y, m] = monthYear.split('-').map(Number);
+    const parts = (activeMonthYear || '').split('-');
+    if (parts.length !== 2) return;
+    const y = Number(parts[0]);
+    const m = Number(parts[1]);
     const date = new Date(y, m, 1);
     const newY = date.getFullYear();
     const newM = String(date.getMonth() + 1).padStart(2, '0');
@@ -129,8 +146,13 @@ export default function TeacherAttendanceCalendar({
 
     // Optimistic update
     setAbsentDays(newAbsentDays);
-    if (onAttendanceChange) {
-      onAttendanceChange(newAbsentDays.length, Math.max(0, daysInMonth - newAbsentDays.length), daysInMonth);
+    if (onAttendanceChangeRef.current) {
+      onAttendanceChangeRef.current(
+        newAbsentDays.length,
+        Math.max(0, daysInMonth - newAbsentDays.length),
+        daysInMonth,
+        teacherId
+      );
     }
 
     try {
@@ -143,8 +165,13 @@ export default function TeacherAttendanceCalendar({
     } catch (err) {
       // Rollback on failure
       setAbsentDays(absentDays);
-      if (onAttendanceChange) {
-        onAttendanceChange(absentDays.length, Math.max(0, daysInMonth - absentDays.length), daysInMonth);
+      if (onAttendanceChangeRef.current) {
+        onAttendanceChangeRef.current(
+          absentDays.length,
+          Math.max(0, daysInMonth - absentDays.length),
+          daysInMonth,
+          teacherId
+        );
       }
       error(err.message || 'Failed to update attendance');
     } finally {
@@ -157,12 +184,14 @@ export default function TeacherAttendanceCalendar({
     if (!teacherId || absentDays.length === 0) return;
     try {
       await teacherApi.saveMonthlyAttendance(teacherId, {
-        month_year: monthYear,
+        month_year: activeMonthYear,
         absent_dates: [],
         absent_days: [],
       });
       setAbsentDays([]);
-      if (onAttendanceChange) onAttendanceChange(0, daysInMonth, daysInMonth);
+      if (onAttendanceChangeRef.current) {
+        onAttendanceChangeRef.current(0, daysInMonth, daysInMonth, teacherId);
+      }
       success('All days marked present for this month');
     } catch (err) {
       error(err.message || 'Failed to clear absent days');
@@ -200,7 +229,7 @@ export default function TeacherAttendanceCalendar({
             </button>
             <input
               type="month"
-              value={monthYear}
+              value={activeMonthYear}
               onChange={(e) => e.target.value && updateMonth(e.target.value)}
               className="text-xs font-bold text-slate-800 bg-transparent px-2 py-1 outline-none font-mono cursor-pointer"
             />
@@ -323,7 +352,7 @@ export default function TeacherAttendanceCalendar({
           {Array.from({ length: daysInMonth }).map((_, i) => {
             const dayNum = i + 1;
             const dayStr = String(dayNum).padStart(2, '0');
-            const dateStr = `${monthYear}-${dayStr}`;
+            const dateStr = `${activeMonthYear}-${dayStr}`;
             const isAbsent = absentSet.has(dateStr);
             const isToggling = togglingDate === dateStr;
             const dayOfWeek = new Date(yearNum, monthNum - 1, dayNum).getDay();

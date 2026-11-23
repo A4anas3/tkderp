@@ -52,16 +52,14 @@ export default function TeacherAttendancePage() {
       setTeachers(tList);
       setAttendanceSummary(summaryRes || []);
 
-      if (!selectedTeacherId && tList.length > 0) {
-        setSelectedTeacherId(tList[0].id);
-      }
+      setSelectedTeacherId((prev) => prev || (tList.length > 0 ? tList[0].id : null));
     } catch (err) {
       console.error('Failed to load teacher attendance data:', err);
       error(err.message || 'Failed to load teacher attendance data');
     } finally {
       setLoading(false);
     }
-  }, [monthYear, error, selectedTeacherId]);
+  }, [monthYear, error]);
 
   useEffect(() => {
     loadData();
@@ -69,7 +67,10 @@ export default function TeacherAttendancePage() {
 
   // Navigate months
   const handlePrevMonth = () => {
-    const [y, m] = monthYear.split('-').map(Number);
+    const parts = (monthYear || '').split('-');
+    if (parts.length !== 2) return;
+    const y = Number(parts[0]);
+    const m = Number(parts[1]);
     const date = new Date(y, m - 2, 1);
     const newY = date.getFullYear();
     const newM = String(date.getMonth() + 1).padStart(2, '0');
@@ -77,7 +78,10 @@ export default function TeacherAttendancePage() {
   };
 
   const handleNextMonth = () => {
-    const [y, m] = monthYear.split('-').map(Number);
+    const parts = (monthYear || '').split('-');
+    if (parts.length !== 2) return;
+    const y = Number(parts[0]);
+    const m = Number(parts[1]);
     const date = new Date(y, m, 1);
     const newY = date.getFullYear();
     const newM = String(date.getMonth() + 1).padStart(2, '0');
@@ -115,14 +119,16 @@ export default function TeacherAttendancePage() {
   });
 
   // Callback when attendance toggled in calendar
-  const handleAttendanceChange = (newAbsentCount, newPresentCount, realDays) => {
-    const dCount = realDays || daysInMonth;
-    const pCount = typeof newPresentCount === 'number' ? newPresentCount : Math.max(0, dCount - newAbsentCount);
+  const handleAttendanceChange = useCallback((newAbsentCount, newPresentCount, realDays, targetTeacherId) => {
     setAttendanceSummary((prev) => {
-      const exists = prev.some((item) => item.teacher_id === selectedTeacherId);
+      const tId = targetTeacherId || selectedTeacherId;
+      if (!tId) return prev;
+      const dCount = realDays || daysInMonth;
+      const pCount = typeof newPresentCount === 'number' ? newPresentCount : Math.max(0, dCount - newAbsentCount);
+      const exists = prev.some((item) => item.teacher_id === tId);
       if (exists) {
         return prev.map((item) =>
-          item.teacher_id === selectedTeacherId
+          item.teacher_id === tId
             ? {
                 ...item,
                 absent_days_count: newAbsentCount,
@@ -135,14 +141,14 @@ export default function TeacherAttendancePage() {
       return [
         ...prev,
         {
-          teacher_id: selectedTeacherId,
+          teacher_id: tId,
           absent_days_count: newAbsentCount,
           present_days_count: pCount,
           days_in_month: dCount,
         },
       ];
     });
-  };
+  }, [selectedTeacherId, daysInMonth]);
 
   return (
     <div className="space-y-4">
@@ -309,10 +315,10 @@ export default function TeacherAttendancePage() {
           <div className="lg:col-span-3">
             {selectedTeacher ? (
               <TeacherAttendanceCalendar
-                key={`${selectedTeacher.id}-${monthYear}`}
+                key={selectedTeacher.id}
                 teacherId={selectedTeacher.id}
                 teacherName={selectedTeacher.name}
-                initialMonthYear={monthYear}
+                monthYear={monthYear}
                 onAttendanceChange={handleAttendanceChange}
                 onMonthChange={setMonthYear}
               />
