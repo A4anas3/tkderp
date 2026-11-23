@@ -28,9 +28,11 @@ def main():
     token = login['access_token']
     print("   Token acquired.")
 
-    print("2. Fetching active subjects...")
-    subs = get_json(f'{BASE}/subjects?status_filter=ACTIVE&page_size=10', token)['items']
-    print(f"   Active subjects found: {len(subs)}")
+    print("2. Fetching active subjects & active teachers...")
+    active_teachers = {t['id']: t for t in get_json(f'{BASE}/teachers/all', token)}
+    all_subs = get_json(f'{BASE}/subjects?status_filter=ACTIVE&page_size=50', token)['items']
+    subs = [s for s in all_subs if not s.get('teacher_id') or s.get('teacher_id') in active_teachers]
+    print(f"   Active subjects with active teachers found: {len(subs)}")
     assert len(subs) >= 2, "Need at least 2 active subjects"
     sub1, sub2 = subs[0], subs[1]
     print(f"   Subject 1: {sub1['name']} (Fee: {sub1['default_fee']})")

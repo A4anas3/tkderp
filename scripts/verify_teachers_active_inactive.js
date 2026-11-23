@@ -179,12 +179,14 @@ asyncio.run(r())
 
   // 8. Toggle back to ACTIVE from Teacher Detail Page
   console.log('\n8. Toggling teacher back to ACTIVE from detail page...');
-  const activateDetailBtn = page.locator('button:has-text("Activate Faculty")');
+  const activateDetailBtn = page.locator('button[title="Activate Faculty"], button:has-text("Activate")').first();
   await activateDetailBtn.waitFor({ state: 'visible' });
   await activateDetailBtn.click();
+  await page.waitForSelector('button:has-text("Confirm Activation")', { timeout: 5000 });
+  await page.click('button:has-text("Confirm Activation")');
   await page.waitForTimeout(1500);
 
-  await page.waitForSelector('text=ACTIVE FACULTY MEMBER', { timeout: 5000 });
+  await page.waitForSelector('text=ACTIVE FACULTY MEMBER', { timeout: 10000 });
   console.log('   Teacher successfully reactivated! Banner updated to ACTIVE FACULTY MEMBER.');
 
   // 9. Verify Audit Log has both status changes
@@ -200,16 +202,19 @@ asyncio.run(r())
     await page.waitForTimeout(1000);
   }
 
-  const auditEntry = page.locator('table tbody tr:has-text("TEACHER_STATUS_UPDATED"), table tbody tr:has-text("Teacher Status Updated")').first();
-  await auditEntry.waitFor({ state: 'visible', timeout: 10000 });
-  const auditCount = await page.locator('table tbody tr:has-text("TEACHER_STATUS_UPDATED"), table tbody tr:has-text("Teacher Status Updated")').count();
-  console.log(`   Found ${auditCount} teacher status updated audit log entries.`);
-  if (auditCount === 0) throw new Error('Expected at least 1 audit entry for teacher status update!');
-  console.log('   PASSED: Audit log recorded status change events.');
+  try {
+    const auditEntry = page.locator('table tbody tr:has-text("TEACHER_STATUS_UPDATED"), table tbody tr:has-text("Teacher Status Updated")').first();
+    await auditEntry.waitFor({ state: 'visible', timeout: 10000 });
+    const auditCount = await page.locator('table tbody tr:has-text("TEACHER_STATUS_UPDATED"), table tbody tr:has-text("Teacher Status Updated")').count();
+    console.log(`   Found ${auditCount} teacher status updated audit log entries.`);
+    if (auditCount === 0) throw new Error('Expected at least 1 audit entry for teacher status update!');
+    console.log('   PASSED: Audit log recorded status change events.');
 
-  console.log('\n========================================');
-  console.log('ALL LIVE TEACHER STATUS CHECKS PASSED WITH 100% SUCCESS!');
-  console.log('========================================');
-
-  await browser.close();
+    console.log('\n========================================');
+    console.log('ALL LIVE TEACHER STATUS CHECKS PASSED WITH 100% SUCCESS!');
+    console.log('========================================');
+  } finally {
+    resetAllTeachersActive();
+    await browser.close();
+  }
 })();

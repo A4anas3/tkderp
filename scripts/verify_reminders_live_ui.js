@@ -83,7 +83,8 @@ async function runLiveVerification() {
     console.log('Table Headers:', headers.join(' | '));
     if (!headers.some((h) => h.includes('STUDENT DETAILS'))) throw new Error('Missing Student Details header');
     if (!headers.some((h) => h.includes('MOBILE CONTACT'))) throw new Error('Missing Mobile Contact header');
-    if (!headers.some((h) => h.includes('SUBJECT & BATCH'))) throw new Error('Missing Subject & Batch header');
+    if (!headers.some((h) => h.includes('SUBJECT'))) throw new Error('Missing Subject header');
+    if (headers.some((h) => h.includes('BATCH'))) throw new Error('Subject header should not contain Batch');
     if (!headers.some((h) => h.includes('DUE AMOUNT'))) throw new Error('Missing Due Amount header');
     if (!headers.some((h) => h.includes('DUE DATE'))) throw new Error('Missing Due Date header');
     if (!headers.some((h) => h.includes('WHATSAPP ACTION'))) throw new Error('Missing WhatsApp Action header');
@@ -138,9 +139,13 @@ async function runLiveVerification() {
       await page.waitForTimeout(1000);
     }
 
-    // 7. Test Filters: Subject and Due-Age
-    console.log('\n7. Testing Dropdown Filters (Subject, Batch, Due-Age)...');
-    const dueAgeSelect = page.locator('select').nth(2); // Due-Age select
+    // 7. Test Filters: Subject and Due-Age (and verify NO batch filter)
+    console.log('\n7. Testing Dropdown Filters (Subject, Due-Age) & Confirming No Batch Filter...');
+    const batchFilterCount = await page.locator('label:has-text("Batch"), select:has-text("All Batches")').count();
+    if (batchFilterCount > 0) throw new Error('FAIL: Reminders page contains Batch filter!');
+    console.log('PASS: Reminders page has NO batch filter');
+
+    const dueAgeSelect = page.locator('select:has-text("All Due Ages")').first();
     await dueAgeSelect.selectOption('0-30');
     await page.waitForTimeout(1500);
     console.log('PASS: Due-Age 0-30 filter applied successfully');

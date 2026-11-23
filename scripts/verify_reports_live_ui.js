@@ -28,7 +28,6 @@ const REPORT_TABS = [
   { id: 'dues-ageing', name: 'Dues & Ageing' },
   { id: 'subject-breakup', name: 'Subject-wise' },
   { id: 'teacher-breakup', name: 'Teacher-wise' },
-  { id: 'batch-breakup', name: 'Batch-wise' },
   { id: 'admissions-conversion', name: 'Admissions & Conversion' },
   { id: 'waivers', name: 'Waivers' },
   { id: 'refunds', name: 'Refunds' },
