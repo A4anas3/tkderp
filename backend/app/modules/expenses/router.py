@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 
 from app.database.session import get_db
 from app.core.dependencies import require_staff, require_cashier_or_admin, require_admin
-from app.database.models import ExpenseCategory, Expense, SalaryRecord, User, AuditLog
+from app.database.models import ExpenseCategory, Expense, SalaryRecord, User, AuditLog, Teacher, TeacherAttendance
 from app.modules.expenses.schemas import (
     ExpenseCategoryCreate, ExpenseCategoryResponse,
     ExpenseCreate, ExpenseResponse,
@@ -197,7 +197,48 @@ async def list_salary_records(
     items_result = await db.execute(query)
     items = items_result.scalars().all()
 
-    return PageResponse.create(items=items, total=total, params=PaginationParams(page=page, page_size=page_size))
+    # Look up absent counts for teacher records
+    teachers_res = await db.execute(select(Teacher))
+    all_teachers = teachers_res.scalars().all()
+    teacher_name_to_id = {t.name.lower().strip(): t.id for t in all_teachers}
+
+    pairs = set()
+    for s in items:
+        tid = s.employee_id or teacher_name_to_id.get(s.employee_name_snapshot.lower().strip())
+        if tid:
+            pairs.add((tid, s.month_year))
+
+    absent_map = {}
+    for tid, my in pairs:
+        cnt_res = await db.execute(
+            select(func.count(TeacherAttendance.id))
+            .where(TeacherAttendance.teacher_id == tid, TeacherAttendance.month_year == my)
+        )
+        absent_map[(tid, my)] = cnt_res.scalar() or 0
+
+    response_items = []
+    for s in items:
+        tid = s.employee_id or teacher_name_to_id.get(s.employee_name_snapshot.lower().strip())
+        abs_count = absent_map.get((tid, s.month_year)) if tid else None
+        response_items.append(
+            SalaryRecordResponse(
+                id=s.id,
+                employee_id=s.employee_id,
+                employee_type=s.employee_type,
+                employee_name_snapshot=s.employee_name_snapshot,
+                month_year=s.month_year,
+                salary_amount=s.salary_amount,
+                due_date=s.due_date,
+                paid_amount=s.paid_amount,
+                status=s.status,
+                payment_date=s.payment_date,
+                payment_mode=s.payment_mode,
+                notes=s.notes,
+                absent_days_count=abs_count
+            )
+        )
+
+    return PageResponse.create(items=response_items, total=total, params=PaginationParams(page=page, page_size=page_size))
 
 @router.post("/salaries", response_model=SalaryRecordResponse, status_code=status.HTTP_201_CREATED)
 async def create_salary_record(
@@ -219,7 +260,34 @@ async def create_salary_record(
     db.add(record)
     await db.commit()
     await db.refresh(record)
-    return record
+
+    abs_count = None
+    tid = record.employee_id
+    if not tid and record.employee_type == "TEACHER":
+        t_res = await db.execute(select(Teacher.id).where(Teacher.name.ilike(record.employee_name_snapshot.strip())))
+        tid = t_res.scalar_one_or_none()
+    if tid:
+        cnt_res = await db.execute(
+            select(func.count(TeacherAttendance.id))
+            .where(TeacherAttendance.teacher_id == tid, TeacherAttendance.month_year == record.month_year)
+        )
+        abs_count = cnt_res.scalar() or 0
+
+    return SalaryRecordResponse(
+        id=record.id,
+        employee_id=record.employee_id,
+        employee_type=record.employee_type,
+        employee_name_snapshot=record.employee_name_snapshot,
+        month_year=record.month_year,
+        salary_amount=record.salary_amount,
+        due_date=record.due_date,
+        paid_amount=record.paid_amount,
+        status=record.status,
+        payment_date=record.payment_date,
+        payment_mode=record.payment_mode,
+        notes=record.notes,
+        absent_days_count=abs_count
+    )
 
 @router.post("/salaries/{record_id}/pay", response_model=SalaryRecordResponse)
 async def pay_salary(
@@ -266,4 +334,31 @@ async def pay_salary(
 
     await db.commit()
     await db.refresh(record)
-    return record
+
+    abs_count = None
+    tid = record.employee_id
+    if not tid and record.employee_type == "TEACHER":
+        t_res = await db.execute(select(Teacher.id).where(Teacher.name.ilike(record.employee_name_snapshot.strip())))
+        tid = t_res.scalar_one_or_none()
+    if tid:
+        cnt_res = await db.execute(
+            select(func.count(TeacherAttendance.id))
+            .where(TeacherAttendance.teacher_id == tid, TeacherAttendance.month_year == record.month_year)
+        )
+        abs_count = cnt_res.scalar() or 0
+
+    return SalaryRecordResponse(
+        id=record.id,
+        employee_id=record.employee_id,
+        employee_type=record.employee_type,
+        employee_name_snapshot=record.employee_name_snapshot,
+        month_year=record.month_year,
+        salary_amount=record.salary_amount,
+        due_date=record.due_date,
+        paid_amount=record.paid_amount,
+        status=record.status,
+        payment_date=record.payment_date,
+        payment_mode=record.payment_mode,
+        notes=record.notes,
+        absent_days_count=abs_count
+    )

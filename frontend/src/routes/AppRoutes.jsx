@@ -29,6 +29,7 @@ import StaffUsersPage from '../pages/users/StaffUsersPage';
 import AuditLogPage from '../pages/audit/AuditLogPage';
 import PublicVerifyPage from '../pages/verify/PublicVerifyPage';
 import PublicIDCardPage from '../pages/idcard/PublicIDCardPage';
+import TeacherAttendancePage from '../pages/teachers/TeacherAttendancePage';
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { user, loading, role } = useAuth();
@@ -198,6 +199,22 @@ export default function AppRoutes() {
           }
         />
         <Route
+          path="teachers/attendance"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER']}>
+              <TeacherAttendancePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="teacher-attendance"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER']}>
+              <TeacherAttendancePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="teachers/:id"
           element={
             <ProtectedRoute allowedRoles={['ADMIN', 'TEACHER']}>
@@ -244,7 +261,7 @@ export default function AppRoutes() {
         <Route
           path="expenses"
           element={
-            <ProtectedRoute allowedRoles={['ADMIN']}>
+            <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER']}>
               <ExpensesPage />
             </ProtectedRoute>
           }

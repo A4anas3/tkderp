@@ -15,6 +15,8 @@ import {
   Settings,
   Sparkles,
   X,
+  Wallet,
+  CalendarCheck,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -112,6 +114,24 @@ export default function CoachingAppsModal({ isOpen, onClose }) {
       route: '/teachers',
       color: 'bg-emerald-600',
       roles: ['ADMIN'],
+    },
+    {
+      id: 'teacher-attendance',
+      name: 'Teacher Attendance',
+      desc: 'Mark Monthly Absences',
+      icon: CalendarCheck,
+      route: '/teacher-attendance',
+      color: 'bg-teal-700',
+      roles: ['ADMIN', 'CASHIER'],
+    },
+    {
+      id: 'expenses',
+      name: 'Expenses',
+      desc: 'Daily & Salaries',
+      icon: Wallet,
+      route: '/expenses',
+      color: 'bg-rose-600',
+      roles: ['ADMIN', 'CASHIER'],
     },
     {
       id: 'enquiries',

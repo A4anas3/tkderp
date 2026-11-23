@@ -214,7 +214,14 @@ export default function PaymentReceiptModal({ isOpen, onClose, receipt, payment 
                         {i + 1}
                       </td>
                       <td className="p-1.5 text-black border-r border-slate-200 font-semibold">
-                        {a.item_name || 'Enrolled Course Module'}
+                        <span>{a.item_name || 'Enrolled Course Module'}</span>
+                        {(a.schedule || a.timing) && (
+                          <div className="text-[10px] text-slate-700 font-normal mt-0.5">
+                            <span className="bg-slate-100 border border-slate-200 px-1 py-0.2 rounded">
+                              Timing: <strong className="text-black">{a.schedule || a.timing}</strong>
+                            </span>
+                          </div>
+                        )}
                       </td>
                       <td className="p-1.5 text-right font-mono font-bold text-black">
                         {formatCurrency(a.allocated_amount || a.amount)}

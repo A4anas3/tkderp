@@ -68,6 +68,7 @@ class StudentLineResponse(BaseModel):
     batch_id: Optional[uuid.UUID] = None
     batch_name: Optional[str] = None
     hall_number: Optional[str] = None
+    schedule: Optional[str] = None
     valid_from: Optional[date] = None
     valid_to: Optional[date] = None
     days_left: Optional[int] = None

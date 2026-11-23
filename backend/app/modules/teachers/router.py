@@ -12,14 +12,16 @@ import json
 from app.database.session import get_db
 from app.core.config import settings
 from app.modules.students.router import compress_avatar_image
-from app.modules.teachers.models import Teacher, TeacherEarning
+from app.modules.teachers.models import Teacher, TeacherEarning, TeacherAttendance
 from app.modules.teachers.schemas import (
     TeacherCreate, TeacherUpdate, TeacherResponse, TeacherStatusUpdate,
     TeacherEnrollmentItem, TeacherRosterMetrics, TeacherRosterResponse, TeacherSubjectOption,
     TeacherPayoutCreate, TeacherPayoutResponse, TeacherEarningsResponse, TeacherSubjectEarningItem,
     TeacherSubjectDetailItem, TeacherHistoryEvent, TeacherHistoryResponse,
     TeacherSubjectBreakupItem, TeacherStudentBreakupItem, TeacherBreakupResponse,
-    TeacherCollectionItem, TeacherCollectionsResponse
+    TeacherCollectionItem, TeacherCollectionsResponse,
+    TeacherAttendanceToggle, TeacherAttendanceBulkUpdate, TeacherAttendanceRecordResponse,
+    TeacherAttendanceMonthlySummary, TeacherMonthlyAttendanceResponse
 )
 from app.modules.batches.models import Batch
 from app.modules.subjects.models import Subject
@@ -103,6 +105,54 @@ async def get_teacher_by_mobile(
     if not teacher:
         return None
     return TeacherResponse.model_validate(teacher)
+
+# --- Teacher Attendance Endpoints ---
+
+@router.get("/attendance", response_model=List[TeacherAttendanceMonthlySummary])
+async def list_teacher_attendance_monthly(
+    month_year: Optional[str] = Query(None),
+    teacher_id: Optional[uuid.UUID] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    user = Depends(require_staff)
+):
+    """
+    Returns monthly attendance summary (total absent days / holidays) for all teachers or a specific teacher.
+    Only absent days are marked in storage; unrecorded days count as present.
+    """
+    m_year = (month_year or date.today().strftime("%Y-%m")).strip()
+    
+    t_query = select(Teacher).order_by(Teacher.name.asc())
+    if teacher_id:
+        t_query = t_query.where(Teacher.id == teacher_id)
+    teachers = (await db.execute(t_query)).scalars().all()
+    
+    att_query = select(TeacherAttendance).where(TeacherAttendance.month_year == m_year)
+    if teacher_id:
+        att_query = att_query.where(TeacherAttendance.teacher_id == teacher_id)
+    att_records = (await db.execute(att_query)).scalars().all()
+    
+    teacher_absent_map = defaultdict(list)
+    for rec in att_records:
+        teacher_absent_map[rec.teacher_id].append(rec.date)
+        
+    summary_list = []
+    for t in teachers:
+        abs_dates = sorted(teacher_absent_map.get(t.id, []))
+        summary_list.append(
+            TeacherAttendanceMonthlySummary(
+                teacher_id=t.id,
+                teacher_name=t.name,
+                teacher_code=t.teacher_code,
+                mobile=t.mobile,
+                specialization=t.specialization,
+                status=t.status,
+                month_year=m_year,
+                absent_days_count=len(abs_dates),
+                absent_dates=abs_dates,
+                absent_days=[d.isoformat() for d in abs_dates]
+            )
+        )
+    return summary_list
 
 @router.get("/{teacher_id}", response_model=TeacherResponse)
 async def get_teacher(teacher_id: uuid.UUID, db: AsyncSession = Depends(get_db), user = Depends(require_staff)):
@@ -1294,4 +1344,117 @@ async def get_teacher_collections(
         by_mode=dict(by_mode),
         items=items
     )
+
+@router.get("/{teacher_id}/attendance", response_model=TeacherMonthlyAttendanceResponse)
+async def get_teacher_attendance_detail(
+    teacher_id: uuid.UUID,
+    month_year: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    user = Depends(require_staff)
+):
+    teacher = (await db.execute(select(Teacher).where(Teacher.id == teacher_id))).scalar_one_or_none()
+    if not teacher:
+        raise HTTPException(status_code=404, detail="Teacher not found")
+        
+    m_year = (month_year or date.today().strftime("%Y-%m")).strip()
+    
+    records = (await db.execute(
+        select(TeacherAttendance)
+        .where(TeacherAttendance.teacher_id == teacher_id, TeacherAttendance.month_year == m_year)
+        .order_by(TeacherAttendance.date.asc())
+    )).scalars().all()
+    
+    abs_dates = [r.date for r in records]
+    abs_days = [r.date.isoformat() for r in records]
+    
+    return TeacherMonthlyAttendanceResponse(
+        teacher_id=teacher.id,
+        teacher_name=teacher.name,
+        teacher_code=teacher.teacher_code,
+        month_year=m_year,
+        absent_days_count=len(abs_dates),
+        absent_dates=abs_dates,
+        absent_days=abs_days,
+        records=[
+            TeacherAttendanceRecordResponse(
+                id=r.id,
+                date=r.date,
+                month_year=r.month_year,
+                status=r.status,
+                reason=r.reason
+            ) for r in records
+        ]
+    )
+
+@router.post("/{teacher_id}/attendance/toggle", response_model=TeacherMonthlyAttendanceResponse)
+async def toggle_teacher_absent_day(
+    teacher_id: uuid.UUID,
+    payload: TeacherAttendanceToggle,
+    db: AsyncSession = Depends(get_db),
+    user = Depends(require_staff)
+):
+    teacher = (await db.execute(select(Teacher).where(Teacher.id == teacher_id))).scalar_one_or_none()
+    if not teacher:
+        raise HTTPException(status_code=404, detail="Teacher not found")
+        
+    m_year = payload.date.strftime("%Y-%m")
+    
+    existing = (await db.execute(
+        select(TeacherAttendance)
+        .where(TeacherAttendance.teacher_id == teacher_id, TeacherAttendance.date == payload.date)
+    )).scalar_one_or_none()
+    
+    if existing:
+        await db.delete(existing)
+    else:
+        new_rec = TeacherAttendance(
+            teacher_id=teacher_id,
+            date=payload.date,
+            month_year=m_year,
+            status="ABSENT",
+            reason=payload.reason,
+            created_by=user.id if hasattr(user, 'id') else None
+        )
+        db.add(new_rec)
+        
+    await db.commit()
+    return await get_teacher_attendance_detail(teacher_id=teacher_id, month_year=m_year, db=db, user=user)
+
+@router.post("/{teacher_id}/attendance", response_model=TeacherMonthlyAttendanceResponse)
+async def bulk_set_teacher_attendance(
+    teacher_id: uuid.UUID,
+    payload: TeacherAttendanceBulkUpdate,
+    db: AsyncSession = Depends(get_db),
+    user = Depends(require_staff)
+):
+    teacher = (await db.execute(select(Teacher).where(Teacher.id == teacher_id))).scalar_one_or_none()
+    if not teacher:
+        raise HTTPException(status_code=404, detail="Teacher not found")
+        
+    m_year = payload.month_year.strip()
+    
+    existing_records = (await db.execute(
+        select(TeacherAttendance)
+        .where(TeacherAttendance.teacher_id == teacher_id, TeacherAttendance.month_year == m_year)
+    )).scalars().all()
+    for er in existing_records:
+        await db.delete(er)
+        
+    input_dates = payload.absent_dates or payload.absent_days or []
+    unique_dates = sorted(set(input_dates))
+    for d in unique_dates:
+        if d.strftime("%Y-%m") != m_year:
+            continue
+        new_rec = TeacherAttendance(
+            teacher_id=teacher_id,
+            date=d,
+            month_year=m_year,
+            status="ABSENT",
+            reason=payload.reason,
+            created_by=user.id if hasattr(user, 'id') else None
+        )
+        db.add(new_rec)
+        
+    await db.commit()
+    return await get_teacher_attendance_detail(teacher_id=teacher_id, month_year=m_year, db=db, user=user)
 

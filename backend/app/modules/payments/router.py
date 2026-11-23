@@ -309,10 +309,12 @@ async def get_payment_receipt(
         raise HTTPException(status_code=404, detail="Payment not found")
 
     item_names = {itm.id: itm.item_name_snapshot for itm in p.admission.items}
+    item_schedules = {itm.id: (itm.schedule or (itm.subject.schedule if getattr(itm, "subject", None) else None)) for itm in p.admission.items}
     alloc_data = [
         {
             "item_name": item_names.get(a.admission_item_id, "Item"),
-            "amount": a.allocated_amount
+            "amount": a.allocated_amount,
+            "schedule": item_schedules.get(a.admission_item_id)
         }
         for a in p.allocations
     ]

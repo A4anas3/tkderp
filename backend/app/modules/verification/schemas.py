@@ -1,6 +1,7 @@
 from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, List
 from datetime import date, datetime
+from decimal import Decimal
 
 class VerificationCourseItem(BaseModel):
     course_name: str
@@ -8,6 +9,7 @@ class VerificationCourseItem(BaseModel):
     batch_name: Optional[str] = None
     teacher_name: Optional[str] = None
     hall_number: Optional[str] = None
+    schedule: Optional[str] = None
     valid_from: Optional[date] = None
     valid_to: Optional[date] = None
     validity_period: str
@@ -47,6 +49,7 @@ class IDCardCourseItem(BaseModel):
     batch_name: Optional[str] = None
     teacher_name: Optional[str] = None
     hall_number: Optional[str] = None
+    schedule: Optional[str] = None
     valid_from: Optional[date] = None
     valid_to: Optional[date] = None
     validity_period: str
@@ -63,6 +66,7 @@ class IDCardStudentData(BaseModel):
     photo_url: Optional[str] = None
     father_name: Optional[str] = None
     status: str = "ACTIVE"
+    due_balance: Decimal = Decimal("0.00")
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -72,6 +76,7 @@ class PublicIDCardResponse(BaseModel):
     student: IDCardStudentData
     active_courses: List[IDCardCourseItem]
     total_active_courses: int
+    due_balance: Decimal = Decimal("0.00")
     institute_name: str = "THAKURDWARA COACHING INSTITUTE"
     institute_tagline: str = "Civil Lines, Thakurdwara (U.P.) • ISO 9001:2015 Certified"
     institute_address: str = "Civil Lines, Thakurdwara (U.P.)"

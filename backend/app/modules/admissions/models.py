@@ -163,6 +163,13 @@ class AdmissionItem(BaseModel):
     admission: Mapped["Admission"] = relationship("Admission", back_populates="items")
     student: Mapped[Optional["app.modules.students.models.Student"]] = relationship("app.modules.students.models.Student", lazy="joined")
     renewed_from_item: Mapped[Optional["AdmissionItem"]] = relationship("AdmissionItem", remote_side="AdmissionItem.id", lazy="selectin")
+    subject: Mapped[Optional["app.modules.subjects.models.Subject"]] = relationship("app.modules.subjects.models.Subject", lazy="joined")
+
+    @property
+    def schedule(self) -> Optional[str]:
+        if self.subject and self.subject.schedule:
+            return self.subject.schedule
+        return None
 
     @property
     def can_cancel(self) -> bool:

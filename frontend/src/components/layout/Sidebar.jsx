@@ -18,6 +18,7 @@ import {
   LogOut,
   ChevronRight,
   Sparkles,
+  CalendarCheck,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import Badge from '../common/Badge';
@@ -102,6 +103,12 @@ export default function Sidebar({ isOpen, onClose }) {
               icon: MessageSquare,
               show: true,
             },
+            {
+              to: '/expenses',
+              label: 'Expenses',
+              icon: Wallet,
+              show: true,
+            },
           ],
         },
       ];
@@ -162,6 +169,12 @@ export default function Sidebar({ isOpen, onClose }) {
             to: '/teachers',
             label: 'Faculty & Teachers',
             icon: Users,
+            show: true,
+          },
+          {
+            to: '/teacher-attendance',
+            label: 'Teacher Attendance',
+            icon: CalendarCheck,
             show: true,
           },
           {

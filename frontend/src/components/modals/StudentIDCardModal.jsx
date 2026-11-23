@@ -1,5 +1,5 @@
 import React from 'react';
-import { Printer, X, ShieldCheck, Calendar, BookOpen, AlertCircle, Phone, User } from 'lucide-react';
+import { Printer, X, ShieldCheck, Calendar, BookOpen, AlertCircle, Phone, User, Clock } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import Modal from '../common/Modal';
 import Button from '../common/Button';
@@ -242,8 +242,15 @@ export default function StudentIDCardModal({
                           <span className="font-bold text-black leading-tight flex-1">
                             {course.course_name}
                           </span>
-
                         </div>
+
+                        {/* Class Timing */}
+                        {course.schedule && (
+                          <div className="text-[10px] text-slate-700 font-medium flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-slate-500 shrink-0" />
+                            <span>Timing: <strong className="text-black">{course.schedule}</strong></span>
+                          </div>
+                        )}
 
                         {/* Validity Period */}
                         <div className="flex flex-wrap items-center justify-between gap-1 text-[11px]">
@@ -268,6 +275,14 @@ export default function StudentIDCardModal({
                     ))}
                   </div>
                 )}
+              </div>
+
+              {/* Live Due Balance (Small, unobtrusive text) */}
+              <div className="text-[10px] text-slate-500 pt-1 border-t border-slate-200 flex items-center justify-between">
+                <span>Account Dues:</span>
+                <span className="font-mono font-semibold text-slate-700">
+                  Due Balance: ₹{Number(student.total_balance_due !== undefined ? student.total_balance_due : (student.balance_due || 0)).toFixed(2)}
+                </span>
               </div>
 
               {/* Card Footer: Verification QR Code & Official Signatory */}

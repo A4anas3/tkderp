@@ -61,4 +61,5 @@ class SalaryRecordResponse(SalaryRecordBase):
     status: str
     payment_date: Optional[date] = None
     payment_mode: Optional[str] = None
+    absent_days_count: Optional[int] = None
     model_config = ConfigDict(from_attributes=True)

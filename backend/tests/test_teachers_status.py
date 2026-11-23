@@ -34,7 +34,7 @@ async def test_teacher_status_and_audit(admin_token):
         assert tch["status"] == "ACTIVE"
 
         # 2. Test status filter in list
-        list_active = await client.get("/api/teachers?status=ACTIVE&search=Status+Test", headers=headers)
+        list_active = await client.get(f"/api/teachers?status=ACTIVE&search={suffix}", headers=headers)
         assert list_active.status_code == 200
         active_ids = [t["id"] for t in list_active.json()["items"]]
         assert tch_id in active_ids

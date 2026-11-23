@@ -81,6 +81,7 @@ export default function Topbar({ onOpenAppMenu, onQuickStudent, onQuickPayment }
         { to: '/fees', label: 'Fees & Dues' },
         { to: '/payments', label: 'Payments' },
         { to: '/reminders', label: 'Reminders' },
+        { to: '/expenses', label: 'Expenses' },
       ];
     }
     // ADMIN (and fallback)
@@ -92,7 +93,9 @@ export default function Topbar({ onOpenAppMenu, onQuickStudent, onQuickPayment }
       { to: '/fees', label: 'Fees & Dues' },
       { to: '/payments', label: 'Payments' },
       { to: '/reminders', label: 'Reminders' },
+      { to: '/expenses', label: 'Expenses' },
       { to: '/teachers', label: 'Teachers' },
+      { to: '/teacher-attendance', label: 'Teacher Attendance' },
       { to: '/enquiries', label: 'Enquiries' },
       { to: '/reports', label: 'Reports' },
       { to: '/settings', label: 'Settings' },

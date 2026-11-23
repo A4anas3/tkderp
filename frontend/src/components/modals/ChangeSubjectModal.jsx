@@ -259,7 +259,7 @@ export default function ChangeSubjectModal({
               .filter((s) => s.id !== item.subject_id)
               .map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.name} — Standard Fee: ₹{Number(s.default_fee).toFixed(0)}/mo {s.teacher_name_snapshot ? `(${s.teacher_name_snapshot})` : ''}
+                  {s.name} ({s.subject_code}) — Standard Fee: ₹{Number(s.default_fee).toFixed(0)}/mo {s.teacher_name_snapshot ? `(${s.teacher_name_snapshot})` : ''}
                 </option>
               ))}
           </select>

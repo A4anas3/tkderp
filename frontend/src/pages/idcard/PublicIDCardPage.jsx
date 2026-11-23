@@ -455,6 +455,14 @@ export default function PublicIDCardPage() {
                             )}
                           </div>
 
+                          {/* Class Timing */}
+                          {course.schedule && (
+                            <div className="text-[10px] text-slate-700 font-medium flex items-center gap-1">
+                              <Clock className="w-3 h-3 text-slate-500 shrink-0" />
+                              <span>Timing: <strong className="text-black">{course.schedule}</strong></span>
+                            </div>
+                          )}
+
                           {/* Validity Period */}
                           <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] pt-0.5 border-t border-slate-200">
                             <span className="font-bold text-odoo-900 bg-purple-50 px-2 py-0.5 rounded border border-purple-200 inline-flex items-center gap-1">
@@ -477,6 +485,14 @@ export default function PublicIDCardPage() {
                         </div>
                       ))}
                     </div>
+                  </div>
+
+                  {/* Live Due Balance (Small, unobtrusive text) */}
+                  <div className="text-[10px] text-slate-500 pt-1 border-t border-slate-200 flex items-center justify-between">
+                    <span>Account Dues:</span>
+                    <span className="font-mono font-semibold text-slate-700">
+                      Due Balance: ₹{Number(cardData.due_balance !== undefined ? cardData.due_balance : (cardData.student?.due_balance || 0)).toFixed(2)}
+                    </span>
                   </div>
 
                   {/* Card Footer: Verification QR Code & Official Signatory */}

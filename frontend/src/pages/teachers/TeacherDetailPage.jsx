@@ -32,8 +32,10 @@ import {
   Wallet,
   Clock,
   ArrowRight,
-  FileText
+  FileText,
+  CalendarCheck,
 } from 'lucide-react';
+import TeacherAttendanceCalendar from '../../components/teachers/TeacherAttendanceCalendar';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
 import Modal from '../../components/common/Modal';
@@ -695,6 +697,19 @@ export default function TeacherDetailPage() {
         >
           <CreditCard className="w-4 h-4" />
           <span>Collections Handled ({collections.collections_count})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('ATTENDANCE')}
+          className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-lg transition cursor-pointer ${
+            activeTab === 'ATTENDANCE'
+              ? 'bg-odoo-700 text-white shadow-2xs'
+              : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          <CalendarCheck className="w-4 h-4" />
+          <span>Teacher Attendance</span>
         </button>
       </div>
 
@@ -1609,6 +1624,18 @@ export default function TeacherDetailPage() {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 4: TEACHER ATTENDANCE (Mark absent per month) */}
+      {/* ========================================================================= */}
+      {activeTab === 'ATTENDANCE' && teacher && (
+        <div className="space-y-4">
+          <TeacherAttendanceCalendar
+            teacherId={teacher.id}
+            teacherName={teacher.name}
+          />
         </div>
       )}
 

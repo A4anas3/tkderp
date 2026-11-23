@@ -639,6 +639,7 @@ async def get_admission_slips(
                 "item_name_snapshot": itm.item_name_snapshot,
                 "teacher_name_snapshot": itm.teacher_name_snapshot,
                 "hall_number_snapshot": itm.hall_number_snapshot,
+                "schedule": itm.schedule or (itm.subject.schedule if getattr(itm, "subject", None) else None),
                 "original_price": float(itm.original_price),
                 "discount_amount": float(itm.discount_amount),
                 "overall_discount_share": float(itm.overall_discount_share),
@@ -671,11 +672,13 @@ async def get_admission_slips(
 
     # 2. Payments (1st partial, 2nd payment, balance clearing, etc.)
     item_names_map = {itm.id: itm.item_name_snapshot for itm in admission.items}
+    item_schedules_map = {itm.id: (itm.schedule or (itm.subject.schedule if getattr(itm, "subject", None) else None)) for itm in admission.items}
     for idx, p in enumerate(payments):
         alloc_data = [
             {
                 "item_name": item_names_map.get(a.admission_item_id, "Course Item"),
-                "allocated_amount": float(a.allocated_amount)
+                "allocated_amount": float(a.allocated_amount),
+                "schedule": item_schedules_map.get(a.admission_item_id)
             }
             for a in p.allocations
         ]

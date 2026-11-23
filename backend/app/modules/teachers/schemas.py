@@ -285,3 +285,50 @@ class TeacherCollectionsResponse(BaseModel):
     by_mode: dict = {}
     items: List[TeacherCollectionItem] = []
 
+# Teacher Attendance Schemas
+class TeacherAttendanceToggle(BaseModel):
+    date: date
+    reason: Optional[str] = None
+
+class TeacherAttendanceBulkUpdate(BaseModel):
+    month_year: str = Field(..., pattern=r"^\d{4}-\d{2}$") # e.g. 2026-11
+    absent_dates: List[date] = []
+    absent_days: Optional[List[date]] = None
+    reason: Optional[str] = None
+
+class TeacherAttendanceRecordResponse(BaseModel):
+    id: uuid.UUID
+    date: date
+    month_year: str
+    status: str = "ABSENT"
+    reason: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+class TeacherAttendanceMonthlySummary(BaseModel):
+    teacher_id: uuid.UUID
+    teacher_name: str
+    teacher_code: str
+    mobile: Optional[str] = None
+    specialization: Optional[str] = None
+    status: str = "ACTIVE"
+    month_year: str
+    absent_days_count: int
+    absent_dates: List[date] = []
+    absent_days: List[str] = []
+
+    model_config = ConfigDict(from_attributes=True)
+
+class TeacherMonthlyAttendanceResponse(BaseModel):
+    teacher_id: uuid.UUID
+    teacher_name: str
+    teacher_code: str
+    month_year: str
+    absent_days_count: int
+    absent_dates: List[date] = []
+    absent_days: List[str] = []
+    records: List[TeacherAttendanceRecordResponse] = []
+
+    model_config = ConfigDict(from_attributes=True)
+
+

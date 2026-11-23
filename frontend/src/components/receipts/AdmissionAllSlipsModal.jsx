@@ -345,11 +345,13 @@ export default function AdmissionAllSlipsModal({
                                 <span className="font-bold text-black block">
                                   {itm.item_name_snapshot}
                                 </span>
-                                {(itm.teacher_name_snapshot || itm.hall_number_snapshot) && (
+                                {(itm.teacher_name_snapshot || itm.hall_number_snapshot || itm.schedule || itm.timing) && (
                                   <span className="text-[10px] text-slate-700 block mt-0.5">
                                     {itm.teacher_name_snapshot && `Faculty: ${itm.teacher_name_snapshot}`}
                                     {itm.teacher_name_snapshot && itm.hall_number_snapshot && ' • '}
                                     {itm.hall_number_snapshot && `Hall: ${itm.hall_number_snapshot}`}
+                                    {(itm.teacher_name_snapshot || itm.hall_number_snapshot) && (itm.schedule || itm.timing) && ' • '}
+                                    {(itm.schedule || itm.timing) && `Timing: ${itm.schedule || itm.timing}`}
                                   </span>
                                 )}
                               </td>

@@ -11,6 +11,7 @@ from app.database.session import get_db
 from app.modules.students.models import Student
 from app.modules.admissions.models import Admission, AdmissionItem
 from app.modules.batches.models import Batch
+from app.modules.subjects.models import Subject
 from app.modules.verification.schemas import (
     PublicVerificationResponse,
     StudentVerificationData,
@@ -106,12 +107,18 @@ async def get_student_and_active_courses(
     )
     rows = (await db.execute(items_stmt)).all()
 
-    # Collect batch names
+    # Collect batch names and subject schedules
     batch_ids = [itm.batch_id for itm, _ in rows if itm.batch_id]
     batch_names = {}
     if batch_ids:
         b_res = await db.execute(select(Batch.id, Batch.name).where(Batch.id.in_(batch_ids)))
         batch_names = {b_id: b_name for b_id, b_name in b_res.all()}
+
+    subject_ids = [itm.subject_id for itm, _ in rows if itm.subject_id]
+    subject_schedules = {}
+    if subject_ids:
+        s_res = await db.execute(select(Subject.id, Subject.schedule).where(Subject.id.in_(subject_ids)))
+        subject_schedules = {s_id: s_sched for s_id, s_sched in s_res.all()}
 
     active_courses_dict = {}
     active_green_card = None
@@ -178,6 +185,7 @@ async def get_student_and_active_courses(
         days_rem = (latest_end - today).days if latest_end else None
 
         b_name = batch_names.get(latest_item.batch_id) if latest_item.batch_id else None
+        subj_schedule = subject_schedules.get(latest_item.subject_id) if latest_item.subject_id else None
 
         active_courses_list.append(
             VerificationCourseItem(
@@ -186,6 +194,7 @@ async def get_student_and_active_courses(
                 batch_name=b_name,
                 teacher_name=latest_item.teacher_name_snapshot,
                 hall_number=latest_item.hall_number_snapshot,
+                schedule=subj_schedule,
                 valid_from=earliest_start,
                 valid_to=latest_end,
                 validity_period=format_period(earliest_start, latest_end),
@@ -314,6 +323,17 @@ async def get_public_id_card(
             detail="No active enrolment or ID card is available for this student."
         )
 
+    # Calculate live due balance from backend (total booked minus collected minus waived)
+    adm_rows = (await db.execute(
+        select(Admission)
+        .where(
+            Admission.student_id == student.id,
+            Admission.status.notin_(["REVOKED", "CANCELLED"]),
+            func.coalesce(Admission.document_status, "VALID") != "VOID"
+        )
+    )).scalars().all()
+    live_due_balance = sum((adm.balance_due for adm in adm_rows), Decimal("0.00"))
+
     student_data = IDCardStudentData(
         name=student.name,
         student_code=student.student_code,
@@ -321,6 +341,7 @@ async def get_public_id_card(
         photo_url=student.photo_url,
         father_name=student.father_name,
         status=student.status,
+        due_balance=live_due_balance,
     )
 
     course_items = [
@@ -330,6 +351,7 @@ async def get_public_id_card(
             batch_name=c.batch_name,
             teacher_name=c.teacher_name,
             hall_number=c.hall_number,
+            schedule=c.schedule,
             valid_from=c.valid_from,
             valid_to=c.valid_to,
             validity_period=c.validity_period,
@@ -346,6 +368,7 @@ async def get_public_id_card(
         student=student_data,
         active_courses=course_items,
         total_active_courses=len(course_items),
+        due_balance=live_due_balance,
         institute_name="THAKURDWARA COACHING INSTITUTE",
         institute_tagline="Civil Lines, Thakurdwara (U.P.) • ISO 9001:2015 Certified",
         institute_address="Civil Lines, Thakurdwara (U.P.)",

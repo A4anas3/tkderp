@@ -50,6 +50,21 @@ async def lifespan(app: FastAPI):
             await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_reminder_queue_subject_id ON reminder_queue(subject_id);"))
             await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_reminder_queue_batch_id ON reminder_queue(batch_id);"))
             await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_reminder_queue_due_date ON reminder_queue(due_date);"))
+            await conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS teacher_attendance (
+                    id UUID PRIMARY KEY,
+                    teacher_id UUID NOT NULL REFERENCES teachers(id) ON DELETE CASCADE,
+                    date DATE NOT NULL,
+                    month_year VARCHAR(7) NOT NULL,
+                    status VARCHAR(20) NOT NULL DEFAULT 'ABSENT',
+                    reason TEXT,
+                    created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                );
+            """))
+            await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_teacher_attendance_teacher_date ON teacher_attendance(teacher_id, date);"))
+            await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_teacher_attendance_teacher_month ON teacher_attendance(teacher_id, month_year);"))
         except Exception:
             pass
     

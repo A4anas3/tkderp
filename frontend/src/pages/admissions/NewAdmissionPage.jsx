@@ -1250,7 +1250,7 @@ export default function NewAdmissionPage() {
                                 const activeMatch = activeEnrollment?.active_subjects?.find((as) => as.subject_id === s.id);
                                 return (
                                   <option key={s.id} value={s.id}>
-                                    {s.name} — ₹{Number(s.default_fee).toFixed(0)}/mo
+                                    {s.name} ({s.subject_code}) — ₹{Number(s.default_fee).toFixed(0)}/mo
                                     {activeMatch ? ` • [Active till ${activeMatch.valid_to} — Renews Next Cycle]` : ''}
                                     {s.teacher_name_snapshot ? ` (${s.teacher_name_snapshot})` : ''}
                                   </option>

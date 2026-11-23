@@ -257,6 +257,11 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission, admi
                               Hall: <strong className="text-black">{itm.hall_number_snapshot}</strong>
                             </span>
                           )}
+                          {(itm.schedule || itm.timing) && (
+                            <span className="bg-slate-100 border border-slate-200 px-1 py-0.2 rounded">
+                              Timing: <strong className="text-black">{itm.schedule || itm.timing}</strong>
+                            </span>
+                          )}
                           {itm.valid_from && itm.valid_to && (
                             <span className="bg-purple-50 border border-odoo-200 px-1 py-0.2 rounded text-odoo-950 font-mono text-[9px] font-semibold">
                               Period: {formatDate(itm.valid_from)} &rarr; {formatDate(itm.valid_to)}

@@ -71,6 +71,22 @@ export const teacherApi = {
     const res = await api.get(`/teachers/${id}/collections`);
     return res.data;
   },
+  getAttendanceSummary: async (params) => {
+    const res = await api.get('/teachers/attendance', { params });
+    return res.data;
+  },
+  getTeacherAttendance: async (id, params) => {
+    const res = await api.get(`/teachers/${id}/attendance`, { params });
+    return res.data;
+  },
+  toggleAttendance: async (id, data) => {
+    const res = await api.post(`/teachers/${id}/attendance/toggle`, data);
+    return res.data;
+  },
+  saveMonthlyAttendance: async (id, data) => {
+    const res = await api.post(`/teachers/${id}/attendance`, data);
+    return res.data;
+  },
   uploadPhoto: async (id, file) => {
     const formData = new FormData();
     formData.append('file', file);

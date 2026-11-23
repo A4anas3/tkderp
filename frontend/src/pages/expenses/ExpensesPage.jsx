@@ -64,6 +64,8 @@ export default function ExpensesPage() {
   // Pay Salary Modal
   const [paySalaryModalOpen, setPaySalaryModalOpen] = useState(false);
   const [selectedSalRecord, setSelectedSalRecord] = useState(null);
+  const [salTeacherAbsentCount, setSalTeacherAbsentCount] = useState(null);
+  const [paySalTeacherAbsentCount, setPaySalTeacherAbsentCount] = useState(null);
   const [paySalForm, setPaySalForm] = useState({
     paid_amount: '',
     payment_mode: 'BANK_TRANSFER',
@@ -132,6 +134,29 @@ export default function ExpensesPage() {
     if (activeTab === 'daily') loadExpenses();
     if (activeTab === 'salaries') loadSalaries();
   }, [activeTab, loadExpenses, loadSalaries]);
+
+  // Fetch teacher absent count when teacher or month changes in create salary form
+  useEffect(() => {
+    if (salForm.employee_type !== 'TEACHER' || !salForm.employee_name_snapshot) {
+      setSalTeacherAbsentCount(null);
+      return;
+    }
+    const matched = teachers.find(
+      (t) => t.name.toLowerCase() === salForm.employee_name_snapshot.trim().toLowerCase()
+    );
+    if (!matched) {
+      setSalTeacherAbsentCount(null);
+      return;
+    }
+    teacherApi
+      .getTeacherAttendance(matched.id, { month_year: salForm.month_year })
+      .then((res) => {
+        setSalTeacherAbsentCount(res.absent_days_count ?? 0);
+      })
+      .catch(() => {
+        setSalTeacherAbsentCount(0);
+      });
+  }, [salForm.employee_name_snapshot, salForm.month_year, salForm.employee_type, teachers]);
 
   // Create Category
   const handleCreateCategory = async (e) => {
@@ -220,7 +245,7 @@ export default function ExpensesPage() {
   };
 
   // Pay Salary
-  const handleOpenPaySalary = (record) => {
+  const handleOpenPaySalary = async (record) => {
     setSelectedSalRecord(record);
     const balance = Number(record.salary_amount) - Number(record.paid_amount);
     setPaySalForm({
@@ -229,7 +254,24 @@ export default function ExpensesPage() {
       payment_date: new Date().toISOString().split('T')[0],
       notes: '',
     });
+    setPaySalTeacherAbsentCount(record.absent_days_count ?? null);
     setPaySalaryModalOpen(true);
+
+    if (record.employee_type === 'TEACHER') {
+      const matchTeacher = teachers.find(
+        (t) => t.name.toLowerCase() === record.employee_name_snapshot.toLowerCase()
+      );
+      if (matchTeacher) {
+        try {
+          const att = await teacherApi.getTeacherAttendance(matchTeacher.id, {
+            month_year: record.month_year,
+          });
+          setPaySalTeacherAbsentCount(att.absent_days_count ?? 0);
+        } catch (e) {
+          console.error('Error fetching teacher absent count:', e);
+        }
+      }
+    }
   };
 
   const handlePaySalarySubmit = async (e) => {
@@ -318,6 +360,25 @@ export default function ExpensesPage() {
       header: 'Paid Amount',
       className: 'text-right font-mono font-bold text-emerald-800 w-32',
       render: (s) => `₹${Number(s.paid_amount).toFixed(2)}`,
+    },
+    {
+      header: 'Absent Days',
+      className: 'text-center w-28',
+      render: (s) =>
+        s.employee_type === 'TEACHER' ? (
+          <span
+            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+              (s.absent_days_count || 0) > 0
+                ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+            }`}
+            title={`${s.absent_days_count ?? 0} holidays / absent days in ${s.month_year}`}
+          >
+            {s.absent_days_count ?? 0} {s.absent_days_count === 1 ? 'day' : 'days'}
+          </span>
+        ) : (
+          <span className="text-slate-400 text-xs">—</span>
+        ),
     },
     {
       header: 'Due Date',
@@ -637,6 +698,29 @@ export default function ExpensesPage() {
             />
           </div>
 
+          {salForm.employee_type === 'TEACHER' && salTeacherAbsentCount !== null && (
+            <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-lg flex items-center justify-between text-xs text-amber-900">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-amber-600 shrink-0" />
+                <div>
+                  <span className="font-bold">Teacher Attendance ({salForm.month_year})</span>
+                  <p className="text-[11px] text-amber-800">
+                    Recorded holidays / absent days for this month
+                  </p>
+                </div>
+              </div>
+              <span
+                className={`px-2.5 py-1 rounded-full font-bold text-xs ${
+                  salTeacherAbsentCount > 0
+                    ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                    : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                }`}
+              >
+                {salTeacherAbsentCount} {salTeacherAbsentCount === 1 ? 'day' : 'days'} absent
+              </span>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               label="Salary Amount (₹)"
@@ -676,6 +760,31 @@ export default function ExpensesPage() {
         maxWidth="max-w-md"
       >
         <form onSubmit={handlePaySalarySubmit} className="space-y-3">
+          {selectedSalRecord?.employee_type === 'TEACHER' && paySalTeacherAbsentCount !== null && (
+            <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-lg flex items-center justify-between text-xs text-amber-900">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-amber-600 shrink-0" />
+                <div>
+                  <span className="font-bold">
+                    Teacher Attendance ({selectedSalRecord.month_year})
+                  </span>
+                  <p className="text-[11px] text-amber-800">
+                    Recorded holidays before issuing salary
+                  </p>
+                </div>
+              </div>
+              <span
+                className={`px-2.5 py-1 rounded-full font-bold text-xs ${
+                  paySalTeacherAbsentCount > 0
+                    ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                    : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                }`}
+              >
+                {paySalTeacherAbsentCount} {paySalTeacherAbsentCount === 1 ? 'day' : 'days'} absent
+              </span>
+            </div>
+          )}
+
           <Input
             label="Payout Amount (₹)"
             type="number"

@@ -12,6 +12,7 @@ class AdmissionItemCreate(BaseModel):
     teacher_id: Optional[uuid.UUID] = None
     teacher_name_snapshot: Optional[str] = None
     hall_number_snapshot: Optional[str] = None
+    schedule: Optional[str] = None
     item_name_snapshot: str = Field(..., min_length=2, max_length=200)
     original_price: Optional[Decimal] = Field(default=None, ge=0)
     months: Optional[int] = Field(default=None, ge=1)
@@ -34,6 +35,7 @@ class AdmissionItemResponse(BaseModel):
     teacher_id: Optional[uuid.UUID] = None
     teacher_name_snapshot: Optional[str] = None
     hall_number_snapshot: Optional[str] = None
+    schedule: Optional[str] = None
     item_name_snapshot: str
     original_price: Decimal
     discount_type: str

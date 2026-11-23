@@ -383,12 +383,18 @@ async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db),
             if aid not in last_payment_info:
                 last_payment_info[aid] = (p_date, p_amt)
 
-    # Fetch batch names in one query
+    # Fetch batch names and subject schedules in one query
     batch_ids = [itm.batch_id for itm in all_items if itm.batch_id]
     batch_names = {}
     if batch_ids:
         b_res = await db.execute(select(Batch.id, Batch.name).where(Batch.id.in_(batch_ids)))
         batch_names = {bid: bname for bid, bname in b_res.all()}
+
+    subject_ids = [itm.subject_id for itm in all_items if itm.subject_id]
+    subject_schedules = {}
+    if subject_ids:
+        s_res = await db.execute(select(Subject.id, Subject.schedule).where(Subject.id.in_(subject_ids)))
+        subject_schedules = {sid: ssched for sid, ssched in s_res.all()}
 
     # Group lines: active, expiring, expired, revoked
     RENEWAL_ALERT_DAYS = 5
@@ -431,6 +437,7 @@ async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db),
             batch_id=itm.batch_id,
             batch_name=batch_names.get(itm.batch_id),
             hall_number=itm.hall_number_snapshot,
+            schedule=itm.schedule or subject_schedules.get(itm.subject_id),
             valid_from=itm.valid_from,
             valid_to=itm.valid_to,
             days_left=days_left,
