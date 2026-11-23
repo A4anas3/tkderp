@@ -5,6 +5,7 @@ from sqlalchemy import String, Numeric, Text, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base import BaseModel
+from app.modules.teachers.models import Teacher
 
 class Subject(BaseModel):
     __tablename__ = "subjects"
@@ -25,14 +26,22 @@ class Subject(BaseModel):
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="ACTIVE") # ACTIVE, INACTIVE
 
     # Relationship to Teacher
-    teacher: Mapped[Optional["app.modules.teachers.models.Teacher"]] = relationship(
-        "app.modules.teachers.models.Teacher", lazy="joined"
+    teacher: Mapped[Optional["Teacher"]] = relationship(
+        "Teacher", lazy="joined"
     )
 
     @property
     def timing(self) -> Optional[str]:
         return self.schedule
 
+    @timing.setter
+    def timing(self, value: Optional[str]) -> None:
+        self.schedule = value
+
     @property
     def teacher_name(self) -> Optional[str]:
         return self.teacher_name_snapshot or (self.teacher.name if self.teacher else None)
+
+    @teacher_name.setter
+    def teacher_name(self, value: Optional[str]) -> None:
+        self.teacher_name_snapshot = value

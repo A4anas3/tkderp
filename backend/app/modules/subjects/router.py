@@ -123,6 +123,15 @@ async def create_subject(
         if t.status != "ACTIVE":
             raise HTTPException(status_code=400, detail="Cannot assign an inactive teacher to a subject")
         teacher_name = t.name
+    elif payload.teacher_name_snapshot or payload.teacher_name:
+        req_name = payload.teacher_name_snapshot or payload.teacher_name
+        t_res = await db.execute(select(Teacher).where(Teacher.name == req_name))
+        t = t_res.scalar_one_or_none()
+        if t:
+            teacher_id = t.id
+            teacher_name = t.name
+        else:
+            teacher_name = req_name
     else:
         # Auto-assign active teacher so subject always has an assigned faculty
         t_res = await db.execute(select(Teacher).where(Teacher.status == "ACTIVE").limit(1))
@@ -174,6 +183,16 @@ async def update_subject(
         raise HTTPException(status_code=404, detail="Subject not found")
 
     update_data = payload.model_dump(exclude_unset=True)
+    if "timing" in update_data and "schedule" not in update_data:
+        update_data["schedule"] = update_data.pop("timing")
+    elif "timing" in update_data:
+        update_data.pop("timing")
+
+    if "teacher_name" in update_data and "teacher_name_snapshot" not in update_data:
+        update_data["teacher_name_snapshot"] = update_data.pop("teacher_name")
+    elif "teacher_name" in update_data:
+        update_data.pop("teacher_name")
+
     if "teacher_id" in update_data:
         if update_data["teacher_id"]:
             t_res = await db.execute(select(Teacher).where(Teacher.id == update_data["teacher_id"]))
