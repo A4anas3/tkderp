@@ -942,6 +942,9 @@ export default function ReportsHubPage() {
                       >
                         Prev
                       </button>
+                      <span className="px-2 font-bold text-slate-800">
+                        {tablePage} / {data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE))}
+                      </span>
                       <button
                         onClick={() => setTablePage((p) => p + 1)}
                         disabled={tablePage >= (data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE)))}
@@ -1076,6 +1079,9 @@ export default function ReportsHubPage() {
                       >
                         Prev
                       </button>
+                      <span className="px-2 font-bold text-slate-800">
+                        {tablePage} / {data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE))}
+                      </span>
                       <button
                         onClick={() => setTablePage((p) => p + 1)}
                         disabled={tablePage >= (data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE)))}
@@ -1173,6 +1179,34 @@ export default function ReportsHubPage() {
                     </tbody>
                   </table>
                 </div>
+
+                {/* Pagination */}
+                {((data?.total ?? 0) > PAGE_SIZE || (data?.total_pages ?? 1) > 1 || tablePage > 1) && (
+                  <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100 text-xs">
+                    <span className="text-slate-500">
+                      Showing {(tablePage - 1) * PAGE_SIZE + 1} to {Math.min(tablePage * PAGE_SIZE, data.total ?? data.items?.length ?? 0)} of {data.total ?? data.items?.length ?? 0}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setTablePage((p) => Math.max(1, p - 1))}
+                        disabled={tablePage === 1}
+                        className="px-2 py-1 rounded border border-slate-200 disabled:opacity-50 font-bold"
+                      >
+                        Prev
+                      </button>
+                      <span className="px-2 font-bold text-slate-800">
+                        {tablePage} / {data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE))}
+                      </span>
+                      <button
+                        onClick={() => setTablePage((p) => p + 1)}
+                        disabled={tablePage >= (data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE)))}
+                        className="px-2 py-1 rounded border border-slate-200 disabled:opacity-50 font-bold"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1185,43 +1219,43 @@ export default function ReportsHubPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 <StatCard
                   title="Total Faculty"
-                  value={`${Array.isArray(data) ? data.length : data?.items?.length || 0}`}
+                  value={`${data?.summary?.total_teachers ?? (Array.isArray(data) ? data.length : data?.total || data?.items?.length || 0)}`}
                   subtext="Teaching staff members"
                   icon={UserCheck}
                   color="indigo"
                 />
                 <StatCard
                   title="Total Collections"
-                  value={`₹${(
+                  value={`₹${(data?.summary?.total_collected ?? (
                     (Array.isArray(data) ? data : data?.items || []).reduce(
                       (acc, t) => acc + (t.collections || t.total_collected || 0),
                       0
                     )
-                  ).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
+                  )).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
                   subtext="Derived from allocation ledger"
                   icon={CheckCircle2}
                   color="emerald"
                 />
                 <StatCard
                   title="Total Fees Billed"
-                  value={`₹${(
+                  value={`₹${(data?.summary?.total_billed ?? (
                     (Array.isArray(data) ? data : data?.items || []).reduce(
                       (acc, t) => acc + (t.fees_billed || t.total_booked || 0),
                       0
                     )
-                  ).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
+                  )).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
                   subtext="Gross tuition fee booked"
                   icon={BookOpen}
                   color="purple"
                 />
                 <StatCard
                   title="Total Dues"
-                  value={`₹${(
+                  value={`₹${(data?.summary?.total_due ?? (
                     (Array.isArray(data) ? data : data?.items || []).reduce(
                       (acc, t) => acc + (t.due || t.balance_due || 0),
                       0
                     )
-                  ).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
+                  )).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
                   subtext="Outstanding student balances"
                   icon={AlertTriangle}
                   color="rose"
@@ -1282,6 +1316,34 @@ export default function ReportsHubPage() {
                     </tbody>
                   </table>
                 </div>
+
+                {/* Pagination */}
+                {((data?.total ?? 0) > PAGE_SIZE || (data?.total_pages ?? 1) > 1 || tablePage > 1) && (
+                  <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100 text-xs">
+                    <span className="text-slate-500">
+                      Showing {(tablePage - 1) * PAGE_SIZE + 1} to {Math.min(tablePage * PAGE_SIZE, data.total ?? data.items?.length ?? 0)} of {data.total ?? data.items?.length ?? 0}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setTablePage((p) => Math.max(1, p - 1))}
+                        disabled={tablePage === 1}
+                        className="px-2 py-1 rounded border border-slate-200 disabled:opacity-50 font-bold"
+                      >
+                        Prev
+                      </button>
+                      <span className="px-2 font-bold text-slate-800">
+                        {tablePage} / {data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE))}
+                      </span>
+                      <button
+                        onClick={() => setTablePage((p) => p + 1)}
+                        disabled={tablePage >= (data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE)))}
+                        className="px-2 py-1 rounded border border-slate-200 disabled:opacity-50 font-bold"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1456,6 +1518,9 @@ export default function ReportsHubPage() {
                       >
                         Prev
                       </button>
+                      <span className="px-2 font-bold text-slate-800">
+                        {tablePage} / {data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE))}
+                      </span>
                       <button
                         onClick={() => setTablePage((p) => p + 1)}
                         disabled={tablePage >= (data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE)))}
@@ -1578,6 +1643,9 @@ export default function ReportsHubPage() {
                       >
                         Prev
                       </button>
+                      <span className="px-2 font-bold text-slate-800">
+                        {tablePage} / {data?.total_pages ?? Math.max(1, Math.ceil((data?.total || dedupedWaivers.length) / PAGE_SIZE))}
+                      </span>
                       <button
                         onClick={() => setTablePage((p) => p + 1)}
                         disabled={tablePage >= (data?.total_pages ?? Math.max(1, Math.ceil((data?.total || dedupedWaivers.length) / PAGE_SIZE)))}
@@ -1695,6 +1763,9 @@ export default function ReportsHubPage() {
                       >
                         Prev
                       </button>
+                      <span className="px-2 font-bold text-slate-800">
+                        {tablePage} / {data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE))}
+                      </span>
                       <button
                         onClick={() => setTablePage((p) => p + 1)}
                         disabled={tablePage >= (data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE)))}
@@ -1820,6 +1891,9 @@ export default function ReportsHubPage() {
                       >
                         Prev
                       </button>
+                      <span className="px-2 font-bold text-slate-800">
+                        {tablePage} / {data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE))}
+                      </span>
                       <button
                         onClick={() => setTablePage((p) => p + 1)}
                         disabled={tablePage >= (data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE)))}
@@ -1938,6 +2012,34 @@ export default function ReportsHubPage() {
                     </tbody>
                   </table>
                 </div>
+
+                {/* Pagination */}
+                {((data?.total ?? 0) > PAGE_SIZE || (data?.total_pages ?? 1) > 1 || tablePage > 1) && (
+                  <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100 text-xs">
+                    <span className="text-slate-500">
+                      Showing {(tablePage - 1) * PAGE_SIZE + 1} to {Math.min(tablePage * PAGE_SIZE, data.total ?? data.items?.length ?? 0)} of {data.total ?? data.items?.length ?? 0}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setTablePage((p) => Math.max(1, p - 1))}
+                        disabled={tablePage === 1}
+                        className="px-2 py-1 rounded border border-slate-200 disabled:opacity-50 font-bold"
+                      >
+                        Prev
+                      </button>
+                      <span className="px-2 font-bold text-slate-800">
+                        {tablePage} / {data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE))}
+                      </span>
+                      <button
+                        onClick={() => setTablePage((p) => p + 1)}
+                        disabled={tablePage >= (data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE)))}
+                        className="px-2 py-1 rounded border border-slate-200 disabled:opacity-50 font-bold"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

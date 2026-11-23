@@ -89,6 +89,10 @@ export default function SubjectDetailPage() {
   const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL' | 'ACTIVE' | 'INACTIVE'
   const [rosterSearch, setRosterSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [rosterTotal, setRosterTotal] = useState(0);
+  const [rosterTotalPages, setRosterTotalPages] = useState(1);
+  const [rosterMetrics, setRosterMetrics] = useState(null);
+  const [rosterLoading, setRosterLoading] = useState(false);
 
   // Quick Payment Modal
   const [payAdmissionId, setPayAdmissionId] = useState(null);
@@ -165,7 +169,7 @@ export default function SubjectDetailPage() {
         setLoading(false);
       }
 
-      // 2. Fetch subject revenue report for enrolled roster & financials in background
+      // 2. Fetch subject revenue report for financials in background
       try {
         const reportRes = await reportApi.getSubjectRevenue({});
         const items = reportRes?.items || [];
@@ -175,13 +179,11 @@ export default function SubjectDetailPage() {
 
         if (foundInReport) {
           setSubject((prev) => ({ ...prev, ...foundInReport }));
-          setStudents(foundInReport.students || []);
         } else if (!currentSub) {
           if (id === 'green-card-all-access' || id === 'GREEN-CARD') {
             const gc = items.find((itm) => itm.subject_code === 'GREEN-CARD');
             if (gc) {
               setSubject(gc);
-              setStudents(gc.students || []);
             }
           }
         }
@@ -195,61 +197,63 @@ export default function SubjectDetailPage() {
     }
   }, [id, error]);
 
+  // Load paginated course enrollments directly from backend roster endpoint
+  const loadRoster = useCallback(async () => {
+    if (!id) return;
+    setRosterLoading(true);
+    try {
+      const res = await subjectApi.getRoster(id, {
+        page,
+        page_size: PAGE_SIZE,
+        search: rosterSearch.trim() || undefined,
+        status_filter: statusFilter === 'ALL' ? undefined : statusFilter,
+      });
+      setStudents(res?.items || []);
+      setRosterTotal(res?.total || 0);
+      setRosterTotalPages(res?.total_pages || 1);
+      if (res?.metrics) setRosterMetrics(res.metrics);
+    } catch (err) {
+      console.warn('Failed to load subject roster:', err);
+    } finally {
+      setRosterLoading(false);
+    }
+  }, [id, page, rosterSearch, statusFilter]);
+
   useEffect(() => {
     loadData();
   }, [loadData]);
 
+  useEffect(() => {
+    loadRoster();
+  }, [loadRoster]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [rosterSearch, statusFilter]);
+
   // Derived Counts and Metrics
   const isCancelledStudent = (s) => s.cycle_status === 'CANCELLED' || s.admission_status === 'CANCELLED' || s.admission_status === 'REVOKED';
-  const totalEnrollments = subject?.total_enrollments ?? subject?.enrolled_count ?? students.length;
+  const totalEnrollments = rosterMetrics?.total_enrollments ?? subject?.total_enrollments ?? subject?.enrolled_count ?? rosterTotal;
   const activeCount = useMemo(() => {
+    if (rosterMetrics?.active_enrollments != null) return rosterMetrics.active_enrollments;
     if (subject?.active_enrollments != null) return subject.active_enrollments;
     return students.filter((s) => !isCancelledStudent(s) && (s.cycle_status === 'ACTIVE' || (s.days_remaining != null && s.days_remaining >= 0))).length;
-  }, [subject, students]);
+  }, [rosterMetrics, subject, students]);
 
   const inactiveCount = useMemo(() => {
+    if (rosterMetrics?.inactive_enrollments != null) return rosterMetrics.inactive_enrollments;
     if (subject?.inactive_enrollments != null) return subject.inactive_enrollments;
     return students.filter((s) => !isCancelledStudent(s) && (s.cycle_status === 'INACTIVE' || s.cycle_status === 'OVERDUE' || (s.days_remaining != null && s.days_remaining < 0))).length;
-  }, [subject, students]);
+  }, [rosterMetrics, subject, students]);
 
   const uniqueStudentsCount = useMemo(() => {
+    if (rosterMetrics?.unique_students_count != null) return rosterMetrics.unique_students_count;
     if (subject?.unique_students_count != null) return subject.unique_students_count;
     const uniqueIds = new Set(students.map((s) => s.student_id));
     return uniqueIds.size;
-  }, [subject, students]);
+  }, [rosterMetrics, subject, students]);
 
-  // Filtered & Paginated Course Enrollments
-  const filteredStudents = useMemo(() => {
-    if (!students) return [];
-    let list = students;
-
-    // Status filter
-    if (statusFilter === 'ACTIVE') {
-      list = list.filter((s) => !isCancelledStudent(s) && (s.cycle_status === 'ACTIVE' || (s.days_remaining != null && s.days_remaining >= 0)));
-    } else if (statusFilter === 'INACTIVE') {
-      list = list.filter((s) => !isCancelledStudent(s) && (s.cycle_status === 'INACTIVE' || s.cycle_status === 'OVERDUE' || (s.days_remaining != null && s.days_remaining < 0)));
-    }
-
-    // Search query
-    if (rosterSearch.trim()) {
-      const q = rosterSearch.toLowerCase().trim();
-      list = list.filter(
-        (s) =>
-          s.student_name?.toLowerCase().includes(q) ||
-          s.student_code?.toLowerCase().includes(q) ||
-          s.mobile?.includes(q) ||
-          s.teacher_name?.toLowerCase().includes(q)
-      );
-    }
-    return list;
-  }, [students, statusFilter, rosterSearch]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredStudents.length / PAGE_SIZE));
-  const currentPage = Math.min(page, totalPages);
-  const pagedStudents = useMemo(() => {
-    const start = (currentPage - 1) * PAGE_SIZE;
-    return filteredStudents.slice(start, start + PAGE_SIZE);
-  }, [filteredStudents, currentPage]);
+  const pagedStudents = students;
 
   if (loading) {
     return (
@@ -788,17 +792,17 @@ export default function SubjectDetailPage() {
           )}
 
           {/* Pagination Controls */}
-          {totalPages > 1 && (
+          {(rosterTotal > PAGE_SIZE || rosterTotalPages > 1 || page > 1) && (
             <div className="flex flex-col sm:flex-row items-center justify-between gap-2 pt-3 border-t border-slate-200 text-xs">
               <span className="text-slate-600 font-medium">
-                Showing {(currentPage - 1) * PAGE_SIZE + 1} to{' '}
-                {Math.min(currentPage * PAGE_SIZE, filteredStudents.length)} of {filteredStudents.length} course enrollments
+                Showing {(page - 1) * PAGE_SIZE + 1} to{' '}
+                {Math.min(page * PAGE_SIZE, rosterTotal)} of {rosterTotal} course enrollments (Page {page} of {rosterTotalPages})
               </span>
 
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => setPage(1)}
-                  disabled={currentPage === 1}
+                  disabled={page <= 1}
                   className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
                   title="First Page"
                 >
@@ -806,26 +810,26 @@ export default function SubjectDetailPage() {
                 </button>
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
+                  disabled={page <= 1}
                   className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
                   title="Previous Page"
                 >
                   <ChevronLeft className="w-3.5 h-3.5 text-slate-700" />
                 </button>
                 <span className="px-2 font-bold text-black">
-                  Page {currentPage} of {totalPages}
+                  Page {page} of {rosterTotalPages}
                 </span>
                 <button
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
+                  onClick={() => setPage((p) => Math.min(rosterTotalPages, p + 1))}
+                  disabled={page >= rosterTotalPages}
                   className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
                   title="Next Page"
                 >
                   <ChevronRight className="w-3.5 h-3.5 text-slate-700" />
                 </button>
                 <button
-                  onClick={() => setPage(totalPages)}
-                  disabled={currentPage === totalPages}
+                  onClick={() => setPage(rosterTotalPages)}
+                  disabled={page >= rosterTotalPages}
                   className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
                   title="Last Page"
                 >

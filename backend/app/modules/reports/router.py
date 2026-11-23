@@ -102,6 +102,9 @@ async def get_subject_revenue_report(
     to_date: Optional[date] = Query(None, description="End date (YYYY-MM-DD)"),
     month: Optional[int] = Query(None, ge=1, le=12, description="Specific month (1-12)"),
     year: Optional[int] = Query(None, description="Specific year (e.g. 2026)"),
+    search: Optional[str] = Query(None, description="Search subject name or code"),
+    page: Optional[int] = Query(None, ge=1, description="Page number"),
+    page_size: Optional[int] = Query(None, ge=1, le=100, description="Items per page"),
     format: Optional[str] = Query(None, description="Set to 'csv' for CSV export"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin)
@@ -320,6 +323,14 @@ async def get_subject_revenue_report(
             "students": gc_students
         })
 
+    search_str = search if isinstance(search, str) else None
+    page_int = page if isinstance(page, int) else None
+    page_size_int = page_size if isinstance(page_size, int) else None
+
+    if search_str and search_str.strip():
+        q = search_str.strip().lower()
+        report = [s for s in report if q in s.get("subject_name", "").lower() or q in s.get("subject_code", "").lower()]
+
     if format == "csv":
         headers = ["Subject Code", "Subject Name", "Enrolled", "Total Booked (₹)", "Total Collected (₹)", "Balance Due (₹)"]
         rows = [
@@ -327,6 +338,31 @@ async def get_subject_revenue_report(
             for item in report
         ]
         return generate_csv_response("subject_revenue_report.csv", headers, rows)
+
+    total = len(report)
+    if page_int is not None:
+        effective_page_size = page_size_int or 15
+        total_pages = max(1, (total + effective_page_size - 1) // effective_page_size) if total > 0 else 1
+        start = (page_int - 1) * effective_page_size
+        paged_items = report[start:start + effective_page_size]
+        return {
+            "filters": {
+                "from_date": str(f_date) if f_date else None,
+                "to_date": str(t_date) if t_date else None,
+                "month": month,
+                "year": year
+            },
+            "summary": {
+                "total_booked_all": float(total_revenue_all),
+                "total_collected_all": float(total_collected_all),
+                "total_balance_all": float(total_revenue_all - total_collected_all)
+            },
+            "total": total,
+            "total_pages": total_pages,
+            "page": page_int,
+            "page_size": effective_page_size,
+            "items": paged_items
+        }
 
     return {
         "filters": {
@@ -340,6 +376,10 @@ async def get_subject_revenue_report(
             "total_collected_all": float(total_collected_all),
             "total_balance_all": float(total_revenue_all - total_collected_all)
         },
+        "total": total,
+        "total_pages": 1,
+        "page": 1,
+        "page_size": total or 15,
         "items": report
     }
 
@@ -355,6 +395,7 @@ async def get_subject_revenue_csv(
 ):
     return await get_subject_revenue_report(
         from_date=from_date, to_date=to_date, month=month, year=year,
+        search=None, page=None, page_size=None,
         format="csv", db=db, current_user=current_user
     )
 
@@ -517,6 +558,9 @@ async def get_teacher_revenue_report(
     to_date: Optional[date] = Query(None, description="End date (YYYY-MM-DD)"),
     month: Optional[int] = Query(None, ge=1, le=12, description="Specific month (1-12)"),
     year: Optional[int] = Query(None, description="Specific year (e.g. 2026)"),
+    search: Optional[str] = Query(None, description="Search teacher name, code, specialization"),
+    page: Optional[int] = Query(None, ge=1, description="Page number"),
+    page_size: Optional[int] = Query(None, ge=1, le=100, description="Items per page"),
     format: Optional[str] = Query(None, description="Set to 'csv' for CSV export"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin)
@@ -650,6 +694,14 @@ async def get_teacher_revenue_report(
             "students": t_students
         })
 
+    search_str = search if isinstance(search, str) else None
+    page_int = page if isinstance(page, int) else None
+    page_size_int = page_size if isinstance(page_size, int) else None
+
+    if search_str and search_str.strip():
+        q = search_str.strip().lower()
+        report = [t for t in report if q in (t.get("teacher_name") or "").lower() or q in (t.get("teacher_code") or "").lower() or q in (t.get("specialization") or "").lower()]
+
     if format == "csv":
         headers = ["Teacher Code", "Teacher Name", "Specialization", "Batches", "Enrolled", "Total Booked (₹)", "Total Collected (₹)", "Balance Due (₹)"]
         rows = [
@@ -657,6 +709,28 @@ async def get_teacher_revenue_report(
             for t in report
         ]
         return generate_csv_response("teacher_revenue_report.csv", headers, rows)
+
+    total = len(report)
+    summary = {
+        "total_teachers": total,
+        "total_billed": float(sum(t.get("fees_billed", 0) for t in report)),
+        "total_collected": float(sum(t.get("collections", 0) for t in report)),
+        "total_due": float(sum(t.get("due", 0) for t in report))
+    }
+
+    if page_int is not None:
+        effective_page_size = page_size_int or 15
+        total_pages = max(1, (total + effective_page_size - 1) // effective_page_size) if total > 0 else 1
+        start = (page_int - 1) * effective_page_size
+        paged_items = report[start:start + effective_page_size]
+        return {
+            "summary": summary,
+            "items": paged_items,
+            "total": total,
+            "total_pages": total_pages,
+            "page": page_int,
+            "page_size": effective_page_size
+        }
 
     return report
 
@@ -672,6 +746,7 @@ async def get_teacher_revenue_csv(
 ):
     return await get_teacher_revenue_report(
         from_date=from_date, to_date=to_date, month=month, year=year,
+        search=None, page=None, page_size=None,
         format="csv", db=db, current_user=current_user
     )
 
@@ -1404,6 +1479,9 @@ async def get_subject_breakup_report(
     to_date: Optional[date] = Query(None),
     month: Optional[int] = Query(None, ge=1, le=12),
     year: Optional[int] = Query(None),
+    search: Optional[str] = Query(None),
+    page: Optional[int] = Query(None, ge=1),
+    page_size: Optional[int] = Query(None, ge=1, le=100),
     format: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
@@ -1413,7 +1491,11 @@ async def get_subject_breakup_report(
     """
     return await get_subject_revenue_report(
         from_date=from_date, to_date=to_date, month=month, year=year,
-        format=format, db=db, current_user=current_user
+        search=search if isinstance(search, str) else None,
+        page=page if isinstance(page, int) else None,
+        page_size=page_size if isinstance(page_size, int) else None,
+        format=format if isinstance(format, str) else None,
+        db=db, current_user=current_user
     )
 
 
@@ -1423,11 +1505,13 @@ async def get_subject_breakup_csv(
     to_date: Optional[date] = Query(None),
     month: Optional[int] = Query(None, ge=1, le=12),
     year: Optional[int] = Query(None),
+    search: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
     return await get_subject_breakup_report(
         from_date=from_date, to_date=to_date, month=month, year=year,
+        search=search if isinstance(search, str) else None,
         format="csv", db=db, current_user=current_user
     )
 
@@ -1438,6 +1522,9 @@ async def get_teacher_breakup_report(
     to_date: Optional[date] = Query(None),
     month: Optional[int] = Query(None, ge=1, le=12),
     year: Optional[int] = Query(None),
+    search: Optional[str] = Query(None),
+    page: Optional[int] = Query(None, ge=1),
+    page_size: Optional[int] = Query(None, ge=1, le=100),
     format: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
@@ -1447,7 +1534,11 @@ async def get_teacher_breakup_report(
     """
     return await get_teacher_revenue_report(
         from_date=from_date, to_date=to_date, month=month, year=year,
-        format=format, db=db, current_user=current_user
+        search=search if isinstance(search, str) else None,
+        page=page if isinstance(page, int) else None,
+        page_size=page_size if isinstance(page_size, int) else None,
+        format=format if isinstance(format, str) else None,
+        db=db, current_user=current_user
     )
 
 
@@ -1457,11 +1548,13 @@ async def get_teacher_breakup_csv(
     to_date: Optional[date] = Query(None),
     month: Optional[int] = Query(None, ge=1, le=12),
     year: Optional[int] = Query(None),
+    search: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
     return await get_teacher_breakup_report(
         from_date=from_date, to_date=to_date, month=month, year=year,
+        search=search if isinstance(search, str) else None,
         format="csv", db=db, current_user=current_user
     )
 

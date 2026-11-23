@@ -1,14 +1,21 @@
 import uuid
 import random
 import re
-from typing import Optional
+from typing import Optional, Any, Dict
+from decimal import Decimal
+from datetime import date, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_
+from sqlalchemy import select, func, or_, and_, desc, case
 
 from app.database.session import get_db
 from app.core.dependencies import require_staff, require_admin
-from app.database.models import Subject, User, Teacher
+from app.database.models import Subject, User, Teacher, Batch
+from app.modules.admissions.models import Admission, AdmissionItem
+from app.modules.students.models import Student
+from app.common.active_student import today_kolkata, active_student_subject_filter
+from app.modules.reports.ledger_queries import get_item_allocated_collected_map
+from app.common.calculations import evaluate_student_rolling_cycle
 from app.modules.subjects.schemas import SubjectCreate, SubjectUpdate, SubjectResponse
 from app.common.pagination import PaginationParams, PageResponse
 
@@ -158,6 +165,142 @@ async def create_subject(
     await db.commit()
     await db.refresh(subject)
     return subject
+
+@router.get("/{subject_id}/roster")
+async def get_subject_roster(
+    subject_id: str,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(15, ge=1, le=100),
+    search: Optional[str] = Query(None),
+    status_filter: Optional[str] = Query("ALL"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_staff)
+):
+    today = today_kolkata()
+    is_green_card = subject_id.upper() in ("GREEN-CARD", "GREEN-CARD-ALL-ACCESS", "GREEN_CARD")
+    
+    if is_green_card:
+        base_filter = and_(AdmissionItem.item_type == "GREEN_CARD", Admission.status != "CANCELLED")
+    else:
+        try:
+            s_uuid = uuid.UUID(subject_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid subject ID")
+        base_filter = and_(AdmissionItem.subject_id == s_uuid, Admission.status != "CANCELLED")
+
+    active_cond = active_student_subject_filter(AdmissionItem, Admission, today)
+    end_col = func.coalesce(AdmissionItem.valid_to, Admission.valid_to, Admission.admission_date + 30)
+    start_col = func.coalesce(AdmissionItem.valid_from, Admission.valid_from, Admission.admission_date)
+
+    # 1. Cohort metrics
+    metrics_stmt = (
+        select(
+            func.count(AdmissionItem.id),
+            func.count(case((active_cond, 1), else_=None)),
+            func.count(case((and_(Admission.status == "ACTIVE", or_(AdmissionItem.valid_to < today, AdmissionItem.status == "EXPIRED")), 1), else_=None)),
+            func.count(case((or_(Admission.status.in_(["CANCELLED", "REVOKED"]), AdmissionItem.status.in_(["CANCELLED", "REVOKED", "DISCONTINUED"])), 1), else_=None)),
+            func.count(func.distinct(Admission.student_id))
+        )
+        .join(Admission, AdmissionItem.admission_id == Admission.id)
+        .where(base_filter)
+    )
+    m_row = (await db.execute(metrics_stmt)).one()
+    total_enr, active_enr, inactive_enr, cancelled_enr, uniq_stu = m_row
+
+    # 2. Base query
+    q_items = (
+        select(AdmissionItem, Admission, Student, Batch)
+        .join(Admission, AdmissionItem.admission_id == Admission.id)
+        .join(Student, Admission.student_id == Student.id)
+        .outerjoin(Batch, AdmissionItem.batch_id == Batch.id)
+        .where(base_filter)
+    )
+    q_count = (
+        select(func.count(AdmissionItem.id))
+        .join(Admission, AdmissionItem.admission_id == Admission.id)
+        .join(Student, Admission.student_id == Student.id)
+        .outerjoin(Batch, AdmissionItem.batch_id == Batch.id)
+        .where(base_filter)
+    )
+
+    if status_filter == "ACTIVE":
+        q_items = q_items.where(active_cond)
+        q_count = q_count.where(active_cond)
+    elif status_filter in ("INACTIVE", "EXPIRED"):
+        status_cond = and_(Admission.status == "ACTIVE", end_col < today)
+        q_items = q_items.where(status_cond)
+        q_count = q_count.where(status_cond)
+    elif status_filter in ("CANCELLED", "REVOKED"):
+        status_cond = Admission.status.in_(["CANCELLED", "REVOKED"])
+        q_items = q_items.where(status_cond)
+        q_count = q_count.where(status_cond)
+
+    if search and search.strip():
+        pat = f"%{search.strip()}%"
+        search_clause = or_(
+            Student.name.ilike(pat),
+            Student.student_code.ilike(pat),
+            Student.mobile.ilike(pat),
+            AdmissionItem.teacher_name_snapshot.ilike(pat),
+            Admission.admission_number.ilike(pat),
+        )
+        q_items = q_items.where(search_clause)
+        q_count = q_count.where(search_clause)
+
+    total_filtered = (await db.execute(q_count)).scalar() or 0
+    total_pages = max(1, (total_filtered + page_size - 1) // page_size) if total_filtered > 0 else 1
+
+    offset = (page - 1) * page_size
+    q_items = q_items.order_by(start_col.desc(), desc(AdmissionItem.created_at)).offset(offset).limit(page_size)
+    rows = (await db.execute(q_items)).all()
+
+    item_ids = [itm.id for itm, adm, stu, bch in rows]
+    collected_map = await get_item_allocated_collected_map(db, item_ids)
+
+    items = []
+    for itm, adm, stu, bch in rows:
+        itm_coll = collected_map.get(itm.id, Decimal("0.00"))
+        c_info = evaluate_student_rolling_cycle(
+            valid_from=itm.valid_from,
+            valid_to=itm.valid_to,
+            admission_date=adm.admission_date,
+            balance_due=itm.balance_due,
+            net_price=itm.net_price,
+            amount_collected=itm_coll
+        )
+        items.append({
+            "item_id": str(itm.id),
+            "admission_id": str(adm.id),
+            "admission_number": adm.admission_number,
+            "admission_date": str(adm.admission_date),
+            "student_id": str(stu.id),
+            "student_code": stu.student_code,
+            "student_name": stu.name,
+            "mobile": stu.mobile or "",
+            "father_name": stu.father_name or "",
+            "photo_url": stu.photo_url,
+            "batch_id": str(bch.id) if bch else None,
+            "batch_name": bch.name if bch else (itm.item_name_snapshot or "Direct Subject"),
+            "teacher_id": str(itm.teacher_id) if itm.teacher_id else (str(bch.teacher_id) if bch and bch.teacher_id else None),
+            "teacher_name": itm.teacher_name_snapshot or (bch.teacher_name_snapshot if bch else "Faculty"),
+            "hall_number": itm.hall_number_snapshot or (bch.hall_number if bch else "Main"),
+            **c_info
+        })
+
+    return {
+        "items": items,
+        "total": total_filtered,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+        "metrics": {
+            "total_enrollments": total_enr or 0,
+            "active_enrollments": active_enr or 0,
+            "inactive_enrollments": inactive_enr or 0,
+            "cancelled_enrollments": cancelled_enr or 0,
+            "unique_students_count": uniq_stu or 0
+        }
+    }
 
 @router.get("/{subject_id}", response_model=SubjectResponse)
 async def get_subject(

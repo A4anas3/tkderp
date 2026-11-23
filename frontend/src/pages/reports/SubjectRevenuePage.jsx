@@ -336,12 +336,22 @@ export default function SubjectRevenuePage() {
   const [payModalOpen, setPayModalOpen] = useState(false);
   const [payAdmissionId, setPayAdmissionId] = useState(null);
 
-  const fetchReports = useCallback(async (filters = {}) => {
+  const fetchReports = useCallback(async () => {
     setLoading(true);
     try {
       const [subRes, tRes] = await Promise.all([
-        reportApi.getSubjectRevenue(filters),
-        reportApi.getTeacherRevenue(filters),
+        reportApi.getSubjectRevenue({
+          ...currentFilters,
+          page: subjectPage,
+          page_size: PAGE_SIZE,
+          search: subjectSearch.trim() || undefined,
+        }),
+        reportApi.getTeacherRevenue({
+          ...currentFilters,
+          page: teacherPage,
+          page_size: PAGE_SIZE,
+          search: teacherSearch.trim() || undefined,
+        }),
       ]);
       setSubjectData(subRes);
       setTeacherData(tRes || []);
@@ -350,15 +360,16 @@ export default function SubjectRevenuePage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentFilters, subjectPage, subjectSearch, teacherPage, teacherSearch]);
 
   useEffect(() => {
-    fetchReports({});
+    fetchReports();
   }, [fetchReports]);
 
   const handleFilterChange = (newFilters) => {
     setCurrentFilters(newFilters);
-    fetchReports(newFilters);
+    setSubjectPage(1);
+    setTeacherPage(1);
   };
 
   const toggleSubjectExpand = (subId) => {
@@ -381,46 +392,17 @@ export default function SubjectRevenuePage() {
   };
 
   const summary = subjectData?.summary || {};
-  const rawItems = subjectData?.items || [];
+  const pagedSubjects = subjectData?.items || [];
+  const subjectTotal = subjectData?.total ?? pagedSubjects.length;
+  const subjectTotalPages = subjectData?.total_pages ?? 1;
 
-  // Filtered and Paginated Subjects
-  const filteredSubjects = useMemo(() => {
-    if (!subjectSearch.trim()) return rawItems;
-    const q = subjectSearch.toLowerCase().trim();
-    return rawItems.filter(
-      (s) => s.subject_name?.toLowerCase().includes(q) || s.subject_code?.toLowerCase().includes(q)
-    );
-  }, [rawItems, subjectSearch]);
-
-  const subjectTotalPages = Math.max(1, Math.ceil(filteredSubjects.length / PAGE_SIZE));
-  const currentSubjectPage = Math.min(subjectPage, subjectTotalPages);
-  const pagedSubjects = useMemo(() => {
-    const start = (currentSubjectPage - 1) * PAGE_SIZE;
-    return filteredSubjects.slice(start, start + PAGE_SIZE);
-  }, [filteredSubjects, currentSubjectPage]);
-
-  // Filtered and Paginated Teachers
-  const filteredTeachers = useMemo(() => {
-    if (!teacherSearch.trim()) return teacherData;
-    const q = teacherSearch.toLowerCase().trim();
-    return teacherData.filter(
-      (t) =>
-        t.teacher_name?.toLowerCase().includes(q) ||
-        t.teacher_code?.toLowerCase().includes(q) ||
-        t.specialization?.toLowerCase().includes(q)
-    );
-  }, [teacherData, teacherSearch]);
-
-  const teacherTotalPages = Math.max(1, Math.ceil(filteredTeachers.length / PAGE_SIZE));
-  const currentTeacherPage = Math.min(teacherPage, teacherTotalPages);
-  const pagedTeachers = useMemo(() => {
-    const start = (currentTeacherPage - 1) * PAGE_SIZE;
-    return filteredTeachers.slice(start, start + PAGE_SIZE);
-  }, [filteredTeachers, currentTeacherPage]);
+  const pagedTeachers = Array.isArray(teacherData) ? teacherData : teacherData?.items || [];
+  const teacherTotal = teacherData?.total ?? pagedTeachers.length;
+  const teacherTotalPages = teacherData?.total_pages ?? 1;
 
   // Chart data formatting: Show active top subjects and avoid label crowding
   const chartData = useMemo(() => {
-    const activeItems = rawItems
+    const activeItems = pagedSubjects
       .filter((itm) => itm.total_booked > 0)
       .sort((a, b) => b.total_booked - a.total_booked)
       .slice(0, 10);
@@ -432,7 +414,7 @@ export default function SubjectRevenuePage() {
       Collected: itm.total_collected,
       Outstanding: itm.balance_due,
     }));
-  }, [rawItems]);
+  }, [pagedSubjects]);
 
   return (
     <div className="space-y-4">
@@ -563,7 +545,7 @@ export default function SubjectRevenuePage() {
               }`}
             >
               <BookOpen className="w-3.5 h-3.5" />
-              <span>Subject Ledgers ({rawItems.length})</span>
+              <span>Subject Ledgers ({subjectTotal})</span>
             </button>
             <button
               onClick={() => setActiveTab('teachers')}
@@ -574,7 +556,7 @@ export default function SubjectRevenuePage() {
               }`}
             >
               <GraduationCap className="w-3.5 h-3.5" />
-              <span>Teacher Ledgers ({teacherData.length})</span>
+              <span>Teacher Ledgers ({teacherTotal})</span>
             </button>
           </div>
 
@@ -726,14 +708,14 @@ export default function SubjectRevenuePage() {
               {subjectTotalPages > 1 && (
                 <div className="flex items-center justify-between text-xs text-slate-600 pt-2 border-t border-slate-100">
                   <span>
-                    Showing <strong className="text-black">{(currentSubjectPage - 1) * PAGE_SIZE + 1}</strong> to{' '}
-                    <strong className="text-black">{Math.min(currentSubjectPage * PAGE_SIZE, filteredSubjects.length)}</strong> of{' '}
-                    <strong className="text-black">{filteredSubjects.length}</strong> subjects
+                    Showing <strong className="text-black">{(subjectPage - 1) * PAGE_SIZE + 1}</strong> to{' '}
+                    <strong className="text-black">{Math.min(subjectPage * PAGE_SIZE, subjectTotal)}</strong> of{' '}
+                    <strong className="text-black">{subjectTotal}</strong> subjects
                   </span>
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => setSubjectPage(1)}
-                      disabled={currentSubjectPage <= 1}
+                      disabled={subjectPage <= 1}
                       className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
                       title="First Page"
                     >
@@ -741,18 +723,18 @@ export default function SubjectRevenuePage() {
                     </button>
                     <button
                       onClick={() => setSubjectPage((p) => Math.max(1, p - 1))}
-                      disabled={currentSubjectPage <= 1}
+                      disabled={subjectPage <= 1}
                       className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
                       title="Previous Page"
                     >
                       <ChevronLeft className="w-3.5 h-3.5 text-black" />
                     </button>
                     <span className="px-2 py-0.5 font-medium text-black">
-                      Page {currentSubjectPage} of {subjectTotalPages}
+                      Page {subjectPage} of {subjectTotalPages}
                     </span>
                     <button
                       onClick={() => setSubjectPage((p) => Math.min(subjectTotalPages, p + 1))}
-                      disabled={currentSubjectPage >= subjectTotalPages}
+                      disabled={subjectPage >= subjectTotalPages}
                       className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
                       title="Next Page"
                     >
@@ -760,7 +742,7 @@ export default function SubjectRevenuePage() {
                     </button>
                     <button
                       onClick={() => setSubjectPage(subjectTotalPages)}
-                      disabled={currentSubjectPage >= subjectTotalPages}
+                      disabled={subjectPage >= subjectTotalPages}
                       className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
                       title="Last Page"
                     >
@@ -915,14 +897,14 @@ export default function SubjectRevenuePage() {
               {teacherTotalPages > 1 && (
                 <div className="flex items-center justify-between text-xs text-slate-600 pt-2 border-t border-slate-100">
                   <span>
-                    Showing <strong className="text-black">{(currentTeacherPage - 1) * PAGE_SIZE + 1}</strong> to{' '}
-                    <strong className="text-black">{Math.min(currentTeacherPage * PAGE_SIZE, filteredTeachers.length)}</strong> of{' '}
-                    <strong className="text-black">{filteredTeachers.length}</strong> teachers
+                    Showing <strong className="text-black">{(teacherPage - 1) * PAGE_SIZE + 1}</strong> to{' '}
+                    <strong className="text-black">{Math.min(teacherPage * PAGE_SIZE, teacherTotal)}</strong> of{' '}
+                    <strong className="text-black">{teacherTotal}</strong> teachers
                   </span>
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => setTeacherPage(1)}
-                      disabled={currentTeacherPage <= 1}
+                      disabled={teacherPage <= 1}
                       className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
                       title="First Page"
                     >
@@ -930,18 +912,18 @@ export default function SubjectRevenuePage() {
                     </button>
                     <button
                       onClick={() => setTeacherPage((p) => Math.max(1, p - 1))}
-                      disabled={currentTeacherPage <= 1}
+                      disabled={teacherPage <= 1}
                       className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
                       title="Previous Page"
                     >
                       <ChevronLeft className="w-3.5 h-3.5 text-black" />
                     </button>
                     <span className="px-2 py-0.5 font-medium text-black">
-                      Page {currentTeacherPage} of {teacherTotalPages}
+                      Page {teacherPage} of {teacherTotalPages}
                     </span>
                     <button
                       onClick={() => setTeacherPage((p) => Math.min(teacherTotalPages, p + 1))}
-                      disabled={currentTeacherPage >= teacherTotalPages}
+                      disabled={teacherPage >= teacherTotalPages}
                       className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
                       title="Next Page"
                     >
@@ -949,7 +931,7 @@ export default function SubjectRevenuePage() {
                     </button>
                     <button
                       onClick={() => setTeacherPage(teacherTotalPages)}
-                      disabled={currentTeacherPage >= teacherTotalPages}
+                      disabled={teacherPage >= teacherTotalPages}
                       className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
                       title="Last Page"
                     >

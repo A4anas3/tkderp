@@ -234,6 +234,10 @@ export const subjectApi = {
     const res = await api.put(`/subjects/${id}`, data);
     return res.data;
   },
+  getRoster: async (id, params) => {
+    const res = await api.get(`/subjects/${id}/roster`, { params });
+    return res.data;
+  },
 };
 
 export const greenCardApi = {
