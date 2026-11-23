@@ -71,7 +71,6 @@ export default function RenewSubjectModal({
         const reqPayload = {
           subject_id: item.subject_id,
           student_id: student?.id,
-          batch_id: item.batch_id,
           valid_from: targetFrom,
           valid_to: targetTo,
           discount_type: newDiscountType !== undefined ? newDiscountType : discountType,

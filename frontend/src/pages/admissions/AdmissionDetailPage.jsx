@@ -387,7 +387,7 @@ export default function AdmissionDetailPage() {
               {admission.items?.map((itm, idx) => (
                 <tr key={idx} className="hover:bg-slate-50/60">
                   <td className="p-3">
-                    <div className="font-bold text-black">{itm.item_name_snapshot || itm.batch_name_snapshot || 'Course Enrollment'}</div>
+                    <div className="font-bold text-black">{itm.item_name_snapshot || 'Course Enrollment'}</div>
                     <div className="text-[11px] text-slate-500 font-mono">
                       {itm.subject_code ? `Code: ${itm.subject_code}` : ''}
                     </div>

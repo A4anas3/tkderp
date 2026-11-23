@@ -2894,8 +2894,8 @@ export default function StudentDetailPage() {
                 <option value="ADMISSION_ITEM_VALIDITY_UPDATED">Validity Adjusted</option>
                 <option value="REVOKE_STUDENT">Student Revoked</option>
                 <option value="RESTORE_STUDENT">Student Restored</option>
-                <option value="BATCH_PURCHASE_REVOKED">Purchase Revoked</option>
-                <option value="BATCH_PURCHASE_RESTORED">Purchase Restored</option>
+                <option value="PURCHASE_REVOKED">Purchase Revoked</option>
+                <option value="PURCHASE_RESTORED">Purchase Restored</option>
                 <option value="ADMISSION_ITEM_SUSPENDED">Subject Suspended</option>
                 <option value="ADMISSION_ITEM_RESUMED">Subject Resumed</option>
                 <option value="ADMISSION_ITEM_DISCONTINUED">Subject Discontinued</option>

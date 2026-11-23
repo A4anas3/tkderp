@@ -254,7 +254,6 @@ export default function NewAdmissionPage() {
           {
             tempId: 'item-1',
             item_type: 'SUBJECT',
-            batch_id: null,
             subject_id: firstSub.id,
             item_name_snapshot: firstSub.name,
             base_monthly_fee: baseFee,
@@ -377,7 +376,6 @@ export default function NewAdmissionPage() {
         const payload = {
           items: items.map((itm) => ({
             item_type: itm.item_type,
-            batch_id: itm.batch_id || undefined,
             subject_id: itm.subject_id || undefined,
             green_card_id: itm.green_card_id || undefined,
             item_name_snapshot: itm.item_name_snapshot,
@@ -436,7 +434,6 @@ export default function NewAdmissionPage() {
     const newItem = {
       tempId: `item-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
       item_type: 'SUBJECT',
-      batch_id: null,
       subject_id: s.id,
       item_name_snapshot: s.name,
       base_monthly_fee: baseFee,
@@ -785,7 +782,6 @@ export default function NewAdmissionPage() {
 
         return {
           item_type: itm.item_type,
-          batch_id: itm.batch_id || null,
           subject_id: itm.subject_id || null,
           green_card_id: itm.green_card_id || null,
           teacher_id: itm.teacher_id || null,

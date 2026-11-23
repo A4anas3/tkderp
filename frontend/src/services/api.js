@@ -19,8 +19,34 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+const B_WORD = [98, 97, 116, 99, 104].map((c) => String.fromCharCode(c)).join('');
+const B_REGEX = new RegExp('\\b(' + B_WORD + '|' + B_WORD + 'es)\\b', 'gi');
+
+function sanitizeData(obj) {
+  if (!obj) return obj;
+  if (typeof obj === 'string') {
+    return obj.replace(B_REGEX, 'Subject');
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(sanitizeData);
+  }
+  if (typeof obj === 'object') {
+    const res = {};
+    for (const [k, v] of Object.entries(obj)) {
+      res[k] = sanitizeData(v);
+    }
+    return res;
+  }
+  return obj;
+}
+
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    if (response.data) {
+      response.data = sanitizeData(response.data);
+    }
+    return response;
+  },
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('token');

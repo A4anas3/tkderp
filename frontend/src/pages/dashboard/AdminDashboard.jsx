@@ -121,7 +121,7 @@ export default function AdminDashboard() {
         />
         <StatCard
           title="Active Subjects"
-          value={m.active_subjects ?? m.active_batches ?? 0}
+          value={m.active_subjects ?? 0}
           subtext="Running subjects"
           icon={BookOpen}
           color="purple"

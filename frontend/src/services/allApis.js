@@ -118,15 +118,9 @@ export const studentApi = {
     });
     return res.data;
   },
-  getLastFeePeriod: async (studentId, batchId) => {
-    const res = await api.get(`/students/${studentId}/last-batch-period`, {
-      params: { batch_id: batchId },
-    });
-    return res.data;
-  },
-  getLastBatchPeriod: async (studentId, batchId) => {
-    const res = await api.get(`/students/${studentId}/last-batch-period`, {
-      params: { batch_id: batchId },
+  getLastFeePeriod: async (studentId, subjectId) => {
+    const res = await api.get(`/students/${studentId}/last-fee-period`, {
+      params: { subject_id: subjectId },
     });
     return res.data;
   },

@@ -934,7 +934,7 @@ async def cancel_admission_service(
 
     audit = AuditLog(
         user_id=current_user.id,
-        action="BATCH_PURCHASE_CANCELLED",
+        action="PURCHASE_CANCELLED",
         entity_type="ADMISSION",
         entity_id=admission.id,
         details=json.dumps({
@@ -1146,7 +1146,7 @@ async def revoke_admission_service(
 
     audit = AuditLog(
         user_id=current_user.id,
-        action="BATCH_PURCHASE_REVOKED",
+        action="PURCHASE_REVOKED",
         entity_type="ADMISSION",
         entity_id=admission.id,
         details=json.dumps({
@@ -1236,7 +1236,7 @@ async def restore_admission_service(
 
     audit = AuditLog(
         user_id=current_user.id,
-        action="BATCH_PURCHASE_RESTORED",
+        action="PURCHASE_RESTORED",
         entity_type="ADMISSION",
         entity_id=admission.id,
         details=json.dumps({

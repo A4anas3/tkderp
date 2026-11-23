@@ -14,9 +14,9 @@ export default function TeacherDashboard() {
       try {
         const res = await dashboardApi.getTeacher();
         setData(res);
-        const list = res?.subjects || res?.batches || [];
+        const list = res?.subjects || [];
         if (list.length > 0) {
-          setActiveSubjectId(list[0].batch_id || list[0].id);
+          setActiveSubjectId(list[0].id);
         }
       } catch (err) {
         console.error('Failed to load teacher dashboard:', err);
@@ -39,8 +39,8 @@ export default function TeacherDashboard() {
     );
   }
 
-  const subjectsList = data?.subjects || data?.batches || [];
-  const activeSubject = subjectsList.find((b) => (b.batch_id || b.id) === activeSubjectId);
+  const subjectsList = data?.subjects || [];
+  const activeSubject = subjectsList.find((b) => b.id === activeSubjectId);
 
   return (
     <div className="space-y-5 sm:space-y-6">
@@ -61,7 +61,7 @@ export default function TeacherDashboard() {
         <div className="grid grid-cols-2 gap-2.5 sm:flex sm:gap-3 w-full sm:w-auto">
           <div className="flex-1 sm:flex-initial bg-white/15 backdrop-blur-xs border border-white/20 rounded-xl px-4 py-2.5 text-center">
             <span className="text-[11px] sm:text-xs text-purple-100 block font-medium">Assigned Subjects</span>
-            <span className="text-xl sm:text-2xl font-black text-white mt-0.5">{data?.subjects_count ?? data?.batches_count ?? 0}</span>
+            <span className="text-xl sm:text-2xl font-black text-white mt-0.5">{data?.subjects_count ?? 0}</span>
           </div>
           <div className="flex-1 sm:flex-initial bg-white/15 backdrop-blur-xs border border-white/20 rounded-xl px-4 py-2.5 text-center">
             <span className="text-[11px] sm:text-xs text-purple-100 block font-medium">Enrolled Students</span>
@@ -94,7 +94,7 @@ export default function TeacherDashboard() {
             </div>
           ) : (
             subjectsList.map((b) => {
-              const itemId = b.batch_id || b.id;
+              const itemId = b.id;
               const isSelected = itemId === activeSubjectId;
               const studentCount = b.students?.length ?? b.student_count ?? 0;
               return (

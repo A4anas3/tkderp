@@ -775,15 +775,17 @@ async def upload_student_photo(
     await db.refresh(student)
     return StudentResponse.model_validate(student)
 
+@router.get("/{student_id}/last-fee-period")
 @router.get("/{student_id}/last-batch-period")
-async def get_student_last_batch_period(
+async def get_student_last_fee_period(
     student_id: uuid.UUID,
+    subject_id: Optional[uuid.UUID] = None,
     batch_id: Optional[uuid.UUID] = None,
     db: AsyncSession = Depends(get_db),
     user = Depends(require_staff)
 ):
     """
-    Retrieves the ending date of the student's previous enrolled batch cycle.
+    Retrieves the ending date of the student's previous enrolled cycle.
     Provides smart suggested next start date (next day after previous end) and end date (+30 days).
     Admin can override the start date for the next cycle.
     """
@@ -801,7 +803,9 @@ async def get_student_last_batch_period(
             AdmissionItem.item_type != "GREEN_CARD"
         )
     )
-    if batch_id:
+    if subject_id:
+        stmt = stmt.where(AdmissionItem.subject_id == subject_id)
+    elif batch_id:
         stmt = stmt.where(AdmissionItem.batch_id == batch_id)
 
     # Order by validity end date or admission date desc

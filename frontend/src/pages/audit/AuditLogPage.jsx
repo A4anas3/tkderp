@@ -71,11 +71,11 @@ export function getActionMeta(action) {
     case 'ADMISSION_DISCONTINUED':
     case 'ADMISSION_ITEM_DISCONTINUED':
       return { label: 'Discontinued', variant: 'danger', icon: XCircle };
-    case 'BATCH_PURCHASE_REVOKED':
+    case 'PURCHASE_REVOKED':
       return { label: 'Purchase Revoked', variant: 'danger', icon: AlertCircle };
-    case 'BATCH_PURCHASE_RESTORED':
+    case 'PURCHASE_RESTORED':
       return { label: 'Purchase Restored', variant: 'teal', icon: RotateCcw };
-    case 'BATCH_PURCHASE_CANCELLED':
+    case 'PURCHASE_CANCELLED':
       return { label: 'Purchase Cancelled', variant: 'danger', icon: XCircle };
     case 'EXPENSE_CREATED':
       return { label: 'Expense Recorded', variant: 'purple', icon: Wallet };
