@@ -10,6 +10,7 @@ import {
   buildWhatsAppLink,
   buildAdmissionReceiptWhatsAppMessage,
 } from '../../utils/whatsappHelpers';
+import { getCleanCancelReason } from '../../utils/dateCycleUtils';
 
 const formatCurrency = (amount) => {
   const num = Number(amount);
@@ -103,9 +104,9 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission, admi
             <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
             <div>
               <span>[ENROLLMENT CANCELLED / REVOKED]</span>
-              {data.revocation_reason && (
+              {getCleanCancelReason(data.revocation_reason) && (
                 <span className="block normal-case font-normal text-rose-800 text-[11px] mt-0.5">
-                  Reason: {data.revocation_reason}
+                  Reason: {getCleanCancelReason(data.revocation_reason)}
                 </span>
               )}
             </div>

@@ -458,9 +458,10 @@ async def get_renewals_due(
 
     conds = [
         AdmissionItem.item_type == "BATCH_SUBJECT",
-        AdmissionItem.status != "DISCONTINUED",
+        AdmissionItem.status.notin_(["DISCONTINUED", "REVOKED", "CANCELLED"]),
+        AdmissionItem.access_status.notin_(["REVOKED", "CANCELLED", "DISCONTINUED"]),
         Admission.document_status == "VALID",
-        Admission.status != "CANCELLED",
+        Admission.status.notin_(["CANCELLED", "REVOKED"]),
         AdmissionItem.valid_to != None,
         AdmissionItem.valid_to <= window_end
     ]
@@ -1508,9 +1509,9 @@ async def renew_subject(
         .where(
             AdmissionItem.student_id == payload.student_id,
             AdmissionItem.subject_id == payload.subject_id,
-            AdmissionItem.status != "DISCONTINUED",
+            AdmissionItem.status.notin_(["DISCONTINUED", "REVOKED", "CANCELLED"]),
             Admission.document_status == "VALID",
-            Admission.status != "CANCELLED"
+            Admission.status.notin_(["CANCELLED", "REVOKED"])
         )
         .order_by(
             func.coalesce(AdmissionItem.valid_to, Admission.valid_to).desc(),
@@ -1519,6 +1520,24 @@ async def renew_subject(
     )
     res = await db.execute(stmt)
     target_item = res.scalars().first()
+
+    if not target_item:
+        # Fall back to check if previous item was from a cancelled/revoked admission
+        rev_stmt = (
+            select(AdmissionItem)
+            .join(Admission, AdmissionItem.admission_id == Admission.id)
+            .where(
+                AdmissionItem.student_id == payload.student_id,
+                AdmissionItem.subject_id == payload.subject_id,
+                AdmissionItem.status != "DISCONTINUED",
+                Admission.document_status == "VALID",
+            )
+            .order_by(
+                func.coalesce(AdmissionItem.valid_to, Admission.valid_to).desc(),
+                AdmissionItem.created_at.desc()
+            )
+        )
+        target_item = (await db.execute(rev_stmt)).scalars().first()
 
     default_params = {
         "valid_from": payload.valid_from,

@@ -109,7 +109,9 @@ async def list_students(
             .join(Admission, AdmissionItem.admission_id == Admission.id)
             .where(
                 AdmissionItem.access_status == "ACTIVE",
+                AdmissionItem.status.notin_(["REVOKED", "CANCELLED", "DISCONTINUED"]),
                 Admission.document_status == "VALID",
+                Admission.status.notin_(["REVOKED", "CANCELLED"]),
                 or_(AdmissionItem.valid_from == None, AdmissionItem.valid_from <= today),
                 or_(AdmissionItem.valid_to == None, AdmissionItem.valid_to >= today),
             )
@@ -414,14 +416,21 @@ async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db),
             pay_st = "UNPAID"
 
         is_line_revoked = (
-            itm.access_status == "REVOKED"
+            itm.access_status in ("REVOKED", "CANCELLED")
+            or getattr(itm, "status", "ACTIVE") in ("REVOKED", "CANCELLED")
+            or getattr(itm.admission, "status", "ACTIVE") in ("REVOKED", "CANCELLED")
             or getattr(itm.admission, "document_status", "VALID") == "VOID"
         )
-        is_line_expired = (
-            itm.access_status == "EXPIRED"
-            or (itm.valid_to is not None and itm.valid_to < today)
-        )
-        is_line_overdue = is_line_expired and itm.balance_due > Decimal("0.00")
+        if is_line_revoked:
+            days_left = None
+            is_line_expired = False
+            is_line_overdue = False
+        else:
+            is_line_expired = (
+                itm.access_status == "EXPIRED"
+                or (itm.valid_to is not None and itm.valid_to < today)
+            )
+            is_line_overdue = is_line_expired and itm.balance_due > Decimal("0.00")
 
         sub = subjects_map.get(itm.subject_id)
         hall_num = (sub.hall_number if sub and sub.hall_number else itm.hall_number_snapshot)
@@ -993,9 +1002,10 @@ async def get_student_renewals_due(
     conds = [
         AdmissionItem.student_id == student_id,
         AdmissionItem.item_type == "BATCH_SUBJECT",
-        AdmissionItem.status != "DISCONTINUED",
+        AdmissionItem.status.notin_(["DISCONTINUED", "REVOKED", "CANCELLED"]),
+        AdmissionItem.access_status.notin_(["REVOKED", "CANCELLED", "DISCONTINUED"]),
         Admission.document_status == "VALID",
-        Admission.status != "CANCELLED",
+        Admission.status.notin_(["CANCELLED", "REVOKED"]),
         AdmissionItem.valid_to != None,
         AdmissionItem.valid_to <= window_end
     ]
@@ -1114,8 +1124,21 @@ async def get_student_active_enrollment(
             subjects_by_name[s.name.lower().strip()] = s
 
     for item, adm in rows:
+        is_cancelled = (
+            adm.status in ["REVOKED", "CANCELLED"] or
+            getattr(adm, "access_status", "ACTIVE") in ["REVOKED", "CANCELLED"] or
+            getattr(adm, "document_status", "VALID") == "VOID" or
+            item.status in ["REVOKED", "CANCELLED"]
+        )
+        is_discontinued = (
+            item.status == "DISCONTINUED" or
+            getattr(item, "access_status", "ACTIVE") == "DISCONTINUED"
+        )
+        is_inactive_or_cancelled = is_cancelled or is_discontinued or getattr(item, "access_status", "ACTIVE") in ["REVOKED", "CANCELLED"]
+
         # Determine active status: parent admission and item must both be ACTIVE, and valid_to must cover today or future
         is_active = (
+            not is_inactive_or_cancelled and
             adm.status == "ACTIVE" and
             getattr(adm, "access_status", "ACTIVE") == "ACTIVE" and
             item.status == "ACTIVE" and
@@ -1124,7 +1147,7 @@ async def get_student_active_enrollment(
         )
 
         days_remaining = None
-        if item.valid_to:
+        if not is_inactive_or_cancelled and item.valid_to:
             days_remaining = (item.valid_to - today).days
 
         # Clean subject name: strip any legacy "[Renewal] " prefix from display
@@ -1132,8 +1155,26 @@ async def get_student_active_enrollment(
         if raw_name.startswith("[Renewal] "):
             raw_name = raw_name[len("[Renewal] "):]
 
-        is_item_expired = (days_remaining is not None and days_remaining < 0) or item.status == "EXPIRED" or adm.status == "EXPIRED"
-        is_item_overdue = is_item_expired and item.balance_due > Decimal("0.00")
+        if is_cancelled:
+            item_status = "CANCELLED"
+            is_item_expired = False
+            is_item_overdue = False
+            can_cancel = False
+        elif is_discontinued:
+            item_status = "DISCONTINUED"
+            is_item_expired = False
+            is_item_overdue = False
+            can_cancel = False
+        elif item.status == "SUSPENDED":
+            item_status = "SUSPENDED"
+            is_item_expired = False
+            is_item_overdue = False
+            can_cancel = False
+        else:
+            is_item_expired = (days_remaining is not None and days_remaining < 0) or item.status == "EXPIRED" or adm.status == "EXPIRED"
+            is_item_overdue = is_item_expired and item.balance_due > Decimal("0.00")
+            item_status = "EXPIRED" if is_item_expired and item.status not in ["REVOKED", "CANCELLED", "SUSPENDED", "DISCONTINUED"] else (item.status if adm.status == "ACTIVE" else adm.status)
+            can_cancel = item.can_cancel
 
         sub = subjects_map.get(item.subject_id) or (subjects_by_name.get(raw_name.lower().strip()) if raw_name else None)
         hall_num = (sub.hall_number if sub and sub.hall_number else item.hall_number_snapshot)
@@ -1159,13 +1200,13 @@ async def get_student_active_enrollment(
             "net_price": float(item.net_price),
             "amount_collected": float(item.amount_collected),
             "balance_due": float(item.balance_due),
-            "status": "EXPIRED" if is_item_expired and item.status not in ["REVOKED", "CANCELLED", "SUSPENDED", "DISCONTINUED"] else (item.status if adm.status == "ACTIVE" else adm.status),
+            "status": item_status,
             "days_remaining": days_remaining,
             "is_expiring_soon": days_remaining is not None and 0 <= days_remaining <= 7,
             "is_expired": is_item_expired,
             "is_overdue": is_item_overdue,
             "lifecycle_reason": item.lifecycle_reason or adm.revocation_reason,
-            "can_cancel": item.can_cancel
+            "can_cancel": can_cancel
         }
 
         if item.item_type == "GREEN_CARD":
@@ -1182,10 +1223,22 @@ async def get_student_active_enrollment(
                 active_subjects_dict[subj_key].append((item, adm, item_dict))
             else:
                 hist_item = dict(item_dict)
-                if hist_item["status"] in ["ACTIVE", "UPCOMING"] and ((item.valid_to and item.valid_to < today) or is_item_expired):
+                if is_cancelled:
+                    hist_item["status"] = "CANCELLED"
+                    hist_item["days_remaining"] = None
+                    hist_item["is_expiring_soon"] = False
+                    hist_item["is_expired"] = False
+                    hist_item["is_overdue"] = False
+                elif is_discontinued:
+                    hist_item["status"] = "DISCONTINUED"
+                    hist_item["days_remaining"] = None
+                    hist_item["is_expiring_soon"] = False
+                    hist_item["is_expired"] = False
+                    hist_item["is_overdue"] = False
+                elif hist_item["status"] in ["ACTIVE", "UPCOMING"] and ((item.valid_to and item.valid_to < today) or is_item_expired):
                     hist_item["status"] = "EXPIRED"
-                hist_item["is_expired"] = is_item_expired
-                hist_item["is_overdue"] = is_item_overdue
+                hist_item["is_expired"] = False if is_inactive_or_cancelled else is_item_expired
+                hist_item["is_overdue"] = False if is_inactive_or_cancelled else is_item_overdue
                 historical_subjects.append(hist_item)
 
     # Consolidate chained active cycles for each subject (e.g. Month 1 + Month 2 renewal)
@@ -1235,8 +1288,8 @@ async def get_student_active_enrollment(
             "is_expiring_soon": days_remaining is not None and 0 <= days_remaining <= 7,
             "is_expired": False,
             "is_overdue": False,
-            "is_renewed": len(cycle_list) > 1,
-            "cycle_count": len(cycle_list),
+            "is_renewed": len(cycle_list) > 1 or bool(getattr(latest_item, "renewed_from_item_id", None) or (getattr(latest_item, "renewal_count", 0) or 0) > 0),
+            "cycle_count": max(len(cycle_list), (getattr(latest_item, "renewal_count", 0) or 0) + 1),
             "lifecycle_reason": latest_dict["lifecycle_reason"]
         }
 

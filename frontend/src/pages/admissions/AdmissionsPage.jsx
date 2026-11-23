@@ -112,7 +112,8 @@ export default function AdmissionsPage() {
       render: (a) => {
         const vFrom = a.valid_from || a.admission_date;
         const vTo = a.valid_to;
-        const cycle = evaluateCycleStatus(vTo, a.balance_due);
+        const isCancelled = a.status === 'REVOKED' || a.status === 'CANCELLED';
+        const cycle = evaluateCycleStatus(vTo, a.balance_due, isCancelled);
         return (
           <div className="text-xs">
             <span className="font-mono font-bold text-black block">
@@ -319,8 +320,8 @@ export default function AdmissionsPage() {
             {admissions.map((a) => {
               const vFrom = a.valid_from || a.admission_date;
               const vTo = a.valid_to;
-              const cycle = evaluateCycleStatus(vTo, a.balance_due);
               const isCancelled = a.status === 'REVOKED' || a.status === 'CANCELLED';
+              const cycle = evaluateCycleStatus(vTo, a.balance_due, isCancelled);
 
               return (
                 <div

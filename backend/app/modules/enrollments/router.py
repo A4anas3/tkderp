@@ -176,9 +176,20 @@ async def list_enrollments(
         last_p_date, last_p_amt = last_payment_map.get(itm.id, (None, None))
         if isinstance(last_p_date, datetime):
             last_p_date = last_p_date.date()
-        days_left = (itm.valid_to - today).days if itm.valid_to else None
-        is_item_expired = itm.access_status == "EXPIRED" or (days_left is not None and days_left < 0)
-        is_item_overdue = is_item_expired and itm.balance_due > Decimal("0.00")
+        is_line_revoked = (
+            itm.access_status in ("REVOKED", "CANCELLED")
+            or getattr(itm, "status", "ACTIVE") in ("REVOKED", "CANCELLED")
+            or adm.status in ("REVOKED", "CANCELLED")
+            or getattr(adm, "document_status", "VALID") == "VOID"
+        )
+        if is_line_revoked:
+            days_left = None
+            is_item_expired = False
+            is_item_overdue = False
+        else:
+            days_left = (itm.valid_to - today).days if itm.valid_to else None
+            is_item_expired = itm.access_status == "EXPIRED" or (days_left is not None and days_left < 0)
+            is_item_overdue = is_item_expired and itm.balance_due > Decimal("0.00")
 
         if itm.amount_collected >= itm.net_price:
             pay_st = "PAID"

@@ -6,6 +6,7 @@ import Select from '../common/Select';
 import Button from '../common/Button';
 import { admissionApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
+import { getCleanCancelReason } from '../../utils/dateCycleUtils';
 
 export default function CancelPurchaseModal({
   isOpen,
@@ -43,8 +44,9 @@ export default function CancelPurchaseModal({
       error('Cannot cancel an expired or completed admission.');
       return;
     }
-    if (!reason.trim()) {
-      error('Please provide a mandatory reason for cancelling this purchase');
+    const cleanR = getCleanCancelReason(reason);
+    if (!cleanR) {
+      error('Please provide a valid, descriptive reason for cancelling this purchase');
       return;
     }
 
@@ -64,7 +66,7 @@ export default function CancelPurchaseModal({
     setSubmitting(true);
     try {
       const payload = {
-        reason: reason.trim(),
+        reason: cleanR,
         refund_amount: refundVal,
         refund_mode: refundMode,
       };
@@ -157,6 +159,23 @@ export default function CancelPurchaseModal({
             required
             autoFocus
           />
+          <div className="flex flex-wrap gap-1 mt-1.5">
+            {[
+              'Timetable / Schedule clash',
+              'Personal / Relocation',
+              'Incorrect subject enrolled',
+              'Student discontinued coaching'
+            ].map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                onClick={() => setReason(preset)}
+                className="text-[10px] font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-0.5 rounded border border-slate-200 transition"
+              >
+                {preset}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Optional Refund Section if student paid any fee */}

@@ -15,19 +15,30 @@ def is_active_line(item: Any, today: Optional[date] = None) -> bool:
     t = today or today_kolkata()
     
     doc_status = "VALID"
+    adm_status = "ACTIVE"
     # Check __dict__ to avoid triggering lazy load in async session
     if hasattr(item, "__dict__") and "admission" in item.__dict__:
         adm = item.__dict__["admission"]
         if adm is not None:
             doc_status = getattr(adm, "document_status", "VALID")
+            adm_status = getattr(adm, "status", "ACTIVE")
     elif hasattr(item, "document_status"):
         doc_status = getattr(item, "document_status", "VALID")
     
     if doc_status != "VALID":
         return False
     
+    if adm_status in ("REVOKED", "CANCELLED"):
+        return False
+    
     access_status = getattr(item, "access_status", "ACTIVE")
+    if access_status in ("REVOKED", "CANCELLED", "DISCONTINUED"):
+        return False
     if access_status != "ACTIVE":
+        return False
+    
+    item_status = getattr(item, "status", "ACTIVE")
+    if item_status in ("REVOKED", "CANCELLED", "DISCONTINUED"):
         return False
     
     if item.valid_from is not None and item.valid_from > t:

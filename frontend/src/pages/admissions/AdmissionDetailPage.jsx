@@ -32,7 +32,7 @@ import PaymentReceiptModal from '../../components/receipts/PaymentReceiptModal';
 import IssueRefundModal from '../../components/modals/IssueRefundModal';
 import RefundReceiptModal from '../../components/receipts/RefundReceiptModal';
 import WaiveDueModal from '../../components/modals/WaiveDueModal';
-import { formatIndianDate, formatCycleLabel, evaluateCycleStatus } from '../../utils/dateCycleUtils';
+import { formatIndianDate, formatCycleLabel, evaluateCycleStatus, getCleanCancelReason } from '../../utils/dateCycleUtils';
 
 export default function AdmissionDetailPage() {
   const { id } = useParams();
@@ -263,8 +263,8 @@ export default function AdmissionDetailPage() {
             <div className="text-xs text-slate-700 font-medium mt-0.5">
               {isActive
                 ? 'Student has active enrollment and valid class attendance rights'
-                : admission.revocation_reason
-                ? `Access Revoked: ${admission.revocation_reason}`
+                : getCleanCancelReason(admission.revocation_reason)
+                ? `Access Revoked: ${getCleanCancelReason(admission.revocation_reason)}`
                 : 'Enrollment has been deactivated or cancelled'}
             </div>
           </div>
@@ -351,7 +351,7 @@ export default function AdmissionDetailPage() {
               {cycleInfo.label}
             </span>
             <div className={`text-[10px] mt-0.5 font-medium ${isInactive ? 'text-rose-700' : 'text-slate-600'}`}>
-              {isInactive ? (admission.revocation_reason || 'Course purchase cancelled / revoked') : cycleInfo.subtext}
+              {isInactive ? (getCleanCancelReason(admission.revocation_reason) || 'Course purchase cancelled') : cycleInfo.subtext}
             </div>
           </div>
         </div>

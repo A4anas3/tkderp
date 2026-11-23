@@ -200,15 +200,16 @@ export default function SubjectDetailPage() {
   }, [loadData]);
 
   // Derived Counts and Metrics
+  const isCancelledStudent = (s) => s.cycle_status === 'CANCELLED' || s.admission_status === 'CANCELLED' || s.admission_status === 'REVOKED';
   const totalEnrollments = subject?.total_enrollments ?? subject?.enrolled_count ?? students.length;
   const activeCount = useMemo(() => {
     if (subject?.active_enrollments != null) return subject.active_enrollments;
-    return students.filter((s) => s.cycle_status === 'ACTIVE' || (s.days_remaining != null && s.days_remaining >= 0)).length;
+    return students.filter((s) => !isCancelledStudent(s) && (s.cycle_status === 'ACTIVE' || (s.days_remaining != null && s.days_remaining >= 0))).length;
   }, [subject, students]);
 
   const inactiveCount = useMemo(() => {
     if (subject?.inactive_enrollments != null) return subject.inactive_enrollments;
-    return students.filter((s) => s.cycle_status === 'INACTIVE' || s.cycle_status === 'OVERDUE' || (s.days_remaining != null && s.days_remaining < 0)).length;
+    return students.filter((s) => !isCancelledStudent(s) && (s.cycle_status === 'INACTIVE' || s.cycle_status === 'OVERDUE' || (s.days_remaining != null && s.days_remaining < 0))).length;
   }, [subject, students]);
 
   const uniqueStudentsCount = useMemo(() => {
@@ -224,9 +225,9 @@ export default function SubjectDetailPage() {
 
     // Status filter
     if (statusFilter === 'ACTIVE') {
-      list = list.filter((s) => s.cycle_status === 'ACTIVE' || (s.days_remaining != null && s.days_remaining >= 0));
+      list = list.filter((s) => !isCancelledStudent(s) && (s.cycle_status === 'ACTIVE' || (s.days_remaining != null && s.days_remaining >= 0)));
     } else if (statusFilter === 'INACTIVE') {
-      list = list.filter((s) => s.cycle_status === 'INACTIVE' || s.cycle_status === 'OVERDUE' || (s.days_remaining != null && s.days_remaining < 0));
+      list = list.filter((s) => !isCancelledStudent(s) && (s.cycle_status === 'INACTIVE' || s.cycle_status === 'OVERDUE' || (s.days_remaining != null && s.days_remaining < 0)));
     }
 
     // Search query
@@ -703,13 +704,13 @@ export default function SubjectDetailPage() {
                       {/* Cycle Status */}
                       <td className="p-3 text-center">
                         <Badge
-                          variant={s.badge_variant || (s.days_remaining != null && s.days_remaining < 0 ? 'danger' : 'success')}
+                          variant={isCancelledStudent(s) ? 'danger' : (s.badge_variant || (s.days_remaining != null && s.days_remaining < 0 ? 'danger' : 'success'))}
                           size="xs"
                         >
-                          {s.status_label || (s.days_remaining != null && s.days_remaining < 0 ? 'Inactive (Expired)' : 'Active')}
+                          {isCancelledStudent(s) ? 'Cancelled' : (s.status_label || (s.days_remaining != null && s.days_remaining < 0 ? 'Inactive (Expired)' : 'Active'))}
                         </Badge>
                         <div className="text-[10px] text-slate-500 mt-0.5 font-medium">
-                          {s.status_subtext}
+                          {isCancelledStudent(s) ? 'Cancelled' : s.status_subtext}
                         </div>
                       </td>
 

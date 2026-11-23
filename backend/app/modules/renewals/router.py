@@ -96,11 +96,10 @@ async def get_renewals_summary(
             AdmissionItem.item_type.in_(["BATCH_SUBJECT", "SUBJECT", "COURSE"]),
             AdmissionItem.subject_id.isnot(None)
         ),
-        AdmissionItem.status != "DISCONTINUED",
-        AdmissionItem.access_status != "REVOKED",
-        AdmissionItem.access_status != "DISCONTINUED",
+        AdmissionItem.status.notin_(["DISCONTINUED", "REVOKED", "CANCELLED"]),
+        AdmissionItem.access_status.notin_(["REVOKED", "CANCELLED", "DISCONTINUED"]),
         Admission.document_status == "VALID",
-        Admission.status != "CANCELLED",
+        Admission.status.notin_(["CANCELLED", "REVOKED"]),
         effective_valid_to != None,
         effective_valid_to >= start_expired,
         effective_valid_to <= end_expiring,
@@ -149,8 +148,8 @@ async def get_renewals_summary(
     if candidate_item_ids:
         r_stmt = select(AdmissionItem.renewed_from_item_id).where(
             AdmissionItem.renewed_from_item_id.in_(candidate_item_ids),
-            AdmissionItem.status != "DISCONTINUED",
-            AdmissionItem.access_status != "REVOKED",
+            AdmissionItem.status.notin_(["DISCONTINUED", "REVOKED", "CANCELLED"]),
+            AdmissionItem.access_status.notin_(["REVOKED", "CANCELLED", "DISCONTINUED"]),
         )
         r_res = await db.execute(r_stmt)
         renewed_ids = set(r_res.scalars().all())
@@ -166,10 +165,10 @@ async def get_renewals_summary(
         .join(Admission, AdmissionItem.admission_id == Admission.id)
         .where(
             AdmissionItem.student_id.in_(candidate_student_ids),
-            AdmissionItem.status != "DISCONTINUED",
-            AdmissionItem.access_status != "REVOKED",
+            AdmissionItem.status.notin_(["DISCONTINUED", "REVOKED", "CANCELLED"]),
+            AdmissionItem.access_status.notin_(["REVOKED", "CANCELLED", "DISCONTINUED"]),
             Admission.document_status == "VALID",
-            Admission.status != "CANCELLED",
+            Admission.status.notin_(["CANCELLED", "REVOKED"]),
             func.coalesce(AdmissionItem.valid_to, Admission.valid_to) >= today,
         )
         .group_by(AdmissionItem.student_id, AdmissionItem.subject_id)

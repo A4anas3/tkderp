@@ -144,7 +144,8 @@ def evaluate_student_rolling_cycle(
     admission_date: date,
     balance_due: Decimal,
     net_price: Decimal,
-    amount_collected: Decimal
+    amount_collected: Decimal,
+    is_cancelled: bool = False
 ) -> Dict[str, Any]:
     """
     Evaluates rolling date-to-date coaching cycle parameters, remaining days,
@@ -159,8 +160,28 @@ def evaluate_student_rolling_cycle(
     else:
         c_end, next_due = compute_rolling_cycle_end(c_start, 1)
 
-    days_remaining = (c_end - today).days
     billing_day = c_start.day
+
+    if is_cancelled:
+        return {
+            "valid_from": str(c_start),
+            "valid_to": str(c_end),
+            "billing_day": billing_day,
+            "cycle_label": f"{c_start.strftime('%d %b %Y')} → {c_end.strftime('%d %b %Y')}",
+            "billing_cycle_anchor": f"Day {billing_day} of month",
+            "next_due_date": None,
+            "days_remaining": None,
+            "cycle_status": "CANCELLED",
+            "status_label": "Cancelled",
+            "badge_variant": "danger",
+            "status_subtext": "Cancelled",
+            "payment_status": "CANCELLED",
+            "net_price": float(net_price),
+            "amount_collected": float(amount_collected),
+            "balance_due": 0.0
+        }
+
+    days_remaining = (c_end - today).days
 
     if balance_due > Decimal("0.00") and today > c_end:
         cycle_status = "OVERDUE"

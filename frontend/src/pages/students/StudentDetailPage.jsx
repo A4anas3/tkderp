@@ -69,6 +69,7 @@ import RenewSubjectModal from '../../components/modals/RenewSubjectModal';
 import ChangeSubjectModal from '../../components/modals/ChangeSubjectModal';
 import WaiveDueModal from '../../components/modals/WaiveDueModal';
 import StudentIDCardModal from '../../components/modals/StudentIDCardModal';
+import { getCleanCancelReason } from '../../utils/dateCycleUtils';
 
 function getValidityStatus(adm) {
   if (adm.status === 'SUSPENDED') {
@@ -99,12 +100,11 @@ function getValidityStatus(adm) {
 
   const isCancelledOrRevoked = adm.status === 'REVOKED' || adm.status === 'CANCELLED';
   if (isCancelledOrRevoked) {
-    const formattedDate = adm.revoked_at ? new Date(adm.revoked_at).toLocaleDateString('en-IN') : null;
     return {
       status: 'CANCELLED',
       badgeVariant: 'danger',
       label: 'Cancelled',
-      subtext: adm.revocation_reason ? adm.revocation_reason : (formattedDate ? `Cancelled on ${formattedDate}` : 'Cancelled'),
+      subtext: 'Cancelled',
       isExpired: false,
       isExpiringSoon: false,
       isCancelled: true,
@@ -1029,7 +1029,7 @@ export default function StudentDetailPage() {
                   <span className="font-mono font-bold text-purple-950">
                     {enrollmentData.active_green_card.valid_from} → {enrollmentData.active_green_card.valid_to}
                   </span>
-                  {enrollmentData.active_green_card.days_remaining !== null && (
+                  {enrollmentData.active_green_card.days_remaining !== null && enrollmentData.active_green_card.days_remaining !== undefined && !['CANCELLED', 'REVOKED'].includes(enrollmentData.active_green_card.status) && (
                     <span className="ml-1.5 px-1.5 py-0.2 rounded bg-purple-200/70 text-purple-900 font-bold font-mono text-[10px]">
                       {enrollmentData.active_green_card.days_remaining}d remaining
                     </span>
@@ -1137,13 +1137,18 @@ export default function StudentDetailPage() {
                       <div className="font-mono text-black font-semibold text-[11px] mt-0.5">
                         {item.valid_from} → {item.valid_to}
                       </div>
-                      {item.days_remaining !== null && (
+                      {item.days_remaining !== null && item.days_remaining !== undefined && !['CANCELLED', 'REVOKED'].includes(item.status) && (
                         <span className={`inline-block mt-0.5 px-1.5 py-0.2 rounded font-bold text-[10px] ${
                           item.days_remaining <= 3 ? 'bg-rose-100 text-rose-800 border border-rose-200' :
                           item.days_remaining <= 7 ? 'bg-amber-100 text-amber-800 border border-amber-200' :
                           'bg-emerald-100 text-emerald-800 border border-emerald-200'
                         }`}>
                           {item.days_remaining}d remaining
+                        </span>
+                      )}
+                      {['CANCELLED', 'REVOKED'].includes(item.status) && (
+                        <span className="inline-block mt-0.5 px-1.5 py-0.2 rounded font-bold text-[10px] bg-rose-50 text-rose-800 border border-rose-200">
+                          Cancelled
                         </span>
                       )}
                     </div>
@@ -1299,7 +1304,7 @@ export default function StudentDetailPage() {
                           {item.valid_from} → {item.valid_to}
                         </div>
                         <div className="text-[10px] mt-0.5">
-                          {item.days_remaining !== null && (
+                          {item.days_remaining !== null && item.days_remaining !== undefined && !['CANCELLED', 'REVOKED'].includes(item.status) ? (
                             <span className={`px-1.5 py-0.2 rounded font-bold ${
                               item.days_remaining <= 3 ? 'bg-rose-100 text-rose-800' :
                               item.days_remaining <= 7 ? 'bg-amber-100 text-amber-800' :
@@ -1307,7 +1312,11 @@ export default function StudentDetailPage() {
                             }`}>
                               {item.days_remaining}d remaining
                             </span>
-                          )}
+                          ) : ['CANCELLED', 'REVOKED'].includes(item.status) ? (
+                            <span className="px-1.5 py-0.2 rounded font-bold bg-rose-50 text-rose-800 border border-rose-200">
+                              Cancelled
+                            </span>
+                          ) : null}
                         </div>
                       </td>
                       <td className="py-2.5 px-3 text-right font-mono font-bold text-black">
@@ -1890,9 +1899,19 @@ export default function StudentDetailPage() {
                       </div>
                       <div className="text-right space-y-1">
                         {isPurchaseCancelled ? (
-                          <Badge size="xs" variant="danger">
-                            CANCELLED
-                          </Badge>
+                          <div className="space-y-0.5">
+                            <Badge size="xs" variant="danger">
+                              CANCELLED
+                            </Badge>
+                            {getCleanCancelReason(adm.revocation_reason) && (
+                              <div
+                                className="text-[10px] text-rose-700 italic max-w-[120px] truncate"
+                                title={getCleanCancelReason(adm.revocation_reason)}
+                              >
+                                {getCleanCancelReason(adm.revocation_reason)}
+                              </div>
+                            )}
+                          </div>
                         ) : (
                           <Badge
                             size="xs"
@@ -2116,9 +2135,16 @@ export default function StudentDetailPage() {
                         <td className="p-2.5 text-slate-800">
                           <span className="font-bold text-black block">{adm.admission_date}</span>
                           {isPurchaseCancelled ? (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded border bg-rose-50 text-rose-800 border-rose-200 mt-1">
-                              {validity.subtext}
-                            </span>
+                            <div className="mt-1 space-y-0.5">
+                              {adm.valid_from && adm.valid_to && (
+                                <span className="text-[10px] text-slate-500 font-mono block">
+                                  {adm.valid_from} &rarr; {adm.valid_to}
+                                </span>
+                              )}
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded border bg-rose-50 text-rose-800 border-rose-200">
+                                Cancelled
+                              </span>
+                            </div>
                           ) : adm.valid_from && adm.valid_to ? (
                             <div className="mt-1 space-y-0.5">
                               <span className="text-[10px] text-slate-800 font-mono font-semibold block">
@@ -2194,12 +2220,12 @@ export default function StudentDetailPage() {
                               <Badge size="xs" variant="danger">
                                 CANCELLED
                               </Badge>
-                              {adm.revocation_reason && (
+                              {getCleanCancelReason(adm.revocation_reason) && (
                                 <div
                                   className="text-[10px] text-rose-700 italic max-w-[120px] truncate mx-auto"
-                                  title={adm.revocation_reason}
+                                  title={getCleanCancelReason(adm.revocation_reason)}
                                 >
-                                  {adm.revocation_reason}
+                                  {getCleanCancelReason(adm.revocation_reason)}
                                 </div>
                               )}
                             </div>
@@ -3292,7 +3318,12 @@ export default function StudentDetailPage() {
         }}
         student={student}
         item={selectedItemForRenew}
-        onSuccess={() => fetchStudentData()}
+        onSuccess={(createdAdmission) => {
+          fetchStudentData();
+          if (createdAdmission) {
+            setAdmissionSlipToShow(createdAdmission);
+          }
+        }}
       />
 
       {/* Change Subject Modal */}
@@ -3304,7 +3335,12 @@ export default function StudentDetailPage() {
         }}
         student={student}
         item={selectedItemForChange}
-        onSuccess={() => fetchStudentData()}
+        onSuccess={(createdAdmission) => {
+          fetchStudentData();
+          if (createdAdmission) {
+            setAdmissionSlipToShow(createdAdmission);
+          }
+        }}
       />
 
       {/* Edit Validity Dates Modal */}

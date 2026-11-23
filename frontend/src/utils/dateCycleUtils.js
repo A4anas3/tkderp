@@ -65,14 +65,27 @@ export function formatCycleLabel(startDateStr, endDateStr) {
   return `${formatIndianDate(startDateStr)} → ${formatIndianDate(endDateStr)}`;
 }
 
+export function getCleanCancelReason(reason) {
+  if (!reason || typeof reason !== 'string') return null;
+  const trimmed = reason.trim();
+  if (!trimmed) return null;
+  const lower = trimmed.toLowerCase();
+  const junkWords = ['dsfd', 'asdf', 'asdfg', 'qwerty', 'zxcv', 'xxx', 'test', 'bla', 'blah', 'null', 'undefined', 'na', 'n/a', 'none'];
+  if (junkWords.includes(lower)) return null;
+  if (/^[bcdfghjklmnpqrstvwxyz]{3,}$/i.test(lower)) return null;
+  if (/^(.)\1+$/i.test(trimmed)) return null;
+  if (trimmed.length < 3) return null;
+  return trimmed;
+}
+
 export function evaluateCycleStatus(endDateStr, balanceDue = 0, isCancelledOrRevoked = false) {
   if (isCancelledOrRevoked) {
     return {
       status: 'CANCELLED',
       label: 'Cancelled',
       variant: 'danger',
-      daysRemaining: 0,
-      subtext: 'Enrollment cancelled / dropped',
+      daysRemaining: null,
+      subtext: 'Cancelled',
     };
   }
 
@@ -81,7 +94,7 @@ export function evaluateCycleStatus(endDateStr, balanceDue = 0, isCancelledOrRev
       status: 'UNKNOWN',
       label: 'Unknown',
       variant: 'neutral',
-      daysRemaining: 0,
+      daysRemaining: null,
       subtext: 'No cycle set',
     };
   }

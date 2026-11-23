@@ -94,7 +94,7 @@ class TeacherEnrollmentItem(BaseModel):
     admission_status: str
     valid_from: Optional[date] = None
     valid_to: Optional[date] = None
-    days_remaining: int
+    days_remaining: Optional[int] = None
     cycle_status: str  # ACTIVE, INACTIVE, CANCELLED
     status_label: str
     badge_variant: str

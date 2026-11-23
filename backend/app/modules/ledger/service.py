@@ -1602,9 +1602,10 @@ async def renew_admission_items_service(
             .where(
                 AdmissionItem.student_id == student_id,
                 AdmissionItem.subject_id == itm.subject_id,
-                AdmissionItem.status != "DISCONTINUED",
+                AdmissionItem.status.notin_(["DISCONTINUED", "REVOKED", "CANCELLED"]),
+                AdmissionItem.access_status.notin_(["REVOKED", "CANCELLED", "DISCONTINUED"]),
                 Admission.document_status == "VALID",
-                Admission.status != "CANCELLED",
+                Admission.status.notin_(["CANCELLED", "REVOKED"]),
                 AdmissionItem.valid_from != None,
                 AdmissionItem.valid_to != None,
                 AdmissionItem.valid_from <= new_to,
@@ -1727,6 +1728,10 @@ async def renew_admission_items_service(
     for idx, spec in enumerate(renewal_specs):
         item_calc = calc["items"][idx]
         prev_itm = spec["prev_item"]
+        clean_subj_name = spec["subject_name"] or ""
+        while clean_subj_name.startswith("[Renewal] "):
+            clean_subj_name = clean_subj_name[len("[Renewal] "):]
+
         ai = AdmissionItem(
             admission=admission,
             student_id=admission.student_id,
@@ -1736,7 +1741,7 @@ async def renew_admission_items_service(
             teacher_id=spec["teacher_id"],
             teacher_name_snapshot=spec["teacher_name_snapshot"],
             hall_number_snapshot=spec["hall_number_snapshot"],
-            item_name_snapshot=spec["subject_name"],
+            item_name_snapshot=clean_subj_name,
             original_price=item_calc["original_price"],
             discount_type=spec["discount_type"],
             discount_value=spec["discount_value"],
@@ -1763,27 +1768,37 @@ async def renew_admission_items_service(
     set_committed_value(admission, "items", new_items)
 
     # Initial payment
-    if initial_payment and getattr(initial_payment, "amount", Decimal("0.00")) > Decimal("0.00"):
-        pay_amount = Decimal(str(initial_payment.amount))
-        if pay_amount > admission.total_payable:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Initial payment amount ₹{pay_amount} exceeds total payable ₹{admission.total_payable}"
+    if initial_payment:
+        raw_amt = getattr(initial_payment, "amount", None)
+        if raw_amt is None and isinstance(initial_payment, dict):
+            raw_amt = initial_payment.get("amount")
+        if raw_amt and Decimal(str(raw_amt)) > Decimal("0.00"):
+            pay_amount = Decimal(str(raw_amt))
+            if pay_amount > admission.total_payable:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Initial payment amount ₹{pay_amount} exceeds total payable ₹{admission.total_payable}"
+                )
+            p_mode = getattr(initial_payment, "payment_mode", None) or (initial_payment.get("payment_mode") if isinstance(initial_payment, dict) else "CASH")
+            t_ref = getattr(initial_payment, "transaction_reference", None) or (initial_payment.get("transaction_reference") if isinstance(initial_payment, dict) else None)
+            p_notes = getattr(initial_payment, "notes", None) or (initial_payment.get("notes") if isinstance(initial_payment, dict) else None) or f"Renewal payment for {sub_names}"
+            alloc_mode = getattr(initial_payment, "allocation_mode", None) or (initial_payment.get("allocation_mode") if isinstance(initial_payment, dict) else "PROPORTIONAL")
+            man_alloc = getattr(initial_payment, "manual_allocations", None) or (initial_payment.get("manual_allocations") if isinstance(initial_payment, dict) else None)
+
+            await record_payment_service(
+                db=db,
+                admission=admission,
+                amount=pay_amount,
+                payment_mode=p_mode,
+                collected_by_user=current_user,
+                transaction_reference=t_ref,
+                notes=p_notes,
+                valid_from=min_from,
+                valid_to=max_to,
+                fee_period=f"{min_from} to {max_to}",
+                allocation_mode=alloc_mode,
+                manual_allocations=man_alloc
             )
-        await record_payment_service(
-            db=db,
-            admission=admission,
-            amount=pay_amount,
-            payment_mode=getattr(initial_payment, "payment_mode", "CASH"),
-            collected_by_user=current_user,
-            transaction_reference=getattr(initial_payment, "transaction_reference", None),
-            notes=getattr(initial_payment, "notes", None) or f"Renewal payment for {sub_names}",
-            valid_from=min_from,
-            valid_to=max_to,
-            fee_period=f"{min_from} to {max_to}",
-            allocation_mode=getattr(initial_payment, "allocation_mode", "PROPORTIONAL"),
-            manual_allocations=getattr(initial_payment, "manual_allocations", None)
-        )
 
     # Audit log
     audit = AuditLog(

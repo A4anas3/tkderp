@@ -552,12 +552,17 @@ async def get_teacher_roster(
         c_start = itm.valid_from or adm.valid_from or adm.admission_date
         c_end = itm.valid_to or adm.valid_to or (c_start + timedelta(days=30))
 
-        if adm.status in ("CANCELLED", "REVOKED"):
+        is_cancelled = (
+            adm.status in ("CANCELLED", "REVOKED")
+            or getattr(itm, "access_status", "ACTIVE") in ("CANCELLED", "REVOKED", "DISCONTINUED")
+            or getattr(itm, "status", "ACTIVE") in ("CANCELLED", "REVOKED", "DISCONTINUED")
+        )
+        if is_cancelled:
             c_status = "CANCELLED"
             s_label = "Cancelled"
             badge_var = "danger"
-            s_subtext = adm.revocation_reason or "Enrollment cancelled / dropped"
-            days_rem = 0
+            s_subtext = "Cancelled"
+            days_rem = None
         elif today > c_end:
             c_status = "INACTIVE"
             s_label = "Inactive (Expired)"

@@ -18,7 +18,7 @@ import Modal from '../common/Modal';
 import Button from '../common/Button';
 import Badge from '../common/Badge';
 import { useAuth } from '../../context/AuthContext';
-import { formatIndianDate, formatCycleLabel, evaluateCycleStatus } from '../../utils/dateCycleUtils';
+import { formatIndianDate, formatCycleLabel, evaluateCycleStatus, getCleanCancelReason } from '../../utils/dateCycleUtils';
 
 export default function AdmissionDetailModal({
   isOpen,
@@ -73,8 +73,8 @@ export default function AdmissionDetailModal({
               <div className="text-[11px] text-slate-600 font-medium">
                 {isActive
                   ? 'Student has active subject enrollment and class access'
-                  : admission.revocation_reason
-                  ? `Revoked: ${admission.revocation_reason}`
+                  : getCleanCancelReason(admission.revocation_reason)
+                  ? `Revoked: ${getCleanCancelReason(admission.revocation_reason)}`
                   : 'Enrollment has been deactivated / cancelled'}
               </div>
             </div>
