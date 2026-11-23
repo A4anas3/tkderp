@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
 from typing import List
@@ -16,8 +16,8 @@ router = APIRouter(prefix="/api/users", tags=["Users & Staff Management"])
 
 @router.get("", response_model=PageResponse[UserResponse])
 async def list_users(
-    page: int = 1,
-    page_size: int = 20,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     search: str = None,
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(require_admin)

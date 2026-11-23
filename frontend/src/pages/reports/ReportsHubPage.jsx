@@ -208,9 +208,33 @@ export default function ReportsHubPage() {
     setSelectedYear(y || currentYear);
   };
 
+  // Reset tablePage to 1 whenever any filter or tab changes
+  useEffect(() => {
+    setTablePage(1);
+  }, [
+    activeTab,
+    fromDate,
+    toDate,
+    selectedMonth,
+    selectedYear,
+    searchQuery,
+    paymentModeFilter,
+    cashierFilter,
+    ageingBucketFilter,
+    selectedSubjectFilter,
+    enquirySourceFilter,
+    refundModeFilter,
+    expenseCategoryFilter,
+    summaryPeriod,
+  ]);
+
   // Build query params
-  const buildQueryParams = useCallback(() => {
+  const buildQueryParams = useCallback((includePagination = true) => {
     const params = {};
+    if (includePagination) {
+      params.page = tablePage;
+      params.page_size = PAGE_SIZE;
+    }
     if (fromDate) params.from_date = fromDate;
     if (toDate) params.to_date = toDate;
     if (selectedMonth) params.month = selectedMonth;
@@ -241,6 +265,7 @@ export default function ReportsHubPage() {
     }
     return params;
   }, [
+    tablePage,
     fromDate,
     toDate,
     selectedMonth,
@@ -260,9 +285,8 @@ export default function ReportsHubPage() {
   // Fetch report data
   const fetchReportData = useCallback(async () => {
     setLoading(true);
-    setTablePage(1);
     try {
-      const params = buildQueryParams();
+      const params = buildQueryParams(true);
       let res;
       switch (activeTab) {
         case 'collections':
@@ -311,7 +335,7 @@ export default function ReportsHubPage() {
   const handleExportCsv = async () => {
     setExporting(true);
     try {
-      const params = buildQueryParams();
+      const params = buildQueryParams(false);
       params.format = 'csv';
       const query = new URLSearchParams();
       Object.entries(params).forEach(([k, v]) => {
@@ -868,7 +892,7 @@ export default function ReportsHubPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-medium">
-                      {data?.transactions?.slice((tablePage - 1) * PAGE_SIZE, tablePage * PAGE_SIZE).map((t) => (
+                      {data?.transactions?.map((t) => (
                         <tr key={t.id} className="hover:bg-slate-50 transition-colors">
                           <td className="p-2.5 font-mono text-slate-600 whitespace-nowrap">
                             {t.payment_date ? t.payment_date.slice(0, 10) : '-'}
@@ -905,10 +929,10 @@ export default function ReportsHubPage() {
                 </div>
 
                 {/* Pagination */}
-                {data?.transactions?.length > PAGE_SIZE && (
+                {((data?.total ?? 0) > PAGE_SIZE || (data?.total_pages ?? 1) > 1 || tablePage > 1) && (
                   <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100 text-xs">
                     <span className="text-slate-500">
-                      Showing {(tablePage - 1) * PAGE_SIZE + 1} to {Math.min(tablePage * PAGE_SIZE, data.transactions.length)} of {data.transactions.length}
+                      Showing {(tablePage - 1) * PAGE_SIZE + 1} to {Math.min(tablePage * PAGE_SIZE, data.total ?? data.transactions?.length ?? 0)} of {data.total ?? data.transactions?.length ?? 0}
                     </span>
                     <div className="flex items-center gap-1">
                       <button
@@ -920,7 +944,7 @@ export default function ReportsHubPage() {
                       </button>
                       <button
                         onClick={() => setTablePage((p) => p + 1)}
-                        disabled={tablePage * PAGE_SIZE >= data.transactions.length}
+                        disabled={tablePage >= (data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE)))}
                         className="px-2 py-1 rounded border border-slate-200 disabled:opacity-50 font-bold"
                       >
                         Next
@@ -999,7 +1023,7 @@ export default function ReportsHubPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-medium">
-                      {data?.items?.slice((tablePage - 1) * PAGE_SIZE, tablePage * PAGE_SIZE).map((i) => (
+                      {data?.items?.map((i) => (
                         <tr key={i.item_id} className="hover:bg-slate-50 transition-colors">
                           <td className="p-2.5">
                             <span
@@ -1039,10 +1063,10 @@ export default function ReportsHubPage() {
                 </div>
 
                 {/* Pagination */}
-                {data?.items?.length > PAGE_SIZE && (
+                {((data?.total ?? 0) > PAGE_SIZE || (data?.total_pages ?? 1) > 1 || tablePage > 1) && (
                   <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100 text-xs">
                     <span className="text-slate-500">
-                      Showing {(tablePage - 1) * PAGE_SIZE + 1} to {Math.min(tablePage * PAGE_SIZE, data.items.length)} of {data.items.length}
+                      Showing {(tablePage - 1) * PAGE_SIZE + 1} to {Math.min(tablePage * PAGE_SIZE, data.total ?? data.items?.length ?? 0)} of {data.total ?? data.items?.length ?? 0}
                     </span>
                     <div className="flex items-center gap-1">
                       <button
@@ -1054,7 +1078,7 @@ export default function ReportsHubPage() {
                       </button>
                       <button
                         onClick={() => setTablePage((p) => p + 1)}
-                        disabled={tablePage * PAGE_SIZE >= data.items.length}
+                        disabled={tablePage >= (data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE)))}
                         className="px-2 py-1 rounded border border-slate-200 disabled:opacity-50 font-bold"
                       >
                         Next
@@ -1388,7 +1412,7 @@ export default function ReportsHubPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-medium">
-                      {data?.items?.slice((tablePage - 1) * PAGE_SIZE, tablePage * PAGE_SIZE).map((e) => (
+                      {data?.items?.map((e) => (
                         <tr key={e.id} className="hover:bg-slate-50 transition-colors">
                           <td className="p-2.5 font-mono text-slate-600 whitespace-nowrap">
                             {e.created_at ? e.created_at.slice(0, 10) : '-'}
@@ -1419,10 +1443,10 @@ export default function ReportsHubPage() {
                 </div>
 
                 {/* Pagination */}
-                {data?.items?.length > PAGE_SIZE && (
+                {((data?.total ?? 0) > PAGE_SIZE || (data?.total_pages ?? 1) > 1 || tablePage > 1) && (
                   <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100 text-xs">
                     <span className="text-slate-500">
-                      Showing {(tablePage - 1) * PAGE_SIZE + 1} to {Math.min(tablePage * PAGE_SIZE, data.items.length)} of {data.items.length}
+                      Showing {(tablePage - 1) * PAGE_SIZE + 1} to {Math.min(tablePage * PAGE_SIZE, data.total ?? data.items?.length ?? 0)} of {data.total ?? data.items?.length ?? 0}
                     </span>
                     <div className="flex items-center gap-1">
                       <button
@@ -1434,7 +1458,7 @@ export default function ReportsHubPage() {
                       </button>
                       <button
                         onClick={() => setTablePage((p) => p + 1)}
-                        disabled={tablePage * PAGE_SIZE >= data.items.length}
+                        disabled={tablePage >= (data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE)))}
                         className="px-2 py-1 rounded border border-slate-200 disabled:opacity-50 font-bold"
                       >
                         Next
@@ -1498,7 +1522,7 @@ export default function ReportsHubPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-medium">
-                      {dedupedWaivers.slice((tablePage - 1) * PAGE_SIZE, tablePage * PAGE_SIZE).map((w, idx) => (
+                      {dedupedWaivers.map((w, idx) => (
                         <tr key={w.id ? `${w.id}-${idx}` : `waiver-${w.waiver_number || idx}-${idx}`} className="hover:bg-slate-50 transition-colors">
                           <td className="p-2.5 font-mono text-slate-600 whitespace-nowrap">
                             {w.date ? w.date.slice(0, 10) : '—'}
@@ -1541,10 +1565,10 @@ export default function ReportsHubPage() {
                 </div>
 
                 {/* Pagination */}
-                {dedupedWaivers.length > PAGE_SIZE && (
+                {((data?.total ?? dedupedWaivers.length) > PAGE_SIZE || (data?.total_pages ?? 1) > 1 || tablePage > 1) && (
                   <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100 text-xs">
                     <span className="text-slate-500">
-                      Showing {(tablePage - 1) * PAGE_SIZE + 1} to {Math.min(tablePage * PAGE_SIZE, dedupedWaivers.length)} of {dedupedWaivers.length}
+                      Showing {(tablePage - 1) * PAGE_SIZE + 1} to {Math.min(tablePage * PAGE_SIZE, data?.total ?? dedupedWaivers.length)} of {data?.total ?? dedupedWaivers.length}
                     </span>
                     <div className="flex items-center gap-1">
                       <button
@@ -1556,7 +1580,7 @@ export default function ReportsHubPage() {
                       </button>
                       <button
                         onClick={() => setTablePage((p) => p + 1)}
-                        disabled={tablePage * PAGE_SIZE >= dedupedWaivers.length}
+                        disabled={tablePage >= (data?.total_pages ?? Math.max(1, Math.ceil((data?.total || dedupedWaivers.length) / PAGE_SIZE)))}
                         className="px-2 py-1 rounded border border-slate-200 disabled:opacity-50 font-bold"
                       >
                         Next
@@ -1627,7 +1651,7 @@ export default function ReportsHubPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-medium">
-                      {data?.items?.slice((tablePage - 1) * PAGE_SIZE, tablePage * PAGE_SIZE).map((r) => (
+                      {data?.items?.map((r) => (
                         <tr key={r.id} className="hover:bg-slate-50 transition-colors">
                           <td className="p-2.5 font-mono text-slate-600 whitespace-nowrap">
                             {r.refund_date ? r.refund_date.slice(0, 10) : '-'}
@@ -1658,10 +1682,10 @@ export default function ReportsHubPage() {
                 </div>
 
                 {/* Pagination */}
-                {data?.items?.length > PAGE_SIZE && (
+                {((data?.total ?? 0) > PAGE_SIZE || (data?.total_pages ?? 1) > 1 || tablePage > 1) && (
                   <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100 text-xs">
                     <span className="text-slate-500">
-                      Showing {(tablePage - 1) * PAGE_SIZE + 1} to {Math.min(tablePage * PAGE_SIZE, data.items.length)} of {data.items.length}
+                      Showing {(tablePage - 1) * PAGE_SIZE + 1} to {Math.min(tablePage * PAGE_SIZE, data.total ?? data.items?.length ?? 0)} of {data.total ?? data.items?.length ?? 0}
                     </span>
                     <div className="flex items-center gap-1">
                       <button
@@ -1673,7 +1697,7 @@ export default function ReportsHubPage() {
                       </button>
                       <button
                         onClick={() => setTablePage((p) => p + 1)}
-                        disabled={tablePage * PAGE_SIZE >= data.items.length}
+                        disabled={tablePage >= (data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE)))}
                         className="px-2 py-1 rounded border border-slate-200 disabled:opacity-50 font-bold"
                       >
                         Next
@@ -1760,7 +1784,7 @@ export default function ReportsHubPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-medium">
-                      {data?.items?.slice((tablePage - 1) * PAGE_SIZE, tablePage * PAGE_SIZE).map((i) => (
+                      {data?.items?.map((i) => (
                         <tr key={i.id} className="hover:bg-slate-50 transition-colors">
                           <td className="p-2.5 font-mono text-slate-600 whitespace-nowrap">{i.date}</td>
                           <td className="p-2.5">
@@ -1783,10 +1807,10 @@ export default function ReportsHubPage() {
                 </div>
 
                 {/* Pagination */}
-                {data?.items?.length > PAGE_SIZE && (
+                {((data?.total ?? 0) > PAGE_SIZE || (data?.total_pages ?? 1) > 1 || tablePage > 1) && (
                   <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100 text-xs">
                     <span className="text-slate-500">
-                      Showing {(tablePage - 1) * PAGE_SIZE + 1} to {Math.min(tablePage * PAGE_SIZE, data.items.length)} of {data.items.length}
+                      Showing {(tablePage - 1) * PAGE_SIZE + 1} to {Math.min(tablePage * PAGE_SIZE, data.total ?? data.items?.length ?? 0)} of {data.total ?? data.items?.length ?? 0}
                     </span>
                     <div className="flex items-center gap-1">
                       <button
@@ -1798,7 +1822,7 @@ export default function ReportsHubPage() {
                       </button>
                       <button
                         onClick={() => setTablePage((p) => p + 1)}
-                        disabled={tablePage * PAGE_SIZE >= data.items.length}
+                        disabled={tablePage >= (data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE)))}
                         className="px-2 py-1 rounded border border-slate-200 disabled:opacity-50 font-bold"
                       >
                         Next

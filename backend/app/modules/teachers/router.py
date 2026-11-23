@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, and_, desc, case
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Optional, List
+from typing import Optional, List, Union
 from collections import defaultdict
 import uuid
 import os
@@ -41,8 +41,8 @@ router = APIRouter(prefix="/api/teachers", tags=["Teachers"])
 
 @router.get("", response_model=PageResponse[TeacherResponse])
 async def list_teachers(
-    page: int = 1,
-    page_size: int = 20,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     search: Optional[str] = None,
     status: Optional[str] = None,
     status_filter: Optional[str] = None,
@@ -122,10 +122,12 @@ def get_days_in_month(month_year: str) -> int:
     except Exception:
         return 30
 
-@router.get("/attendance", response_model=List[TeacherAttendanceMonthlySummary])
+@router.get("/attendance", response_model=Union[PageResponse[TeacherAttendanceMonthlySummary], List[TeacherAttendanceMonthlySummary]])
 async def list_teacher_attendance_monthly(
     month_year: Optional[str] = Query(None),
     teacher_id: Optional[uuid.UUID] = Query(None),
+    page: Optional[int] = Query(None, ge=1, description="Page number"),
+    page_size: Optional[int] = Query(None, ge=1, le=100, description="Page size"),
     db: AsyncSession = Depends(get_db),
     user = Depends(require_staff)
 ):
@@ -172,6 +174,21 @@ async def list_teacher_attendance_monthly(
                 absent_days=[d.isoformat() for d in abs_dates]
             )
         )
+
+    if page is not None:
+        total = len(summary_list)
+        effective_page_size = page_size or 20
+        total_pages = max(1, (total + effective_page_size - 1) // effective_page_size) if total > 0 else 1
+        start = (page - 1) * effective_page_size
+        paged_items = summary_list[start:start + effective_page_size]
+        return PageResponse(
+            items=paged_items,
+            total=total,
+            total_pages=total_pages,
+            page=page,
+            page_size=effective_page_size
+        )
+
     return summary_list
 
 @router.get("/{teacher_id}", response_model=TeacherResponse)
@@ -1062,6 +1079,8 @@ async def get_teacher_history(
     teacher_id: uuid.UUID,
     event_type: Optional[str] = Query(None, description="Filter: ALL, ADMISSION, RENEWAL, EXPIRY, CHANGE, CANCELLATION"),
     search: Optional[str] = Query(None, description="Search student, code, or subject"),
+    page: Optional[int] = Query(None, ge=1, description="Page number"),
+    page_size: Optional[int] = Query(None, ge=1, le=100, description="Page size"),
     db: AsyncSession = Depends(get_db),
     user = Depends(require_staff)
 ):
@@ -1277,6 +1296,19 @@ async def get_teacher_history(
             if q in e.student_name.lower() or q in e.student_code.lower() or q in (e.mobile or "") or q in e.subject_name.lower() or q in (e.subject_code or "").lower() or q in e.admission_number.lower()
         ]
 
+    total = len(filtered_events)
+    if page is not None:
+        effective_page_size = page_size or 20
+        total_pages = max(1, (total + effective_page_size - 1) // effective_page_size) if total > 0 else 1
+        start = (page - 1) * effective_page_size
+        paged_events = filtered_events[start:start + effective_page_size]
+        cur_page = page
+    else:
+        effective_page_size = total or 20
+        total_pages = 1
+        paged_events = filtered_events
+        cur_page = 1
+
     return TeacherHistoryResponse(
         teacher_id=teacher.id,
         teacher_name=teacher.name,
@@ -1287,7 +1319,11 @@ async def get_teacher_history(
         expiries_count=expiries_cnt,
         changes_count=changes_cnt,
         cancellations_count=cancellations_cnt,
-        events=filtered_events
+        total=total,
+        total_pages=total_pages,
+        page=cur_page,
+        page_size=effective_page_size,
+        events=paged_events
     )
 
 

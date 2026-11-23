@@ -40,14 +40,26 @@ export default function RenewalsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Filters
+  // Filters & Pagination
   const [activeTab, setActiveTab] = useState('ALL'); // 'ALL' | 'EXPIRING' | 'EXPIRED'
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('ALL');
   const [subjectsList, setSubjectsList] = useState([]);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const pageSize = 15;
 
-  // Preload subjects for filter dropdown
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    setPage(1);
+  };
+
+  const handleSubjectChange = (val) => {
+    setSelectedSubject(val);
+    setPage(1);
+  };
   useEffect(() => {
     async function fetchSubjects() {
       try {
@@ -60,10 +72,11 @@ export default function RenewalsPage() {
     fetchSubjects();
   }, []);
 
-  // Debounce search
+  // Debounce search and reset to page 1
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(searchQuery);
+      setPage(1);
     }, 300);
     return () => clearTimeout(timer);
   }, [searchQuery]);
@@ -72,7 +85,13 @@ export default function RenewalsPage() {
     try {
       setLoading(true);
       setError(null);
-      const params = {};
+      const params = {
+        page,
+        page_size: pageSize,
+      };
+      if (activeTab !== 'ALL') {
+        params.category = activeTab;
+      }
       if (debouncedSearch.trim()) {
         params.search = debouncedSearch.trim();
       }
@@ -85,6 +104,8 @@ export default function RenewalsPage() {
       if (data?.counts) {
         setCounts(data.counts);
       }
+      setTotal(typeof data?.total === 'number' ? data.total : (data?.counts?.total_count || 0));
+      setTotalPages(typeof data?.total_pages === 'number' ? data.total_pages : 1);
     } catch (err) {
       console.error('Failed to load renewals data:', err);
       const msg = err?.response?.data?.detail || err?.message || 'Failed to load course renewals data';
@@ -93,7 +114,7 @@ export default function RenewalsPage() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, selectedSubject, toastError]);
+  }, [debouncedSearch, selectedSubject, activeTab, page, pageSize, toastError]);
 
   useEffect(() => {
     loadData();
@@ -348,7 +369,7 @@ export default function RenewalsPage() {
           subtext="Admissions expiring within the next 1 to 5 days"
           icon={Clock}
           color="amber"
-          onClick={() => setActiveTab('EXPIRING')}
+          onClick={() => handleTabChange('EXPIRING')}
         />
         <StatCard
           title="Recently Expired (1–5 Days Ago)"
@@ -356,7 +377,7 @@ export default function RenewalsPage() {
           subtext="Admissions expired within the last 1 to 5 days"
           icon={AlertTriangle}
           color="rose"
-          onClick={() => setActiveTab('EXPIRED')}
+          onClick={() => handleTabChange('EXPIRED')}
         />
         <StatCard
           title="Total Renewal Candidates"
@@ -364,7 +385,7 @@ export default function RenewalsPage() {
           subtext="Combined candidates requiring course renewal"
           icon={RotateCcw}
           color="purple"
-          onClick={() => setActiveTab('ALL')}
+          onClick={() => handleTabChange('ALL')}
         />
       </div>
 
@@ -375,7 +396,7 @@ export default function RenewalsPage() {
           <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-100 rounded-lg text-xs font-bold">
             <button
               type="button"
-              onClick={() => setActiveTab('ALL')}
+              onClick={() => handleTabChange('ALL')}
               className={`min-h-[32px] px-3.5 py-1 rounded-md transition-colors cursor-pointer ${
                 activeTab === 'ALL'
                   ? 'bg-white text-black shadow-xs font-bold'
@@ -386,7 +407,7 @@ export default function RenewalsPage() {
             </button>
             <button
               type="button"
-              onClick={() => setActiveTab('EXPIRING')}
+              onClick={() => handleTabChange('EXPIRING')}
               className={`min-h-[32px] px-3.5 py-1 rounded-md transition-colors cursor-pointer ${
                 activeTab === 'EXPIRING'
                   ? 'bg-white text-amber-900 shadow-xs font-bold'
@@ -397,7 +418,7 @@ export default function RenewalsPage() {
             </button>
             <button
               type="button"
-              onClick={() => setActiveTab('EXPIRED')}
+              onClick={() => handleTabChange('EXPIRED')}
               className={`min-h-[32px] px-3.5 py-1 rounded-md transition-colors cursor-pointer ${
                 activeTab === 'EXPIRED'
                   ? 'bg-white text-rose-900 shadow-xs font-bold'
@@ -430,7 +451,7 @@ export default function RenewalsPage() {
           <div className="sm:col-span-4">
             <select
               value={selectedSubject}
-              onChange={(e) => setSelectedSubject(e.target.value)}
+              onChange={(e) => handleSubjectChange(e.target.value)}
               className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-purple-900/30 focus:border-purple-900 bg-white font-medium text-slate-700"
             >
               <option value="ALL">All Subjects & Courses</option>
@@ -491,6 +512,36 @@ export default function RenewalsPage() {
                 </span>
               </div>
               {renderListTable(recentlyExpiredList, 'EXPIRED')}
+            </div>
+          )}
+
+          {/* Pagination Controls */}
+          {total > 0 && (
+            <div className="p-3 bg-white rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-2xs">
+              <span className="text-slate-600 font-medium">
+                Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, total)} of {total} candidates (Page {page} of {totalPages})
+              </span>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  Previous
+                </Button>
+                <span className="px-2 font-bold text-slate-800">
+                  {page} / {totalPages}
+                </span>
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                >
+                  Next
+                </Button>
+              </div>
             </div>
           )}
         </div>

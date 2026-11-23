@@ -69,8 +69,8 @@ router = APIRouter(prefix="/api/students", tags=["Students"])
 
 @router.get("", response_model=PageResponse[StudentResponse])
 async def list_students(
-    page: int = 1,
-    page_size: int = 20,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     search: str = None,
     status: str = None,
     db: AsyncSession = Depends(get_db),

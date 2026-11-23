@@ -504,7 +504,9 @@ async def get_dues_and_ageing(
     batch_id: Optional[uuid.UUID] = None,
     ageing_bucket: Optional[str] = None,
     search: Optional[str] = None,
-    limit: Optional[int] = 500
+    limit: Optional[int] = 500,
+    page: Optional[int] = None,
+    page_size: Optional[int] = None
 ) -> Dict[str, Any]:
     """
     Dues & Ageing Report:
@@ -609,16 +611,25 @@ async def get_dues_and_ageing(
             or q in i["batch_name"].lower()
         ]
 
-    total_matching = len(filtered_items)
-    if limit and len(filtered_items) > limit:
-        filtered_items = filtered_items[:limit]
+    total = len(filtered_items)
+    if page is not None:
+        effective_page_size = page_size or 15
+        total_pages = max(1, (total + effective_page_size - 1) // effective_page_size) if total > 0 else 1
+        start = (page - 1) * effective_page_size
+        paged_items = filtered_items[start:start + effective_page_size]
+        cur_page = page
+    else:
+        effective_page_size = limit or len(filtered_items) or 15
+        total_pages = 1
+        paged_items = filtered_items[:limit] if limit else filtered_items
+        cur_page = 1
 
     return {
         "summary": {
             "total_due": float(total_due),
             "total_students": len(unique_students),
             "total_records": len(all_items),
-            "total_matching": total_matching,
+            "total_matching": total,
             "buckets": {
                 "0-30": {"count": bucket_counts["0-30"], "amount": float(bucket_amounts["0-30"])},
                 "31-60": {"count": bucket_counts["31-60"], "amount": float(bucket_amounts["31-60"])},
@@ -626,7 +637,11 @@ async def get_dues_and_ageing(
                 "90+": {"count": bucket_counts["90+"], "amount": float(bucket_amounts["90+"])}
             }
         },
-        "items": filtered_items
+        "total": total,
+        "total_pages": total_pages,
+        "page": cur_page,
+        "page_size": effective_page_size,
+        "items": paged_items
     }
 
 
@@ -637,7 +652,9 @@ async def get_collections_detailed(
     payment_mode: Optional[str] = None,
     cashier_id: Optional[uuid.UUID] = None,
     search: Optional[str] = None,
-    limit: Optional[int] = 500
+    limit: Optional[int] = 500,
+    page: Optional[int] = None,
+    page_size: Optional[int] = None
 ) -> Dict[str, Any]:
     """
     Collections Report:
@@ -709,9 +726,18 @@ async def get_collections_detailed(
     net = gross - ref
     p_count = sum((m["payment_count"] for m in by_mode), 0)
 
-    total_matching = len(txns)
-    if limit and len(txns) > limit:
-        txns = txns[:limit]
+    total = len(txns)
+    if page is not None:
+        effective_page_size = page_size or 15
+        total_pages = max(1, (total + effective_page_size - 1) // effective_page_size) if total > 0 else 1
+        start = (page - 1) * effective_page_size
+        paged_txns = txns[start:start + effective_page_size]
+        cur_page = page
+    else:
+        effective_page_size = limit or len(txns) or 15
+        total_pages = 1
+        paged_txns = txns[:limit] if limit else txns
+        cur_page = 1
 
     return {
         "summary": {
@@ -719,8 +745,8 @@ async def get_collections_detailed(
             "total_refunded": float(ref),
             "net_collected": float(net),
             "payment_count": p_count,
-            "total_matching": total_matching,
-            "filtered_transactions_count": len(txns)
+            "total_matching": total,
+            "filtered_transactions_count": len(paged_txns)
         },
         "by_mode": [
             {
@@ -746,7 +772,11 @@ async def get_collections_detailed(
             }
             for c in by_cashier
         ],
-        "transactions": txns
+        "total": total,
+        "total_pages": total_pages,
+        "page": cur_page,
+        "page_size": effective_page_size,
+        "transactions": paged_txns
     }
 
 
@@ -755,7 +785,9 @@ async def get_waivers_detailed(
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
     admin_id: Optional[uuid.UUID] = None,
-    search: Optional[str] = None
+    search: Optional[str] = None,
+    page: Optional[int] = None,
+    page_size: Optional[int] = None
 ) -> Dict[str, Any]:
     """
     Waivers Report:
@@ -841,15 +873,32 @@ async def get_waivers_detailed(
         total_amount = sum((Decimal(str(w["waived_amount"])) for w in waivers), Decimal("0.00"))
         unique_students = {w["student_id"] for w in waivers}
 
+    total = len(waivers)
+    if page is not None:
+        effective_page_size = page_size or 15
+        total_pages = max(1, (total + effective_page_size - 1) // effective_page_size) if total > 0 else 1
+        start = (page - 1) * effective_page_size
+        paged_waivers = waivers[start:start + effective_page_size]
+        cur_page = page
+    else:
+        effective_page_size = len(waivers) or 15
+        total_pages = 1
+        paged_waivers = waivers
+        cur_page = 1
+
     return {
         "summary": {
             "total_waived_amount": float(total_amount),
             "total_amount": float(total_amount),
-            "waivers_count": len(waivers),
-            "count": len(waivers),
+            "waivers_count": total,
+            "count": total,
             "unique_students_count": len(unique_students)
         },
-        "items": waivers
+        "total": total,
+        "total_pages": total_pages,
+        "page": cur_page,
+        "page_size": effective_page_size,
+        "items": paged_waivers
     }
 
 
@@ -858,7 +907,9 @@ async def get_refunds_detailed(
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
     refund_mode: Optional[str] = None,
-    search: Optional[str] = None
+    search: Optional[str] = None,
+    page: Optional[int] = None,
+    page_size: Optional[int] = None
 ) -> Dict[str, Any]:
     """
     Refunds Report:
@@ -934,14 +985,31 @@ async def get_refunds_detailed(
             or q in r["processor_name"].lower()
         ]
 
+    total = len(items)
+    if page is not None:
+        effective_page_size = page_size or 15
+        total_pages = max(1, (total + effective_page_size - 1) // effective_page_size) if total > 0 else 1
+        start = (page - 1) * effective_page_size
+        paged_items = items[start:start + effective_page_size]
+        cur_page = page
+    else:
+        effective_page_size = len(items) or 15
+        total_pages = 1
+        paged_items = items
+        cur_page = 1
+
     return {
         "summary": {
             "total_refunded_amount": float(total_net),
             "gross_requested_amount": float(total_gross),
             "total_deductions_amount": float(total_ded),
-            "total_refunds_count": len(items)
+            "total_refunds_count": total
         },
-        "items": items
+        "total": total,
+        "total_pages": total_pages,
+        "page": cur_page,
+        "page_size": effective_page_size,
+        "items": paged_items
     }
 
 
@@ -951,7 +1019,9 @@ async def get_expenses_detailed(
     to_date: Optional[date] = None,
     category_id: Optional[uuid.UUID] = None,
     payment_mode: Optional[str] = None,
-    search: Optional[str] = None
+    search: Optional[str] = None,
+    page: Optional[int] = None,
+    page_size: Optional[int] = None
 ) -> Dict[str, Any]:
     """
     Expenses Report:
@@ -1066,12 +1136,25 @@ async def get_expenses_detailed(
 
     items.sort(key=lambda x: x["date"], reverse=True)
 
+    total = len(items)
+    if page is not None:
+        effective_page_size = page_size or 15
+        total_pages = max(1, (total + effective_page_size - 1) // effective_page_size) if total > 0 else 1
+        start = (page - 1) * effective_page_size
+        paged_items = items[start:start + effective_page_size]
+        cur_page = page
+    else:
+        effective_page_size = len(items) or 15
+        total_pages = 1
+        paged_items = items
+        cur_page = 1
+
     return {
         "summary": {
             "total_expenses": float(total_operational + total_salaries),
             "total_operational_expenses": float(total_operational),
             "total_salaries_paid": float(total_salaries),
-            "expense_count": len(items)
+            "expense_count": total
         },
         "by_category": [
             {"category_name": c["category_name"], "count": c["count"], "amount": float(c["amount"])}
@@ -1081,7 +1164,11 @@ async def get_expenses_detailed(
             {"mode": m["mode"], "count": m["count"], "amount": float(m["amount"])}
             for m in by_mode_map.values()
         ],
-        "items": items
+        "total": total,
+        "total_pages": total_pages,
+        "page": cur_page,
+        "page_size": effective_page_size,
+        "items": paged_items
     }
 
 
@@ -1091,7 +1178,9 @@ async def get_admissions_conversion_detailed(
     to_date: Optional[date] = None,
     subject_id: Optional[uuid.UUID] = None,
     source: Optional[str] = None,
-    search: Optional[str] = None
+    search: Optional[str] = None,
+    page: Optional[int] = None,
+    page_size: Optional[int] = None
 ) -> Dict[str, Any]:
     """
     Admissions & Conversion Report:
@@ -1206,6 +1295,19 @@ async def get_admissions_conversion_detailed(
         by_source.append({**s, "conversion_rate_pct": rate})
     by_source.sort(key=lambda x: x["enquiries_count"], reverse=True)
 
+    total = len(filtered_items)
+    if page is not None:
+        effective_page_size = page_size or 15
+        total_pages = max(1, (total + effective_page_size - 1) // effective_page_size) if total > 0 else 1
+        start = (page - 1) * effective_page_size
+        paged_items = filtered_items[start:start + effective_page_size]
+        cur_page = page
+    else:
+        effective_page_size = len(filtered_items) or 15
+        total_pages = 1
+        paged_items = filtered_items
+        cur_page = 1
+
     return {
         "summary": {
             "total_enquiries": total_enquiries,
@@ -1214,7 +1316,11 @@ async def get_admissions_conversion_detailed(
         },
         "by_subject": by_subject,
         "by_source": by_source,
-        "items": filtered_items
+        "total": total,
+        "total_pages": total_pages,
+        "page": cur_page,
+        "page_size": effective_page_size,
+        "items": paged_items
     }
 
 

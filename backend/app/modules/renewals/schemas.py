@@ -45,3 +45,7 @@ class RenewalsSummaryResponse(BaseModel):
     expiring: List[RenewalItemResponse]
     recently_expired: List[RenewalItemResponse]
     counts: RenewalCounts
+    total: int = 0
+    total_pages: int = 1
+    page: int = 1
+    page_size: int = 20

@@ -204,6 +204,10 @@ class TeacherHistoryResponse(BaseModel):
     changes_count: int
     cancellations_count: int
     events: List[TeacherHistoryEvent] = []
+    total: int = 0
+    total_pages: int = 1
+    page: int = 1
+    page_size: int = 20
 
 
 class TeacherSubjectBreakupItem(BaseModel):

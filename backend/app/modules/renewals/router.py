@@ -72,6 +72,9 @@ async def get_renewals_summary(
     search: Optional[str] = Query(None, description="Search by student name, code, phone, or course"),
     subject_id: Optional[uuid.UUID] = Query(None, description="Filter by subject ID"),
     window_days: int = Query(5, ge=1, le=30, description="Window in days (default 5)"),
+    category: Optional[str] = Query(None, description="Filter: ALL | EXPIRING | EXPIRED"),
+    page: Optional[int] = Query(None, ge=1, description="Page number"),
+    page_size: Optional[int] = Query(None, ge=1, le=100, description="Items per page"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin),
 ):
@@ -283,9 +286,51 @@ async def get_renewals_summary(
         total_count=len(expiring_items) + len(recently_expired_items),
     )
 
+    if page is not None:
+        effective_page_size = page_size or 20
+        cat_upper = category.upper() if category else "ALL"
+        if cat_upper == "EXPIRING":
+            target_list = expiring_items
+            total = len(target_list)
+            total_pages = max(1, (total + effective_page_size - 1) // effective_page_size) if total > 0 else 1
+            start = (page - 1) * effective_page_size
+            paged_expiring = target_list[start:start + effective_page_size]
+            paged_expired = []
+        elif cat_upper == "EXPIRED":
+            target_list = recently_expired_items
+            total = len(target_list)
+            total_pages = max(1, (total + effective_page_size - 1) // effective_page_size) if total > 0 else 1
+            start = (page - 1) * effective_page_size
+            paged_expiring = []
+            paged_expired = target_list[start:start + effective_page_size]
+        else:
+            all_target = expiring_items + recently_expired_items
+            total = len(all_target)
+            total_pages = max(1, (total + effective_page_size - 1) // effective_page_size) if total > 0 else 1
+            start = (page - 1) * effective_page_size
+            paged = all_target[start:start + effective_page_size]
+            paged_expiring = [x for x in paged if x.category == "EXPIRING"]
+            paged_expired = [x for x in paged if x.category == "EXPIRED"]
+
+        return RenewalsSummaryResponse(
+            as_of_date=today,
+            expiring=paged_expiring,
+            recently_expired=paged_expired,
+            counts=counts,
+            total=total,
+            total_pages=total_pages,
+            page=page,
+            page_size=effective_page_size,
+        )
+
+    total = len(expiring_items) + len(recently_expired_items)
     return RenewalsSummaryResponse(
         as_of_date=today,
         expiring=expiring_items,
         recently_expired=recently_expired_items,
         counts=counts,
+        total=total,
+        total_pages=1,
+        page=1,
+        page_size=total or 20,
     )

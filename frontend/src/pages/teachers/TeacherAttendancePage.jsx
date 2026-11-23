@@ -39,6 +39,38 @@ export default function TeacherAttendancePage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('CALENDAR'); // 'CALENDAR' | 'SUMMARY'
 
+  // Tab 2 Summary Server-Side Pagination
+  const [summaryItems, setSummaryItems] = useState([]);
+  const [summaryPage, setSummaryPage] = useState(1);
+  const [summaryTotal, setSummaryTotal] = useState(0);
+  const [summaryTotalPages, setSummaryTotalPages] = useState(1);
+  const summaryPageSize = 15;
+
+  const loadSummaryData = useCallback(async () => {
+    try {
+      const res = await teacherApi.getAttendanceSummary({
+        month_year: monthYear,
+        page: summaryPage,
+        page_size: summaryPageSize,
+      });
+      const items = Array.isArray(res) ? res : res?.items || [];
+      setSummaryItems(items);
+      setSummaryTotal(typeof res?.total === 'number' ? res.total : items.length);
+      setSummaryTotalPages(typeof res?.total_pages === 'number' ? res.total_pages : 1);
+    } catch (err) {
+      console.error('Failed to load attendance summary page:', err);
+    }
+  }, [monthYear, summaryPage, summaryPageSize]);
+
+  useEffect(() => {
+    loadSummaryData();
+  }, [loadSummaryData]);
+
+  // Reset summary page on month change
+  useEffect(() => {
+    setSummaryPage(1);
+  }, [monthYear]);
+
   // Load teacher attendance summary for the given month
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -362,8 +394,7 @@ export default function TeacherAttendancePage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {teachers.map((t) => {
-                  const info = summaryMap.get(t.id);
+                {summaryItems.map((info) => {
                   const absentCount = info ? (info.absent_days_count ?? 0) : 0;
                   const rowDaysInMonth = (info && info.days_in_month) || daysInMonth;
                   const presentCount = info && typeof info.present_days_count === 'number'
@@ -371,18 +402,18 @@ export default function TeacherAttendancePage() {
                     : Math.max(0, rowDaysInMonth - absentCount);
 
                   return (
-                    <tr key={t.id} className="hover:bg-slate-50/70 transition">
+                    <tr key={info.teacher_id} className="hover:bg-slate-50/70 transition">
                       <td className="py-2.5 px-4">
-                        <span className="font-bold text-slate-900 block">{t.name}</span>
+                        <span className="font-bold text-slate-900 block">{info.teacher_name}</span>
                         <span className="font-mono text-[10px] text-slate-500">
-                          {t.teacher_code}
+                          {info.teacher_code}
                         </span>
                       </td>
                       <td className="py-2.5 px-4 text-slate-600 font-medium">
-                        {t.specialization || '—'}
+                        {info.specialization || '—'}
                       </td>
                       <td className="py-2.5 px-4 text-slate-600 font-mono text-[11px]">
-                        {t.mobile || '—'}
+                        {info.mobile || '—'}
                       </td>
                       <td className="py-2.5 px-4 text-center">
                         <span
@@ -403,7 +434,7 @@ export default function TeacherAttendancePage() {
                           size="xs"
                           variant="secondary"
                           onClick={() => {
-                            setSelectedTeacherId(t.id);
+                            setSelectedTeacherId(info.teacher_id);
                             setActiveTab('CALENDAR');
                           }}
                           className="inline-flex items-center gap-1"
@@ -416,7 +447,7 @@ export default function TeacherAttendancePage() {
                   );
                 })}
 
-                {teachers.length === 0 && (
+                {summaryItems.length === 0 && (
                   <tr>
                     <td colSpan={6} className="py-6 text-center text-slate-400 italic">
                       No faculty members found.
@@ -426,6 +457,36 @@ export default function TeacherAttendancePage() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {summaryTotal > 0 && (
+            <div className="p-3 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs bg-slate-50/50">
+              <span className="text-slate-600 font-medium">
+                Showing {(summaryPage - 1) * summaryPageSize + 1} to {Math.min(summaryPage * summaryPageSize, summaryTotal)} of {summaryTotal} faculty members (Page {summaryPage} of {summaryTotalPages})
+              </span>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  disabled={summaryPage <= 1}
+                  onClick={() => setSummaryPage((p) => Math.max(1, p - 1))}
+                >
+                  Previous
+                </Button>
+                <span className="px-2 font-bold text-slate-800">
+                  {summaryPage} / {summaryTotalPages}
+                </span>
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  disabled={summaryPage >= summaryTotalPages}
+                  onClick={() => setSummaryPage((p) => Math.min(summaryTotalPages, p + 1))}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

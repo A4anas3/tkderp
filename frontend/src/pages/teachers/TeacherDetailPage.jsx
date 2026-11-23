@@ -70,6 +70,8 @@ export default function TeacherDetailPage() {
 
   // 4. Chronological History State (Part b)
   const [historyEvents, setHistoryEvents] = useState([]);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyTotalPages, setHistoryTotalPages] = useState(1);
   const [historyMetrics, setHistoryMetrics] = useState({
     total_events: 0,
     admissions_count: 0,
@@ -197,8 +199,12 @@ export default function TeacherDetailPage() {
       const data = await teacherApi.getHistory(id, {
         event_type: historyFilter !== 'ALL' ? historyFilter : undefined,
         search: historySearch.trim() || undefined,
+        page: historyPage,
+        page_size: HISTORY_PAGE_SIZE,
       });
       setHistoryEvents(data.events || []);
+      setHistoryTotal(typeof data.total === 'number' ? data.total : (data.events?.length || 0));
+      setHistoryTotalPages(typeof data.total_pages === 'number' ? data.total_pages : 1);
       setHistoryMetrics({
         total_events: data.total_events || 0,
         admissions_count: data.admissions_count || 0,
@@ -212,7 +218,7 @@ export default function TeacherDetailPage() {
     } finally {
       setHistoryLoading(false);
     }
-  }, [id, historyFilter, historySearch]);
+  }, [id, historyFilter, historySearch, historyPage]);
 
   // Load collections handled by teacher (Part d)
   const loadCollections = useCallback(async () => {
@@ -286,11 +292,15 @@ export default function TeacherDetailPage() {
     refreshAll();
   }, [refreshAll]);
 
-  // Reload history when filter or search changes
+  // Reset history page when filter or search changes
+  useEffect(() => {
+    setHistoryPage(1);
+  }, [historyFilter, historySearch]);
+
+  // Reload history when page or loadHistory changes
   useEffect(() => {
     loadHistory();
-    setHistoryPage(1);
-  }, [historyFilter, historySearch, loadHistory]);
+  }, [loadHistory]);
 
   // Reload roster when filters change
   useEffect(() => {
@@ -392,13 +402,6 @@ export default function TeacherDetailPage() {
       setStatusSubmitting(false);
     }
   };
-
-  // Filtered History Pagination
-  const historyTotalPages = Math.max(1, Math.ceil(historyEvents.length / HISTORY_PAGE_SIZE));
-  const pagedHistory = useMemo(() => {
-    const start = (historyPage - 1) * HISTORY_PAGE_SIZE;
-    return historyEvents.slice(start, start + HISTORY_PAGE_SIZE);
-  }, [historyEvents, historyPage]);
 
   if (profileLoading) {
     return (
@@ -908,7 +911,7 @@ export default function TeacherDetailPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {pagedHistory.map((ev) => (
+                    {historyEvents.map((ev) => (
                       <tr key={ev.event_id} className="hover:bg-slate-50/80 transition">
                         {/* Event Type & Date */}
                         <td className="p-3 align-top">
@@ -1019,11 +1022,11 @@ export default function TeacherDetailPage() {
             )}
 
             {/* History Pagination */}
-            {historyTotalPages > 1 && (
+            {(historyTotal > HISTORY_PAGE_SIZE || historyTotalPages > 1 || (historyEvents.length > 0 && historyPage > 1)) && (
               <div className="flex items-center justify-between pt-3 border-t border-slate-200 text-xs">
                 <span className="text-slate-500">
                   Showing {(historyPage - 1) * HISTORY_PAGE_SIZE + 1} to{' '}
-                  {Math.min(historyPage * HISTORY_PAGE_SIZE, historyEvents.length)} of {historyEvents.length} events
+                  {Math.min(historyPage * HISTORY_PAGE_SIZE, historyTotal)} of {historyTotal} events
                 </span>
                 <div className="flex items-center gap-1">
                   <button

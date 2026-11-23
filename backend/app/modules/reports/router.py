@@ -1292,6 +1292,8 @@ async def get_collections_report(
     payment_mode: Optional[str] = Query(None, description="Filter by payment mode (CASH, UPI, etc.)"),
     cashier_id: Optional[uuid.UUID] = Query(None, description="Filter by cashier staff user"),
     search: Optional[str] = Query(None, description="Search student, receipt number, cashier, reference"),
+    page: Optional[int] = Query(None, ge=1, description="Page number"),
+    page_size: Optional[int] = Query(None, ge=1, le=100, description="Items per page"),
     format: Optional[str] = Query(None, description="Set to 'csv' for CSV export"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
@@ -1299,10 +1301,13 @@ async def get_collections_report(
     """
     (a) Collections report: Total collected by date range, broken down by payment mode and cashier.
     """
-    lim = None if format == "csv" else 500
+    lim = None if (format == "csv" or page is not None) else 500
     report = await get_collections_detailed(
         db, from_date=from_date, to_date=to_date,
-        payment_mode=payment_mode, cashier_id=cashier_id, search=search, limit=lim
+        payment_mode=payment_mode, cashier_id=cashier_id, search=search,
+        limit=lim,
+        page=page if format != "csv" else None,
+        page_size=page_size if format != "csv" else None
     )
     if format == "csv":
         headers = ["Payment Number", "Date", "Student Name", "Reg No", "Admission Number", "Amount (₹)", "Payment Mode", "Cashier", "Reference", "Notes"]
@@ -1343,6 +1348,8 @@ async def get_dues_ageing_report(
     batch_id: Optional[uuid.UUID] = Query(None, description="Filter by batch"),
     ageing_bucket: Optional[str] = Query(None, description="Ageing bucket: 0-30, 31-60, 61-90, 90+, or ALL"),
     search: Optional[str] = Query(None, description="Search student, code, mobile, admission"),
+    page: Optional[int] = Query(None, ge=1, description="Page number"),
+    page_size: Optional[int] = Query(None, ge=1, le=100, description="Items per page"),
     format: Optional[str] = Query(None, description="Set to 'csv' for CSV export"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
@@ -1350,10 +1357,13 @@ async def get_dues_ageing_report(
     """
     (b) Dues & ageing report: Outstanding dues by student, subject and batch, with ageing buckets.
     """
-    lim = None if format == "csv" else 500
+    lim = None if (format == "csv" or page is not None) else 500
     report = await get_dues_and_ageing(
         db, from_date=from_date, to_date=to_date,
-        subject_id=subject_id, batch_id=batch_id, ageing_bucket=ageing_bucket, search=search, limit=lim
+        subject_id=subject_id, batch_id=batch_id, ageing_bucket=ageing_bucket, search=search,
+        limit=lim,
+        page=page if format != "csv" else None,
+        page_size=page_size if format != "csv" else None
     )
     if format == "csv":
         headers = ["Student Name", "Reg No", "Mobile", "Admission Number", "Subject", "Batch", "Faculty", "Billed (₹)", "Paid (₹)", "Due (₹)", "Waived (₹)", "Days Overdue", "Ageing Bucket"]
@@ -1497,6 +1507,8 @@ async def get_admissions_conversion_api(
     subject_id: Optional[uuid.UUID] = Query(None),
     source: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
+    page: Optional[int] = Query(None, ge=1, description="Page number"),
+    page_size: Optional[int] = Query(None, ge=1, le=100, description="Items per page"),
     format: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
@@ -1506,7 +1518,9 @@ async def get_admissions_conversion_api(
     """
     report = await get_admissions_conversion_detailed(
         db, from_date=from_date, to_date=to_date,
-        subject_id=subject_id, source=source, search=search
+        subject_id=subject_id, source=source, search=search,
+        page=page if format != "csv" else None,
+        page_size=page_size if format != "csv" else None
     )
     if format == "csv":
         headers = ["Enquiry Code", "Date", "Student Name", "Mobile", "Interested Subject", "Source", "Status", "Converted Student", "Admission Number"]
@@ -1545,6 +1559,8 @@ async def get_waivers_report_api(
     to_date: Optional[date] = Query(None, description="End date (YYYY-MM-DD)"),
     admin_id: Optional[uuid.UUID] = Query(None),
     search: Optional[str] = Query(None),
+    page: Optional[int] = Query(None, ge=1, description="Page number"),
+    page_size: Optional[int] = Query(None, ge=1, le=100, description="Items per page"),
     format: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
@@ -1553,7 +1569,9 @@ async def get_waivers_report_api(
     (g) Waivers report: all waived dues with admin, reason and audit reference.
     """
     report = await get_waivers_detailed(
-        db, from_date=from_date, to_date=to_date, admin_id=admin_id, search=search
+        db, from_date=from_date, to_date=to_date, admin_id=admin_id, search=search,
+        page=page if format != "csv" else None,
+        page_size=page_size if format != "csv" else None
     )
     if format == "csv":
         headers = ["Waiver Number", "Date", "Student Name", "Reg No", "Admission Number", "Waived Amount (₹)", "Approved By Admin", "Reason", "Audit Reference"]
@@ -1590,6 +1608,8 @@ async def get_refunds_report_api(
     to_date: Optional[date] = Query(None, description="End date (YYYY-MM-DD)"),
     refund_mode: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
+    page: Optional[int] = Query(None, ge=1, description="Page number"),
+    page_size: Optional[int] = Query(None, ge=1, le=100, description="Items per page"),
     format: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
@@ -1598,7 +1618,9 @@ async def get_refunds_report_api(
     (h) Refunds report: fee refunds with original payment, amount, deductions, mode, cashier, reason.
     """
     report = await get_refunds_detailed(
-        db, from_date=from_date, to_date=to_date, refund_mode=refund_mode, search=search
+        db, from_date=from_date, to_date=to_date, refund_mode=refund_mode, search=search,
+        page=page if format != "csv" else None,
+        page_size=page_size if format != "csv" else None
     )
     if format == "csv":
         headers = ["Refund Number", "Date", "Student Name", "Reg No", "Admission Number", "Payment Number", "Gross Requested (₹)", "Deduction (₹)", "Net Refunded (₹)", "Mode", "Processed By", "Reason"]
@@ -1638,6 +1660,8 @@ async def get_expenses_report_api(
     category_id: Optional[uuid.UUID] = Query(None),
     payment_mode: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
+    page: Optional[int] = Query(None, ge=1, description="Page number"),
+    page_size: Optional[int] = Query(None, ge=1, le=100, description="Items per page"),
     format: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
@@ -1647,7 +1671,9 @@ async def get_expenses_report_api(
     """
     report = await get_expenses_detailed(
         db, from_date=from_date, to_date=to_date,
-        category_id=category_id, payment_mode=payment_mode, search=search
+        category_id=category_id, payment_mode=payment_mode, search=search,
+        page=page if format != "csv" else None,
+        page_size=page_size if format != "csv" else None
     )
     if format == "csv":
         headers = ["Date", "Type", "Title", "Category", "Amount (₹)", "Payment Mode", "Reference", "Added By", "Notes"]
