@@ -782,31 +782,48 @@ async def get_waivers_detailed(
     rows = res.all()
 
     waivers = []
+    seen_ids = set()
+    seen_txn_numbers = set()
     total_amount = Decimal("0.00")
     unique_students = set()
 
     for tx, stu, adm, usr in rows:
-        amt = abs(tx.signed_amount) if tx.signed_amount else Decimal("0.00")
+        tx_id_str = str(tx.id)
+        txn_number = tx.txn_number or f"TXN-{tx_id_str[:8]}"
+
+        # Deduplicate waiver records if multiple join matches or duplicate transactions exist
+        if tx_id_str in seen_ids or txn_number in seen_txn_numbers:
+            continue
+        seen_ids.add(tx_id_str)
+        seen_txn_numbers.add(txn_number)
+
+        amt = abs(tx.signed_amount) if tx.signed_amount is not None else Decimal("0.00")
+        try:
+            amt_num = float(amt)
+        except (ValueError, TypeError):
+            amt_num = 0.0
+
         total_amount += amt
         unique_students.add(stu.id)
-        admin_name = usr.full_name if usr else (usr.username if usr else "System Administrator")
+        admin_name = usr.full_name if usr else (getattr(usr, "username", None) or "System Administrator")
 
         waivers.append({
-            "id": str(tx.id),
-            "waiver_number": tx.txn_number,
+            "id": tx_id_str,
+            "waiver_number": txn_number,
             "date": tx.txn_at.isoformat() if tx.txn_at else None,
             "student_id": str(stu.id),
-            "student_name": stu.name,
-            "student_code": stu.student_code,
+            "student_name": stu.name or "",
+            "student_code": stu.student_code or "",
             "mobile": stu.mobile or "",
             "admission_id": str(adm.id),
-            "admission_number": adm.admission_number,
-            "waived_amount": float(amt),
+            "admission_number": adm.admission_number or "",
+            "waived_amount": amt_num,
+            "amount": amt_num,
             "admin_id": str(tx.created_by) if tx.created_by else None,
             "admin_name": admin_name,
             "admin_role": usr.role if usr else "ADMIN",
             "reason": tx.reason or "Fee due waived by admin",
-            "audit_reference": tx.txn_number
+            "audit_reference": txn_number
         })
 
     if search and search.strip():
@@ -821,11 +838,15 @@ async def get_waivers_detailed(
             or q in w["admin_name"].lower()
             or q in w["reason"].lower()
         ]
+        total_amount = sum((Decimal(str(w["waived_amount"])) for w in waivers), Decimal("0.00"))
+        unique_students = {w["student_id"] for w in waivers}
 
     return {
         "summary": {
             "total_waived_amount": float(total_amount),
+            "total_amount": float(total_amount),
             "waivers_count": len(waivers),
+            "count": len(waivers),
             "unique_students_count": len(unique_students)
         },
         "items": waivers

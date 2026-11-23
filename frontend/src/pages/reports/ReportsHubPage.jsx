@@ -101,12 +101,24 @@ export default function ReportsHubPage() {
   const [refundModeFilter, setRefundModeFilter] = useState('ALL');
   const [summaryPeriod, setSummaryPeriod] = useState('daily'); // 'daily' | 'monthly'
 
-  // Preload subjects once on mount
+  // Preload subjects once on mount (deduped by ID)
   useEffect(() => {
     async function loadMeta() {
       try {
         const subs = await subjectApi.getAll();
-        setSubjectsList(Array.isArray(subs) ? subs : []);
+        if (Array.isArray(subs)) {
+          const uniqueSubs = [];
+          const seen = new Set();
+          for (const s of subs) {
+            if (s && s.id && !seen.has(s.id)) {
+              seen.add(s.id);
+              uniqueSubs.push(s);
+            }
+          }
+          setSubjectsList(uniqueSubs);
+        } else {
+          setSubjectsList([]);
+        }
       } catch (err) {
         console.warn('Failed to preload metadata for reports filters:', err);
       }
@@ -120,6 +132,27 @@ export default function ReportsHubPage() {
   const [exporting, setExporting] = useState(false);
   const [tablePage, setTablePage] = useState(1);
   const PAGE_SIZE = 15;
+
+  // Clear previous tab's data immediately upon tab change to prevent rendering mismatched data shapes
+  useEffect(() => {
+    setData(null);
+  }, [activeTab]);
+
+  // Deduplicate waiver items defensively in the UI
+  const dedupedWaivers = useMemo(() => {
+    if (!data?.items || !Array.isArray(data.items)) return [];
+    if (activeTab !== 'waivers') return [];
+    const seen = new Set();
+    const result = [];
+    for (const item of data.items) {
+      const key = item.id || item.waiver_number || item.audit_reference || `${item.student_id}-${item.admission_id}`;
+      if (key && !seen.has(key)) {
+        seen.add(key);
+        result.push(item);
+      }
+    }
+    return result;
+  }, [data?.items, activeTab]);
 
   const formatDate = (d) => {
     const year = d.getFullYear();
@@ -501,8 +534,8 @@ export default function ReportsHubPage() {
                   className="w-full h-8 px-2 text-xs font-semibold text-black bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#714B67]"
                 >
                   <option value="ALL">All Cashiers</option>
-                  {data?.by_cashier?.map((c) => (
-                    <option key={c.cashier_id || c.username} value={c.cashier_id || c.user_id}>
+                  {data?.by_cashier?.map((c, idx) => (
+                    <option key={c.cashier_id ? `cashier-${c.cashier_id}-${idx}` : `cashier-${idx}`} value={c.cashier_id || c.user_id}>
                       {c.cashier_name}
                     </option>
                   ))}
@@ -539,8 +572,8 @@ export default function ReportsHubPage() {
                   className="w-full h-8 px-2 text-xs font-semibold text-black bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#714B67]"
                 >
                   <option value="ALL">All Subjects</option>
-                  {subjectsList.map((s) => (
-                    <option key={s.id} value={s.id}>
+                  {subjectsList.map((s, idx) => (
+                    <option key={s.id ? `due-subj-${s.id}-${idx}` : `due-subj-${idx}`} value={s.id}>
                       {s.name}
                     </option>
                   ))}
@@ -579,8 +612,8 @@ export default function ReportsHubPage() {
                   className="w-full h-8 px-2 text-xs font-semibold text-black bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#714B67]"
                 >
                   <option value="ALL">All Subjects</option>
-                  {subjectsList.map((s) => (
-                    <option key={s.id} value={s.id}>
+                  {subjectsList.map((s, idx) => (
+                    <option key={s.id ? `adm-subj-${s.id}-${idx}` : `adm-subj-${idx}`} value={s.id}>
                       {s.name}
                     </option>
                   ))}
@@ -1092,9 +1125,9 @@ export default function ReportsHubPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-semibold">
-                      {data?.items?.map((s) => (
+                      {data?.items?.map((s, idx) => (
                         <tr
-                          key={s.subject_id}
+                          key={s.subject_id ? `sb-${s.subject_id}-${idx}` : `sb-${idx}`}
                           onClick={() => s.subject_id && navigate(`/subjects/${s.subject_id}`)}
                           className="hover:bg-purple-50/50 cursor-pointer transition"
                           title="Click to view subject history, breakup & conversion"
@@ -1421,21 +1454,21 @@ export default function ReportsHubPage() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <StatCard
                   title="Total Waived Dues"
-                  value={`₹${(data?.summary?.total_waived_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
+                  value={`₹${(Number(data?.summary?.total_waived_amount ?? data?.summary?.total_amount) || (dedupedWaivers.reduce((sum, w) => sum + (Number(w.waived_amount ?? w.amount) || 0), 0))).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
                   subtext="Authorized fee dues forgiven"
                   icon={FileCheck2}
                   color="amber"
                 />
                 <StatCard
                   title="Waiver Vouchers"
-                  value={`${data?.summary?.waivers_count || 0}`}
+                  value={`${data?.summary?.waivers_count ?? data?.summary?.count ?? dedupedWaivers.length}`}
                   subtext="Official financial transactions"
                   icon={Receipt}
                   color="purple"
                 />
                 <StatCard
                   title="Students Benefited"
-                  value={`${data?.summary?.unique_students_count || 0}`}
+                  value={`${data?.summary?.unique_students_count ?? (new Set(dedupedWaivers.map(w => w.student_id).filter(Boolean)).size)}`}
                   subtext="Unique student accounts"
                   icon={Users}
                   color="teal"
@@ -1446,7 +1479,7 @@ export default function ReportsHubPage() {
               <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
                   <h3 className="text-xs font-black text-black uppercase tracking-wider">
-                    Authorised Dues Waivers & Audit Trail ({data?.items?.length || 0} Records)
+                    Authorised Dues Waivers & Audit Trail ({dedupedWaivers.length} Records)
                   </h3>
                   <Badge variant="warning" size="xs">Admin Authorization Audit</Badge>
                 </div>
@@ -1465,44 +1498,53 @@ export default function ReportsHubPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-medium">
-                      {data?.items?.slice((tablePage - 1) * PAGE_SIZE, tablePage * PAGE_SIZE).map((w) => (
-                        <tr key={w.id} className="hover:bg-slate-50 transition-colors">
+                      {dedupedWaivers.slice((tablePage - 1) * PAGE_SIZE, tablePage * PAGE_SIZE).map((w, idx) => (
+                        <tr key={w.id ? `${w.id}-${idx}` : `waiver-${w.waiver_number || idx}-${idx}`} className="hover:bg-slate-50 transition-colors">
                           <td className="p-2.5 font-mono text-slate-600 whitespace-nowrap">
-                            {w.date ? w.date.slice(0, 10) : '-'}
+                            {w.date ? w.date.slice(0, 10) : '—'}
                           </td>
-                          <td className="p-2.5 font-mono font-bold text-[#714B67] whitespace-nowrap">{w.waiver_number}</td>
+                          <td className="p-2.5 font-mono font-bold text-[#714B67] whitespace-nowrap">{w.waiver_number || '—'}</td>
                           <td className="p-2.5">
                             <span
-                              onClick={() => navigate(`/students/${w.student_id}`)}
+                              onClick={() => w.student_id && navigate(`/students/${w.student_id}`)}
                               className="font-bold text-black hover:text-[#714B67] hover:underline cursor-pointer"
                             >
-                              {w.student_name}
+                              {w.student_name || '—'}
                             </span>
-                            <span className="block text-[10px] text-slate-500 font-mono">{w.student_code}</span>
+                            {w.student_code && (
+                              <span className="block text-[10px] text-slate-500 font-mono">{w.student_code}</span>
+                            )}
                           </td>
-                          <td className="p-2.5 font-mono text-slate-700 whitespace-nowrap">{w.admission_number}</td>
+                          <td className="p-2.5 font-mono text-slate-700 whitespace-nowrap">{w.admission_number || '—'}</td>
                           <td className="p-2.5 text-right font-mono font-black text-amber-800 whitespace-nowrap">
-                            ₹{w.waived_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            ₹{(Number(w.waived_amount ?? w.amount) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                           </td>
                           <td className="p-2.5">
-                            <span className="font-bold text-black">{w.admin_name}</span>
-                            <span className="block text-[10px] text-purple-700 font-semibold">{w.admin_role}</span>
+                            <span className="font-bold text-black">{w.admin_name || 'System Administrator'}</span>
+                            <span className="block text-[10px] text-purple-700 font-semibold">{w.admin_role || 'ADMIN'}</span>
                           </td>
-                          <td className="p-2.5 text-slate-800 max-w-[260px] truncate" title={w.reason}>
-                            {w.reason}
+                          <td className="p-2.5 text-slate-800 max-w-[260px] truncate" title={w.reason || ''}>
+                            {w.reason || '—'}
                           </td>
-                          <td className="p-2.5 font-mono text-slate-500 text-[11px] whitespace-nowrap">{w.audit_reference}</td>
+                          <td className="p-2.5 font-mono text-slate-500 text-[11px] whitespace-nowrap">{w.audit_reference || w.waiver_number || '—'}</td>
                         </tr>
                       ))}
+                      {dedupedWaivers.length === 0 && !loading && (
+                        <tr>
+                          <td colSpan={8} className="p-8 text-center text-slate-500">
+                            No waiver records found matching the current filters.
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
 
                 {/* Pagination */}
-                {data?.items?.length > PAGE_SIZE && (
+                {dedupedWaivers.length > PAGE_SIZE && (
                   <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100 text-xs">
                     <span className="text-slate-500">
-                      Showing {(tablePage - 1) * PAGE_SIZE + 1} to {Math.min(tablePage * PAGE_SIZE, data.items.length)} of {data.items.length}
+                      Showing {(tablePage - 1) * PAGE_SIZE + 1} to {Math.min(tablePage * PAGE_SIZE, dedupedWaivers.length)} of {dedupedWaivers.length}
                     </span>
                     <div className="flex items-center gap-1">
                       <button
@@ -1514,7 +1556,7 @@ export default function ReportsHubPage() {
                       </button>
                       <button
                         onClick={() => setTablePage((p) => p + 1)}
-                        disabled={tablePage * PAGE_SIZE >= data.items.length}
+                        disabled={tablePage * PAGE_SIZE >= dedupedWaivers.length}
                         className="px-2 py-1 rounded border border-slate-200 disabled:opacity-50 font-bold"
                       >
                         Next
@@ -2082,8 +2124,8 @@ export default function ReportsHubPage() {
                   </tr>
                 ))}
               {activeTab === 'subject-breakup' &&
-                data?.items?.map((s) => (
-                  <tr key={s.subject_id}>
+                data?.items?.map((s, idx) => (
+                  <tr key={s.subject_id ? `print-subj-${s.subject_id}-${idx}` : `print-subj-${idx}`}>
                     <td className="p-1 border border-black font-bold">{s.subject_name}</td>
                     <td className="p-1 border border-black text-center font-mono">{s.enrolled_count}</td>
                     <td className="p-1 border border-black text-right font-mono">₹{(s.fees_billed || s.total_booked || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
@@ -2095,8 +2137,8 @@ export default function ReportsHubPage() {
                   </tr>
                 ))}
               {activeTab === 'teacher-breakup' &&
-                (Array.isArray(data) ? data : data?.items || []).map((t) => (
-                  <tr key={t.teacher_id}>
+                (Array.isArray(data) ? data : data?.items || []).map((t, idx) => (
+                  <tr key={t.teacher_id ? `print-tea-${t.teacher_id}-${idx}` : `print-tea-${idx}`}>
                     <td className="p-1 border border-black font-bold">{t.teacher_name}</td>
                     <td className="p-1 border border-black">{t.specialization}</td>
                     <td className="p-1 border border-black text-center font-mono">{t.enrolled_count}</td>
@@ -2106,8 +2148,8 @@ export default function ReportsHubPage() {
                   </tr>
                 ))}
               {activeTab === 'admissions-conversion' &&
-                data?.items?.slice(0, 50).map((e) => (
-                  <tr key={e.id}>
+                data?.items?.slice(0, 50).map((e, idx) => (
+                  <tr key={e.id ? `print-adm-${e.id}-${idx}` : `print-adm-${idx}`}>
                     <td className="p-1 border border-black font-mono">{e.created_at?.slice(0, 10)}</td>
                     <td className="p-1 border border-black font-mono font-bold">{e.enquiry_code}</td>
                     <td className="p-1 border border-black">{e.student_name}</td>
@@ -2118,20 +2160,22 @@ export default function ReportsHubPage() {
                   </tr>
                 ))}
               {activeTab === 'waivers' &&
-                data?.items?.slice(0, 50).map((w) => (
-                  <tr key={w.id}>
-                    <td className="p-1 border border-black font-mono">{w.date?.slice(0, 10)}</td>
-                    <td className="p-1 border border-black font-mono font-bold">{w.waiver_number}</td>
-                    <td className="p-1 border border-black">{w.student_name} ({w.student_code})</td>
-                    <td className="p-1 border border-black font-mono">{w.admission_number}</td>
-                    <td className="p-1 border border-black text-right font-mono font-black">₹{w.waived_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td className="p-1 border border-black">{w.admin_name}</td>
-                    <td className="p-1 border border-black">{w.reason}</td>
+                dedupedWaivers?.slice(0, 50).map((w, idx) => (
+                  <tr key={w.id ? `print-w-${w.id}-${idx}` : `print-waiver-${w.waiver_number || idx}-${idx}`}>
+                    <td className="p-1 border border-black font-mono">{w.date ? w.date.slice(0, 10) : '—'}</td>
+                    <td className="p-1 border border-black font-mono font-bold">{w.waiver_number || '—'}</td>
+                    <td className="p-1 border border-black">{w.student_name || '—'} {w.student_code ? `(${w.student_code})` : ''}</td>
+                    <td className="p-1 border border-black font-mono">{w.admission_number || '—'}</td>
+                    <td className="p-1 border border-black text-right font-mono font-black">
+                      ₹{(Number(w.waived_amount ?? w.amount) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="p-1 border border-black">{w.admin_name || 'System Administrator'}</td>
+                    <td className="p-1 border border-black">{w.reason || '—'}</td>
                   </tr>
                 ))}
               {activeTab === 'refunds' &&
-                data?.items?.slice(0, 50).map((r) => (
-                  <tr key={r.id}>
+                data?.items?.slice(0, 50).map((r, idx) => (
+                  <tr key={r.id ? `print-ref-${r.id}-${idx}` : `print-ref-${idx}`}>
                     <td className="p-1 border border-black font-mono">{r.refund_date?.slice(0, 10)}</td>
                     <td className="p-1 border border-black font-mono font-bold">{r.refund_number}</td>
                     <td className="p-1 border border-black">{r.student_name} ({r.student_code})</td>
@@ -2143,8 +2187,8 @@ export default function ReportsHubPage() {
                   </tr>
                 ))}
               {activeTab === 'expenses' &&
-                data?.items?.slice(0, 50).map((i) => (
-                  <tr key={i.id}>
+                data?.items?.slice(0, 50).map((i, idx) => (
+                  <tr key={i.id ? `print-exp-${i.id}-${idx}` : `print-exp-${idx}`}>
                     <td className="p-1 border border-black font-mono">{i.date}</td>
                     <td className="p-1 border border-black font-bold">{i.type}</td>
                     <td className="p-1 border border-black">{i.title}</td>
@@ -2155,8 +2199,8 @@ export default function ReportsHubPage() {
                   </tr>
                 ))}
               {activeTab === 'summary-dashboard' &&
-                data?.intervals?.map((row) => (
-                  <tr key={row.period_key}>
+                data?.intervals?.map((row, idx) => (
+                  <tr key={row.period_key ? `print-period-${row.period_key}-${idx}` : `print-period-${idx}`}>
                     <td className="p-1 border border-black font-bold">{row.period_label}</td>
                     <td className="p-1 border border-black text-right font-mono">₹{row.billed.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                     <td className="p-1 border border-black text-right font-mono font-black">₹{row.collected.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
