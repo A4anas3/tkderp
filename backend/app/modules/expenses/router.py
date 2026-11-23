@@ -24,7 +24,7 @@ router = APIRouter(prefix="/api/expenses", tags=["Expenses & Salaries"])
 @router.get("/categories", response_model=list[ExpenseCategoryResponse])
 async def list_expense_categories(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     result = await db.execute(select(ExpenseCategory).order_by(ExpenseCategory.name.asc()))
     return result.scalars().all()
@@ -59,7 +59,7 @@ async def list_expenses(
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     query = select(Expense).options(selectinload(Expense.category))
     count_query = select(func.count(Expense.id))
@@ -176,7 +176,7 @@ async def list_salary_records(
     month_year: Optional[str] = None,
     status_filter: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_admin)
 ):
     query = select(SalaryRecord)
     count_query = select(func.count(SalaryRecord.id))

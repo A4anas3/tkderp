@@ -152,11 +152,11 @@ export default function AppRoutes() {
           }
         />
 
-        {/* Students (Admin & Cashier) */}
+        {/* Students (Admin, Cashier, Teacher) */}
         <Route
           path="students"
           element={
-            <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER']}>
+            <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER', 'TEACHER']}>
               <StudentsPage />
             </ProtectedRoute>
           }
@@ -164,17 +164,17 @@ export default function AppRoutes() {
         <Route
           path="students/:id"
           element={
-            <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER']}>
+            <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER', 'TEACHER']}>
               <StudentDetailPage />
             </ProtectedRoute>
           }
         />
 
-        {/* Enquiries & Demos (Admin & Cashier) */}
+        {/* Enquiries & Demos (Admin only) */}
         <Route
           path="enquiries"
           element={
-            <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER']}>
+            <ProtectedRoute allowedRoles={['ADMIN']}>
               <EnquiriesPage />
             </ProtectedRoute>
           }
@@ -182,7 +182,7 @@ export default function AppRoutes() {
         <Route
           path="enquiries/:id"
           element={
-            <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER']}>
+            <ProtectedRoute allowedRoles={['ADMIN']}>
               <EnquiryDetailPage />
             </ProtectedRoute>
           }
@@ -192,7 +192,7 @@ export default function AppRoutes() {
         <Route
           path="teachers"
           element={
-            <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER']}>
+            <ProtectedRoute allowedRoles={['ADMIN']}>
               <TeachersPage />
             </ProtectedRoute>
           }
@@ -200,17 +200,17 @@ export default function AppRoutes() {
         <Route
           path="teachers/:id"
           element={
-            <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER', 'TEACHER']}>
+            <ProtectedRoute allowedRoles={['ADMIN', 'TEACHER']}>
               <TeacherDetailPage />
             </ProtectedRoute>
           }
         />
 
-        {/* Subjects */}
+        {/* Subjects (Admin & Teacher) */}
         <Route
           path="subjects"
           element={
-            <ProtectedRoute allowedRoles={['ADMIN']}>
+            <ProtectedRoute allowedRoles={['ADMIN', 'TEACHER']}>
               <SubjectsPage />
             </ProtectedRoute>
           }
@@ -218,7 +218,7 @@ export default function AppRoutes() {
         <Route
           path="subjects/:id"
           element={
-            <ProtectedRoute allowedRoles={['ADMIN']}>
+            <ProtectedRoute allowedRoles={['ADMIN', 'TEACHER']}>
               <SubjectDetailPage />
             </ProtectedRoute>
           }
@@ -252,7 +252,7 @@ export default function AppRoutes() {
         <Route
           path="reports"
           element={
-            <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER']}>
+            <ProtectedRoute allowedRoles={['ADMIN']}>
               <ReportsHubPage />
             </ProtectedRoute>
           }
@@ -260,7 +260,7 @@ export default function AppRoutes() {
         <Route
           path="reports/:reportTab"
           element={
-            <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER']}>
+            <ProtectedRoute allowedRoles={['ADMIN']}>
               <ReportsHubPage />
             </ProtectedRoute>
           }

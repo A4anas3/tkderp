@@ -23,11 +23,13 @@ import QuickStudentModal from '../../components/modals/QuickStudentModal';
 import EditStudentModal from '../../components/modals/EditStudentModal';
 import { studentApi, remindersApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 import { WhatsAppIcon } from '../../utils/whatsappHelpers';
 
 export default function StudentsPage() {
   const navigate = useNavigate();
   const { error } = useToast();
+  const { isAdmin, isCashier, isTeacher, canManageAdmissions } = useAuth();
   const [students, setStudents] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -189,19 +191,21 @@ export default function StudentsPage() {
               <span>Remind</span>
             </button>
           )}
-          <Button
-            size="xs"
-            variant="amber"
-            icon={Edit2}
-            onClick={(e) => {
-              e.stopPropagation();
-              setEditingStudent(s);
-              setEditModalOpen(true);
-            }}
-            title="Edit Student Information"
-          >
-            Edit
-          </Button>
+          {canManageAdmissions && (
+            <Button
+              size="xs"
+              variant="amber"
+              icon={Edit2}
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditingStudent(s);
+                setEditModalOpen(true);
+              }}
+              title="Edit Student Information"
+            >
+              Edit
+            </Button>
+          )}
           <Button
             size="xs"
             variant="info"
@@ -226,9 +230,13 @@ export default function StudentsPage() {
       {/* Odoo Control Panel Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">Registered Students</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+            {isTeacher ? 'Student Roster' : 'Registered Students'}
+          </h1>
           <p className="text-xs text-slate-600 mt-0.5">
-            Student database with profile photos (&le; 20 KB), fee cycles, and Kanban view
+            {isTeacher
+              ? 'Enrolled student roster of your assigned subjects and courses.'
+              : 'Student database with profile photos (≤ 20 KB), fee cycles, and Kanban view'}
           </p>
         </div>
 
@@ -284,9 +292,11 @@ export default function StudentsPage() {
             <option value="INACTIVE">Inactive / Revoked Students</option>
           </select>
 
-          <Button variant="primary" icon={UserPlus} onClick={() => setAddModalOpen(true)} className="w-full sm:w-auto font-bold">
-            Register Student
-          </Button>
+          {canManageAdmissions && (
+            <Button variant="primary" icon={UserPlus} onClick={() => setAddModalOpen(true)} className="w-full sm:w-auto font-bold">
+              Register Student
+            </Button>
+          )}
         </div>
       </div>
 
@@ -448,18 +458,20 @@ export default function StudentsPage() {
 
                     {/* Bottom Card Actions */}
                     <div className="mt-3.5 pt-2 border-t border-slate-100 flex items-center gap-1.5">
-                      <Button
-                        size="xs"
-                        variant="amber"
-                        icon={Edit2}
-                        onClick={() => {
-                          setEditingStudent(s);
-                          setEditModalOpen(true);
-                        }}
-                        title="Edit Student Information"
-                      >
-                        Edit
-                      </Button>
+                      {canManageAdmissions && (
+                        <Button
+                          size="xs"
+                          variant="amber"
+                          icon={Edit2}
+                          onClick={() => {
+                            setEditingStudent(s);
+                            setEditModalOpen(true);
+                          }}
+                          title="Edit Student Information"
+                        >
+                          Edit
+                        </Button>
+                      )}
                       <Button
                         size="xs"
                         variant="info"
@@ -469,7 +481,7 @@ export default function StudentsPage() {
                       >
                         Profile
                       </Button>
-                      {!isRev && (
+                      {canManageAdmissions && !isRev && (
                         <Button
                           size="xs"
                           variant="primary"

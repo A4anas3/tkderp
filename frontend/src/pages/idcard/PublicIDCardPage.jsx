@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, useSearchParams, useLocation, Link } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import {
   ShieldCheck,
   Search,
@@ -10,7 +10,6 @@ import {
   AlertTriangle,
   XCircle,
   CheckCircle2,
-  ArrowLeft,
   FileCheck2,
   Clock,
   Sparkles,
@@ -141,25 +140,6 @@ export default function PublicIDCardPage() {
   return (
     <div className="min-h-screen bg-slate-50 text-black font-sans py-6 px-3 sm:px-6 flex flex-col justify-between">
       <div className="max-w-2xl mx-auto w-full space-y-5">
-        {/* Navigation & Header */}
-        <div className="flex items-center justify-between no-print">
-          <Link
-            to="/dashboard"
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-black transition"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" /> Back to ERP
-          </Link>
-
-          {currentIdentifier && (
-            <Link
-              to={`/verify/${encodeURIComponent(currentIdentifier)}`}
-              className="inline-flex items-center gap-1 text-xs font-semibold text-odoo-700 hover:text-odoo-900 transition"
-            >
-              <FileCheck2 className="w-3.5 h-3.5" /> View Verification Record
-            </Link>
-          )}
-        </div>
-
         {/* Top Institute Header Banner (no-print) */}
         <div className="bg-white border-2 border-black rounded-xl p-4 sm:p-5 shadow-xs text-center relative overflow-hidden no-print">
           <div className="flex items-center justify-center gap-2 mb-1">
@@ -181,7 +161,7 @@ export default function PublicIDCardPage() {
         <div className="bg-white border-2 border-slate-300 rounded-xl p-3 sm:p-4 shadow-2xs no-print">
           <form onSubmit={handleSearchSubmit} className="space-y-2">
             <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
-              Student ID Card Lookup
+              Enter Admission Number
             </label>
             <div className="flex flex-col sm:flex-row gap-2">
               <div className="relative flex-1">
@@ -190,7 +170,7 @@ export default function PublicIDCardPage() {
                   type="text"
                   value={inputVal}
                   onChange={(e) => setInputVal(e.target.value)}
-                  placeholder="Enter Admission Number or Student ID (e.g. ENR-2026-0001)..."
+                  placeholder="Enter Admission Number (e.g. ADM-2026-0001)..."
                   className="w-full pl-9 pr-3 py-2 text-xs sm:text-sm border border-slate-300 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-odoo-500 font-mono"
                   autoFocus={!currentIdentifier}
                 />
@@ -204,9 +184,8 @@ export default function PublicIDCardPage() {
               </button>
             </div>
             <p className="text-[11px] text-slate-500">
-              Enter your official admission number (e.g. ENR-2026-0001) or student ID (e.g.
-              STU-2026-0001). Identity cards are issued only for students with active course
-              enrolments.
+              Enter your official admission number (e.g. ADM-2026-0001) to view the student identity card.
+              Identity cards are available only for active course enrolments.
             </p>
           </form>
         </div>
@@ -217,10 +196,10 @@ export default function PublicIDCardPage() {
             <div className="w-12 h-12 bg-slate-100 text-slate-600 rounded-full flex items-center justify-center mx-auto">
               <Search className="w-6 h-6" />
             </div>
-            <h2 className="text-sm font-bold text-black">Ready to Retrieve Student ID Card</h2>
+            <h2 className="text-sm font-bold text-black">Enter Admission Number</h2>
             <p className="text-xs text-slate-600 max-w-md mx-auto">
-              Please enter your admission number or student ID code in the input box above and click{' '}
-              <strong className="text-black">Get ID Card</strong> to view your updated credential.
+              Please enter an admission number (e.g. <span className="font-mono font-bold text-black">ADM-2026-0001</span>) in the search box above and click{' '}
+              <strong className="text-black">Get ID Card</strong> to view the student's official identity card.
             </p>
           </div>
         )}
@@ -281,12 +260,11 @@ export default function PublicIDCardPage() {
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-black text-rose-900 uppercase">
-                Student Record Not Found
+                Student ID Card Not Found
               </h2>
-              <p className="text-xs text-rose-800 mt-1 max-w-md mx-auto">
-                No matching student or admission record found for identifier{' '}
-                <span className="font-mono font-bold text-black">{currentIdentifier}</span>. Please
-                verify the number and try again.
+              <p className="text-xs sm:text-sm text-rose-800 mt-1 max-w-md mx-auto">
+                No matching student or admission record found for admission number{' '}
+                <span className="font-mono font-bold text-black bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">{currentIdentifier}</span>. Please verify the admission number and try again.
               </p>
             </div>
           </div>

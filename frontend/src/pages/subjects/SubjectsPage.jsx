@@ -22,6 +22,7 @@ import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
 import { subjectApi, teacherApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 
 export function generateSubjectCode(name) {
   if (!name || !name.trim()) return '';
@@ -153,6 +154,7 @@ function buildScheduleString(schedState) {
 export default function SubjectsPage() {
   const navigate = useNavigate();
   const { success, error } = useToast();
+  const { isAdmin, isTeacher } = useAuth();
   const [subjects, setSubjects] = useState([]);
   const [teachers, setTeachers] = useState([]);
   const [total, setTotal] = useState(0);
@@ -467,18 +469,20 @@ export default function SubjectsPage() {
       className: 'text-right w-40 whitespace-nowrap',
       render: (s) => (
         <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
-          <Button
-            size="xs"
-            variant="amber"
-            icon={Edit2}
-            onClick={(e) => {
-              e.stopPropagation();
-              handleOpenEdit(s);
-            }}
-            title="Edit Subject"
-          >
-            Edit
-          </Button>
+          {isAdmin && (
+            <Button
+              size="xs"
+              variant="amber"
+              icon={Edit2}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleOpenEdit(s);
+              }}
+              title="Edit Subject"
+            >
+              Edit
+            </Button>
+          )}
           <Button
             size="xs"
             variant="info"
@@ -504,9 +508,13 @@ export default function SubjectsPage() {
       {/* Odoo Control Panel Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">Institute Subjects & Courses</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+            {isTeacher ? 'Assigned Subjects & Rosters' : 'Institute Subjects & Courses'}
+          </h1>
           <p className="text-xs text-slate-600 mt-0.5">
-            Manage subject catalog with assigned faculty, classroom halls, timings, and standard fees.
+            {isTeacher
+              ? 'Your assigned teaching subjects, classroom halls, timings, and enrolled students.'
+              : 'Manage subject catalog with assigned faculty, classroom halls, timings, and standard fees.'}
           </p>
         </div>
 
@@ -559,9 +567,11 @@ export default function SubjectsPage() {
             <option value="INACTIVE">Inactive Subjects</option>
           </select>
 
-          <Button variant="primary" icon={Plus} onClick={handleOpenAdd} className="w-full sm:w-auto h-9">
-            New Subject
-          </Button>
+          {isAdmin && (
+            <Button variant="primary" icon={Plus} onClick={handleOpenAdd} className="w-full sm:w-auto h-9">
+              New Subject
+            </Button>
+          )}
         </div>
       </div>
 
@@ -696,15 +706,17 @@ export default function SubjectsPage() {
 
                     {/* Actions */}
                     <div className="mt-3.5 pt-2 border-t border-slate-100 flex items-center gap-1.5">
-                      <Button
-                        size="xs"
-                        variant="amber"
-                        icon={Edit2}
-                        onClick={() => handleOpenEdit(s)}
-                        className="flex-1 justify-center"
-                      >
-                        Edit
-                      </Button>
+                      {isAdmin && (
+                        <Button
+                          size="xs"
+                          variant="amber"
+                          icon={Edit2}
+                          onClick={() => handleOpenEdit(s)}
+                          className="flex-1 justify-center"
+                        >
+                          Edit
+                        </Button>
+                      )}
                       <Button
                         size="xs"
                         variant="info"

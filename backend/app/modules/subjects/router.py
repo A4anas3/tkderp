@@ -42,6 +42,17 @@ async def list_subjects(
         query = query.where(Subject.status == status_filter)
         count_query = count_query.where(Subject.status == status_filter)
 
+    if current_user.role == "TEACHER":
+        t_stmt = select(Teacher).where(Teacher.user_id == current_user.id)
+        t_rec = (await db.execute(t_stmt)).scalar_one_or_none()
+        if not t_rec:
+            t_stmt2 = select(Teacher).where(or_(Teacher.email == current_user.email, Teacher.name == current_user.full_name))
+            t_rec = (await db.execute(t_stmt2)).scalar_one_or_none()
+        teacher_id = t_rec.id if t_rec else None
+        if teacher_id:
+            query = query.where(Subject.teacher_id == teacher_id)
+            count_query = count_query.where(Subject.teacher_id == teacher_id)
+
     total_result = await db.execute(count_query)
     total = total_result.scalar_one()
 
@@ -57,7 +68,18 @@ async def get_all_active_subjects(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_staff)
 ):
-    result = await db.execute(select(Subject).where(Subject.status == "ACTIVE").order_by(Subject.name.asc()))
+    query = select(Subject).where(Subject.status == "ACTIVE")
+    if current_user.role == "TEACHER":
+        t_stmt = select(Teacher).where(Teacher.user_id == current_user.id)
+        t_rec = (await db.execute(t_stmt)).scalar_one_or_none()
+        if not t_rec:
+            t_stmt2 = select(Teacher).where(or_(Teacher.email == current_user.email, Teacher.name == current_user.full_name))
+            t_rec = (await db.execute(t_stmt2)).scalar_one_or_none()
+        teacher_id = t_rec.id if t_rec else None
+        if teacher_id:
+            query = query.where(Subject.teacher_id == teacher_id)
+
+    result = await db.execute(query.order_by(Subject.name.asc()))
     return result.scalars().all()
 
 async def generate_unique_subject_code(name: str, db: AsyncSession) -> str:

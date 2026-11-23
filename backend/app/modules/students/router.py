@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.database.session import get_db
 from app.modules.users.models import User
 from app.modules.students.models import Student
+from app.database.models import Teacher, Subject
 from app.modules.admissions.models import Admission, AdmissionItem
 from app.modules.payments.models import Payment, Refund, PaymentAllocation, FinancialTransaction
 from app.modules.batches.models import Batch
@@ -180,6 +181,28 @@ async def list_students(
         else:
             query = query.where(Student.status == status)
             count_query = count_query.where(Student.status == status)
+
+    if user.role == "TEACHER":
+        t_stmt = select(Teacher).where(Teacher.user_id == user.id)
+        t_rec = (await db.execute(t_stmt)).scalar_one_or_none()
+        if not t_rec:
+            t_stmt2 = select(Teacher).where(or_(Teacher.email == user.email, Teacher.name == user.full_name))
+            t_rec = (await db.execute(t_stmt2)).scalar_one_or_none()
+        teacher_id = t_rec.id if t_rec else None
+        if teacher_id:
+            sub_ids_stmt = select(Subject.id).where(Subject.teacher_id == teacher_id)
+            teacher_sub_ids = (await db.execute(sub_ids_stmt)).scalars().all()
+            if teacher_sub_ids:
+                teacher_students_stmt = (
+                    select(Admission.student_id)
+                    .join(AdmissionItem, AdmissionItem.admission_id == Admission.id)
+                    .where(
+                        AdmissionItem.subject_id.in_(teacher_sub_ids),
+                        Admission.status.not_in(["REVOKED", "CANCELLED"])
+                    )
+                )
+                query = query.where(Student.id.in_(teacher_students_stmt))
+                count_query = count_query.where(Student.id.in_(teacher_students_stmt))
 
     total = (await db.execute(count_query)).scalar() or 0
     total_pages = (total + page_size - 1) // page_size if total > 0 else 0
@@ -800,7 +823,7 @@ async def get_student_last_fee_period(
     subject_id: Optional[uuid.UUID] = None,
     batch_id: Optional[uuid.UUID] = None,
     db: AsyncSession = Depends(get_db),
-    user = Depends(require_staff)
+    user = Depends(require_cashier_or_admin)
 ):
     """
     Retrieves the ending date of the student's previous enrolled cycle.
@@ -868,7 +891,7 @@ async def get_student_renewals_due(
     days: int = Query(7, ge=1, description="Number of days ahead to look for expiring subjects"),
     include_overdue: bool = Query(True, description="Include items that expired in the past 30 days"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     student = (await db.execute(select(Student).where(Student.id == student_id))).scalar_one_or_none()
     if not student:

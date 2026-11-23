@@ -39,7 +39,7 @@ export default function CoachingAppsModal({ isOpen, onClose }) {
       icon: Users,
       route: '/students',
       color: 'bg-indigo-600',
-      roles: ['ADMIN', 'CASHIER'],
+      roles: ['ADMIN', 'CASHIER', 'TEACHER'],
     },
     {
       id: 'subjects',
@@ -48,7 +48,7 @@ export default function CoachingAppsModal({ isOpen, onClose }) {
       icon: BookOpen,
       route: '/subjects',
       color: 'bg-blue-600',
-      roles: ['ADMIN'],
+      roles: ['ADMIN', 'TEACHER'],
     },
     {
       id: 'admissions',
@@ -93,7 +93,7 @@ export default function CoachingAppsModal({ isOpen, onClose }) {
       icon: BarChart3,
       route: '/reports',
       color: 'bg-cyan-600',
-      roles: ['ADMIN', 'CASHIER'],
+      roles: ['ADMIN'],
     },
     {
       id: 'verify',
@@ -111,7 +111,7 @@ export default function CoachingAppsModal({ isOpen, onClose }) {
       icon: UserCheck,
       route: '/teachers',
       color: 'bg-emerald-600',
-      roles: ['ADMIN', 'CASHIER', 'TEACHER'],
+      roles: ['ADMIN'],
     },
     {
       id: 'enquiries',
@@ -120,7 +120,7 @@ export default function CoachingAppsModal({ isOpen, onClose }) {
       icon: LifeBuoy,
       route: '/enquiries',
       color: 'bg-amber-600',
-      roles: ['ADMIN', 'CASHIER'],
+      roles: ['ADMIN'],
     },
     {
       id: 'audit',

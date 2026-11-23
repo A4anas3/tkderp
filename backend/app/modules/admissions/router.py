@@ -49,7 +49,7 @@ router = APIRouter(prefix="/api/admissions", tags=["Admissions"])
 async def preview_admission_calculation(
     payload: AdmissionCalculatePreviewRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     items_data = []
     for itm in payload.items:
@@ -104,7 +104,7 @@ async def list_admissions(
     student_id: Optional[uuid.UUID] = None,
     payment_status: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     query = select(Admission).options(selectinload(Admission.items))
     count_query = select(func.count(Admission.id))
@@ -450,7 +450,7 @@ async def get_renewals_due(
     subject_id: Optional[uuid.UUID] = Query(None, description="Filter by subject"),
     include_overdue: bool = Query(True, description="Include items that expired in the past 30 days"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     today = date.today()
     window_end = today + timedelta(days=days)
@@ -536,7 +536,7 @@ async def get_renewals_due(
 async def get_admission(
     admission_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     query = select(Admission).options(selectinload(Admission.items)).where(Admission.id == admission_id)
     res = await db.execute(query)
@@ -558,7 +558,7 @@ async def get_admission(
 async def get_admission_slips(
     admission_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     """
     Returns all generated slips, payment receipts (1st, 2nd, installments),
@@ -1395,7 +1395,7 @@ async def renew_admission_item_endpoint(
 async def calculate_renewal_endpoint(
     payload: RenewalCalculateRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     """
     Computes authoritative renewal payable from subject fee rate, renewal period (months/days divide),

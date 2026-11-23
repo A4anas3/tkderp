@@ -1174,7 +1174,7 @@ async def get_renewal_rate_report(
     teacher_id: Optional[uuid.UUID] = Query(None, description="Filter by teacher"),
     subject_id: Optional[uuid.UUID] = Query(None, description="Filter by subject"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     """
     Renewal rate report:

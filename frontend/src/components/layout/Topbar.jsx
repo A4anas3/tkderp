@@ -60,20 +60,46 @@ export default function Topbar({ onOpenAppMenu, onQuickStudent, onQuickPayment }
     }
   };
 
-  // Coaching module navigation links matching the hostel pattern
-  const navLinks = [
-    { to: '/dashboard', label: 'Dashboard' },
-    { to: '/students', label: 'Students' },
-    { to: '/subjects', label: 'Subjects' },
-    { to: '/admissions', label: 'Admissions' },
-    { to: '/fees', label: 'Fees & Dues' },
-    { to: '/payments', label: 'Payments' },
-    { to: '/reminders', label: 'Reminders' },
-    { to: '/teachers', label: 'Teachers' },
-    { to: '/enquiries', label: 'Enquiries' },
-    { to: '/reports', label: 'Reports' },
-    { to: '/settings', label: 'Settings' },
-  ];
+  // Role-based navigation links strictly enforcing visibility by role:
+  // - ADMIN: sees full nav
+  // - TEACHER: sees ONLY Dashboard, Subjects, Students
+  // - CASHIER: sees ONLY Dashboard, Students, Admissions, Fees & Dues, Payments, Reminders
+  const getNavLinks = () => {
+    const roleUpper = (role || 'ADMIN').toUpperCase();
+    if (roleUpper === 'TEACHER') {
+      return [
+        { to: '/dashboard', label: 'Dashboard' },
+        { to: '/subjects', label: 'Subjects' },
+        { to: '/students', label: 'Students' },
+      ];
+    }
+    if (roleUpper === 'CASHIER') {
+      return [
+        { to: '/dashboard', label: 'Dashboard' },
+        { to: '/students', label: 'Students' },
+        { to: '/admissions', label: 'Admissions' },
+        { to: '/fees', label: 'Fees & Dues' },
+        { to: '/payments', label: 'Payments' },
+        { to: '/reminders', label: 'Reminders' },
+      ];
+    }
+    // ADMIN (and fallback)
+    return [
+      { to: '/dashboard', label: 'Dashboard' },
+      { to: '/students', label: 'Students' },
+      { to: '/subjects', label: 'Subjects' },
+      { to: '/admissions', label: 'Admissions' },
+      { to: '/fees', label: 'Fees & Dues' },
+      { to: '/payments', label: 'Payments' },
+      { to: '/reminders', label: 'Reminders' },
+      { to: '/teachers', label: 'Teachers' },
+      { to: '/enquiries', label: 'Enquiries' },
+      { to: '/reports', label: 'Reports' },
+      { to: '/settings', label: 'Settings' },
+    ];
+  };
+
+  const navLinks = getNavLinks();
 
   return (
     <header className="sticky top-0 z-40 bg-[#714B67] text-white shadow-sm border-b border-[#5e3c54]">
@@ -208,16 +234,18 @@ export default function Topbar({ onOpenAppMenu, onQuickStudent, onQuickPayment }
             )}
           </div>
 
-          {/* Notifications Bell */}
-          <button
-            type="button"
-            onClick={() => navigate('/reminders')}
-            className="relative p-1.5 rounded-full hover:bg-white/15 transition-colors text-white cursor-pointer"
-            title="Due Reminders & WhatsApp Queue"
-          >
-            <Bell className="w-4 h-4" />
-            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-400 ring-2 ring-[#714B67]" />
-          </button>
+          {/* Notifications Bell (Admin & Cashier only) */}
+          {(isAdmin || isCashier) && (
+            <button
+              type="button"
+              onClick={() => navigate('/reminders')}
+              className="relative p-1.5 rounded-full hover:bg-white/15 transition-colors text-white cursor-pointer"
+              title="Due Reminders & WhatsApp Queue"
+            >
+              <Bell className="w-4 h-4" />
+              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-400 ring-2 ring-[#714B67]" />
+            </button>
+          )}
 
           {/* User Profile Avatar Dropdown */}
           <div className="relative" ref={profileRef}>
@@ -246,16 +274,18 @@ export default function Topbar({ onOpenAppMenu, onQuickStudent, onQuickPayment }
                   </span>
                 </div>
 
-                <div className="py-1">
-                  <NavLink
-                    to="/settings"
-                    onClick={() => setProfileOpen(false)}
-                    className="flex items-center px-3.5 py-2 text-slate-700 hover:bg-slate-50 transition-colors"
-                  >
-                    <Settings className="w-4 h-4 mr-2 text-slate-400" />
-                    Institute Settings
-                  </NavLink>
-                </div>
+                {isAdmin && (
+                  <div className="py-1">
+                    <NavLink
+                      to="/settings"
+                      onClick={() => setProfileOpen(false)}
+                      className="flex items-center px-3.5 py-2 text-slate-700 hover:bg-slate-50 transition-colors"
+                    >
+                      <Settings className="w-4 h-4 mr-2 text-slate-400" />
+                      Institute Settings
+                    </NavLink>
+                  </div>
+                )}
 
                 <div className="border-t border-slate-100 pt-1">
                   <button

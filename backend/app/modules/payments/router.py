@@ -37,7 +37,7 @@ async def list_payments(
     admission_id: Optional[uuid.UUID] = None,
     payment_mode: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     query = (
         select(Payment)
@@ -127,7 +127,7 @@ async def list_transactions(
     payment_mode: Optional[str] = None,
     txn_type: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     """
     Append-only Financial Transactions Ledger paginated directly in SQL on financial_transactions.
@@ -292,7 +292,7 @@ async def record_payment(
 async def get_payment_receipt(
     payment_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     query = (
         select(Payment)
@@ -508,7 +508,7 @@ async def list_refunds(
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     query = (
         select(Refund)
@@ -580,7 +580,7 @@ async def list_refunds(
 async def get_refund_receipt(
     refund_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     query = (
         select(Refund)

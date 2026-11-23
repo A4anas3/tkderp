@@ -25,118 +25,204 @@ import Badge from '../common/Badge';
 export default function Sidebar({ isOpen, onClose }) {
   const { user, role, isAdmin, isCashier, isTeacher, logout } = useAuth();
 
-  const navSections = [
-    {
-      title: 'CORE',
-      items: [
+  const getNavSections = () => {
+    const roleUpper = (role || 'ADMIN').toUpperCase();
+
+    if (roleUpper === 'TEACHER') {
+      return [
         {
-          to: '/dashboard',
-          label: 'Dashboard',
-          icon: LayoutDashboard,
-          show: true,
+          title: 'ACADEMICS',
+          items: [
+            {
+              to: '/dashboard',
+              label: 'Dashboard',
+              icon: LayoutDashboard,
+              show: true,
+            },
+            {
+              to: '/subjects',
+              label: 'Subjects',
+              icon: BookOpen,
+              show: true,
+            },
+            {
+              to: '/students',
+              label: 'Students',
+              icon: GraduationCap,
+              show: true,
+            },
+          ],
         },
-      ],
-    },
-    {
-      title: 'ADMISSIONS & STUDENTS',
-      items: [
+      ];
+    }
+
+    if (roleUpper === 'CASHIER') {
+      return [
         {
-          to: '/admissions',
-          label: 'Course Purchases',
-          icon: CreditCard,
-          show: isAdmin || isCashier,
-        },
-        {
-          to: '/payments',
-          label: 'Fee Payments',
-          icon: ReceiptIndianRupee,
-          show: isAdmin || isCashier,
-        },
-        {
-          to: '/reminders',
-          label: 'Due Reminders',
-          icon: MessageSquare,
-          show: isAdmin || isCashier,
-        },
-        {
-          to: '/students',
-          label: 'Students',
-          icon: GraduationCap,
-          show: isAdmin || isCashier,
-        },
-        {
-          to: '/enquiries',
-          label: 'Enquiries & Demos',
-          icon: ClipboardList,
-          show: isAdmin || isCashier,
-        },
-      ],
-    },
-    {
-      title: 'ACADEMICS & FACULTY',
-      items: [
-        {
-          to: '/teachers',
-          label: 'Faculty & Teachers',
-          icon: Users,
-          show: isAdmin,
+          title: 'CORE',
+          items: [
+            {
+              to: '/dashboard',
+              label: 'Dashboard',
+              icon: LayoutDashboard,
+              show: true,
+            },
+          ],
         },
         {
-          to: '/subjects',
-          label: 'Subjects & Classes',
-          icon: BookOpen,
-          show: isAdmin,
+          title: 'STUDENTS & BILLING',
+          items: [
+            {
+              to: '/students',
+              label: 'Students',
+              icon: GraduationCap,
+              show: true,
+            },
+            {
+              to: '/admissions',
+              label: 'Admissions',
+              icon: CreditCard,
+              show: true,
+            },
+            {
+              to: '/fees',
+              label: 'Fees & Dues',
+              icon: ReceiptIndianRupee,
+              show: true,
+            },
+            {
+              to: '/payments',
+              label: 'Payments',
+              icon: ReceiptIndianRupee,
+              show: true,
+            },
+            {
+              to: '/reminders',
+              label: 'Reminders',
+              icon: MessageSquare,
+              show: true,
+            },
+          ],
         },
-        {
-          to: '/green-card',
-          label: 'Green Card Pass',
-          icon: Award,
-          show: isAdmin,
-        },
-      ],
-    },
-    {
-      title: 'FINANCE & REPORTING',
-      items: [
-        {
-          to: '/expenses',
-          label: 'Expenses & Salaries',
-          icon: Wallet,
-          show: isAdmin,
-        },
-        {
-          to: '/reports',
-          label: 'Reports Hub',
-          icon: BarChart3,
-          show: isAdmin || isCashier,
-        },
-        {
-          to: '/reports/subject-revenue',
-          label: 'Subject Revenue',
-          icon: BarChart3,
-          show: isAdmin,
-        },
-        {
-          to: '/reports/cash-flow',
-          label: 'Cash Flow Trends',
-          icon: TrendingUp,
-          show: isAdmin,
-        },
-        {
-          to: '/users',
-          label: 'Staff & Roles',
-          icon: ShieldCheck,
-          show: isAdmin,
-        },
-        {
-          to: '/audit-logs',
-          label: 'Audit Trail',
-          icon: History,
-          show: isAdmin,
-        },
-      ],
-    },
-  ];
+      ];
+    }
+
+    // ADMIN (and default full navigation)
+    return [
+      {
+        title: 'CORE',
+        items: [
+          {
+            to: '/dashboard',
+            label: 'Dashboard',
+            icon: LayoutDashboard,
+            show: true,
+          },
+        ],
+      },
+      {
+        title: 'ADMISSIONS & STUDENTS',
+        items: [
+          {
+            to: '/admissions',
+            label: 'Course Purchases',
+            icon: CreditCard,
+            show: true,
+          },
+          {
+            to: '/payments',
+            label: 'Fee Payments',
+            icon: ReceiptIndianRupee,
+            show: true,
+          },
+          {
+            to: '/reminders',
+            label: 'Due Reminders',
+            icon: MessageSquare,
+            show: true,
+          },
+          {
+            to: '/students',
+            label: 'Students',
+            icon: GraduationCap,
+            show: true,
+          },
+          {
+            to: '/enquiries',
+            label: 'Enquiries & Demos',
+            icon: ClipboardList,
+            show: true,
+          },
+        ],
+      },
+      {
+        title: 'ACADEMICS & FACULTY',
+        items: [
+          {
+            to: '/teachers',
+            label: 'Faculty & Teachers',
+            icon: Users,
+            show: true,
+          },
+          {
+            to: '/subjects',
+            label: 'Subjects & Classes',
+            icon: BookOpen,
+            show: true,
+          },
+          {
+            to: '/green-card',
+            label: 'Green Card Pass',
+            icon: Award,
+            show: true,
+          },
+        ],
+      },
+      {
+        title: 'FINANCE & REPORTING',
+        items: [
+          {
+            to: '/expenses',
+            label: 'Expenses & Salaries',
+            icon: Wallet,
+            show: true,
+          },
+          {
+            to: '/reports',
+            label: 'Reports Hub',
+            icon: BarChart3,
+            show: true,
+          },
+          {
+            to: '/reports/subject-revenue',
+            label: 'Subject Revenue',
+            icon: BarChart3,
+            show: true,
+          },
+          {
+            to: '/reports/cash-flow',
+            label: 'Cash Flow Trends',
+            icon: TrendingUp,
+            show: true,
+          },
+          {
+            to: '/users',
+            label: 'Staff & Roles',
+            icon: ShieldCheck,
+            show: true,
+          },
+          {
+            to: '/audit-logs',
+            label: 'Audit Trail',
+            icon: History,
+            show: true,
+          },
+        ],
+      },
+    ];
+  };
+
+  const navSections = getNavSections();
 
   return (
     <>

@@ -5,20 +5,44 @@ import {
   Users,
   GraduationCap,
   CreditCard,
+  BookOpen,
   Grid,
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 /**
  * Mobile-first Bottom Navigation Bar for phones (screens < 768px).
  * Matches the hostel ERP bottom nav style.
  */
 export default function BottomNav({ onOpenAppMenu }) {
-  const navItems = [
-    { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { to: '/students', label: 'Students', icon: Users },
-    { to: '/admissions', label: 'Admissions', icon: GraduationCap },
-    { to: '/payments', label: 'Payments', icon: CreditCard },
-  ];
+  const { role } = useAuth();
+
+  const getNavItems = () => {
+    const roleUpper = (role || 'ADMIN').toUpperCase();
+    if (roleUpper === 'TEACHER') {
+      return [
+        { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+        { to: '/subjects', label: 'Subjects', icon: BookOpen },
+        { to: '/students', label: 'Students', icon: Users },
+      ];
+    }
+    if (roleUpper === 'CASHIER') {
+      return [
+        { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+        { to: '/students', label: 'Students', icon: Users },
+        { to: '/admissions', label: 'Admissions', icon: GraduationCap },
+        { to: '/payments', label: 'Payments', icon: CreditCard },
+      ];
+    }
+    return [
+      { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { to: '/students', label: 'Students', icon: Users },
+      { to: '/admissions', label: 'Admissions', icon: GraduationCap },
+      { to: '/payments', label: 'Payments', icon: CreditCard },
+    ];
+  };
+
+  const navItems = getNavItems();
 
   return (
     <nav

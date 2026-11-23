@@ -987,6 +987,22 @@ async def test_comprehensive_backend_role_checks():
         }, headers=t_headers)
         assert res.status_code == 403
 
+        # B2) Teacher cannot list or access admissions/fees/payments APIs (out-of-role rejected with 403)
+        res_adm = await client.get("/api/admissions", headers=t_headers)
+        assert res_adm.status_code == 403
+        assert "Required roles: ADMIN, CASHIER" in res_adm.json()["detail"]
+
+        res_pay = await client.get("/api/payments", headers=t_headers)
+        assert res_pay.status_code == 403
+        assert "Required roles: ADMIN, CASHIER" in res_pay.json()["detail"]
+
+        res_rem = await client.get("/api/reminders/queue", headers=t_headers)
+        assert res_rem.status_code == 403
+        assert "Required roles: ADMIN, CASHIER" in res_rem.json()["detail"]
+
+        res_csh_dash = await client.get("/api/dashboard/cashier", headers=t_headers)
+        assert res_csh_dash.status_code == 403
+
         # C) Teacher can access Teacher Dashboard
         res = await client.get("/api/dashboard/teacher", headers=t_headers)
         assert res.status_code == 200
