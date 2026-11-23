@@ -31,6 +31,14 @@ class Subject(BaseModel):
     )
 
     @property
+    def code(self) -> str:
+        return self.subject_code
+
+    @code.setter
+    def code(self, value: str) -> None:
+        self.subject_code = value
+
+    @property
     def timing(self) -> Optional[str]:
         return self.schedule
 

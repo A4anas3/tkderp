@@ -1251,11 +1251,12 @@ export default function NewAdmissionPage() {
                             >
                               {subjects.map((s) => {
                                 const activeMatch = activeEnrollment?.active_subjects?.find((as) => as.subject_id === s.id);
-                                const timing = s.schedule || s.timing || '';
-                                const teacher = s.teacher_name_snapshot || s.teacher_name || (s.teacher && s.teacher.name) || resolveSubjectTeacher(s, teachers)?.teacherName || '';
+                                const timing = s.timing || s.schedule || '';
+                                const teacher = (typeof s.teacher === 'string' ? s.teacher : s.teacher?.name) || s.teacher_name || s.teacher_name_snapshot || resolveSubjectTeacher(s, teachers)?.teacherName || '';
+                                const code = s.code || s.subject_code || '';
                                 return (
                                   <option key={s.id} value={s.id}>
-                                    {s.name} ({s.subject_code}){timing ? ` • ${timing}` : ''}{teacher ? ` • ${teacher}` : ''} — ₹{Number(s.default_fee).toFixed(0)}/mo{activeMatch ? ` • [Active till ${activeMatch.valid_to} — Renews Next Cycle]` : ''}
+                                    {s.name} ({code}){timing ? ` • ${timing}` : ''}{teacher ? ` • ${teacher}` : ''} — ₹{Number(s.default_fee).toFixed(0)}/mo{activeMatch ? ` • [Active till ${activeMatch.valid_to} — Renews Next Cycle]` : ''}
                                   </option>
                                 );
                               })}

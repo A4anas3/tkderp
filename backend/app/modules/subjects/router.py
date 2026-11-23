@@ -105,8 +105,9 @@ async def create_subject(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin)
 ):
-    if payload.subject_code and payload.subject_code.strip():
-        code = payload.subject_code.strip().upper()
+    req_code = payload.subject_code or payload.code
+    if req_code and req_code.strip():
+        code = req_code.strip().upper()
         existing = await db.execute(select(Subject).where(Subject.subject_code == code))
         if existing.scalar_one_or_none():
             raise HTTPException(status_code=400, detail="Subject code already exists")
@@ -123,8 +124,8 @@ async def create_subject(
         if t.status != "ACTIVE":
             raise HTTPException(status_code=400, detail="Cannot assign an inactive teacher to a subject")
         teacher_name = t.name
-    elif payload.teacher_name_snapshot or payload.teacher_name:
-        req_name = payload.teacher_name_snapshot or payload.teacher_name
+    elif payload.teacher_name_snapshot or payload.teacher_name or payload.teacher:
+        req_name = payload.teacher_name_snapshot or payload.teacher_name or payload.teacher
         t_res = await db.execute(select(Teacher).where(Teacher.name == req_name))
         t = t_res.scalar_one_or_none()
         if t:
@@ -183,10 +184,20 @@ async def update_subject(
         raise HTTPException(status_code=404, detail="Subject not found")
 
     update_data = payload.model_dump(exclude_unset=True)
+    if "code" in update_data and "subject_code" not in update_data:
+        update_data["subject_code"] = update_data.pop("code")
+    elif "code" in update_data:
+        update_data.pop("code")
+
     if "timing" in update_data and "schedule" not in update_data:
         update_data["schedule"] = update_data.pop("timing")
     elif "timing" in update_data:
         update_data.pop("timing")
+
+    if "teacher" in update_data and "teacher_name_snapshot" not in update_data:
+        update_data["teacher_name_snapshot"] = update_data.pop("teacher")
+    elif "teacher" in update_data:
+        update_data.pop("teacher")
 
     if "teacher_name" in update_data and "teacher_name_snapshot" not in update_data:
         update_data["teacher_name_snapshot"] = update_data.pop("teacher_name")

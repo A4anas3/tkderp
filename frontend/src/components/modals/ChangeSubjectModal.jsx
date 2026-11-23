@@ -258,11 +258,12 @@ export default function ChangeSubjectModal({
             {subjects
               .filter((s) => s.id !== item.subject_id)
               .map((s) => {
-                const timing = s.schedule || s.timing || '';
-                const teacher = s.teacher_name_snapshot || s.teacher_name || (s.teacher && s.teacher.name) || (teachers.find((t) => t.id === s.teacher_id)?.name) || '';
+                const timing = s.timing || s.schedule || '';
+                const teacher = (typeof s.teacher === 'string' ? s.teacher : s.teacher?.name) || s.teacher_name || s.teacher_name_snapshot || (teachers.find((t) => t.id === s.teacher_id)?.name) || '';
+                const code = s.code || s.subject_code || '';
                 return (
                   <option key={s.id} value={s.id}>
-                    {s.name} ({s.subject_code}){timing ? ` • ${timing}` : ''}{teacher ? ` • ${teacher}` : ''} — Standard Fee: ₹{Number(s.default_fee).toFixed(0)}/mo
+                    {s.name} ({code}){timing ? ` • ${timing}` : ''}{teacher ? ` • ${teacher}` : ''} — Standard Fee: ₹{Number(s.default_fee).toFixed(0)}/mo
                   </option>
                 );
               })}
