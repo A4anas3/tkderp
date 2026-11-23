@@ -17,6 +17,7 @@ import {
   X,
   Wallet,
   CalendarCheck,
+  RotateCcw,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -86,6 +87,15 @@ export default function CoachingAppsModal({ isOpen, onClose }) {
       icon: Bell,
       route: '/reminders',
       color: 'bg-orange-600',
+      roles: ['ADMIN', 'CASHIER'],
+    },
+    {
+      id: 'renewals',
+      name: 'Renewals',
+      desc: 'Expiring & Expired Courses',
+      icon: RotateCcw,
+      route: '/renewals',
+      color: 'bg-rose-600',
       roles: ['ADMIN', 'CASHIER'],
     },
     {

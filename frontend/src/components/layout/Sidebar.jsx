@@ -19,6 +19,7 @@ import {
   ChevronRight,
   Sparkles,
   CalendarCheck,
+  RotateCcw,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import Badge from '../common/Badge';
@@ -104,6 +105,12 @@ export default function Sidebar({ isOpen, onClose }) {
               show: true,
             },
             {
+              to: '/renewals',
+              label: 'Renewals',
+              icon: RotateCcw,
+              show: true,
+            },
+            {
               to: '/expenses',
               label: 'Expenses',
               icon: Wallet,
@@ -146,6 +153,12 @@ export default function Sidebar({ isOpen, onClose }) {
             to: '/reminders',
             label: 'Due Reminders',
             icon: MessageSquare,
+            show: true,
+          },
+          {
+            to: '/renewals',
+            label: 'Renewals',
+            icon: RotateCcw,
             show: true,
           },
           {

@@ -21,6 +21,7 @@ import AdmissionDetailPage from '../pages/admissions/AdmissionDetailPage';
 import PaymentsPage from '../pages/payments/PaymentsPage';
 import PaymentDetailPage from '../pages/payments/PaymentDetailPage';
 import RemindersPage from '../pages/reminders/RemindersPage';
+import RenewalsPage from '../pages/renewals/RenewalsPage';
 import ExpensesPage from '../pages/expenses/ExpensesPage';
 import SubjectRevenuePage from '../pages/reports/SubjectRevenuePage';
 import CashFlowPage from '../pages/reports/CashFlowPage';
@@ -149,6 +150,16 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER']}>
               <RemindersPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Course Renewals (Admin & Cashier) */}
+        <Route
+          path="renewals"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER']}>
+              <RenewalsPage />
             </ProtectedRoute>
           }
         />

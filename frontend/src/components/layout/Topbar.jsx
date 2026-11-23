@@ -63,7 +63,7 @@ export default function Topbar({ onOpenAppMenu, onQuickStudent, onQuickPayment }
   // Role-based navigation links strictly enforcing visibility by role:
   // - ADMIN: sees full nav
   // - TEACHER: sees ONLY Dashboard, Subjects, Students
-  // - CASHIER: sees ONLY Dashboard, Students, Admissions, Fees & Dues, Payments, Reminders
+  // - CASHIER: sees ONLY Dashboard, Students, Admissions, Fees & Dues, Payments, Reminders, Renewals
   const getNavLinks = () => {
     const roleUpper = (role || 'ADMIN').toUpperCase();
     if (roleUpper === 'TEACHER') {
@@ -81,7 +81,7 @@ export default function Topbar({ onOpenAppMenu, onQuickStudent, onQuickPayment }
         { to: '/fees', label: 'Fees & Dues' },
         { to: '/payments', label: 'Payments' },
         { to: '/reminders', label: 'Reminders' },
-        { to: '/expenses', label: 'Expenses' },
+        { to: '/renewals', label: 'Renewals' },
       ];
     }
     // ADMIN (and fallback)
@@ -93,6 +93,7 @@ export default function Topbar({ onOpenAppMenu, onQuickStudent, onQuickPayment }
       { to: '/fees', label: 'Fees & Dues' },
       { to: '/payments', label: 'Payments' },
       { to: '/reminders', label: 'Reminders' },
+      { to: '/renewals', label: 'Renewals' },
       { to: '/expenses', label: 'Expenses' },
       { to: '/teachers', label: 'Teachers' },
       { to: '/teacher-attendance', label: 'Teacher Attendance' },

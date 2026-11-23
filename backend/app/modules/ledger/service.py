@@ -1478,10 +1478,10 @@ async def renew_admission_items_service(
                 status_code=400,
                 detail=f"Cannot renew discontinued subject line '{itm.item_name_snapshot}'. Enroll as a new subject instead."
             )
-        if itm.item_type != "BATCH_SUBJECT":
+        if itm.item_type not in ["BATCH_SUBJECT", "SUBJECT", "BATCH"]:
             raise HTTPException(
                 status_code=400,
-                detail=f"Item '{itm.item_name_snapshot}' has type '{itm.item_type}'. Only BATCH_SUBJECT items are renewable."
+                detail=f"Item '{itm.item_name_snapshot}' has type '{itm.item_type}'. Only course subject items are renewable."
             )
 
     # Prepare renewed items data

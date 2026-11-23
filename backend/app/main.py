@@ -26,6 +26,7 @@ from app.modules.enrollments.router import router as enrollments_router
 from app.modules.audit.router import router as audit_router
 from app.modules.verification.router import router as verification_router
 from app.modules.reminders.router import router as reminders_router
+from app.modules.renewals.router import router as renewals_router
 from app.database.session import engine
 from app.database.models import Base
 
@@ -125,6 +126,8 @@ app.include_router(enrollments_router)
 app.include_router(audit_router)
 app.include_router(verification_router)
 app.include_router(reminders_router)
+app.include_router(renewals_router)
+app.include_router(renewals_router, prefix="/renewals")
 
 # Direct root alias for batches active summary
 @app.get("/batches/active-summary", tags=["Batches"])

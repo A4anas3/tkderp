@@ -560,4 +560,11 @@ export const remindersApi = {
   },
 };
 
+export const renewalsApi = {
+  getSummary: async (params) => {
+    const res = await api.get('/renewals', { params });
+    return res.data;
+  },
+};
+
 

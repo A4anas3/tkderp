@@ -833,7 +833,8 @@ async def test_student_photo_compression_and_last_batch_period():
         assert updated_stu["photo_url"].startswith("/uploads/students/stu_")
 
         # 4. Enroll student in a batch with date-to-date validity (2026-11-01 to 2026-11-30)
-        subj_res = await client.post("/api/subjects", json={"name": "Photo Test Physics", "code": "PTP99", "standard_fee": 1500.0}, headers=headers)
+        subj_code_ptp = f"PTP_{uuid.uuid4().hex[:4].upper()}"
+        subj_res = await client.post("/api/subjects", json={"name": f"Photo Test Physics {subj_code_ptp}", "code": subj_code_ptp, "standard_fee": 1500.0}, headers=headers)
         subj_id = subj_res.json()["id"]
         batch_res = await client.post("/api/batches", json={
             "name": "Nov Photo Batch",
