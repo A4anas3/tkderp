@@ -43,7 +43,7 @@ import Input from '../../components/common/Input';
 import Avatar from '../../components/common/Avatar';
 import QuickPaymentModal from '../../components/modals/QuickPaymentModal';
 import PaymentReceiptModal from '../../components/receipts/PaymentReceiptModal';
-import { teacherApi } from '../../services/allApis';
+import { teacherApi, expenseApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 import { formatIndianDate } from '../../utils/dateCycleUtils';
 import { cleanMobileInput } from '../../utils/phoneUtils';
@@ -111,7 +111,11 @@ export default function TeacherDetailPage() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [subjectFilter, setSubjectFilter] = useState('');
 
-  // 7. Modals State
+  // 7. Monthly Salary History State (Requirement 5)
+  const [salaries, setSalaries] = useState([]);
+  const [salariesLoading, setSalariesLoading] = useState(false);
+
+  // 8. Modals State
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [statusModalOpen, setStatusModalOpen] = useState(false);
   const [statusReason, setStatusReason] = useState('');
@@ -248,6 +252,26 @@ export default function TeacherDetailPage() {
     }
   }, [id, rosterPage, debouncedSearch, statusFilter, subjectFilter]);
 
+  // Load monthly salary history (Requirement 5)
+  const loadSalaries = useCallback(async () => {
+    if (!id) return;
+    setSalariesLoading(true);
+    try {
+      let data = [];
+      try {
+        data = await teacherApi.getSalaries(id);
+      } catch (err) {
+        const res = await expenseApi.listSalaries({ employee_id: id, page_size: 100 });
+        data = res.items || [];
+      }
+      setSalaries(data || []);
+    } catch (err) {
+      console.error('Failed to load teacher salary history:', err);
+    } finally {
+      setSalariesLoading(false);
+    }
+  }, [id]);
+
   // Master refresh function
   const refreshAll = useCallback(() => {
     loadProfile();
@@ -255,7 +279,8 @@ export default function TeacherDetailPage() {
     loadHistory();
     loadCollections();
     loadRoster();
-  }, [loadProfile, loadBreakup, loadHistory, loadCollections, loadRoster]);
+    loadSalaries();
+  }, [loadProfile, loadBreakup, loadHistory, loadCollections, loadRoster, loadSalaries]);
 
   useEffect(() => {
     refreshAll();
@@ -591,7 +616,7 @@ export default function TeacherDetailPage() {
       </div>
 
       {/* Financial & KPI Summary Cards (Single Source of Truth from DB Ledger) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 text-xs">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-3 text-xs">
         {/* Total Billed */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
           <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Total Billed</span>
@@ -656,6 +681,20 @@ export default function TeacherDetailPage() {
           </span>
           <span className="text-[10px] text-indigo-700 font-medium mt-1 block">Desk collections handled</span>
         </div>
+
+        {/* Monthly Salary Paid Card (Requirement 5) */}
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Monthly Salary</span>
+            <span className="text-[10px] text-emerald-800 font-medium">({salaries.length} records)</span>
+          </div>
+          <span className="font-mono font-black text-emerald-800 text-lg sm:text-xl mt-1 block truncate">
+            ₹{salaries.reduce((sum, s) => sum + Number(s.paid_amount || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+          </span>
+          <span className="text-[10px] text-slate-500 font-medium mt-1 block truncate">
+            Payable: ₹{salaries.reduce((sum, s) => sum + Number(s.salary_amount || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+          </span>
+        </div>
       </div>
 
       {/* Main Feature Tabs mirroring Subject module (G3) */}
@@ -710,6 +749,19 @@ export default function TeacherDetailPage() {
         >
           <CalendarCheck className="w-4 h-4" />
           <span>Teacher Attendance</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('SALARY')}
+          className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-lg transition cursor-pointer ${
+            activeTab === 'SALARY'
+              ? 'bg-odoo-700 text-white shadow-2xs'
+              : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          <Wallet className="w-4 h-4" />
+          <span>Monthly Salary History ({salaries.length})</span>
         </button>
       </div>
 
@@ -1636,6 +1688,130 @@ export default function TeacherDetailPage() {
             teacherId={teacher.id}
             teacherName={teacher.name}
           />
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 5: MONTHLY SALARY HISTORY (Requirement 5) */}
+      {/* ========================================================================= */}
+      {activeTab === 'SALARY' && (
+        <div className="space-y-4">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 sm:p-5 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
+              <div>
+                <h3 className="font-bold text-black text-sm flex items-center gap-2">
+                  <Wallet className="w-4 h-4 text-odoo-600" />
+                  <span>Monthly Salary History for {teacher.name}</span>
+                </h3>
+                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                  Monthly payroll records showing payable amount, paid amount, payment mode, and attendance deductions
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200">
+                  Total Paid: ₹{salaries.reduce((acc, s) => acc + Number(s.paid_amount || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </span>
+                <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 border border-slate-200">
+                  Total Payable: ₹{salaries.reduce((acc, s) => acc + Number(s.salary_amount || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+
+            {salariesLoading ? (
+              <div className="p-8 text-center text-xs text-slate-500 animate-pulse">
+                Loading monthly salary history...
+              </div>
+            ) : salaries.length === 0 ? (
+              <div className="p-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200 text-xs text-slate-500">
+                <p className="font-semibold text-slate-700">No monthly salary entries recorded yet.</p>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Salary records created in Expenses &gt; Faculty &amp; Staff Payroll will appear here with monthly amounts, payment modes, and attendance deductions.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-lg border border-slate-200">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold">
+                      <th className="py-2.5 px-3">Month</th>
+                      <th className="py-2.5 px-3 text-right">Payable Amount</th>
+                      <th className="py-2.5 px-3 text-right">Paid Amount</th>
+                      <th className="py-2.5 px-3 text-center">Payment Mode</th>
+                      <th className="py-2.5 px-3 text-center">Status</th>
+                      <th className="py-2.5 px-3 text-center">Absent Days</th>
+                      <th className="py-2.5 px-3">Due Date</th>
+                      <th className="py-2.5 px-3">Payment Date</th>
+                      <th className="py-2.5 px-3">Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium">
+                    {salaries.map((s) => {
+                      const variants = {
+                        PAID: 'success',
+                        PARTIALLY_PAID: 'warning',
+                        PENDING: 'danger',
+                      };
+                      return (
+                        <tr key={s.id} className="hover:bg-slate-50/70 transition-colors">
+                          <td className="py-2.5 px-3 font-mono font-bold text-black">
+                            {s.month_year}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono font-bold text-black">
+                            ₹{Number(s.salary_amount).toFixed(2)}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-800">
+                            ₹{Number(s.paid_amount).toFixed(2)}
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            {s.payment_mode ? (
+                              <Badge
+                                size="xs"
+                                variant={s.payment_mode === 'UPI' ? 'info' : s.payment_mode === 'CASH' ? 'warning' : 'neutral'}
+                              >
+                                {s.payment_mode}
+                              </Badge>
+                            ) : (
+                              <span className="text-slate-400 font-mono text-[11px]">—</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            <Badge size="xs" variant={variants[s.status] || 'neutral'}>
+                              {s.status}
+                            </Badge>
+                          </td>
+                          <td className="py-2.5 px-3 text-center font-mono">
+                            {s.absent_days_count != null ? (
+                              <span
+                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                                  s.absent_days_count > 0
+                                    ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                                    : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                }`}
+                              >
+                                {s.absent_days_count} {s.absent_days_count === 1 ? 'day' : 'days'}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 text-[11px]">—</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 font-mono text-slate-600">
+                            {s.due_date ? formatIndianDate(s.due_date) : '—'}
+                          </td>
+                          <td className="py-2.5 px-3 font-mono text-slate-600">
+                            {s.payment_date ? formatIndianDate(s.payment_date) : '—'}
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-500 max-w-xs truncate" title={s.notes || ''}>
+                            {s.notes || '—'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

@@ -2,7 +2,7 @@ import uuid
 from datetime import date
 from decimal import Decimal
 from typing import Optional
-from sqlalchemy import String, Date, Numeric, Text, Boolean, ForeignKey
+from sqlalchemy import String, Date, Numeric, Text, Boolean, ForeignKey, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base import BaseModel
@@ -42,3 +42,5 @@ class SalaryRecord(BaseModel):
     payment_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     payment_mode: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    base_salary: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
+    holidays_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=0)

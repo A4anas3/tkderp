@@ -30,6 +30,7 @@ from app.modules.admissions.models import Admission, AdmissionItem
 from app.modules.payments.models import Payment, PaymentAllocation, Refund
 from app.modules.students.models import Student
 from app.modules.expenses.models import SalaryRecord
+from app.modules.expenses.schemas import SalaryRecordResponse
 from app.database.models import AuditLog
 from app.modules.reports.ledger_queries import get_item_allocated_collected_map, ist_day_boundaries
 from app.common.active_student import active_student_subject_filter, today_kolkata
@@ -1486,4 +1487,46 @@ async def bulk_set_teacher_attendance(
         
     await db.commit()
     return await get_teacher_attendance_detail(teacher_id=teacher_id, month_year=m_year, db=db, user=user)
+
+@router.get("/{teacher_id}/salaries", response_model=List[SalaryRecordResponse])
+async def get_teacher_salary_history(
+    teacher_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user = Depends(require_staff)
+):
+    teacher = (await db.execute(select(Teacher).where(Teacher.id == teacher_id))).scalar_one_or_none()
+    if not teacher:
+        raise HTTPException(status_code=404, detail="Teacher not found")
+
+    cond = or_(SalaryRecord.employee_id == teacher.id, SalaryRecord.employee_name_snapshot.ilike(teacher.name.strip()))
+    stmt = select(SalaryRecord).where(cond).order_by(desc(SalaryRecord.month_year), desc(SalaryRecord.created_at))
+    records = (await db.execute(stmt)).scalars().all()
+
+    resp = []
+    for r in records:
+        cnt_res = await db.execute(
+            select(func.count(TeacherAttendance.id))
+            .where(TeacherAttendance.teacher_id == teacher.id, TeacherAttendance.month_year == r.month_year)
+        )
+        abs_cnt = cnt_res.scalar() or 0
+        resp.append(
+            SalaryRecordResponse(
+                id=r.id,
+                employee_id=r.employee_id or teacher.id,
+                employee_type=r.employee_type,
+                employee_name_snapshot=r.employee_name_snapshot,
+                month_year=r.month_year,
+                salary_amount=r.salary_amount,
+                due_date=r.due_date,
+                paid_amount=r.paid_amount,
+                status=r.status,
+                payment_date=r.payment_date,
+                payment_mode=r.payment_mode,
+                notes=r.notes,
+                absent_days_count=abs_cnt,
+                base_salary=r.base_salary,
+                holidays_count=r.holidays_count or 0
+            )
+        )
+    return resp
 

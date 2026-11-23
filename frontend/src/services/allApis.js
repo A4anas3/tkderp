@@ -71,6 +71,10 @@ export const teacherApi = {
     const res = await api.get(`/teachers/${id}/collections`);
     return res.data;
   },
+  getSalaries: async (id) => {
+    const res = await api.get(`/teachers/${id}/salaries`);
+    return res.data;
+  },
   getAttendanceSummary: async (params) => {
     const res = await api.get('/teachers/attendance', { params });
     return res.data;

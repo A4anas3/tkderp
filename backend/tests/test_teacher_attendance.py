@@ -310,3 +310,162 @@ async def test_id_card_timings_and_due_balance(admin_token):
         active_line = next((l for l in stu_detail["active"] if l["subject_id"] == subj_id), None)
         assert active_line is not None
         assert active_line["schedule"] == sub_schedule
+
+@pytest.mark.asyncio
+async def test_salary_flow_end_to_end(admin_token):
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        suffix = uuid.uuid4().hex[:6]
+        # 1. Create teacher
+        t_res = await client.post("/api/teachers", headers=headers, json={
+            "name": f"Salary Test Faculty {suffix}",
+            "mobile": f"98{uuid.uuid4().int % 100000000:08d}",
+            "qualification": "Ph.D Physics",
+            "specialization": "Quantum Physics",
+            "joining_date": "2026-01-01"
+        })
+        assert t_res.status_code == 201
+        tch_id = t_res.json()["id"]
+        tch_name = t_res.json()["name"]
+
+        # 2. Mark 3 absent days in November 2026 (30-day month)
+        for day in ["2026-11-04", "2026-11-10", "2026-11-18"]:
+            tg = await client.post(
+                f"/api/teachers/{tch_id}/attendance/toggle",
+                headers=headers,
+                json={"date": day, "reason": "Medical leave"}
+            )
+            assert tg.status_code == 200
+
+        # Check attendance summary
+        att_res = await client.get(f"/api/teachers/{tch_id}/attendance?month_year=2026-11", headers=headers)
+        assert att_res.status_code == 200
+        att_data = att_res.json()
+        assert att_data["days_in_month"] == 30
+        assert att_data["absent_days_count"] == 3
+
+        # 3. Create Salary Entry with auto-calculated formula:
+        # monthly salary = 30,000, days = 30 => per-day rate = 1000.
+        # absent days = 3 => deduction = 3000.
+        # holidays = 4 (paid days, never deducted).
+        # Payable = 30000 - 3000 = 27000.
+        base_salary = Decimal("30000.00")
+        days_in_month = 30
+        per_day_rate = base_salary / Decimal(str(days_in_month)) # 1000.00
+        absent_days = 3
+        payable = base_salary - (per_day_rate * Decimal(str(absent_days))) # 27000.00
+        holidays_count = 4
+
+        sal_res = await client.post("/api/expenses/salaries", headers=headers, json={
+            "employee_id": tch_id,
+            "employee_type": "TEACHER",
+            "employee_name_snapshot": tch_name,
+            "month_year": "2026-11",
+            "base_salary": float(base_salary),
+            "holidays_count": holidays_count,
+            "salary_amount": float(payable),
+            "due_date": "2026-11-30",
+            "notes": f"Auto-calculated: Base ₹{base_salary}, 30 days, 4 holidays (paid), 3 absent days (deduction ₹3000)"
+        })
+        assert sal_res.status_code == 201
+        sal_nov = sal_res.json()
+        assert float(sal_nov["salary_amount"]) == 27000.00
+        assert float(sal_nov["base_salary"]) == 30000.00
+        assert sal_nov["holidays_count"] == 4
+        assert sal_nov["absent_days_count"] == 3
+        assert sal_nov["status"] == "PENDING"
+        assert sal_nov["payment_mode"] is None
+
+        # 4. Pay November salary with UPI
+        pay_nov_res = await client.post(f"/api/expenses/salaries/{sal_nov['id']}/pay", headers=headers, json={
+            "paid_amount": 27000.00,
+            "payment_mode": "UPI",
+            "payment_date": "2026-11-28",
+            "notes": "Paid full via UPI"
+        })
+        assert pay_nov_res.status_code == 200
+        paid_nov = pay_nov_res.json()
+        assert paid_nov["status"] == "PAID"
+        assert paid_nov["payment_mode"] == "UPI"
+        assert float(paid_nov["paid_amount"]) == 27000.00
+        assert paid_nov["absent_days_count"] == 3
+
+        # 5. Last Month Coverage: Create pending salary for Last Month (October 2026, 31 days)
+        # 1 absent day in October
+        await client.post(
+            f"/api/teachers/{tch_id}/attendance/toggle",
+            headers=headers,
+            json={"date": "2026-10-15", "reason": "Casual leave"}
+        )
+        oct_att = await client.get(f"/api/teachers/{tch_id}/attendance?month_year=2026-10", headers=headers)
+        assert oct_att.status_code == 200
+        assert oct_att.json()["days_in_month"] == 31
+        assert oct_att.json()["absent_days_count"] == 1
+
+        # Base = 31000, days = 31 => per-day rate = 1000. 1 absent => payable = 30000.
+        sal_oct_res = await client.post("/api/expenses/salaries", headers=headers, json={
+            "employee_id": tch_id,
+            "employee_type": "TEACHER",
+            "employee_name_snapshot": tch_name,
+            "month_year": "2026-10",
+            "base_salary": 31000.00,
+            "holidays_count": 5,
+            "salary_amount": 30000.00,
+            "due_date": "2026-10-31",
+            "notes": "Last month salary entry"
+        })
+        assert sal_oct_res.status_code == 201
+        sal_oct = sal_oct_res.json()
+        assert sal_oct["status"] == "PENDING"
+        assert sal_oct["month_year"] == "2026-10"
+        assert sal_oct["absent_days_count"] == 1
+
+        # 6. Verify salary list covers both last month (2026-10) and current month (2026-11)
+        # Check querying by teacher employee_id or month_year
+        all_sal_res = await client.get(f"/api/expenses/salaries?employee_id={tch_id}", headers=headers)
+        assert all_sal_res.status_code == 200
+        items = all_sal_res.json()["items"]
+        nov_item = next((s for s in items if s["id"] == sal_nov["id"]), None)
+        oct_item = next((s for s in items if s["id"] == sal_oct["id"]), None)
+        assert nov_item is not None
+        assert nov_item["payment_mode"] == "UPI"
+        assert oct_item is not None
+        assert oct_item["status"] == "PENDING"
+
+        # Also verify month_year filter works for last month
+        oct_list_res = await client.get(f"/api/expenses/salaries?month_year=2026-10&employee_id={tch_id}", headers=headers)
+        assert oct_list_res.status_code == 200
+        assert any(s["id"] == sal_oct["id"] for s in oct_list_res.json()["items"])
+
+        # 7. Pay pending last month salary with CASH
+        pay_oct_res = await client.post(f"/api/expenses/salaries/{sal_oct['id']}/pay", headers=headers, json={
+            "paid_amount": 30000.00,
+            "payment_mode": "CASH",
+            "payment_date": "2026-11-20",
+            "notes": "Paid pending last-month salary in Cash"
+        })
+        assert pay_oct_res.status_code == 200
+        paid_oct = pay_oct_res.json()
+        assert paid_oct["status"] == "PAID"
+        assert paid_oct["payment_mode"] == "CASH"
+
+        # 8. Check Teacher's Profile Salary History endpoint
+        tch_sal_res = await client.get(f"/api/teachers/{tch_id}/salaries", headers=headers)
+        assert tch_sal_res.status_code == 200
+        tch_salaries = tch_sal_res.json()
+        assert len(tch_salaries) >= 2
+        # Check November record
+        nov_rec = next((s for s in tch_salaries if s["month_year"] == "2026-11"), None)
+        assert nov_rec is not None
+        assert float(nov_rec["salary_amount"]) == 27000.00
+        assert float(nov_rec["paid_amount"]) == 27000.00
+        assert nov_rec["payment_mode"] == "UPI"
+        assert nov_rec["status"] == "PAID"
+
+        # Check October record
+        oct_rec = next((s for s in tch_salaries if s["month_year"] == "2026-10"), None)
+        assert oct_rec is not None
+        assert float(oct_rec["salary_amount"]) == 30000.00
+        assert float(oct_rec["paid_amount"]) == 30000.00
+        assert oct_rec["payment_mode"] == "CASH"
+        assert oct_rec["status"] == "PAID"

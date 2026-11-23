@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Plus,
   Wallet,
@@ -9,6 +9,8 @@ import {
   AlertCircle,
   Tag,
   DollarSign,
+  Calculator,
+  Sparkles,
 } from 'lucide-react';
 import DataTable from '../../components/common/DataTable';
 import Modal from '../../components/common/Modal';
@@ -20,9 +22,21 @@ import { expenseApi, teacherApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 import { parseMonthYear } from '../../utils/calendarUtils';
 
+const getMonthStrings = () => {
+  const now = new Date();
+  const cy = now.getFullYear();
+  const cm = now.getMonth() + 1;
+  const currentMonth = `${cy}-${String(cm).padStart(2, '0')}`;
+  const prevDate = new Date(cy, cm - 2, 1);
+  const lastMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+  return { currentMonth, lastMonth };
+};
+
 export default function ExpensesPage() {
   const { success, error } = useToast();
   const [activeTab, setActiveTab] = useState('daily'); // 'daily' | 'salaries' | 'categories'
+
+  const { currentMonth: curMonthStr, lastMonth: prevMonthStr } = useMemo(() => getMonthStrings(), []);
 
   // Categories
   const [categories, setCategories] = useState([]);
@@ -52,12 +66,17 @@ export default function ExpensesPage() {
   const [salPage, setSalPage] = useState(1);
   const [salLoading, setSalLoading] = useState(true);
   const [salModalOpen, setSalModalOpen] = useState(false);
+  const [salMonthFilter, setSalMonthFilter] = useState('ALL'); // 'ALL' | curMonthStr | prevMonthStr
+  const [salSearch, setSalSearch] = useState('');
   const [teachers, setTeachers] = useState([]);
   const [salForm, setSalForm] = useState({
+    employee_id: '',
     employee_name_snapshot: '',
     employee_type: 'TEACHER',
-    month_year: '2026-11',
-    salary_amount: '20000.00',
+    month_year: curMonthStr,
+    base_salary: '25000.00',
+    holidays_count: '0',
+    salary_amount: '25000.00',
     due_date: new Date().toISOString().split('T')[0],
     notes: '',
   });
@@ -69,7 +88,7 @@ export default function ExpensesPage() {
   const [paySalTeacherAbsentCount, setPaySalTeacherAbsentCount] = useState(null);
   const [paySalForm, setPaySalForm] = useState({
     paid_amount: '',
-    payment_mode: 'BANK_TRANSFER',
+    payment_mode: 'UPI',
     payment_date: new Date().toISOString().split('T')[0],
     notes: '',
   });
@@ -107,14 +126,21 @@ export default function ExpensesPage() {
     }
   }, [expPage, expSearch]);
 
-  // Load Salaries
+  // Load Salaries (covers current month, last month, and all months)
   const loadSalaries = useCallback(async () => {
     setSalLoading(true);
     try {
-      const res = await expenseApi.listSalaries({
+      const params = {
         page: salPage,
         page_size: 15,
-      });
+      };
+      if (salMonthFilter && salMonthFilter !== 'ALL') {
+        params.month_year = salMonthFilter;
+      }
+      if (salSearch && salSearch.trim()) {
+        params.search = salSearch.trim();
+      }
+      const res = await expenseApi.listSalaries(params);
       setSalaries(res.items || []);
       setSalTotal(res.total || 0);
     } catch (err) {
@@ -122,7 +148,7 @@ export default function ExpensesPage() {
     } finally {
       setSalLoading(false);
     }
-  }, [salPage]);
+  }, [salPage, salMonthFilter, salSearch]);
 
   useEffect(() => {
     loadCategories();
@@ -135,6 +161,26 @@ export default function ExpensesPage() {
     if (activeTab === 'daily') loadExpenses();
     if (activeTab === 'salaries') loadSalaries();
   }, [activeTab, loadExpenses, loadSalaries]);
+
+  // Helper formula: Payable = monthly salary - (per-day rate x absent days)
+  // per-day rate = monthly salary / real days in that month (31/30/28/29)
+  // Holidays are paid days, never deducted as absent.
+  const calculatePayableSalary = useCallback((baseSalaryVal, monthYearVal, absentCountVal, holidaysCountVal = 0) => {
+    const base = parseFloat(baseSalaryVal) || 0;
+    const { daysInMonth } = parseMonthYear(monthYearVal);
+    const perDayRate = daysInMonth > 0 ? base / daysInMonth : 0;
+    const absDays = Math.max(0, parseInt(absentCountVal, 10) || 0);
+    const deduction = perDayRate * absDays;
+    const payable = Math.max(0, base - deduction);
+    return {
+      daysInMonth,
+      perDayRate,
+      absentDays: absDays,
+      holidays: parseInt(holidaysCountVal, 10) || 0,
+      deduction,
+      payable: Math.round(payable * 100) / 100,
+    };
+  }, []);
 
   // Fetch teacher absent count when teacher or month changes in create salary form
   useEffect(() => {
@@ -152,12 +198,37 @@ export default function ExpensesPage() {
     teacherApi
       .getTeacherAttendance(matched.id, { month_year: salForm.month_year })
       .then((res) => {
-        setSalTeacherAbsentCount(res.absent_days_count ?? 0);
+        const absCnt = res.absent_days_count ?? 0;
+        setSalTeacherAbsentCount(absCnt);
+        // Auto-calculate payable when attendance is loaded
+        const calc = calculatePayableSalary(salForm.base_salary, salForm.month_year, absCnt, salForm.holidays_count);
+        setSalForm((prev) => ({
+          ...prev,
+          employee_id: matched.id,
+          salary_amount: calc.payable.toFixed(2),
+        }));
       })
       .catch(() => {
         setSalTeacherAbsentCount(0);
       });
-  }, [salForm.employee_name_snapshot, salForm.month_year, salForm.employee_type, teachers]);
+  }, [salForm.employee_name_snapshot, salForm.month_year, salForm.employee_type, teachers, calculatePayableSalary]);
+
+  // Explicit auto-calculate action triggered by user button
+  const handleAutoCalculate = () => {
+    const calc = calculatePayableSalary(
+      salForm.base_salary,
+      salForm.month_year,
+      salTeacherAbsentCount ?? 0,
+      salForm.holidays_count
+    );
+    setSalForm((prev) => ({
+      ...prev,
+      salary_amount: calc.payable.toFixed(2),
+    }));
+    success(
+      `Payable auto-calculated: ₹${calc.payable.toFixed(2)} (${calc.absentDays} absent days deducted at ₹${calc.perDayRate.toFixed(2)}/day, ${calc.holidays} holidays fully paid)`
+    );
+  };
 
   // Create Category
   const handleCreateCategory = async (e) => {
@@ -228,14 +299,17 @@ export default function ExpensesPage() {
     setSubmitting(true);
     try {
       await expenseApi.createSalary({
+        employee_id: salForm.employee_id || undefined,
         employee_name_snapshot: salForm.employee_name_snapshot.trim(),
         employee_type: salForm.employee_type,
         month_year: salForm.month_year,
         salary_amount: parseFloat(salForm.salary_amount),
         due_date: salForm.due_date,
+        base_salary: salForm.base_salary ? parseFloat(salForm.base_salary) : undefined,
+        holidays_count: parseInt(salForm.holidays_count, 10) || 0,
         notes: salForm.notes.trim() || null,
       });
-      success('Monthly salary record created');
+      success(`Monthly salary record created for ${salForm.employee_name_snapshot}`);
       setSalModalOpen(false);
       loadSalaries();
     } catch (err) {
@@ -251,7 +325,7 @@ export default function ExpensesPage() {
     const balance = Number(record.salary_amount) - Number(record.paid_amount);
     setPaySalForm({
       paid_amount: balance > 0 ? balance.toFixed(2) : '0.00',
-      payment_mode: 'BANK_TRANSFER',
+      payment_mode: 'UPI',
       payment_date: new Date().toISOString().split('T')[0],
       notes: '',
     });
@@ -286,7 +360,7 @@ export default function ExpensesPage() {
         payment_date: paySalForm.payment_date,
         notes: paySalForm.notes.trim() || null,
       });
-      success(`Salary payment recorded for ${selectedSalRecord.employee_name_snapshot}`);
+      success(`Salary payment recorded via ${paySalForm.payment_mode} for ${selectedSalRecord.employee_name_snapshot}`);
       setPaySalaryModalOpen(false);
       loadSalaries();
     } catch (err) {
@@ -353,7 +427,7 @@ export default function ExpensesPage() {
       ),
     },
     {
-      header: 'Salary Amount',
+      header: 'Payable Salary',
       className: 'text-right font-mono font-bold text-black w-32',
       render: (s) => `₹${Number(s.salary_amount).toFixed(2)}`,
     },
@@ -363,26 +437,49 @@ export default function ExpensesPage() {
       render: (s) => `₹${Number(s.paid_amount).toFixed(2)}`,
     },
     {
-      header: 'Absent Days',
+      header: 'Payment Mode',
       className: 'text-center w-28',
+      render: (s) =>
+        s.payment_mode ? (
+          <Badge
+            size="xs"
+            variant={s.payment_mode === 'UPI' ? 'info' : s.payment_mode === 'CASH' ? 'warning' : 'neutral'}
+          >
+            {s.payment_mode}
+          </Badge>
+        ) : (
+          <span className="text-slate-400 text-xs font-mono">—</span>
+        ),
+    },
+    {
+      header: 'Absent Days',
+      className: 'text-center w-32',
       render: (s) => {
         if (s.employee_type !== 'TEACHER') {
           return <span className="text-slate-400 text-xs">—</span>;
         }
         const cal = parseMonthYear(s.month_year);
         const absCnt = s.absent_days_count ?? 0;
+        const holCnt = s.holidays_count ?? 0;
         const presCnt = Math.max(0, cal.daysInMonth - absCnt);
         return (
-          <span
-            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
-              absCnt > 0
-                ? 'bg-rose-100 text-rose-800 border border-rose-300'
-                : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-            }`}
-            title={`${absCnt} holidays / absent days in ${s.month_year} (${presCnt} / ${cal.daysInMonth} present)`}
-          >
-            {absCnt} {absCnt === 1 ? 'day' : 'days'}
-          </span>
+          <div className="flex flex-col items-center gap-0.5">
+            <span
+              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+                absCnt > 0
+                  ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                  : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+              }`}
+              title={`${absCnt} absent days in ${s.month_year} (${presCnt} / ${cal.daysInMonth} present). Holidays are paid days.`}
+            >
+              {absCnt} {absCnt === 1 ? 'day' : 'days'}
+            </span>
+            {holCnt > 0 && (
+              <span className="text-[10px] text-slate-500 font-medium">
+                {holCnt} {holCnt === 1 ? 'holiday' : 'holidays'} (paid)
+              </span>
+            )}
+          </div>
         );
       },
     },
@@ -512,20 +609,78 @@ export default function ExpensesPage() {
         />
       )}
 
-      {/* Tab 2: Monthly Salaries */}
+      {/* Tab 2: Monthly Salaries (Covers Last Month, Current Month, and All Months) */}
       {activeTab === 'salaries' && (
-        <DataTable
-          columns={salaryColumns}
-          data={salaries}
-          total={salTotal}
-          page={salPage}
-          pageSize={15}
-          onPageChange={(p) => setSalPage(p)}
-          onRefresh={loadSalaries}
-          loading={salLoading}
-          searchPlaceholder="Monthly salary records..."
-          emptyMessage="No salary records found."
-        />
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-xs font-bold text-slate-700 mr-1">Period Filter:</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setSalMonthFilter('ALL');
+                  setSalPage(1);
+                }}
+                className={`px-2.5 py-1 text-xs rounded-md font-semibold transition cursor-pointer ${
+                  salMonthFilter === 'ALL'
+                    ? 'bg-odoo-700 text-white shadow-2xs'
+                    : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                All Months (Current & Last Month)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSalMonthFilter(curMonthStr);
+                  setSalPage(1);
+                }}
+                className={`px-2.5 py-1 text-xs rounded-md font-semibold transition cursor-pointer ${
+                  salMonthFilter === curMonthStr
+                    ? 'bg-odoo-700 text-white shadow-2xs'
+                    : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                Current Month ({curMonthStr})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSalMonthFilter(prevMonthStr);
+                  setSalPage(1);
+                }}
+                className={`px-2.5 py-1 text-xs rounded-md font-semibold transition cursor-pointer ${
+                  salMonthFilter === prevMonthStr
+                    ? 'bg-odoo-700 text-white shadow-2xs'
+                    : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                Last Month ({prevMonthStr})
+              </button>
+            </div>
+            <div className="text-xs text-slate-500 font-medium">
+              Showing {salaries.length} of {salTotal} payroll entries
+            </div>
+          </div>
+
+          <DataTable
+            columns={salaryColumns}
+            data={salaries}
+            total={salTotal}
+            page={salPage}
+            pageSize={15}
+            onPageChange={(p) => setSalPage(p)}
+            searchValue={salSearch}
+            onSearchChange={(val) => {
+              setSalSearch(val);
+              setSalPage(1);
+            }}
+            onRefresh={loadSalaries}
+            loading={salLoading}
+            searchPlaceholder="Search payroll by employee name..."
+            emptyMessage="No salary records found for this period."
+          />
+        </div>
       )}
 
       {/* Tab 3: Categories */}
@@ -648,20 +803,27 @@ export default function ExpensesPage() {
         isOpen={salModalOpen}
         onClose={() => setSalModalOpen(false)}
         title="Create Monthly Salary Entry"
-        subtitle="Record monthly teacher or staff payroll payable"
-        maxWidth="max-w-md"
+        subtitle="Auto-calculate teacher or staff payroll payable from real calendar attendance"
+        maxWidth="max-w-lg"
       >
         <form onSubmit={handleCreateSalary} className="space-y-3">
           <div>
             <label className="block text-xs font-semibold text-black mb-1">
-              Select Faculty / Staff
+              Select Faculty / Staff Member
             </label>
             <div className="space-y-2">
               <select
                 value={salForm.employee_name_snapshot}
-                onChange={(e) =>
-                  setSalForm({ ...salForm, employee_name_snapshot: e.target.value })
-                }
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const matched = teachers.find((t) => t.name === val);
+                  setSalForm((prev) => ({
+                    ...prev,
+                    employee_name_snapshot: val,
+                    employee_id: matched ? matched.id : '',
+                    employee_type: 'TEACHER',
+                  }));
+                }}
                 className="w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-black focus:outline-none focus:border-odoo-600"
               >
                 <option value="">Select registered faculty...</option>
@@ -695,51 +857,198 @@ export default function ExpensesPage() {
               ]}
             />
 
-            <Input
-              label="Salary Month (YYYY-MM)"
-              value={salForm.month_year}
-              onChange={(e) => setSalForm({ ...salForm, month_year: e.target.value })}
-              placeholder="e.g. 2026-11"
-              required
-            />
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-black">Salary Month</label>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setSalForm((prev) => ({ ...prev, month_year: curMonthStr }))}
+                    className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold transition cursor-pointer ${
+                      salForm.month_year === curMonthStr
+                        ? 'bg-odoo-600 text-white'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    Current ({curMonthStr})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSalForm((prev) => ({ ...prev, month_year: prevMonthStr }))}
+                    className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold transition cursor-pointer ${
+                      salForm.month_year === prevMonthStr
+                        ? 'bg-odoo-600 text-white'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    Last ({prevMonthStr})
+                  </button>
+                </div>
+              </div>
+              <Input
+                value={salForm.month_year}
+                onChange={(e) => setSalForm({ ...salForm, month_year: e.target.value })}
+                placeholder="YYYY-MM (e.g. 2026-11)"
+                required
+              />
+            </div>
           </div>
 
-          {salForm.employee_type === 'TEACHER' && salTeacherAbsentCount !== null && (() => {
-            const cal = parseMonthYear(salForm.month_year);
-            const pres = Math.max(0, cal.daysInMonth - salTeacherAbsentCount);
+          {/* Base Monthly Salary and Holidays Count */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <Input
+                label="Base Monthly Salary (₹)"
+                type="number"
+                step="0.01"
+                min="0.01"
+                value={salForm.base_salary}
+                onChange={(e) => {
+                  const bVal = e.target.value;
+                  const calc = calculatePayableSalary(
+                    bVal,
+                    salForm.month_year,
+                    salTeacherAbsentCount ?? 0,
+                    salForm.holidays_count
+                  );
+                  setSalForm((prev) => ({
+                    ...prev,
+                    base_salary: bVal,
+                    salary_amount: calc.payable.toFixed(2),
+                  }));
+                }}
+                placeholder="e.g. 25000.00"
+                required
+              />
+              <span className="text-[10px] text-slate-500 block mt-0.5">
+                Full-month contractual salary
+              </span>
+            </div>
+
+            <div>
+              <Input
+                label="Holidays in Month (Paid Days)"
+                type="number"
+                min="0"
+                max="31"
+                value={salForm.holidays_count}
+                onChange={(e) => {
+                  const hVal = e.target.value;
+                  const calc = calculatePayableSalary(
+                    salForm.base_salary,
+                    salForm.month_year,
+                    salTeacherAbsentCount ?? 0,
+                    hVal
+                  );
+                  setSalForm((prev) => ({
+                    ...prev,
+                    holidays_count: hVal,
+                    salary_amount: calc.payable.toFixed(2),
+                  }));
+                }}
+                placeholder="e.g. 4"
+              />
+              <span className="text-[10px] text-emerald-700 font-medium block mt-0.5">
+                Holidays are paid days, never deducted as absent
+              </span>
+            </div>
+          </div>
+
+          {/* Teacher Attendance & Salary Auto-calculation Breakdown Card */}
+          {salForm.employee_type === 'TEACHER' && (() => {
+            const absCnt = salTeacherAbsentCount ?? 0;
+            const calc = calculatePayableSalary(
+              salForm.base_salary,
+              salForm.month_year,
+              absCnt,
+              salForm.holidays_count
+            );
             return (
-              <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-lg flex items-center justify-between text-xs text-amber-900">
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-amber-600 shrink-0" />
-                  <div>
-                    <span className="font-bold">Teacher Attendance ({salForm.month_year})</span>
-                    <p className="text-[11px] text-amber-800">
-                      {pres} of {cal.daysInMonth} days present ({cal.daysInMonth} days in month)
-                    </p>
+              <div className="p-3 bg-gradient-to-br from-indigo-50/70 to-purple-50/70 border border-indigo-200 rounded-xl space-y-2.5">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <span className="font-bold text-slate-900">
+                      Attendance & Payroll Engine ({salForm.month_year})
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className={`px-2 py-0.5 rounded-full font-bold text-[11px] ${
+                        absCnt > 0
+                          ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                          : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                      }`}
+                    >
+                      {absCnt} {absCnt === 1 ? 'day' : 'days'} absent
+                    </span>
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="primary"
+                      icon={Calculator}
+                      onClick={handleAutoCalculate}
+                      title="Auto-calculate payable using real calendar per-day rate formula"
+                    >
+                      Auto-calculate
+                    </Button>
                   </div>
                 </div>
-                <span
-                  className={`px-2.5 py-1 rounded-full font-bold text-xs ${
-                    salTeacherAbsentCount > 0
-                      ? 'bg-rose-100 text-rose-800 border border-rose-300'
-                      : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                  }`}
-                >
-                  {salTeacherAbsentCount} {salTeacherAbsentCount === 1 ? 'day' : 'days'} absent
-                </span>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] pt-1 border-t border-indigo-100">
+                  <div className="bg-white/80 p-2 rounded-lg border border-indigo-100">
+                    <span className="text-slate-500 block text-[10px]">Real Calendar</span>
+                    <span className="font-mono font-bold text-slate-900">
+                      {calc.daysInMonth} days
+                    </span>
+                  </div>
+                  <div className="bg-white/80 p-2 rounded-lg border border-indigo-100">
+                    <span className="text-slate-500 block text-[10px]">Per-Day Rate</span>
+                    <span className="font-mono font-bold text-slate-900">
+                      ₹{calc.perDayRate.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="bg-white/80 p-2 rounded-lg border border-indigo-100">
+                    <span className="text-slate-500 block text-[10px]">Absent Deduction</span>
+                    <span className="font-mono font-bold text-rose-700">
+                      -₹{calc.deduction.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="bg-white/80 p-2 rounded-lg border border-indigo-100">
+                    <span className="text-slate-500 block text-[10px]">Holidays (Paid)</span>
+                    <span className="font-mono font-bold text-emerald-700">
+                      {calc.holidays} days (₹0)
+                    </span>
+                  </div>
+                </div>
+
+                <div className="text-[11px] text-slate-600 bg-white/60 p-2 rounded-lg border border-indigo-100/60 flex items-center justify-between">
+                  <span>
+                    Formula: <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-[10px]">₹{Number(salForm.base_salary || 0).toFixed(0)} - (₹{calc.perDayRate.toFixed(2)} × {calc.absentDays} days)</code>
+                  </span>
+                  <span className="font-bold text-indigo-900 font-mono">
+                    = ₹{calc.payable.toFixed(2)}
+                  </span>
+                </div>
               </div>
             );
           })()}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Input
-              label="Salary Amount (₹)"
-              type="number"
-              step="0.01"
-              value={salForm.salary_amount}
-              onChange={(e) => setSalForm({ ...salForm, salary_amount: e.target.value })}
-              required
-            />
+            <div>
+              <Input
+                label="Payable Salary Amount (₹)"
+                type="number"
+                step="0.01"
+                min="0.01"
+                value={salForm.salary_amount}
+                onChange={(e) => setSalForm({ ...salForm, salary_amount: e.target.value })}
+                required
+              />
+              <span className="text-[10px] text-slate-500 block mt-0.5">
+                Auto-calculated payable amount (attendance deductions applied)
+              </span>
+            </div>
 
             <Input
               label="Due Date"
@@ -749,6 +1058,13 @@ export default function ExpensesPage() {
               required
             />
           </div>
+
+          <Input
+            label="Internal Notes (Optional)"
+            value={salForm.notes}
+            onChange={(e) => setSalForm({ ...salForm, notes: e.target.value })}
+            placeholder="e.g. Month-end faculty payout"
+          />
 
           <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
             <Button variant="secondary" onClick={() => setSalModalOpen(false)} disabled={submitting}>
@@ -782,7 +1098,7 @@ export default function ExpensesPage() {
                       Teacher Attendance ({selectedSalRecord.month_year})
                     </span>
                     <p className="text-[11px] text-amber-800">
-                      {pres} of {cal.daysInMonth} days present ({cal.daysInMonth} days in month)
+                      {pres} of {cal.daysInMonth} days present ({cal.daysInMonth} calendar days)
                     </p>
                   </div>
                 </div>
@@ -815,9 +1131,9 @@ export default function ExpensesPage() {
               value={paySalForm.payment_mode}
               onChange={(e) => setPaySalForm({ ...paySalForm, payment_mode: e.target.value })}
               options={[
-                { value: 'BANK_TRANSFER', label: 'Bank Transfer (NEFT/IMPS)' },
                 { value: 'UPI', label: 'UPI' },
                 { value: 'CASH', label: 'Cash' },
+                { value: 'BANK_TRANSFER', label: 'Bank Transfer (NEFT/IMPS)' },
                 { value: 'OTHER', label: 'Cheque / Other' },
               ]}
             />
@@ -835,7 +1151,7 @@ export default function ExpensesPage() {
             label="Payment Reference / Notes"
             value={paySalForm.notes}
             onChange={(e) => setPaySalForm({ ...paySalForm, notes: e.target.value })}
-            placeholder="e.g. UTR ref or Cash voucher no"
+            placeholder="e.g. UPI Ref / Cash voucher no"
           />
 
           <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">

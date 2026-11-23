@@ -176,29 +176,40 @@ async def list_salary_records(
     month_year: Optional[str] = None,
     status_filter: Optional[str] = None,
     employee_id: Optional[uuid.UUID] = None,
+    search: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     query = select(SalaryRecord)
     count_query = select(func.count(SalaryRecord.id))
 
-    if month_year:
-        query = query.where(SalaryRecord.month_year == month_year)
-        count_query = count_query.where(SalaryRecord.month_year == month_year)
+    if search and search.strip():
+        search_pattern = f"%{search.strip()}%"
+        query = query.where(SalaryRecord.employee_name_snapshot.ilike(search_pattern))
+        count_query = count_query.where(SalaryRecord.employee_name_snapshot.ilike(search_pattern))
 
-    if status_filter:
-        query = query.where(SalaryRecord.status == status_filter)
-        count_query = count_query.where(SalaryRecord.status == status_filter)
+    if month_year and month_year.strip():
+        query = query.where(SalaryRecord.month_year == month_year.strip())
+        count_query = count_query.where(SalaryRecord.month_year == month_year.strip())
+
+    if status_filter and status_filter.strip():
+        query = query.where(SalaryRecord.status == status_filter.strip())
+        count_query = count_query.where(SalaryRecord.status == status_filter.strip())
 
     if employee_id:
-        query = query.where(SalaryRecord.employee_id == employee_id)
-        count_query = count_query.where(SalaryRecord.employee_id == employee_id)
+        t_name = (await db.execute(select(Teacher.name).where(Teacher.id == employee_id))).scalar_one_or_none()
+        if t_name:
+            query = query.where(or_(SalaryRecord.employee_id == employee_id, SalaryRecord.employee_name_snapshot.ilike(t_name.strip())))
+            count_query = count_query.where(or_(SalaryRecord.employee_id == employee_id, SalaryRecord.employee_name_snapshot.ilike(t_name.strip())))
+        else:
+            query = query.where(SalaryRecord.employee_id == employee_id)
+            count_query = count_query.where(SalaryRecord.employee_id == employee_id)
 
     total_result = await db.execute(count_query)
     total = total_result.scalar_one()
 
     offset = (page - 1) * page_size
-    query = query.order_by(desc(SalaryRecord.created_at), desc(SalaryRecord.due_date)).offset(offset).limit(page_size)
+    query = query.order_by(desc(SalaryRecord.month_year), desc(SalaryRecord.created_at), desc(SalaryRecord.due_date)).offset(offset).limit(page_size)
     items_result = await db.execute(query)
     items = items_result.scalars().all()
 
@@ -228,7 +239,7 @@ async def list_salary_records(
         response_items.append(
             SalaryRecordResponse(
                 id=s.id,
-                employee_id=s.employee_id,
+                employee_id=s.employee_id or tid,
                 employee_type=s.employee_type,
                 employee_name_snapshot=s.employee_name_snapshot,
                 month_year=s.month_year,
@@ -239,7 +250,9 @@ async def list_salary_records(
                 payment_date=s.payment_date,
                 payment_mode=s.payment_mode,
                 notes=s.notes,
-                absent_days_count=abs_count
+                absent_days_count=abs_count,
+                base_salary=s.base_salary,
+                holidays_count=s.holidays_count or 0
             )
         )
 
@@ -249,10 +262,15 @@ async def list_salary_records(
 async def create_salary_record(
     payload: SalaryRecordCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
+    emp_id = payload.employee_id
+    if not emp_id and payload.employee_type == "TEACHER":
+        t_res = await db.execute(select(Teacher.id).where(Teacher.name.ilike(payload.employee_name_snapshot.strip())))
+        emp_id = t_res.scalar_one_or_none()
+
     record = SalaryRecord(
-        employee_id=payload.employee_id,
+        employee_id=emp_id,
         employee_type=payload.employee_type,
         employee_name_snapshot=payload.employee_name_snapshot,
         month_year=payload.month_year,
@@ -260,7 +278,9 @@ async def create_salary_record(
         due_date=payload.due_date,
         paid_amount=Decimal("0.00"),
         status="PENDING",
-        notes=payload.notes
+        notes=payload.notes,
+        base_salary=payload.base_salary,
+        holidays_count=payload.holidays_count or 0
     )
     db.add(record)
     await db.commit()
@@ -291,7 +311,9 @@ async def create_salary_record(
         payment_date=record.payment_date,
         payment_mode=record.payment_mode,
         notes=record.notes,
-        absent_days_count=abs_count
+        absent_days_count=abs_count,
+        base_salary=record.base_salary,
+        holidays_count=record.holidays_count or 0
     )
 
 @router.post("/salaries/{record_id}/pay", response_model=SalaryRecordResponse)
@@ -299,7 +321,7 @@ async def pay_salary(
     record_id: uuid.UUID,
     payload: PaySalaryRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     res = await db.execute(select(SalaryRecord).where(SalaryRecord.id == record_id))
     record = res.scalar_one_or_none()
@@ -365,5 +387,7 @@ async def pay_salary(
         payment_date=record.payment_date,
         payment_mode=record.payment_mode,
         notes=record.notes,
-        absent_days_count=abs_count
+        absent_days_count=abs_count,
+        base_salary=record.base_salary,
+        holidays_count=record.holidays_count or 0
     )

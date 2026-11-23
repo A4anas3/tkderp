@@ -45,6 +45,8 @@ class SalaryRecordBase(BaseModel):
     salary_amount: Decimal = Field(..., gt=0)
     due_date: date
     notes: Optional[str] = None
+    base_salary: Optional[Decimal] = None
+    holidays_count: Optional[int] = 0
 
 class SalaryRecordCreate(SalaryRecordBase):
     pass
@@ -62,4 +64,6 @@ class SalaryRecordResponse(SalaryRecordBase):
     payment_date: Optional[date] = None
     payment_mode: Optional[str] = None
     absent_days_count: Optional[int] = None
+    base_salary: Optional[Decimal] = None
+    holidays_count: Optional[int] = 0
     model_config = ConfigDict(from_attributes=True)
