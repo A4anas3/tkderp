@@ -191,15 +191,33 @@ async def list_students(
     student_ids = [s.id for s in items]
     adm_map = {}
     if student_ids:
-        adm_stmt = (
+        # Prioritize active, non-void admissions (consistent with get_student)
+        adm_stmt_active = (
             select(Admission.student_id, Admission.admission_number)
-            .where(Admission.student_id.in_(student_ids))
-            .order_by(Admission.created_at.desc())
+            .where(
+                Admission.student_id.in_(student_ids),
+                Admission.status == "ACTIVE",
+                Admission.document_status != "VOID"
+            )
+            .order_by(Admission.admission_date.desc(), Admission.created_at.desc())
         )
-        adm_res = await db.execute(adm_stmt)
-        for s_id, adm_no in adm_res.all():
+        adm_res_active = await db.execute(adm_stmt_active)
+        for s_id, adm_no in adm_res_active.all():
             if s_id not in adm_map:
                 adm_map[s_id] = adm_no
+
+        # For students without an active valid admission, fallback to latest admission
+        remaining_ids = [s_id for s_id in student_ids if s_id not in adm_map]
+        if remaining_ids:
+            adm_stmt_fallback = (
+                select(Admission.student_id, Admission.admission_number)
+                .where(Admission.student_id.in_(remaining_ids))
+                .order_by(Admission.admission_date.desc(), Admission.created_at.desc())
+            )
+            adm_res_fallback = await db.execute(adm_stmt_fallback)
+            for s_id, adm_no in adm_res_fallback.all():
+                if s_id not in adm_map:
+                    adm_map[s_id] = adm_no
 
     response_items = []
     for s in items:

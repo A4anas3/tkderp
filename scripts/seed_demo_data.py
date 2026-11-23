@@ -97,25 +97,57 @@ def take_backup(timestamp: str = None) -> tuple[str, str]:
     return sql_path, dump_path
 
 
-def check_business_row_count() -> int:
-    """Check total row count across all business tables."""
-    count_sql = "SELECT " + " + ".join([f"(SELECT COUNT(*) FROM {t})" for t in BUSINESS_TABLES]) + ";"
-    cmd = f"PGPASSWORD={DB_PASS} psql -h {DB_HOST} -U {DB_USER} -d {DB_NAME} -t -c \"{count_sql}\""
+def get_table_counts(tables: list[str]) -> dict[str, int]:
+    """Get exact row counts for each specified table."""
+    select_parts = [f"SELECT '{t}' as tbl, count(*) as cnt FROM {t}" for t in tables]
+    sql = f"SELECT json_object_agg(tbl, cnt) FROM ({' UNION ALL '.join(select_parts)}) s;"
+    cmd = f"PGPASSWORD={DB_PASS} psql -h {DB_HOST} -U {DB_USER} -d {DB_NAME} -t -c \"{sql}\""
     res = subprocess.run(cmd, shell=True, capture_output=True, text=True, check=True)
-    return int(res.stdout.strip() or "0")
+    raw = res.stdout.strip()
+    return json.loads(raw) if raw else {t: 0 for t in tables}
 
 
-def wipe_business_tables():
-    """Wipe all business tables while strictly keeping users and alembic_version."""
-    print("[Wipe] Truncating all business tables (keeping users and alembic_version)...")
-    truncate_sql = f"TRUNCATE TABLE {', '.join(BUSINESS_TABLES)} CASCADE;"
+def wipe_business_tables() -> tuple[dict[str, int], dict[str, int]]:
+    """
+    Wipe all business tables while strictly keeping users and alembic_version.
+    Resets primary-key sequences and reports counts before and after.
+    """
+    all_monitored_tables = BUSINESS_TABLES + ["users"]
+    counts_before = get_table_counts(all_monitored_tables)
+
+    print("\n[Wipe] Truncating all business tables and resetting sequences...")
+    print("  -> Preserving 'users' (admin/cashier accounts) and 'alembic_version' intact.")
+
+    truncate_sql = f"TRUNCATE TABLE {', '.join(BUSINESS_TABLES)} RESTART IDENTITY CASCADE;"
     cmd = f"PGPASSWORD={DB_PASS} psql -h {DB_HOST} -U {DB_USER} -d {DB_NAME} -c \"{truncate_sql}\""
     subprocess.run(cmd, shell=True, check=True)
 
-    remaining = check_business_row_count()
-    if remaining != 0:
-        raise RuntimeError(f"Wipe verification failed! {remaining} rows remain in business tables.")
-    print("  ✓ All business tables wiped to 0 rows. Users table preserved intact.")
+    counts_after = get_table_counts(all_monitored_tables)
+
+    # Report counts before and after (after: 0 in every wiped table)
+    print("\n" + "=" * 65)
+    print(f"{'BUSINESS TABLE':<28} | {'BEFORE':>10} | {'AFTER (WIPED)':>15} | {'STATUS':<8}")
+    print("-" * 65)
+    for tbl in sorted(BUSINESS_TABLES):
+        b_cnt = counts_before.get(tbl, 0)
+        a_cnt = counts_after.get(tbl, 0)
+        status = "0 (OK)" if a_cnt == 0 else "FAIL"
+        print(f"{tbl:<28} | {b_cnt:>10} | {a_cnt:>15} | {status:<8}")
+        if a_cnt != 0:
+            raise RuntimeError(f"Table '{tbl}' was not wiped completely! {a_cnt} rows remaining.")
+
+    # Users preserved check
+    u_before = counts_before.get("users", 0)
+    u_after = counts_after.get("users", 0)
+    print("-" * 65)
+    print(f"{'users (PRESERVED)':<28} | {u_before:>10} | {u_after:>15} | PRESERVED")
+    print("=" * 65)
+    if u_after == 0 or u_after != u_before:
+        raise RuntimeError(f"Users table was affected during wipe! Before: {u_before}, After: {u_after}")
+
+    print(f"  ✓ Verified: 0 rows in every wiped table (all {len(BUSINESS_TABLES)} business tables).")
+    print(f"  ✓ Verified: {u_after} user accounts preserved intact in users table.\n")
+    return counts_before, counts_after
 
 
 def login(session: requests.Session) -> str:
@@ -701,65 +733,77 @@ def verify_seeded_system(session: requests.Session):
     )
     assert math_rep["enrolled_count"] >= 3, "Mathematics should have at least 3 enrolled students"
 
-    # 4. Check Dues & Reminders Queue
+    # 4. Check Institutional Reports (Collections, Waivers, Subject Revenue)
+    coll_res = session.get(f"{API_URL}/reports/collections", timeout=10)
+    assert coll_res.status_code == 200, "Failed to fetch collections report"
+    coll_data = coll_res.json()
+    assert coll_data["summary"]["gross_collected"] == 17000.0, f"Collections gross mismatch: {coll_data['summary']['gross_collected']}"
+    assert coll_data["summary"]["payment_count"] == 10, f"Collections payment count mismatch: {coll_data['summary']['payment_count']}"
+
+    waiver_res = session.get(f"{API_URL}/reports/waivers", timeout=10)
+    assert waiver_res.status_code == 200, "Failed to fetch waivers report"
+    waiver_data = waiver_res.json()
+    assert waiver_data["summary"]["total_waived_amount"] == 300.0, f"Waiver amount mismatch: {waiver_data['summary']['total_waived_amount']}"
+    assert waiver_data["summary"]["waivers_count"] == 1, f"Waiver count mismatch: {waiver_data['summary']['waivers_count']}"
+    print(
+        f"  4. Institutional Reports: Gross Collections=₹{coll_data['summary']['gross_collected']}, "
+        f"Payments=10, Fee Waivers=₹{waiver_data['summary']['total_waived_amount']} (1 record)"
+    )
+
+    # 5. Check Dues & Reminders Queue
     rem_res = session.get(f"{API_URL}/reminders/queue?status=pending", timeout=10)
     assert rem_res.status_code == 200, "Failed to fetch reminder queue"
     rem_data = rem_res.json()
     pending_count = rem_data.get("total", len(rem_data.get("items", [])))
-    print(f"  4. Dues & Reminders Queue: Found {pending_count} pending reminder(s) (Expected: 3)")
+    print(f"  5. Dues & Reminders Queue: Found {pending_count} pending reminder(s) (Expected: 3)")
     assert pending_count == 3, f"Expected exactly 3 pending reminders, found {pending_count}"
     for item in rem_data.get("items", []):
         mob = item.get("student_mobile") or item.get("mobile", "")
         print(f"     * {item['student_name']}: Due ₹{item['due_amount']} | Mobile: {mob}")
 
-    # 5. Check Public ID Card by Admission Number (no authentication required)
+    # 6. Check Public ID Card by Admission Number (no authentication required)
     public_session = requests.Session()
     id_card_res = public_session.get(f"{BASE_URL}/api/public/id-card/ADM-2026-0001", timeout=10)
     assert id_card_res.status_code == 200, f"Public ID card check failed: {id_card_res.status_code} {id_card_res.text}"
     id_card = id_card_res.json()
     print(
-        f"  5. Public ID Card for ADM-2026-0001: Student '{id_card['student']['name']}', "
+        f"  6. Public ID Card for ADM-2026-0001: Student '{id_card['student']['name']}', "
         f"Enrolled Courses: {len(id_card['active_courses'])} active course(s)"
     )
     assert id_card["student"]["name"] == "Aarav Gupta", f"ID card student mismatch: {id_card['student']['name']}"
     assert len(id_card["active_courses"]) > 0, "Public ID card must list active course"
 
-    print("\n✓ ALL 5 LIVE VERIFICATION CHECKS PASSED WITH FLYING COLORS!")
+    print("\n✓ ALL 6 LIVE VERIFICATION CHECKS PASSED WITH FLYING COLORS!")
 
 
 def main():
     print("=" * 60)
-    print("THAKURDWARA ERP - DATABASE SEED RUNNER")
+    print("THAKURDWARA ERP - DATABASE BACKUP, WIPE & SEED RUNNER")
     print("=" * 60)
 
-    # 1. Check if business data exists. If it does, back up and re-wipe to ensure a clean state
-    row_count = check_business_row_count()
-    if row_count > 0 or "--rewipe" in sys.argv:
-        print(f"[Notice] Found {row_count} existing rows in business tables. Performing safety backup and wipe...")
-        take_backup()
-        wipe_business_tables()
-    else:
-        print("[Notice] Business tables are already clean (0 rows). Proceeding directly to seed...")
+    # Step 1: Backup
+    print("\n--- STEP 1: BACKUP DATABASE ---")
+    take_backup()
 
-    # 2. Initialize requests session
+    # Step 2: Wipe
+    print("\n--- STEP 2: WIPE BUSINESS TABLES ---")
+    wipe_business_tables()
+
+    # Step 3: Seed
+    print("\n--- STEP 3: SEED DEMO DATA ---")
     session = requests.Session()
-
-    # 3. Authenticate
     login(session)
-
-    # 4. Seed Teachers
     teachers = seed_teachers(session)
-
-    # 5. Seed Subjects
     subjects = seed_subjects(session, teachers)
-
-    # 6. Seed Students, Admissions, and Payments
     seed_students_and_admissions(session, subjects)
 
-    # 7. Verify Seeded State
+    # Step 4: Verify
+    print("\n--- STEP 4: VERIFY SEEDED SYSTEM ---")
     verify_seeded_system(session)
 
-    print("\nSUCCESS: Production database wiped, seeded with 10 realistic entries, and verified!")
+    print("\n" + "=" * 60)
+    print("DEMO RUN COMPLETE: PRODUCTION DATABASE FORMATTED, SEEDED & VERIFIED!")
+    print("=" * 60)
 
 
 if __name__ == "__main__":

@@ -112,8 +112,20 @@ async function runLiveVerification() {
     }
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'e2e_03_subject_detail.png'), fullPage: true });
 
-    // 5. Verify Dues & Reminders Page (/reminders)
-    console.log('\n[5/6] Verifying Dues & Reminders Page (/reminders)...');
+    // 5. Verify Reports Hub (/reports/collections)
+    console.log('\n[5/7] Verifying Reports Page (/reports/collections)...');
+    await page.goto(`${FRONTEND_URL}/reports/collections`);
+    await page.waitForSelector('h1:has-text("Institutional Reports & Ledger Analytics")', { timeout: 15000 });
+    await page.waitForTimeout(1000);
+    const reportsText = await page.innerText('body');
+    if (!reportsText.includes('17,000') && !reportsText.includes('17000')) {
+      throw new Error('FAIL: ₹17,000 collected not found in Collections report');
+    }
+    console.log('  ✓ Reports Collections shows ₹17,000 collected across 10 seeded payments!');
+    await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'e2e_04_reports_collections.png'), fullPage: true });
+
+    // 6. Verify Dues & Reminders Page (/reminders)
+    console.log('\n[6/7] Verifying Dues & Reminders Page (/reminders)...');
     await page.goto(`${FRONTEND_URL}/reminders`);
     await page.waitForSelector('h1:has-text("Fee Reminders")', { timeout: 15000 });
     await page.waitForTimeout(1000);
@@ -124,10 +136,10 @@ async function runLiveVerification() {
     if (!remText.includes('Utkarsh Shukla')) throw new Error('FAIL: Utkarsh Shukla not found in Dues & Reminders');
     if (!remText.includes('1,000') && !remText.includes('1000')) throw new Error('FAIL: ₹1,000 due amount not found in Reminders');
     console.log('  ✓ Dues & Reminders lists all 3 partially-paid students with real ₹1,000 dues!');
-    await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'e2e_04_reminders.png'), fullPage: true });
+    await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'e2e_05_reminders.png'), fullPage: true });
 
-    // 6. Verify Public ID Card (No login required)
-    console.log('\n[6/6] Verifying Public Student ID Card for ADM-2026-0001...');
+    // 7. Verify Public ID Card (No login required)
+    console.log('\n[7/7] Verifying Public Student ID Card for ADM-2026-0001...');
     const publicContext = await browser.newContext({
       viewport: { width: 1440, height: 900 },
     });
@@ -141,7 +153,7 @@ async function runLiveVerification() {
     if (!cardText.includes('ADM-2026-0001')) throw new Error('FAIL: ADM-2026-0001 missing from ID card');
     if (!cardText.includes('Mathematics')) throw new Error('FAIL: Mathematics missing from active courses on ID card');
     console.log('  ✓ Public ID card verified for Aarav Gupta (ADM-2026-0001) with active Mathematics subject!');
-    await publicPage.screenshot({ path: path.join(SCREENSHOT_DIR, 'e2e_05_public_id_card.png'), fullPage: true });
+    await publicPage.screenshot({ path: path.join(SCREENSHOT_DIR, 'e2e_06_public_id_card.png'), fullPage: true });
     await publicContext.close();
 
     console.log('\n===============================================================');
