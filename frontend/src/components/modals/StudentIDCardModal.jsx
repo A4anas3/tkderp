@@ -39,9 +39,10 @@ export default function StudentIDCardModal({
     activeCourses[0]?.admission_number ||
     student.student_code;
 
-  // Online public ID card page URL for QR code (pre-filled with admission number)
+  // Online public ID card page URL for QR code (pre-filled with student code)
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  const publicIdCardUrl = `${origin}/id-card/${encodeURIComponent(admissionNo)}`;
+  const qrCodeIdent = student.student_code || admissionNo;
+  const publicIdCardUrl = `${origin}/id-card/${encodeURIComponent(qrCodeIdent)}`;
   const verifyUrl = publicIdCardUrl;
 
   // WhatsApp share link
@@ -185,16 +186,6 @@ export default function StudentIDCardModal({
                       </span>
                     </div>
 
-                    {/* Admission Number */}
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[11px] font-bold text-slate-800 uppercase w-20 shrink-0">
-                        Admission No:
-                      </span>
-                      <span className="font-mono font-black text-black bg-amber-100 px-1.5 py-0.5 rounded border border-amber-300">
-                        {admissionNo}
-                      </span>
-                    </div>
-
                     {/* Mobile */}
                     {student.mobile && (
                       <div className="flex items-center gap-1.5 text-zinc-950 font-semibold">
@@ -301,7 +292,7 @@ export default function StudentIDCardModal({
                     <p className="font-black text-black uppercase">SCAN FOR ID CARD</p>
                     <p className="text-slate-700 font-medium">Instant Online Credential</p>
                     <p className="font-mono text-[8px] text-slate-600 break-all max-w-[130px]">
-                      /id-card/{admissionNo}
+                      /id-card/{qrCodeIdent}
                     </p>
                   </div>
                 </div>

@@ -144,6 +144,35 @@ async def test_public_id_card_active_student(admin_token):
         assert query_res.status_code == 200
         assert query_res.json()["student"]["name"] == active_student["name"]
 
+        # Test lookup by STUDENT ID (student_code)
+        student_code = active_student["student_code"]
+        stu_id_res = await client.get(f"/api/public/id-card/{student_code}")
+        assert stu_id_res.status_code == 200
+        assert stu_id_res.json()["student"]["name"] == active_student["name"]
+        assert stu_id_res.json()["student"]["student_code"] == student_code
+
+        # Test lookup by Student ID query param
+        stu_id_q_res = await client.get(f"/api/public/id-card?student_id={student_code}")
+        assert stu_id_q_res.status_code == 200
+        assert stu_id_q_res.json()["student"]["student_code"] == student_code
+
+        # Test lookup by REGISTERED PHONE NUMBER (mobile)
+        if active_student.get("mobile"):
+            mob = active_student["mobile"]
+            phone_res = await client.get(f"/api/public/id-card/{mob}")
+            assert phone_res.status_code == 200
+            assert phone_res.json()["student"]["name"] == active_student["name"]
+
+            # With country code prefix (+91)
+            phone_prefix_res = await client.get(f"/api/public/id-card/+91{mob}")
+            assert phone_prefix_res.status_code == 200
+            assert phone_prefix_res.json()["student"]["name"] == active_student["name"]
+
+            # Via query param (?phone=...)
+            phone_q_res = await client.get(f"/api/public/id-card?phone={mob}")
+            assert phone_q_res.status_code == 200
+            assert phone_q_res.json()["student"]["name"] == active_student["name"]
+
 @pytest.mark.asyncio
 async def test_public_id_card_no_sensitive_data(admin_token):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

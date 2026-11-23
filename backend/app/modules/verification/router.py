@@ -1,4 +1,5 @@
 from datetime import date, datetime, timezone
+import re
 import uuid
 from typing import Optional, List, Tuple
 from decimal import Decimal
@@ -21,6 +22,7 @@ from app.modules.verification.schemas import (
     IDCardCourseItem,
 )
 from app.common.active_lines import today_kolkata
+from app.common.validators import normalize_mobile
 from app.core.rate_limit import RateLimiter
 
 router = APIRouter(tags=["Public Verification & ID Card"])
@@ -42,7 +44,7 @@ async def get_student_and_active_courses(
     db: AsyncSession
 ) -> Tuple[Optional[Student], Optional[str], List[VerificationCourseItem], bool]:
     """
-    Look up student by admission number, student code, or UUID,
+    Look up student by admission number, student code/ID, UUID, or registered phone number,
     and resolve active enrolled course items.
     Returns: (student, matched_adm_number, active_courses_list, is_overall_valid)
     """
@@ -58,7 +60,12 @@ async def get_student_and_active_courses(
     adm_stmt = (
         select(Admission)
         .options(selectinload(Admission.student), selectinload(Admission.items))
-        .where(func.lower(Admission.admission_number) == ident.lower())
+        .where(
+            or_(
+                func.lower(Admission.admission_number) == ident.lower(),
+                func.lower(func.replace(Admission.admission_number, "-", "")) == ident.lower().replace("-", "")
+            )
+        )
     )
     adm_res = await db.execute(adm_stmt)
     adm_record = adm_res.scalar_one_or_none()
@@ -67,9 +74,14 @@ async def get_student_and_active_courses(
         student = adm_record.student
         matched_adm_number = adm_record.admission_number
 
-    # 2. Lookup by Student Code if not found by admission number
+    # 2. Lookup by Student Code / Student ID if not found by admission number
     if not student:
-        stu_stmt = select(Student).where(func.lower(Student.student_code) == ident.lower())
+        stu_stmt = select(Student).where(
+            or_(
+                func.lower(Student.student_code) == ident.lower(),
+                func.lower(func.replace(Student.student_code, "-", "")) == ident.lower().replace("-", "")
+            )
+        )
         stu_res = await db.execute(stu_stmt)
         student = stu_res.scalar_one_or_none()
 
@@ -91,6 +103,38 @@ async def get_student_and_active_courses(
                     matched_adm_number = adm_by_id.admission_number
         except ValueError:
             pass
+
+    # 4. Lookup by Registered Phone Number (mobile on student's record)
+    if not student:
+        norm_phone = normalize_mobile(ident)
+        clean_digits = re.sub(r"\D", "", ident)
+        phone_matches = set()
+        phone_matches.add(ident)
+        if norm_phone:
+            phone_matches.add(norm_phone)
+            phone_matches.add(f"+91{norm_phone}")
+            phone_matches.add(f"91{norm_phone}")
+            phone_matches.add(f"0{norm_phone}")
+        if clean_digits:
+            phone_matches.add(clean_digits)
+
+        # Build conditions for Student.mobile
+        mobile_conds = [
+            func.lower(Student.mobile) == m.lower() for m in phone_matches if m
+        ]
+        if norm_phone and len(norm_phone) >= 7:
+            mobile_conds.append(Student.mobile.ilike(f"%{norm_phone}%"))
+
+        stu_phone_stmt = (
+            select(Student)
+            .where(or_(*mobile_conds))
+            .order_by(
+                desc(Student.status == "ACTIVE"),
+                desc(Student.created_at)
+            )
+        )
+        stu_phone_res = await db.execute(stu_phone_stmt)
+        student = stu_phone_res.scalars().first()
 
     if not student:
         return None, None, [], False
@@ -231,6 +275,9 @@ async def verify_student_credential(
     identifier: Optional[str] = None,
     admission_no: Optional[str] = Query(None),
     student_id: Optional[str] = Query(None),
+    phone: Optional[str] = Query(None),
+    mobile: Optional[str] = Query(None),
+    phone_number: Optional[str] = Query(None),
     ident_param: Optional[str] = Query(None, alias="identifier"),
     request: Request = None,
     db: AsyncSession = Depends(get_db)
@@ -238,14 +285,14 @@ async def verify_student_credential(
     """
     Public verification endpoint (no authentication required).
     Verifies a student identity card and returns active course validity.
-    Supports lookup by admission number, student ID code, or UUID.
+    Supports lookup by admission number, student ID code, UUID, or registered phone number.
     Protected with sliding-window rate limiting.
     Only returns verification data when student has active enrolment.
     """
     if request:
         await id_card_rate_limiter(request)
 
-    target_ident = identifier or admission_no or student_id or ident_param
+    target_ident = identifier or admission_no or student_id or phone or mobile or phone_number or ident_param
     if not target_ident or not target_ident.strip():
         raise HTTPException(status_code=400, detail="Identifier cannot be empty")
 
@@ -291,6 +338,9 @@ async def get_public_id_card(
     identifier: Optional[str] = None,
     admission_no: Optional[str] = Query(None),
     student_id: Optional[str] = Query(None),
+    phone: Optional[str] = Query(None),
+    mobile: Optional[str] = Query(None),
+    phone_number: Optional[str] = Query(None),
     ident_param: Optional[str] = Query(None, alias="identifier"),
     db: AsyncSession = Depends(get_db),
     _limiter: None = Depends(id_card_rate_limiter),
@@ -298,14 +348,15 @@ async def get_public_id_card(
     """
     Public student ID card endpoint (no authentication required).
     Returns the student ID card data ONLY if that student has an active subject/enrolment.
+    Accepts student ID (code or UUID), registered phone number, or admission number.
     If the student has no active subject, returns 404 with a clear message and leaks no student data.
     Equipped with rate limiting and returns only non-sensitive card-visible attributes.
     """
-    target_ident = (identifier or admission_no or student_id or ident_param or "").strip()
+    target_ident = (identifier or admission_no or student_id or phone or mobile or phone_number or ident_param or "").strip()
     if not target_ident:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Identifier (admission number or student ID) cannot be empty."
+            detail="Identifier (student ID, phone number, or admission number) cannot be empty."
         )
 
     student, matched_adm_number, active_courses_list, is_overall_valid = await get_student_and_active_courses(target_ident, db)

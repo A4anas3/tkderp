@@ -29,7 +29,13 @@ export default function PublicIDCardPage() {
   const basePath = isVerifyRoute ? '/verify' : '/id-card';
 
   // Identifier can come from route params or query params (?admission_no=... or ?identifier=...)
-  const queryParamIdent = searchParams.get('admission_no') || searchParams.get('identifier') || '';
+  const queryParamIdent =
+    searchParams.get('admission_no') ||
+    searchParams.get('student_id') ||
+    searchParams.get('phone') ||
+    searchParams.get('mobile') ||
+    searchParams.get('identifier') ||
+    '';
   const currentIdentifier = (pathIdentifier || queryParamIdent || '').trim();
 
   const [inputVal, setInputVal] = useState(currentIdentifier);
@@ -101,7 +107,7 @@ export default function PublicIDCardPage() {
             setErrorMsg(
               detail ||
                 err.message ||
-                'Unable to retrieve student ID card. Please verify the admission number.'
+                'Unable to retrieve student ID card. Please verify your Student ID, Phone Number, or Admission Number.'
             );
           }
           setCardData(null);
@@ -133,8 +139,9 @@ export default function PublicIDCardPage() {
   };
 
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  const qrTargetUrl = cardData?.student?.admission_number
-    ? `${origin}/id-card/${encodeURIComponent(cardData.student.admission_number)}`
+  const qrCodeIdent = cardData?.student?.student_code || cardData?.student?.admission_number || '';
+  const qrTargetUrl = qrCodeIdent
+    ? `${origin}/id-card/${encodeURIComponent(qrCodeIdent)}`
     : '';
 
   return (
@@ -161,7 +168,7 @@ export default function PublicIDCardPage() {
         <div className="bg-white border-2 border-slate-300 rounded-xl p-3 sm:p-4 shadow-2xs no-print">
           <form onSubmit={handleSearchSubmit} className="space-y-2">
             <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
-              Enter Admission Number
+              Enter Student ID, Phone Number, or Admission Number
             </label>
             <div className="flex flex-col sm:flex-row gap-2">
               <div className="relative flex-1">
@@ -170,7 +177,7 @@ export default function PublicIDCardPage() {
                   type="text"
                   value={inputVal}
                   onChange={(e) => setInputVal(e.target.value)}
-                  placeholder="Enter Admission Number (e.g. ADM-2026-0001)..."
+                  placeholder="Enter Student ID, Phone Number, or Admission Number..."
                   className="w-full pl-9 pr-3 py-2 text-xs sm:text-sm border border-slate-300 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-odoo-500 font-mono"
                   autoFocus={!currentIdentifier}
                 />
@@ -184,7 +191,7 @@ export default function PublicIDCardPage() {
               </button>
             </div>
             <p className="text-[11px] text-slate-500">
-              Enter your official admission number (e.g. ADM-2026-0001) to view the student identity card.
+              Enter your Student ID (e.g. STU20260001), Registered Phone Number (e.g. 9838011221), or Admission Number (e.g. ADM-2026-0001) to view the student identity card.
               Identity cards are available only for active course enrolments.
             </p>
           </form>
@@ -196,9 +203,9 @@ export default function PublicIDCardPage() {
             <div className="w-12 h-12 bg-slate-100 text-slate-600 rounded-full flex items-center justify-center mx-auto">
               <Search className="w-6 h-6" />
             </div>
-            <h2 className="text-sm font-bold text-black">Enter Admission Number</h2>
+            <h2 className="text-sm font-bold text-black">Enter Student ID or Registered Phone Number</h2>
             <p className="text-xs text-slate-600 max-w-md mx-auto">
-              Please enter an admission number (e.g. <span className="font-mono font-bold text-black">ADM-2026-0001</span>) in the search box above and click{' '}
+              Please enter your Student ID (e.g. <span className="font-mono font-bold text-black">STU20260001</span>), Registered Phone Number (e.g. <span className="font-mono font-bold text-black">9838011221</span>), or Admission Number in the search box above and click{' '}
               <strong className="text-black">Get ID Card</strong> to view the student's official identity card.
             </p>
           </div>
@@ -263,8 +270,8 @@ export default function PublicIDCardPage() {
                 Student ID Card Not Found
               </h2>
               <p className="text-xs sm:text-sm text-rose-800 mt-1 max-w-md mx-auto">
-                No matching student or admission record found for admission number{' '}
-                <span className="font-mono font-bold text-black bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">{currentIdentifier}</span>. Please verify the admission number and try again.
+                No matching student or admission record found for{' '}
+                <span className="font-mono font-bold text-black bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">{currentIdentifier}</span>. Please verify your Student ID, Phone Number, or Admission Number and try again.
               </p>
             </div>
           </div>
@@ -396,16 +403,6 @@ export default function PublicIDCardPage() {
                           </span>
                         </div>
 
-                        {/* Admission Number */}
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[11px] font-bold text-slate-800 uppercase w-20 shrink-0">
-                            Admission No:
-                          </span>
-                          <span className="font-mono font-black text-black bg-amber-100 px-1.5 py-0.5 rounded border border-amber-300">
-                            {cardData.student.admission_number}
-                          </span>
-                        </div>
-
                         {/* Status Badge */}
                         <div className="pt-0.5">
                           <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-900 border border-emerald-300">
@@ -511,7 +508,7 @@ export default function PublicIDCardPage() {
                         <p className="font-black text-black uppercase">SCAN FOR ID CARD</p>
                         <p className="text-slate-700 font-medium">Instant Authenticity</p>
                         <p className="font-mono text-[8px] text-slate-600 break-all max-w-[130px]">
-                          /id-card/{cardData.student.admission_number}
+                          /id-card/{qrCodeIdent}
                         </p>
                       </div>
                     </div>
