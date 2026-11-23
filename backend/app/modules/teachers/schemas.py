@@ -314,6 +314,8 @@ class TeacherAttendanceMonthlySummary(BaseModel):
     status: str = "ACTIVE"
     month_year: str
     absent_days_count: int
+    present_days_count: int = 30
+    days_in_month: int = 30
     absent_dates: List[date] = []
     absent_days: List[str] = []
 
@@ -325,6 +327,8 @@ class TeacherMonthlyAttendanceResponse(BaseModel):
     teacher_code: str
     month_year: str
     absent_days_count: int
+    present_days_count: int = 30
+    days_in_month: int = 30
     absent_dates: List[date] = []
     absent_days: List[str] = []
     records: List[TeacherAttendanceRecordResponse] = []

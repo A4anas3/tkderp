@@ -123,6 +123,94 @@ async def test_teacher_attendance_and_salary_flow(admin_token):
         )
         assert bulk_res.status_code == 200
         assert bulk_res.json()["absent_days_count"] == 3
+        assert bulk_res.json()["days_in_month"] == 30
+        assert bulk_res.json()["present_days_count"] == 27
+
+@pytest.mark.asyncio
+async def test_real_calendar_days_in_month_and_present_calculation(admin_token):
+    """
+    Verify real calendar days-in-month and present calculation:
+    - December 2026: 31 days (31 - absent)
+    - February 2027: 28 days (28 - absent, non-leap year)
+    - February 2028: 29 days (29 - absent, leap year)
+    - November 2026: 30 days
+    """
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # Create a teacher
+        suffix = uuid.uuid4().hex[:6]
+        mobile = f"98{uuid.uuid4().int % 100000000:08d}"
+        t_res = await client.post("/api/teachers", headers=headers, json={
+            "name": f"Calendar Test Faculty {suffix}",
+            "mobile": mobile,
+            "qualification": "Ph.D",
+            "specialization": "Physics",
+            "joining_date": "2026-01-01"
+        })
+        assert t_res.status_code == 201
+        tch_id = t_res.json()["id"]
+
+        # Case 1: 31-day month: December 2026
+        dec_res = await client.get(f"/api/teachers/{tch_id}/attendance?month_year=2026-12", headers=headers)
+        assert dec_res.status_code == 200
+        dec_data = dec_res.json()
+        assert dec_data["days_in_month"] == 31
+        assert dec_data["absent_days_count"] == 0
+        assert dec_data["present_days_count"] == 31
+
+        # Mark 2 days absent in Dec 2026
+        await client.post(f"/api/teachers/{tch_id}/attendance/toggle", headers=headers, json={"date": "2026-12-05"})
+        toggle_dec = await client.post(f"/api/teachers/{tch_id}/attendance/toggle", headers=headers, json={"date": "2026-12-15"})
+        assert toggle_dec.status_code == 200
+        dec_after = toggle_dec.json()
+        assert dec_after["days_in_month"] == 31
+        assert dec_after["absent_days_count"] == 2
+        assert dec_after["present_days_count"] == 29
+
+        # Case 2: 28-day month: February 2027 (non-leap year)
+        feb27_res = await client.get(f"/api/teachers/{tch_id}/attendance?month_year=2027-02", headers=headers)
+        assert feb27_res.status_code == 200
+        feb27_data = feb27_res.json()
+        assert feb27_data["days_in_month"] == 28
+        assert feb27_data["absent_days_count"] == 0
+        assert feb27_data["present_days_count"] == 28
+
+        # Mark 1 day absent in Feb 2027
+        toggle_feb27 = await client.post(f"/api/teachers/{tch_id}/attendance/toggle", headers=headers, json={"date": "2027-02-10"})
+        assert toggle_feb27.status_code == 200
+        feb27_after = toggle_feb27.json()
+        assert feb27_after["days_in_month"] == 28
+        assert feb27_after["absent_days_count"] == 1
+        assert feb27_after["present_days_count"] == 27
+
+        # Case 3: 29-day month: February 2028 (leap year)
+        feb28_res = await client.get(f"/api/teachers/{tch_id}/attendance?month_year=2028-02", headers=headers)
+        assert feb28_res.status_code == 200
+        feb28_data = feb28_res.json()
+        assert feb28_data["days_in_month"] == 29
+        assert feb28_data["absent_days_count"] == 0
+        assert feb28_data["present_days_count"] == 29
+
+        # Mark leap day absent: 2028-02-29
+        toggle_feb28 = await client.post(f"/api/teachers/{tch_id}/attendance/toggle", headers=headers, json={"date": "2028-02-29"})
+        assert toggle_feb28.status_code == 200
+        feb28_after = toggle_feb28.json()
+        assert feb28_after["days_in_month"] == 29
+        assert feb28_after["absent_days_count"] == 1
+        assert feb28_after["present_days_count"] == 28
+
+        # Verify summary endpoint returns days_in_month and present_days_count
+        sum_dec = await client.get(f"/api/teachers/attendance?month_year=2026-12&teacher_id={tch_id}", headers=headers)
+        assert sum_dec.status_code == 200
+        assert sum_dec.json()[0]["days_in_month"] == 31
+        assert sum_dec.json()[0]["absent_days_count"] == 2
+        assert sum_dec.json()[0]["present_days_count"] == 29
+
+        sum_feb28 = await client.get(f"/api/teachers/attendance?month_year=2028-02&teacher_id={tch_id}", headers=headers)
+        assert sum_feb28.status_code == 200
+        assert sum_feb28.json()[0]["days_in_month"] == 29
+        assert sum_feb28.json()[0]["absent_days_count"] == 1
+        assert sum_feb28.json()[0]["present_days_count"] == 28
 
 @pytest.mark.asyncio
 async def test_id_card_timings_and_due_balance(admin_token):

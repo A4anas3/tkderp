@@ -175,6 +175,7 @@ async def list_salary_records(
     page_size: int = Query(15, ge=1, le=100),
     month_year: Optional[str] = None,
     status_filter: Optional[str] = None,
+    employee_id: Optional[uuid.UUID] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin)
 ):
@@ -189,11 +190,15 @@ async def list_salary_records(
         query = query.where(SalaryRecord.status == status_filter)
         count_query = count_query.where(SalaryRecord.status == status_filter)
 
+    if employee_id:
+        query = query.where(SalaryRecord.employee_id == employee_id)
+        count_query = count_query.where(SalaryRecord.employee_id == employee_id)
+
     total_result = await db.execute(count_query)
     total = total_result.scalar_one()
 
     offset = (page - 1) * page_size
-    query = query.order_by(desc(SalaryRecord.due_date)).offset(offset).limit(page_size)
+    query = query.order_by(desc(SalaryRecord.created_at), desc(SalaryRecord.due_date)).offset(offset).limit(page_size)
     items_result = await db.execute(query)
     items = items_result.scalars().all()
 

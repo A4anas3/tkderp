@@ -8,6 +8,7 @@ from collections import defaultdict
 import uuid
 import os
 import json
+import calendar
 
 from app.database.session import get_db
 from app.core.config import settings
@@ -108,6 +109,18 @@ async def get_teacher_by_mobile(
 
 # --- Teacher Attendance Endpoints ---
 
+def get_days_in_month(month_year: str) -> int:
+    """
+    Computes real days in month (including leap-year rule for February) given 'YYYY-MM'.
+    """
+    try:
+        parts = month_year.strip().split("-")
+        y = int(parts[0])
+        m = int(parts[1])
+        return calendar.monthrange(y, m)[1]
+    except Exception:
+        return 30
+
 @router.get("/attendance", response_model=List[TeacherAttendanceMonthlySummary])
 async def list_teacher_attendance_monthly(
     month_year: Optional[str] = Query(None),
@@ -118,8 +131,10 @@ async def list_teacher_attendance_monthly(
     """
     Returns monthly attendance summary (total absent days / holidays) for all teachers or a specific teacher.
     Only absent days are marked in storage; unrecorded days count as present.
+    Days in month and present days are calculated from the real calendar for the given month and year.
     """
     m_year = (month_year or date.today().strftime("%Y-%m")).strip()
+    days_in_m = get_days_in_month(m_year)
     
     t_query = select(Teacher).order_by(Teacher.name.asc())
     if teacher_id:
@@ -138,6 +153,8 @@ async def list_teacher_attendance_monthly(
     summary_list = []
     for t in teachers:
         abs_dates = sorted(teacher_absent_map.get(t.id, []))
+        abs_cnt = len(abs_dates)
+        pres_cnt = max(0, days_in_m - abs_cnt)
         summary_list.append(
             TeacherAttendanceMonthlySummary(
                 teacher_id=t.id,
@@ -147,7 +164,9 @@ async def list_teacher_attendance_monthly(
                 specialization=t.specialization,
                 status=t.status,
                 month_year=m_year,
-                absent_days_count=len(abs_dates),
+                absent_days_count=abs_cnt,
+                present_days_count=pres_cnt,
+                days_in_month=days_in_m,
                 absent_dates=abs_dates,
                 absent_days=[d.isoformat() for d in abs_dates]
             )
@@ -1366,13 +1385,18 @@ async def get_teacher_attendance_detail(
     
     abs_dates = [r.date for r in records]
     abs_days = [r.date.isoformat() for r in records]
+    days_in_m = get_days_in_month(m_year)
+    abs_cnt = len(abs_dates)
+    pres_cnt = max(0, days_in_m - abs_cnt)
     
     return TeacherMonthlyAttendanceResponse(
         teacher_id=teacher.id,
         teacher_name=teacher.name,
         teacher_code=teacher.teacher_code,
         month_year=m_year,
-        absent_days_count=len(abs_dates),
+        absent_days_count=abs_cnt,
+        present_days_count=pres_cnt,
+        days_in_month=days_in_m,
         absent_dates=abs_dates,
         absent_days=abs_days,
         records=[

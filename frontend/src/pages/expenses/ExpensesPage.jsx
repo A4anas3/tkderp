@@ -18,6 +18,7 @@ import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
 import { expenseApi, teacherApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
+import { parseMonthYear } from '../../utils/calendarUtils';
 
 export default function ExpensesPage() {
   const { success, error } = useToast();
@@ -364,21 +365,26 @@ export default function ExpensesPage() {
     {
       header: 'Absent Days',
       className: 'text-center w-28',
-      render: (s) =>
-        s.employee_type === 'TEACHER' ? (
+      render: (s) => {
+        if (s.employee_type !== 'TEACHER') {
+          return <span className="text-slate-400 text-xs">—</span>;
+        }
+        const cal = parseMonthYear(s.month_year);
+        const absCnt = s.absent_days_count ?? 0;
+        const presCnt = Math.max(0, cal.daysInMonth - absCnt);
+        return (
           <span
             className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
-              (s.absent_days_count || 0) > 0
+              absCnt > 0
                 ? 'bg-rose-100 text-rose-800 border border-rose-300'
                 : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
             }`}
-            title={`${s.absent_days_count ?? 0} holidays / absent days in ${s.month_year}`}
+            title={`${absCnt} holidays / absent days in ${s.month_year} (${presCnt} / ${cal.daysInMonth} present)`}
           >
-            {s.absent_days_count ?? 0} {s.absent_days_count === 1 ? 'day' : 'days'}
+            {absCnt} {absCnt === 1 ? 'day' : 'days'}
           </span>
-        ) : (
-          <span className="text-slate-400 text-xs">—</span>
-        ),
+        );
+      },
     },
     {
       header: 'Due Date',
@@ -698,28 +704,32 @@ export default function ExpensesPage() {
             />
           </div>
 
-          {salForm.employee_type === 'TEACHER' && salTeacherAbsentCount !== null && (
-            <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-lg flex items-center justify-between text-xs text-amber-900">
-              <div className="flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-amber-600 shrink-0" />
-                <div>
-                  <span className="font-bold">Teacher Attendance ({salForm.month_year})</span>
-                  <p className="text-[11px] text-amber-800">
-                    Recorded holidays / absent days for this month
-                  </p>
+          {salForm.employee_type === 'TEACHER' && salTeacherAbsentCount !== null && (() => {
+            const cal = parseMonthYear(salForm.month_year);
+            const pres = Math.max(0, cal.daysInMonth - salTeacherAbsentCount);
+            return (
+              <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-lg flex items-center justify-between text-xs text-amber-900">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-amber-600 shrink-0" />
+                  <div>
+                    <span className="font-bold">Teacher Attendance ({salForm.month_year})</span>
+                    <p className="text-[11px] text-amber-800">
+                      {pres} of {cal.daysInMonth} days present ({cal.daysInMonth} days in month)
+                    </p>
+                  </div>
                 </div>
+                <span
+                  className={`px-2.5 py-1 rounded-full font-bold text-xs ${
+                    salTeacherAbsentCount > 0
+                      ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                      : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                  }`}
+                >
+                  {salTeacherAbsentCount} {salTeacherAbsentCount === 1 ? 'day' : 'days'} absent
+                </span>
               </div>
-              <span
-                className={`px-2.5 py-1 rounded-full font-bold text-xs ${
-                  salTeacherAbsentCount > 0
-                    ? 'bg-rose-100 text-rose-800 border border-rose-300'
-                    : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                }`}
-              >
-                {salTeacherAbsentCount} {salTeacherAbsentCount === 1 ? 'day' : 'days'} absent
-              </span>
-            </div>
-          )}
+            );
+          })()}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
@@ -760,30 +770,34 @@ export default function ExpensesPage() {
         maxWidth="max-w-md"
       >
         <form onSubmit={handlePaySalarySubmit} className="space-y-3">
-          {selectedSalRecord?.employee_type === 'TEACHER' && paySalTeacherAbsentCount !== null && (
-            <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-lg flex items-center justify-between text-xs text-amber-900">
-              <div className="flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-amber-600 shrink-0" />
-                <div>
-                  <span className="font-bold">
-                    Teacher Attendance ({selectedSalRecord.month_year})
-                  </span>
-                  <p className="text-[11px] text-amber-800">
-                    Recorded holidays before issuing salary
-                  </p>
+          {selectedSalRecord?.employee_type === 'TEACHER' && paySalTeacherAbsentCount !== null && (() => {
+            const cal = parseMonthYear(selectedSalRecord.month_year);
+            const pres = Math.max(0, cal.daysInMonth - paySalTeacherAbsentCount);
+            return (
+              <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-lg flex items-center justify-between text-xs text-amber-900">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-amber-600 shrink-0" />
+                  <div>
+                    <span className="font-bold">
+                      Teacher Attendance ({selectedSalRecord.month_year})
+                    </span>
+                    <p className="text-[11px] text-amber-800">
+                      {pres} of {cal.daysInMonth} days present ({cal.daysInMonth} days in month)
+                    </p>
+                  </div>
                 </div>
+                <span
+                  className={`px-2.5 py-1 rounded-full font-bold text-xs ${
+                    paySalTeacherAbsentCount > 0
+                      ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                      : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                  }`}
+                >
+                  {paySalTeacherAbsentCount} {paySalTeacherAbsentCount === 1 ? 'day' : 'days'} absent
+                </span>
               </div>
-              <span
-                className={`px-2.5 py-1 rounded-full font-bold text-xs ${
-                  paySalTeacherAbsentCount > 0
-                    ? 'bg-rose-100 text-rose-800 border border-rose-300'
-                    : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                }`}
-              >
-                {paySalTeacherAbsentCount} {paySalTeacherAbsentCount === 1 ? 'day' : 'days'} absent
-              </span>
-            </div>
-          )}
+            );
+          })()}
 
           <Input
             label="Payout Amount (₹)"

@@ -19,6 +19,7 @@ import Badge from '../../components/common/Badge';
 import Input from '../../components/common/Input';
 import { teacherApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
+import { getDaysInMonth, parseMonthYear } from '../../utils/calendarUtils';
 
 export default function TeacherAttendancePage() {
   const { error } = useToast();
@@ -106,27 +107,41 @@ export default function TeacherAttendancePage() {
 
   const selectedTeacher = teachers.find((t) => t.id === selectedTeacherId);
 
-  // Month label
-  const [yearNum, monthNum] = monthYear.split('-').map(Number);
+  // Month label and days from real calendar (including February leap-year rule)
+  const { yearNum, monthNum, daysInMonth } = parseMonthYear(monthYear);
   const monthLabel = new Date(yearNum, monthNum - 1, 1).toLocaleDateString('en-IN', {
     month: 'long',
     year: 'numeric',
   });
-  const daysInMonth = new Date(yearNum, monthNum, 0).getDate();
 
   // Callback when attendance toggled in calendar
-  const handleAttendanceChange = (newAbsentCount) => {
-    setAttendanceSummary((prev) =>
-      prev.map((item) =>
-        item.teacher_id === selectedTeacherId
-          ? {
-              ...item,
-              absent_days_count: newAbsentCount,
-              present_days_count: daysInMonth - newAbsentCount,
-            }
-          : item
-      )
-    );
+  const handleAttendanceChange = (newAbsentCount, newPresentCount, realDays) => {
+    const dCount = realDays || daysInMonth;
+    const pCount = typeof newPresentCount === 'number' ? newPresentCount : Math.max(0, dCount - newAbsentCount);
+    setAttendanceSummary((prev) => {
+      const exists = prev.some((item) => item.teacher_id === selectedTeacherId);
+      if (exists) {
+        return prev.map((item) =>
+          item.teacher_id === selectedTeacherId
+            ? {
+                ...item,
+                absent_days_count: newAbsentCount,
+                present_days_count: pCount,
+                days_in_month: dCount,
+              }
+            : item
+        );
+      }
+      return [
+        ...prev,
+        {
+          teacher_id: selectedTeacherId,
+          absent_days_count: newAbsentCount,
+          present_days_count: pCount,
+          days_in_month: dCount,
+        },
+      ];
+    });
   };
 
   return (
@@ -299,6 +314,7 @@ export default function TeacherAttendancePage() {
                 teacherName={selectedTeacher.name}
                 initialMonthYear={monthYear}
                 onAttendanceChange={handleAttendanceChange}
+                onMonthChange={setMonthYear}
               />
             ) : (
               <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-500">
@@ -342,8 +358,11 @@ export default function TeacherAttendancePage() {
               <tbody className="divide-y divide-slate-100">
                 {teachers.map((t) => {
                   const info = summaryMap.get(t.id);
-                  const absentCount = info ? info.absent_days_count : 0;
-                  const presentCount = info ? info.present_days_count : daysInMonth;
+                  const absentCount = info ? (info.absent_days_count ?? 0) : 0;
+                  const rowDaysInMonth = (info && info.days_in_month) || daysInMonth;
+                  const presentCount = info && typeof info.present_days_count === 'number'
+                    ? info.present_days_count
+                    : Math.max(0, rowDaysInMonth - absentCount);
 
                   return (
                     <tr key={t.id} className="hover:bg-slate-50/70 transition">
@@ -371,7 +390,7 @@ export default function TeacherAttendancePage() {
                         </span>
                       </td>
                       <td className="py-2.5 px-4 text-center font-mono font-semibold text-emerald-800">
-                        {presentCount} / {daysInMonth}
+                        {presentCount} / {rowDaysInMonth}
                       </td>
                       <td className="py-2.5 px-4 text-right">
                         <Button
