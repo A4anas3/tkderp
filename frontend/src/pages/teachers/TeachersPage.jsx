@@ -21,6 +21,7 @@ export default function TeachersPage() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState('table');
 
@@ -54,7 +55,13 @@ export default function TeachersPage() {
   const loadTeachers = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await teacherApi.list({ page, page_size: 15, search: search.trim() || undefined });
+      const res = await teacherApi.list({
+        page,
+        page_size: 15,
+        search: search.trim() || undefined,
+        status: statusFilter || undefined,
+        status_filter: statusFilter || undefined,
+      });
       setTeachers(res.items || []);
       setTotal(res.total || 0);
     } catch (err) {
@@ -62,7 +69,18 @@ export default function TeachersPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search]);
+  }, [page, search, statusFilter]);
+
+  const handleToggleStatus = async (teacher) => {
+    const newStatus = teacher.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    try {
+      await teacherApi.updateStatus(teacher.id, newStatus, `User toggled status to ${newStatus}`);
+      success(`Faculty ${teacher.name} status updated to ${newStatus}`);
+      loadTeachers();
+    } catch (err) {
+      error(err.message || 'Failed to update teacher status');
+    }
+  };
 
   useEffect(() => {
     loadTeachers();
@@ -292,7 +310,7 @@ export default function TeachersPage() {
     },
     {
       header: 'Status',
-      className: 'text-center w-20',
+      className: 'text-center w-24 whitespace-nowrap',
       render: (t) => (
         <Badge size="xs" variant={t.status === 'ACTIVE' ? 'success' : 'neutral'}>
           {t.status}
@@ -301,25 +319,44 @@ export default function TeachersPage() {
     },
     {
       header: 'Actions',
-      className: 'text-right w-44 whitespace-nowrap',
+      className: 'text-right w-56 whitespace-nowrap',
       render: (t) => (
         <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
           <Button
             size="xs"
-            variant="info"
-            icon={ExternalLink}
-            onClick={() => navigate(`/teachers/${t.id}`)}
-            title="Open Dedicated Faculty Roster Page"
+            variant={t.status === 'ACTIVE' ? 'danger-soft' : 'success-soft'}
+            icon={t.status === 'ACTIVE' ? UserX : UserCheck}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleToggleStatus(t);
+            }}
+            title={t.status === 'ACTIVE' ? 'Deactivate Faculty' : 'Activate Faculty'}
           >
-            Detail
+            {t.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
           </Button>
           <Button
             size="xs"
             variant="amber"
             icon={Edit2}
-            onClick={() => handleOpenEdit(t)}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpenEdit(t);
+            }}
+            title="Edit Teacher"
           >
             Edit
+          </Button>
+          <Button
+            size="xs"
+            variant="info"
+            icon={ExternalLink}
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate(`/teachers/${t.id}`);
+            }}
+            title="Open Dedicated Faculty Roster Page"
+          >
+            Detail
           </Button>
         </div>
       ),
@@ -363,6 +400,20 @@ export default function TeachersPage() {
               <span>Kanban</span>
             </button>
           </div>
+
+          {/* Status Filter Dropdown */}
+          <select
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setPage(1);
+            }}
+            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-black focus:outline-none focus:border-odoo-600 min-h-[34px] w-full sm:w-auto shadow-2xs"
+          >
+            <option value="">All Teachers</option>
+            <option value="ACTIVE">Active Teachers</option>
+            <option value="INACTIVE">Inactive Teachers</option>
+          </select>
 
           <Button variant="primary" icon={Plus} onClick={handleOpenAdd} className="w-full sm:w-auto h-9">
             Add Teacher
@@ -493,9 +544,25 @@ export default function TeachersPage() {
                   <div className="mt-3.5 pt-2 border-t border-slate-100 flex items-center gap-1.5">
                     <Button
                       size="xs"
+                      variant={t.status === 'ACTIVE' ? 'danger-soft' : 'success-soft'}
+                      icon={t.status === 'ACTIVE' ? UserX : UserCheck}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleStatus(t);
+                      }}
+                      className="flex-1 justify-center"
+                      title={t.status === 'ACTIVE' ? 'Deactivate Faculty' : 'Activate Faculty'}
+                    >
+                      {t.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
+                    </Button>
+                    <Button
+                      size="xs"
                       variant="amber"
                       icon={Edit2}
-                      onClick={() => handleOpenEdit(t)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenEdit(t);
+                      }}
                       className="flex-1 justify-center"
                     >
                       Edit
@@ -504,7 +571,10 @@ export default function TeachersPage() {
                       size="xs"
                       variant="info"
                       icon={ExternalLink}
-                      onClick={() => navigate(`/teachers/${t.id}`)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/teachers/${t.id}`);
+                      }}
                       className="flex-1 justify-center"
                     >
                       Detail

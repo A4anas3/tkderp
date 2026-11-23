@@ -262,7 +262,7 @@ export default function SubjectsPage() {
 
   const loadTeachers = useCallback(async () => {
     try {
-      const res = await teacherApi.list({ page_size: 100, status_filter: 'ACTIVE' });
+      const res = await teacherApi.list({ page_size: 100, status: 'ACTIVE', status_filter: 'ACTIVE' });
       setTeachers(res.items || []);
     } catch (err) {
       console.error('Failed to load teachers:', err);
@@ -303,11 +303,12 @@ export default function SubjectsPage() {
       endTime: '10:30',
     };
     setScheduleState(initialSchedule);
+    const activeTeachers = teachers.filter((t) => t.status === 'ACTIVE');
     setFormData({
       subject_code: '',
       name: '',
       description: '',
-      teacher_id: teachers.length > 0 ? teachers[0].id : '',
+      teacher_id: activeTeachers.length > 0 ? activeTeachers[0].id : '',
       hall_number: 'Hall 13',
       schedule: buildScheduleString(initialSchedule),
       default_fee: '1000.00',
@@ -806,10 +807,12 @@ export default function SubjectsPage() {
               onChange={(e) => setFormData({ ...formData, teacher_id: e.target.value })}
               options={[
                 { value: '', label: '-- No Teacher Assigned --' },
-                ...teachers.map((t) => ({
-                  value: t.id,
-                  label: `${t.name} (${t.specialization || 'Faculty'})`,
-                })),
+                ...teachers
+                  .filter((t) => t.status === 'ACTIVE' || t.id === formData.teacher_id)
+                  .map((t) => ({
+                    value: t.id,
+                    label: `${t.name} (${t.specialization || 'Faculty'})${t.status === 'INACTIVE' ? ' [Inactive]' : ''}`,
+                  })),
               ]}
             />
           </div>

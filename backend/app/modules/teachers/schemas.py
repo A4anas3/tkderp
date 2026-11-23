@@ -49,6 +49,10 @@ class TeacherUpdate(BaseModel):
     def validate_mobile(cls, v):
         return validate_mobile_10_digits(v, required=False)
 
+class TeacherStatusUpdate(BaseModel):
+    status: str = Field(..., pattern="^(ACTIVE|INACTIVE)$")
+    reason: Optional[str] = None
+
 class TeacherResponse(TeacherBase):
     id: uuid.UUID
     teacher_code: str

@@ -44,8 +44,8 @@ export default function RenewSubjectModal({
 
   const loadTeachers = async () => {
     try {
-      const res = await teacherApi.list({ status: 'ACTIVE', page_size: 100 });
-      setTeachers(res.items || []);
+      const res = await teacherApi.list({ status: 'ACTIVE', status_filter: 'ACTIVE', page_size: 100 });
+      setTeachers((res.items || []).filter((t) => t.status === 'ACTIVE'));
     } catch (e) {
       console.error(e);
     }

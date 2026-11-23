@@ -13,7 +13,7 @@ from app.core.config import settings
 from app.modules.students.router import compress_avatar_image
 from app.modules.teachers.models import Teacher, TeacherEarning
 from app.modules.teachers.schemas import (
-    TeacherCreate, TeacherUpdate, TeacherResponse,
+    TeacherCreate, TeacherUpdate, TeacherResponse, TeacherStatusUpdate,
     TeacherEnrollmentItem, TeacherRosterMetrics, TeacherRosterResponse, TeacherSubjectOption,
     TeacherPayoutCreate, TeacherPayoutResponse, TeacherEarningsResponse, TeacherSubjectEarningItem
 )
@@ -34,8 +34,9 @@ router = APIRouter(prefix="/api/teachers", tags=["Teachers"])
 async def list_teachers(
     page: int = 1,
     page_size: int = 20,
-    search: str = None,
-    status: str = None,
+    search: Optional[str] = None,
+    status: Optional[str] = None,
+    status_filter: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     user = Depends(require_staff)
 ):
@@ -52,9 +53,10 @@ async def list_teachers(
         query = query.where(search_filter)
         count_query = count_query.where(search_filter)
 
-    if status:
-        query = query.where(Teacher.status == status)
-        count_query = count_query.where(Teacher.status == status)
+    eff_status = status or status_filter
+    if eff_status:
+        query = query.where(Teacher.status == eff_status)
+        count_query = count_query.where(Teacher.status == eff_status)
 
     total = (await db.execute(count_query)).scalar() or 0
     total_pages = (total + page_size - 1) // page_size if total > 0 else 0
@@ -69,6 +71,14 @@ async def list_teachers(
         page_size=page_size,
         total_pages=total_pages
     )
+
+@router.get("/all", response_model=List[TeacherResponse])
+async def get_all_active_teachers(
+    db: AsyncSession = Depends(get_db),
+    user = Depends(require_staff)
+):
+    result = await db.execute(select(Teacher).where(Teacher.status == "ACTIVE").order_by(Teacher.name.asc()))
+    return [TeacherResponse.model_validate(t) for t in result.scalars().all()]
 
 @router.get("/by-mobile/{mobile}", response_model=Optional[TeacherResponse])
 async def get_teacher_by_mobile(
@@ -177,12 +187,64 @@ async def update_teacher(
         teacher.specialization = req.specialization.strip()
     if req.photo_url is not None: teacher.photo_url = req.photo_url
     if req.joining_date is not None: teacher.joining_date = req.joining_date
-    if req.status is not None: teacher.status = req.status
+    old_status = teacher.status
+    if req.status is not None:
+        teacher.status = req.status
+        if old_status != req.status:
+            audit = AuditLog(
+                user_id=admin.id,
+                action="TEACHER_STATUS_UPDATED",
+                entity_type="TEACHER",
+                entity_id=teacher.id,
+                details=json.dumps({
+                    "teacher_code": teacher.teacher_code,
+                    "teacher_name": teacher.name,
+                    "old_status": old_status,
+                    "new_status": req.status,
+                    "reason": "Profile edit status change"
+                })
+            )
+            db.add(audit)
     if req.share_type is not None: teacher.share_type = req.share_type
     if req.share_value is not None: teacher.share_value = req.share_value
 
     await db.commit()
     await db.refresh(teacher)
+    return TeacherResponse.model_validate(teacher)
+
+@router.patch("/{teacher_id}/status", response_model=TeacherResponse)
+async def update_teacher_status(
+    teacher_id: uuid.UUID,
+    payload: TeacherStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+    admin = Depends(require_admin)
+):
+    teacher = (await db.execute(select(Teacher).where(Teacher.id == teacher_id))).scalar_one_or_none()
+    if not teacher:
+        raise HTTPException(status_code=404, detail="Teacher not found")
+
+    old_status = teacher.status
+    new_status = payload.status
+
+    if old_status != new_status:
+        teacher.status = new_status
+        audit = AuditLog(
+            user_id=admin.id,
+            action="TEACHER_STATUS_UPDATED",
+            entity_type="TEACHER",
+            entity_id=teacher.id,
+            details=json.dumps({
+                "teacher_code": teacher.teacher_code,
+                "teacher_name": teacher.name,
+                "old_status": old_status,
+                "new_status": new_status,
+                "reason": payload.reason or f"Status changed from {old_status} to {new_status}"
+            })
+        )
+        db.add(audit)
+        await db.commit()
+        await db.refresh(teacher)
+
     return TeacherResponse.model_validate(teacher)
 
 @router.post("/upload-photo")

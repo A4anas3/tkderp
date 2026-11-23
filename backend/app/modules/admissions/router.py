@@ -296,15 +296,19 @@ async def create_admission(
         s_pct = Decimal("0.00")
 
         if t_id:
+            t_res = await db.execute(select(Teacher).where(Teacher.id == t_id))
+            t_obj = t_res.scalar_one_or_none()
+            if not t_obj:
+                raise HTTPException(status_code=400, detail="Assigned teacher not found")
+            if t_obj.status != "ACTIVE":
+                raise HTTPException(status_code=400, detail=f"Cannot assign inactive teacher '{t_obj.name}' to a new admission")
+
             if bs_obj and bs_obj.share_value is not None and bs_obj.share_value > Decimal("0.00"):
                 s_type = bs_obj.share_type or "PERCENT"
                 s_val = bs_obj.share_value
             else:
-                t_res = await db.execute(select(Teacher).where(Teacher.id == t_id))
-                t_obj = t_res.scalar_one_or_none()
-                if t_obj:
-                    s_type = t_obj.share_type or "PERCENT"
-                    s_val = t_obj.share_value or Decimal("0.00")
+                s_type = t_obj.share_type or "PERCENT"
+                s_val = t_obj.share_value or Decimal("0.00")
 
             if s_type == "PERCENT":
                 s_pct = s_val
@@ -1644,8 +1648,11 @@ async def change_subject(
     if payload.teacher_id:
         t_res = await db.execute(select(Teacher).where(Teacher.id == payload.teacher_id))
         t_obj = t_res.scalar_one_or_none()
-        if t_obj:
-            t_name = t_obj.name
+        if not t_obj:
+            raise HTTPException(status_code=400, detail="Teacher not found")
+        if t_obj.status != "ACTIVE":
+            raise HTTPException(status_code=400, detail="Cannot assign an inactive teacher")
+        t_name = t_obj.name
 
     s_type = "PERCENT"
     s_val = Decimal("0.00")

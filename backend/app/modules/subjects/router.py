@@ -96,8 +96,11 @@ async def create_subject(
     if teacher_id:
         t_res = await db.execute(select(Teacher).where(Teacher.id == teacher_id))
         t = t_res.scalar_one_or_none()
-        if t:
-            teacher_name = t.name
+        if not t:
+            raise HTTPException(status_code=400, detail="Teacher not found")
+        if t.status != "ACTIVE":
+            raise HTTPException(status_code=400, detail="Cannot assign an inactive teacher to a subject")
+        teacher_name = t.name
     else:
         # Auto-assign active teacher so subject always has an assigned faculty
         t_res = await db.execute(select(Teacher).where(Teacher.status == "ACTIVE").limit(1))
@@ -153,8 +156,11 @@ async def update_subject(
         if update_data["teacher_id"]:
             t_res = await db.execute(select(Teacher).where(Teacher.id == update_data["teacher_id"]))
             t = t_res.scalar_one_or_none()
-            if t:
-                subject.teacher_name_snapshot = t.name
+            if not t:
+                raise HTTPException(status_code=400, detail="Teacher not found")
+            if t.id != subject.teacher_id and t.status != "ACTIVE":
+                raise HTTPException(status_code=400, detail="Cannot assign an inactive teacher to a subject")
+            subject.teacher_name_snapshot = t.name
         else:
             subject.teacher_name_snapshot = None
 

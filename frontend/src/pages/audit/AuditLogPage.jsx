@@ -87,6 +87,8 @@ export function getActionMeta(action) {
       return { label: 'Daily Status Refresh', variant: 'neutral', icon: Clock };
     case 'FEE_DUE_WAIVED':
       return { label: 'Fee Due Waived', variant: 'warning', icon: Sparkles };
+    case 'TEACHER_STATUS_UPDATED':
+      return { label: 'Teacher Status Updated', variant: 'primary', icon: RefreshCw };
     default:
       return {
         label: action ? action.replace(/_/g, ' ') : 'System Action',
@@ -116,6 +118,20 @@ export function formatDateTime(dateStr) {
 export function AuditDetailsSummary({ audit }) {
   const parsed = audit.parsed_details;
   if (!parsed) return <span className="text-slate-600 text-xs truncate max-w-xs">{audit.details || '—'}</span>;
+
+  if (parsed.old_status && parsed.new_status) {
+    return (
+      <div className="text-xs space-y-0.5">
+        <div className="font-semibold text-black">
+          {parsed.teacher_name || parsed.teacher_code}
+        </div>
+        <div className="text-[11px] text-slate-600">
+          Status changed: <span className="font-bold text-slate-800">{parsed.old_status}</span> → <span className="font-bold text-slate-800">{parsed.new_status}</span>
+          {parsed.reason && <span className="italic ml-1 text-slate-500">({parsed.reason})</span>}
+        </div>
+      </div>
+    );
+  }
 
   if (parsed.waived_amount !== undefined) {
     return (

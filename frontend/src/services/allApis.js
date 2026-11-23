@@ -31,6 +31,10 @@ export const teacherApi = {
     const res = await api.get('/teachers', { params });
     return res.data;
   },
+  getAll: async () => {
+    const res = await api.get('/teachers/all');
+    return res.data;
+  },
   get: async (id) => {
     const res = await api.get(`/teachers/${id}`);
     return res.data;
@@ -45,6 +49,10 @@ export const teacherApi = {
   },
   update: async (id, data) => {
     const res = await api.put(`/teachers/${id}`, data);
+    return res.data;
+  },
+  updateStatus: async (id, status, reason = null) => {
+    const res = await api.patch(`/teachers/${id}/status`, { status, reason });
     return res.data;
   },
   getRoster: async (id, params) => {

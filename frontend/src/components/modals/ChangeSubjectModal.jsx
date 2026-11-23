@@ -47,11 +47,11 @@ export default function ChangeSubjectModal({
     try {
       const [allSubs, teacherRes] = await Promise.all([
         subjectApi.getAll(),
-        teacherApi.list({ status: 'ACTIVE', page_size: 100 }),
+        teacherApi.list({ status: 'ACTIVE', status_filter: 'ACTIVE', page_size: 100 }),
       ]);
       const availableSubs = allSubs || [];
       setSubjects(availableSubs);
-      setTeachers(teacherRes.items || []);
+      setTeachers((teacherRes.items || []).filter((t) => t.status === 'ACTIVE'));
 
       // Filter to find a new subject that is different from current subject
       if (item) {

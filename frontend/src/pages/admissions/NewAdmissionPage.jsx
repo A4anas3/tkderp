@@ -112,25 +112,33 @@ export default function NewAdmissionPage() {
   // Helper to auto-resolve teacher from subject definition
   const resolveSubjectTeacher = (subj, teacherList) => {
     if (!subj) return { teacherId: null, teacherName: null };
+    const activeList = (teacherList || []).filter((t) => t.status === 'ACTIVE');
     let tid = subj.teacher_id || null;
     let tname = subj.teacher_name_snapshot || null;
 
-    if (!tid && tname && teacherList && teacherList.length > 0) {
-      const match = teacherList.find(
+    if (tid && activeList.length > 0) {
+      const match = activeList.find((t) => t.id === tid);
+      if (!match) {
+        // Teacher is inactive, fall back to first active faculty
+        tid = activeList[0].id;
+        tname = activeList[0].name;
+      } else {
+        tname = match.name;
+      }
+    } else if (!tid && tname && activeList.length > 0) {
+      const match = activeList.find(
         (t) => t.name.toLowerCase() === tname.toLowerCase()
       );
       if (match) {
         tid = match.id;
         tname = match.name;
+      } else {
+        tid = activeList[0].id;
+        tname = activeList[0].name;
       }
-    }
-    if (!tid && teacherList && teacherList.length > 0) {
-      tid = teacherList[0].id;
-      tname = teacherList[0].name;
-    }
-    if (tid && !tname && teacherList && teacherList.length > 0) {
-      const match = teacherList.find((t) => t.id === tid);
-      if (match) tname = match.name;
+    } else if (!tid && activeList.length > 0) {
+      tid = activeList[0].id;
+      tname = activeList[0].name;
     }
     return { teacherId: tid, teacherName: tname };
   };
@@ -170,12 +178,12 @@ export default function NewAdmissionPage() {
         studentApi.list({ page: 1, page_size: 100 }),
         subjectApi.getAll(),
         greenCardApi.list(),
-        teacherApi.list({ status: 'ACTIVE', page_size: 100 }),
+        teacherApi.list({ status: 'ACTIVE', status_filter: 'ACTIVE', page_size: 100 }),
       ]);
 
       const loadedStudents = stuRes.items || [];
       const loadedSubjects = subRes || [];
-      const loadedTeachers = teachRes.items || [];
+      const loadedTeachers = (teachRes.items || []).filter((t) => t.status === 'ACTIVE');
       setStudents(loadedStudents);
       setSubjects(loadedSubjects);
       setGreenCards(gcRes || []);
@@ -1405,11 +1413,13 @@ export default function NewAdmissionPage() {
                                 className="border border-slate-300 rounded px-2 py-0.5 text-[11px] text-black bg-white font-medium"
                               >
                                 {!itm.teacher_id && <option value="">Select Faculty</option>}
-                                {teachers.map((t) => (
-                                  <option key={t.id} value={t.id}>
-                                    {t.name}
-                                  </option>
-                                ))}
+                                {teachers
+                                  .filter((t) => t.status === 'ACTIVE')
+                                  .map((t) => (
+                                    <option key={t.id} value={t.id}>
+                                      {t.name}
+                                    </option>
+                                  ))}
                               </select>
                             </div>
 

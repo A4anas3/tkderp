@@ -9,6 +9,8 @@ import {
   Award,
   CheckCircle2,
   XCircle,
+  UserCheck,
+  UserX,
   Edit2,
   BookOpen,
   Users,
@@ -280,6 +282,19 @@ export default function TeacherDetailPage() {
     }
   };
 
+  const handleToggleStatus = async () => {
+    if (!teacher) return;
+    const newStatus = teacher.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    try {
+      await teacherApi.updateStatus(teacher.id, newStatus, `User toggled status to ${newStatus}`);
+      success(`Faculty status updated to ${newStatus}`);
+      loadProfile();
+      loadRoster();
+    } catch (err) {
+      error(err.message || 'Failed to update faculty status');
+    }
+  };
+
   const handleClearFilters = () => {
     setStatusFilter('ALL');
     setSearchQuery('');
@@ -349,6 +364,15 @@ export default function TeacherDetailPage() {
 
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <Button
+            size="sm"
+            variant={isActive ? 'danger-soft' : 'success-soft'}
+            icon={isActive ? UserX : UserCheck}
+            onClick={handleToggleStatus}
+            title={isActive ? 'Deactivate Faculty' : 'Activate Faculty'}
+          >
+            {isActive ? 'Deactivate Faculty' : 'Activate Faculty'}
+          </Button>
           <Button
             variant="amber"
             icon={Edit2}
