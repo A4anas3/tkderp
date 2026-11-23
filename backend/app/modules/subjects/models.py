@@ -28,3 +28,11 @@ class Subject(BaseModel):
     teacher: Mapped[Optional["app.modules.teachers.models.Teacher"]] = relationship(
         "app.modules.teachers.models.Teacher", lazy="joined"
     )
+
+    @property
+    def timing(self) -> Optional[str]:
+        return self.schedule
+
+    @property
+    def teacher_name(self) -> Optional[str]:
+        return self.teacher_name_snapshot or (self.teacher.name if self.teacher else None)

@@ -1,6 +1,6 @@
 from decimal import Decimal
 from typing import Optional
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 import uuid
 
 class SubjectBase(BaseModel):
@@ -14,6 +14,8 @@ class SubjectBase(BaseModel):
     class_category: Optional[str] = None
     default_discount_percentage: Optional[Decimal] = Field(default=Decimal("10.00"), ge=0, le=100)
     status: str = Field(default="ACTIVE", pattern="^(ACTIVE|INACTIVE)$")
+    timing: Optional[str] = None
+    teacher_name: Optional[str] = None
 
 class SubjectCreate(SubjectBase):
     subject_code: Optional[str] = None
@@ -26,6 +28,7 @@ class SubjectUpdate(BaseModel):
     teacher_name_snapshot: Optional[str] = None
     hall_number: Optional[str] = None
     schedule: Optional[str] = None
+    timing: Optional[str] = None
     class_category: Optional[str] = None
     default_discount_percentage: Optional[Decimal] = Field(default=None, ge=0, le=100)
     status: Optional[str] = Field(default=None, pattern="^(ACTIVE|INACTIVE)$")
@@ -33,5 +36,13 @@ class SubjectUpdate(BaseModel):
 class SubjectResponse(SubjectBase):
     id: uuid.UUID
     subject_code: str
+
+    @model_validator(mode="after")
+    def populate_timing_and_teacher(self):
+        if not self.timing and self.schedule:
+            self.timing = self.schedule
+        if not self.teacher_name and self.teacher_name_snapshot:
+            self.teacher_name = self.teacher_name_snapshot
+        return self
 
     model_config = ConfigDict(from_attributes=True)

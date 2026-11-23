@@ -270,6 +270,7 @@ export default function NewAdmissionPage() {
             teacher_id: initTid,
             teacher_name_snapshot: initTname,
             hall_number_snapshot: firstSub.hall_number || 'Main Hall',
+            schedule: firstSub.schedule || firstSub.timing || null,
             discount_type: defaultDisc > 0 ? 'PERCENTAGE' : 'NONE',
             discount_value: defaultDisc > 0 ? String(defaultDisc) : '10',
             valid_from: validFrom,
@@ -450,6 +451,7 @@ export default function NewAdmissionPage() {
       teacher_id: assignedTeacherId,
       teacher_name_snapshot: assignedTeacherName,
       hall_number_snapshot: s.hall_number || 'Main Hall',
+      schedule: s.schedule || s.timing || null,
       discount_type: defaultDisc > 0 ? 'PERCENTAGE' : 'NONE',
       discount_value: defaultDisc > 0 ? String(defaultDisc) : '10',
       valid_from: itemFrom,
@@ -537,6 +539,7 @@ export default function NewAdmissionPage() {
             teacher_id: assignedTeacherId,
             teacher_name_snapshot: assignedTeacherName,
             hall_number_snapshot: s.hall_number || 'Main Hall',
+            schedule: s.schedule || s.timing || null,
             valid_from: itemFrom,
             valid_to: itemTo,
             is_renewal: isRenewal,
@@ -1248,11 +1251,11 @@ export default function NewAdmissionPage() {
                             >
                               {subjects.map((s) => {
                                 const activeMatch = activeEnrollment?.active_subjects?.find((as) => as.subject_id === s.id);
+                                const timing = s.schedule || s.timing || '';
+                                const teacher = s.teacher_name_snapshot || s.teacher_name || (s.teacher && s.teacher.name) || resolveSubjectTeacher(s, teachers)?.teacherName || '';
                                 return (
                                   <option key={s.id} value={s.id}>
-                                    {s.name} ({s.subject_code}) — ₹{Number(s.default_fee).toFixed(0)}/mo
-                                    {activeMatch ? ` • [Active till ${activeMatch.valid_to} — Renews Next Cycle]` : ''}
-                                    {s.teacher_name_snapshot ? ` (${s.teacher_name_snapshot})` : ''}
+                                    {s.name} ({s.subject_code}){timing ? ` • ${timing}` : ''}{teacher ? ` • ${teacher}` : ''} — ₹{Number(s.default_fee).toFixed(0)}/mo{activeMatch ? ` • [Active till ${activeMatch.valid_to} — Renews Next Cycle]` : ''}
                                   </option>
                                 );
                               })}

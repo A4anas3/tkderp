@@ -257,11 +257,15 @@ export default function ChangeSubjectModal({
             <option value="">Select a new subject...</option>
             {subjects
               .filter((s) => s.id !== item.subject_id)
-              .map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name} ({s.subject_code}) — Standard Fee: ₹{Number(s.default_fee).toFixed(0)}/mo {s.teacher_name_snapshot ? `(${s.teacher_name_snapshot})` : ''}
-                </option>
-              ))}
+              .map((s) => {
+                const timing = s.schedule || s.timing || '';
+                const teacher = s.teacher_name_snapshot || s.teacher_name || (s.teacher && s.teacher.name) || (teachers.find((t) => t.id === s.teacher_id)?.name) || '';
+                return (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({s.subject_code}){timing ? ` • ${timing}` : ''}{teacher ? ` • ${teacher}` : ''} — Standard Fee: ₹{Number(s.default_fee).toFixed(0)}/mo
+                  </option>
+                );
+              })}
           </select>
         </div>
 

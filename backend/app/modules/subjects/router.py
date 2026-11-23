@@ -139,7 +139,7 @@ async def create_subject(
         teacher_id=teacher_id,
         teacher_name_snapshot=teacher_name,
         hall_number=payload.hall_number or "Main Hall",
-        schedule=payload.schedule,
+        schedule=payload.schedule or payload.timing,
         class_category=payload.class_category or "General",
         default_discount_percentage=payload.default_discount_percentage if payload.default_discount_percentage is not None else Decimal("10.00"),
         status=payload.status
