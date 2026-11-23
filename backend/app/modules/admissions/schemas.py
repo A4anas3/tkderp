@@ -11,8 +11,11 @@ class AdmissionItemCreate(BaseModel):
     green_card_id: Optional[uuid.UUID] = None
     teacher_id: Optional[uuid.UUID] = None
     teacher_name_snapshot: Optional[str] = None
+    teacher_name: Optional[str] = None
     hall_number_snapshot: Optional[str] = None
+    hall_number: Optional[str] = None
     schedule: Optional[str] = None
+    timing: Optional[str] = None
     item_name_snapshot: str = Field(..., min_length=2, max_length=200)
     original_price: Optional[Decimal] = Field(default=None, ge=0)
     months: Optional[int] = Field(default=None, ge=1)
@@ -34,8 +37,11 @@ class AdmissionItemResponse(BaseModel):
     green_card_id: Optional[uuid.UUID] = None
     teacher_id: Optional[uuid.UUID] = None
     teacher_name_snapshot: Optional[str] = None
+    teacher_name: Optional[str] = None
     hall_number_snapshot: Optional[str] = None
+    hall_number: Optional[str] = None
     schedule: Optional[str] = None
+    timing: Optional[str] = None
     item_name_snapshot: str
     original_price: Decimal
     discount_type: str
@@ -267,6 +273,7 @@ class AdmissionSlipsResponse(BaseModel):
     valid_to: Optional[date] = None
     written_off_amount: Decimal = Decimal("0.00")
     can_cancel: bool = True
+    allocations: Optional[List[dict]] = None
     items: List[AdmissionItemResponse] = Field(default_factory=list)
     slips: List[SlipItemResponse] = Field(default_factory=list)
 

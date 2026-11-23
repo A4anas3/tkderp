@@ -222,6 +222,20 @@ export default function PaymentReceiptModal({ isOpen, onClose, receipt, payment 
                             </span>
                           </div>
                         )}
+                        {(a.hall_number || a.teacher_name) && (
+                          <div className="text-[10px] text-slate-700 font-normal mt-0.5 flex flex-wrap gap-x-2">
+                            {a.hall_number && (
+                              <span>
+                                Hall: <strong className="text-black">{a.hall_number}</strong>
+                              </span>
+                            )}
+                            {a.teacher_name && (
+                              <span>
+                                Teacher: <strong className="text-black">{a.teacher_name}</strong>
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="p-1.5 text-right font-mono font-bold text-black">
                         {formatCurrency(a.allocated_amount || a.amount)}

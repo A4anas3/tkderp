@@ -172,6 +172,22 @@ class AdmissionItem(BaseModel):
         return None
 
     @property
+    def timing(self) -> Optional[str]:
+        return self.schedule
+
+    @property
+    def teacher_name(self) -> Optional[str]:
+        if self.subject and self.subject.teacher_name:
+            return self.subject.teacher_name
+        return self.teacher_name_snapshot
+
+    @property
+    def hall_number(self) -> Optional[str]:
+        if self.subject and self.subject.hall_number:
+            return self.subject.hall_number
+        return self.hall_number_snapshot
+
+    @property
     def can_cancel(self) -> bool:
         today = date.today()
         if self.status in ("EXPIRED", "COMPLETED", "DISCONTINUED"):

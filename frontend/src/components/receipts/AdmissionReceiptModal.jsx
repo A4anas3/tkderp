@@ -247,14 +247,14 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission, admi
                           {itm.item_name_snapshot || itm.item_name}
                         </span>
                         <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-700 mt-0.5">
-                          {itm.teacher_name_snapshot && (
+                          {(itm.hall_number || itm.hall_number_snapshot) && (
                             <span className="bg-slate-100 border border-slate-200 px-1 py-0.2 rounded">
-                              Faculty: <strong className="text-black">{itm.teacher_name_snapshot}</strong>
+                              Hall: <strong className="text-black">{itm.hall_number || itm.hall_number_snapshot}</strong>
                             </span>
                           )}
-                          {itm.hall_number_snapshot && (
+                          {(itm.teacher_name || itm.teacher_name_snapshot) && (
                             <span className="bg-slate-100 border border-slate-200 px-1 py-0.2 rounded">
-                              Hall: <strong className="text-black">{itm.hall_number_snapshot}</strong>
+                              Teacher: <strong className="text-black">{itm.teacher_name || itm.teacher_name_snapshot}</strong>
                             </span>
                           )}
                           {(itm.schedule || itm.timing) && (
@@ -285,6 +285,62 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission, admi
             </table>
           </div>
         </div>
+
+        {/* Allocations Table if available */}
+        {data.allocations && data.allocations.length > 0 && (
+          <div className="space-y-1">
+            <span className="text-[10px] font-black text-black uppercase tracking-wider block">
+              Enrolled Subject / Course Module Allocations
+            </span>
+            <div className="overflow-x-auto -webkit-overflow-scrolling-touch">
+              <table className="w-full text-left text-xs border border-slate-300">
+                <thead className="bg-slate-100 text-black font-bold border-b border-slate-300">
+                  <tr>
+                    <th className="p-1.5 w-8 text-center border-r border-slate-300">#</th>
+                    <th className="p-1.5 border-r border-slate-300">Academic Subject Module</th>
+                    <th className="p-1.5 text-right w-32">Allocated Fee (₹)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {data.allocations.map((a, i) => (
+                    <tr key={i} className="hover:bg-slate-50">
+                      <td className="p-1.5 text-center font-mono border-r border-slate-200 text-slate-700">
+                        {i + 1}
+                      </td>
+                      <td className="p-1.5 text-black border-r border-slate-200 font-semibold">
+                        <span>{a.item_name || a.subject_name || 'Enrolled Course Module'}</span>
+                        {(a.schedule || a.timing) && (
+                          <div className="text-[10px] text-slate-700 font-normal mt-0.5">
+                            <span className="bg-slate-100 border border-slate-200 px-1 py-0.2 rounded">
+                              Timing: <strong className="text-black">{a.schedule || a.timing}</strong>
+                            </span>
+                          </div>
+                        )}
+                        {(a.hall_number || a.teacher_name) && (
+                          <div className="text-[10px] text-slate-700 font-normal mt-0.5 flex flex-wrap gap-x-2">
+                            {a.hall_number && (
+                              <span>
+                                Hall: <strong className="text-black">{a.hall_number}</strong>
+                              </span>
+                            )}
+                            {a.teacher_name && (
+                              <span>
+                                Teacher: <strong className="text-black">{a.teacher_name}</strong>
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td className="p-1.5 text-right font-mono font-bold text-black">
+                        {formatCurrency(a.allocated_amount || a.amount)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* Clear Amounts Bill Table (fee, discount, GST, amount paid, balance due) */}
         <div className="space-y-1">

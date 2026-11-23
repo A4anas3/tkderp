@@ -10,6 +10,7 @@ class VerificationCourseItem(BaseModel):
     teacher_name: Optional[str] = None
     hall_number: Optional[str] = None
     schedule: Optional[str] = None
+    timing: Optional[str] = None
     valid_from: Optional[date] = None
     valid_to: Optional[date] = None
     validity_period: str
@@ -50,6 +51,7 @@ class IDCardCourseItem(BaseModel):
     teacher_name: Optional[str] = None
     hall_number: Optional[str] = None
     schedule: Optional[str] = None
+    timing: Optional[str] = None
     valid_from: Optional[date] = None
     valid_to: Optional[date] = None
     validity_period: str

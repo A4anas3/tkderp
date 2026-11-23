@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, and_, desc
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
 from decimal import Decimal
 from datetime import datetime, timezone, date, timedelta
 from typing import Optional, List
@@ -392,9 +392,16 @@ async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db),
 
     subject_ids = [itm.subject_id for itm in all_items if itm.subject_id]
     subject_schedules = {}
+    subjects_map = {}
     if subject_ids:
-        s_res = await db.execute(select(Subject.id, Subject.schedule).where(Subject.id.in_(subject_ids)))
-        subject_schedules = {sid: ssched for sid, ssched in s_res.all()}
+        s_res = await db.execute(
+            select(Subject)
+            .options(joinedload(Subject.teacher))
+            .where(Subject.id.in_(subject_ids))
+        )
+        for s in s_res.scalars().all():
+            subjects_map[s.id] = s
+            subject_schedules[s.id] = s.schedule
 
     # Group lines: active, expiring, expired, revoked
     RENEWAL_ALERT_DAYS = 5
@@ -426,6 +433,11 @@ async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db),
         )
         is_line_overdue = is_line_expired and itm.balance_due > Decimal("0.00")
 
+        sub = subjects_map.get(itm.subject_id)
+        hall_num = (sub.hall_number if sub and sub.hall_number else itm.hall_number_snapshot)
+        class_sched = (sub.schedule if sub and sub.schedule else (itm.schedule or subject_schedules.get(itm.subject_id)))
+        teach_name = (sub.teacher_name if sub and sub.teacher_name else itm.teacher_name_snapshot)
+
         line_resp = StudentLineResponse(
             id=itm.id,
             admission_id=itm.admission_id,
@@ -433,11 +445,11 @@ async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db),
             subject_id=itm.subject_id,
             subject_name=itm.item_name_snapshot,
             teacher_id=itm.teacher_id,
-            teacher_name=itm.teacher_name_snapshot,
+            teacher_name=teach_name,
             batch_id=itm.batch_id,
             batch_name=batch_names.get(itm.batch_id),
-            hall_number=itm.hall_number_snapshot,
-            schedule=itm.schedule or subject_schedules.get(itm.subject_id),
+            hall_number=hall_num,
+            schedule=class_sched,
             valid_from=itm.valid_from,
             valid_to=itm.valid_to,
             days_left=days_left,
@@ -1008,6 +1020,29 @@ async def get_student_active_enrollment(
     active_paid_total = Decimal("0.00")
     active_due_total = Decimal("0.00")
 
+    # Preload Subject models with assigned teachers
+    subject_ids = [item.subject_id for item, _ in rows if item.subject_id]
+    subjects_map = {}
+    if subject_ids:
+        s_res = await db.execute(
+            select(Subject)
+            .options(joinedload(Subject.teacher))
+            .where(Subject.id.in_(subject_ids))
+        )
+        subjects_map = {s.id: s for s in s_res.scalars().all()}
+
+    subjects_by_name = {s.name.lower().strip(): s for s in subjects_map.values()}
+    all_raw_names = list({(item.item_name_snapshot or "").replace("[Renewal] ", "").strip().lower() for item, _ in rows if item.item_name_snapshot})
+    missing_names = [name for name in all_raw_names if name and name not in subjects_by_name]
+    if missing_names:
+        sn_res = await db.execute(
+            select(Subject)
+            .options(joinedload(Subject.teacher))
+            .where(func.lower(Subject.name).in_(missing_names))
+        )
+        for s in sn_res.scalars().all():
+            subjects_by_name[s.name.lower().strip()] = s
+
     for item, adm in rows:
         # Determine active status: parent admission and item must both be ACTIVE, and valid_to must cover today or future
         is_active = (
@@ -1028,6 +1063,12 @@ async def get_student_active_enrollment(
         is_item_expired = (days_remaining is not None and days_remaining < 0) or item.status == "EXPIRED" or adm.status == "EXPIRED"
         is_item_overdue = is_item_expired and item.balance_due > Decimal("0.00")
 
+        sub = subjects_map.get(item.subject_id) or (subjects_by_name.get(raw_name.lower().strip()) if raw_name else None)
+        hall_num = (sub.hall_number if sub and sub.hall_number else item.hall_number_snapshot)
+        class_sched = (sub.schedule if sub and sub.schedule else (item.schedule if hasattr(item, "schedule") else None))
+        teach_name = (sub.teacher_name if sub and sub.teacher_name else item.teacher_name_snapshot)
+        teach_id = str(sub.teacher_id) if (sub and sub.teacher_id) else (str(item.teacher_id) if item.teacher_id else None)
+
         item_dict = {
             "id": str(item.id),
             "admission_id": str(adm.id),
@@ -1035,9 +1076,11 @@ async def get_student_active_enrollment(
             "subject_id": str(item.subject_id) if item.subject_id else None,
             "subject_name": raw_name,
             "item_type": item.item_type,
-            "teacher_id": str(item.teacher_id) if item.teacher_id else None,
-            "teacher_name": item.teacher_name_snapshot,
-            "hall_number": item.hall_number_snapshot,
+            "teacher_id": teach_id,
+            "teacher_name": teach_name,
+            "hall_number": hall_num,
+            "schedule": class_sched,
+            "timing": class_sched,
             "valid_from": item.valid_from.isoformat() if item.valid_from else (adm.valid_from.isoformat() if adm.valid_from else None),
             "valid_to": item.valid_to.isoformat() if item.valid_to else (adm.valid_to.isoformat() if adm.valid_to else None),
             "original_price": float(item.original_price),
@@ -1107,6 +1150,8 @@ async def get_student_active_enrollment(
             "teacher_id": latest_dict["teacher_id"],
             "teacher_name": latest_dict["teacher_name"],
             "hall_number": latest_dict["hall_number"],
+            "schedule": latest_dict.get("schedule"),
+            "timing": latest_dict.get("timing"),
             "valid_from": earliest_start.isoformat() if earliest_start else latest_dict["valid_from"],
             "valid_to": latest_end.isoformat() if latest_end else latest_dict["valid_to"],
             "original_price": float(total_original),

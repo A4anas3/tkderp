@@ -6,7 +6,7 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc, or_
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
 
 from app.database.session import get_db
 from app.modules.students.models import Student
@@ -151,7 +151,7 @@ async def get_student_and_active_courses(
     )
     rows = (await db.execute(items_stmt)).all()
 
-    # Collect batch names and subject schedules
+    # Collect batch names and subject models
     batch_ids = [itm.batch_id for itm, _ in rows if itm.batch_id]
     batch_names = {}
     if batch_ids:
@@ -159,10 +159,26 @@ async def get_student_and_active_courses(
         batch_names = {b_id: b_name for b_id, b_name in b_res.all()}
 
     subject_ids = [itm.subject_id for itm, _ in rows if itm.subject_id]
-    subject_schedules = {}
+    subjects_map = {}
     if subject_ids:
-        s_res = await db.execute(select(Subject.id, Subject.schedule).where(Subject.id.in_(subject_ids)))
-        subject_schedules = {s_id: s_sched for s_id, s_sched in s_res.all()}
+        s_res = await db.execute(
+            select(Subject)
+            .options(joinedload(Subject.teacher))
+            .where(Subject.id.in_(subject_ids))
+        )
+        subjects_map = {s.id: s for s in s_res.scalars().all()}
+
+    subjects_by_name = {s.name.lower().strip(): s for s in subjects_map.values()}
+    all_raw_names = list({(itm.item_name_snapshot or "").replace("[Renewal] ", "").strip().lower() for itm, _ in rows if itm.item_name_snapshot})
+    missing_names = [name for name in all_raw_names if name and name not in subjects_by_name]
+    if missing_names:
+        sn_res = await db.execute(
+            select(Subject)
+            .options(joinedload(Subject.teacher))
+            .where(func.lower(Subject.name).in_(missing_names))
+        )
+        for s in sn_res.scalars().all():
+            subjects_by_name[s.name.lower().strip()] = s
 
     active_courses_dict = {}
     active_green_card = None
@@ -192,15 +208,20 @@ async def get_student_and_active_courses(
 
         if item.item_type == "GREEN_CARD":
             if not active_green_card:
+                sub = subjects_map.get(item.subject_id) or (subjects_by_name.get(raw_name.lower().strip()) if raw_name else None)
                 v_from = item.valid_from or adm.valid_from
                 v_to = item.valid_to or adm.valid_to
                 days_rem = (v_to - today).days if v_to else None
+                teach_name = (sub.teacher_name if sub and sub.teacher_name else item.teacher_name_snapshot)
+                hall_num = (sub.hall_number if sub and sub.hall_number else item.hall_number_snapshot)
+                class_sched = (sub.schedule if sub and sub.schedule else None)
                 active_green_card = VerificationCourseItem(
                     course_name=raw_name,
                     subject_name="Green Card Membership",
                     batch_name="All Access Pass",
-                    teacher_name=item.teacher_name_snapshot,
-                    hall_number=item.hall_number_snapshot,
+                    teacher_name=teach_name,
+                    hall_number=hall_num,
+                    schedule=class_sched,
                     valid_from=v_from,
                     valid_to=v_to,
                     validity_period=format_period(v_from, v_to),
@@ -229,16 +250,21 @@ async def get_student_and_active_courses(
         days_rem = (latest_end - today).days if latest_end else None
 
         b_name = batch_names.get(latest_item.batch_id) if latest_item.batch_id else None
-        subj_schedule = subject_schedules.get(latest_item.subject_id) if latest_item.subject_id else None
+        sub = subjects_map.get(latest_item.subject_id) or (subjects_by_name.get(raw_name.lower().strip()) if raw_name else None)
+
+        hall_num = (sub.hall_number if sub and sub.hall_number else latest_item.hall_number_snapshot)
+        class_sched = (sub.schedule if sub and sub.schedule else (latest_item.schedule if hasattr(latest_item, "schedule") else None))
+        teach_name = (sub.teacher_name if sub and sub.teacher_name else latest_item.teacher_name_snapshot)
 
         active_courses_list.append(
             VerificationCourseItem(
                 course_name=raw_name,
                 subject_name=raw_name,
                 batch_name=b_name,
-                teacher_name=latest_item.teacher_name_snapshot,
-                hall_number=latest_item.hall_number_snapshot,
-                schedule=subj_schedule,
+                teacher_name=teach_name,
+                hall_number=hall_num,
+                schedule=class_sched,
+                timing=class_sched,
                 valid_from=earliest_start,
                 valid_to=latest_end,
                 validity_period=format_period(earliest_start, latest_end),

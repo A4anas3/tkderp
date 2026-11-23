@@ -6,12 +6,12 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, desc, delete
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
 
 from app.database.session import get_db
 from app.core.dependencies import require_staff, require_cashier_or_admin, require_admin
 from app.database.models import (
-    Payment, PaymentAllocation, Admission, AdmissionItem, Student, User, Refund, AuditLog, FinancialTransaction
+    Payment, PaymentAllocation, Admission, AdmissionItem, Student, User, Refund, AuditLog, FinancialTransaction, Subject
 )
 from app.modules.payments.schemas import (
     PaymentCreate, PaymentUpdate, PaymentResponse, PaymentAllocationResponse, PaymentReceiptResponse,
@@ -298,7 +298,7 @@ async def get_payment_receipt(
         select(Payment)
         .options(
             selectinload(Payment.allocations),
-            selectinload(Payment.admission).selectinload(Admission.items),
+            selectinload(Payment.admission).selectinload(Admission.items).joinedload(AdmissionItem.subject).joinedload(Subject.teacher),
             selectinload(Payment.student)
         )
         .where(Payment.id == payment_id)
@@ -309,12 +309,20 @@ async def get_payment_receipt(
         raise HTTPException(status_code=404, detail="Payment not found")
 
     item_names = {itm.id: itm.item_name_snapshot for itm in p.admission.items}
-    item_schedules = {itm.id: (itm.schedule or (itm.subject.schedule if getattr(itm, "subject", None) else None)) for itm in p.admission.items}
+    item_schedules = {itm.id: (itm.subject.schedule if getattr(itm, "subject", None) and itm.subject.schedule else itm.schedule) for itm in p.admission.items}
+    item_halls = {itm.id: (itm.subject.hall_number if getattr(itm, "subject", None) and itm.subject.hall_number else itm.hall_number_snapshot) for itm in p.admission.items}
+    item_teachers = {itm.id: (itm.subject.teacher_name if getattr(itm, "subject", None) and itm.subject.teacher_name else itm.teacher_name_snapshot) for itm in p.admission.items}
     alloc_data = [
         {
+            "admission_item_id": str(a.admission_item_id),
             "item_name": item_names.get(a.admission_item_id, "Item"),
+            "subject_name": item_names.get(a.admission_item_id, "Item"),
             "amount": a.allocated_amount,
-            "schedule": item_schedules.get(a.admission_item_id)
+            "allocated_amount": a.allocated_amount,
+            "schedule": item_schedules.get(a.admission_item_id),
+            "timing": item_schedules.get(a.admission_item_id),
+            "hall_number": item_halls.get(a.admission_item_id),
+            "teacher_name": item_teachers.get(a.admission_item_id)
         }
         for a in p.allocations
     ]

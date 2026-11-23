@@ -567,7 +567,7 @@ async def get_admission_slips(
     query = (
         select(Admission)
         .options(
-            selectinload(Admission.items),
+            selectinload(Admission.items).joinedload(AdmissionItem.subject).joinedload(Subject.teacher),
             selectinload(Admission.student)
         )
         .where(Admission.id == admission_id)
@@ -630,6 +630,19 @@ async def get_admission_slips(
         "notes": admission.notes,
         "valid_from": admission.valid_from.isoformat() if admission.valid_from else None,
         "valid_to": admission.valid_to.isoformat() if admission.valid_to else None,
+        "allocations": [
+            {
+                "item_name": itm.item_name_snapshot,
+                "subject_name": itm.item_name_snapshot,
+                "amount": float(itm.net_price),
+                "allocated_amount": float(itm.net_price),
+                "schedule": (itm.subject.schedule if getattr(itm, "subject", None) and itm.subject.schedule else itm.schedule),
+                "timing": (itm.subject.schedule if getattr(itm, "subject", None) and itm.subject.schedule else itm.schedule),
+                "hall_number": (itm.subject.hall_number if getattr(itm, "subject", None) and itm.subject.hall_number else itm.hall_number_snapshot),
+                "teacher_name": (itm.subject.teacher_name if getattr(itm, "subject", None) and itm.subject.teacher_name else itm.teacher_name_snapshot)
+            }
+            for itm in admission.items
+        ],
         "items": [
             {
                 "id": str(itm.id),
@@ -637,9 +650,13 @@ async def get_admission_slips(
                 "batch_id": str(itm.batch_id) if itm.batch_id else None,
                 "subject_id": str(itm.subject_id) if itm.subject_id else None,
                 "item_name_snapshot": itm.item_name_snapshot,
-                "teacher_name_snapshot": itm.teacher_name_snapshot,
-                "hall_number_snapshot": itm.hall_number_snapshot,
-                "schedule": itm.schedule or (itm.subject.schedule if getattr(itm, "subject", None) else None),
+                "item_name": itm.item_name_snapshot,
+                "teacher_name_snapshot": (itm.subject.teacher_name if getattr(itm, "subject", None) and itm.subject.teacher_name else itm.teacher_name_snapshot),
+                "teacher_name": (itm.subject.teacher_name if getattr(itm, "subject", None) and itm.subject.teacher_name else itm.teacher_name_snapshot),
+                "hall_number_snapshot": (itm.subject.hall_number if getattr(itm, "subject", None) and itm.subject.hall_number else itm.hall_number_snapshot),
+                "hall_number": (itm.subject.hall_number if getattr(itm, "subject", None) and itm.subject.hall_number else itm.hall_number_snapshot),
+                "schedule": (itm.subject.schedule if getattr(itm, "subject", None) and itm.subject.schedule else itm.schedule),
+                "timing": (itm.subject.schedule if getattr(itm, "subject", None) and itm.subject.schedule else itm.schedule),
                 "original_price": float(itm.original_price),
                 "discount_amount": float(itm.discount_amount),
                 "overall_discount_share": float(itm.overall_discount_share),
@@ -672,13 +689,20 @@ async def get_admission_slips(
 
     # 2. Payments (1st partial, 2nd payment, balance clearing, etc.)
     item_names_map = {itm.id: itm.item_name_snapshot for itm in admission.items}
-    item_schedules_map = {itm.id: (itm.schedule or (itm.subject.schedule if getattr(itm, "subject", None) else None)) for itm in admission.items}
+    item_schedules_map = {itm.id: (itm.subject.schedule if getattr(itm, "subject", None) and itm.subject.schedule else itm.schedule) for itm in admission.items}
+    item_halls_map = {itm.id: (itm.subject.hall_number if getattr(itm, "subject", None) and itm.subject.hall_number else itm.hall_number_snapshot) for itm in admission.items}
+    item_teachers_map = {itm.id: (itm.subject.teacher_name if getattr(itm, "subject", None) and itm.subject.teacher_name else itm.teacher_name_snapshot) for itm in admission.items}
     for idx, p in enumerate(payments):
         alloc_data = [
             {
                 "item_name": item_names_map.get(a.admission_item_id, "Course Item"),
+                "subject_name": item_names_map.get(a.admission_item_id, "Course Item"),
                 "allocated_amount": float(a.allocated_amount),
-                "schedule": item_schedules_map.get(a.admission_item_id)
+                "amount": float(a.allocated_amount),
+                "schedule": item_schedules_map.get(a.admission_item_id),
+                "timing": item_schedules_map.get(a.admission_item_id),
+                "hall_number": item_halls_map.get(a.admission_item_id),
+                "teacher_name": item_teachers_map.get(a.admission_item_id)
             }
             for a in p.allocations
         ]
@@ -820,6 +844,7 @@ async def get_admission_slips(
         valid_from=admission.valid_from,
         valid_to=admission.valid_to,
         written_off_amount=admission.written_off_amount or Decimal("0.00"),
+        allocations=adm_dict["allocations"],
         items=admission.items,
         slips=slips
     )

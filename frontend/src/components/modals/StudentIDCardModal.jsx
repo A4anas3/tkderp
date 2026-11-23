@@ -235,11 +235,25 @@ export default function StudentIDCardModal({
                           </span>
                         </div>
 
-                        {/* Class Timing */}
-                        {course.schedule && (
-                          <div className="text-[10px] text-slate-700 font-medium flex items-center gap-1">
-                            <Clock className="w-3 h-3 text-slate-500 shrink-0" />
-                            <span>Timing: <strong className="text-black">{course.schedule}</strong></span>
+                        {/* Class Timing, Hall Number & Teacher Name */}
+                        {((course.schedule || course.timing) || course.hall_number || course.teacher_name) && (
+                          <div className="text-[10px] text-slate-700 font-medium flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
+                            {(course.schedule || course.timing) && (
+                              <div className="flex items-center gap-1">
+                                <Clock className="w-3 h-3 text-slate-500 shrink-0" />
+                                <span>Timing: <strong className="text-black">{course.schedule || course.timing}</strong></span>
+                              </div>
+                            )}
+                            {course.hall_number && (
+                              <span>
+                                Hall: <strong className="text-black">{course.hall_number}</strong>
+                              </span>
+                            )}
+                            {course.teacher_name && (
+                              <span>
+                                Teacher: <strong className="text-black">{course.teacher_name}</strong>
+                              </span>
+                            )}
                           </div>
                         )}
 
