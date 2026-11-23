@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   GraduationCap,
   Phone,
@@ -9,7 +10,8 @@ import {
   XCircle,
   Edit2,
   BookOpen,
-  Users
+  Users,
+  ExternalLink
 } from 'lucide-react';
 import Modal from '../common/Modal';
 import Button from '../common/Button';
@@ -24,6 +26,7 @@ export default function TeacherDetailModal({
   onEditTeacher,
   onViewRoster,
 }) {
+  const navigate = useNavigate();
   if (!teacher) return null;
 
   const isActive = teacher.status === 'ACTIVE';
@@ -140,6 +143,19 @@ export default function TeacherDetailModal({
         <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 pt-2 border-t border-slate-200">
           <Button size="sm" variant="secondary" onClick={onClose} className="w-full sm:w-auto">
             Close
+          </Button>
+
+          <Button
+            size="sm"
+            variant="primary"
+            icon={ExternalLink}
+            className="w-full sm:w-auto"
+            onClick={() => {
+              onClose();
+              navigate(`/teachers/${teacher.id || teacher.teacher_id}`);
+            }}
+          >
+            Open Teacher Page
           </Button>
 
           {onViewRoster && (

@@ -111,6 +111,8 @@ export default function SubjectDetailPage() {
             subject_name: sData.name,
             subject_code: sData.subject_code,
             default_fee: sData.default_fee || 0,
+            teacher_id: sData.teacher_id,
+            teacher_name: sData.teacher_name_snapshot,
             enrolled_count: 0,
             total_enrollments: 0,
             active_enrollments: 0,
@@ -671,7 +673,18 @@ export default function SubjectDetailPage() {
 
                       {/* Faculty & Hall */}
                       <td className="p-3 text-slate-700">
-                        <div className="font-semibold text-black">{s.teacher_name || 'Faculty'}</div>
+                        {s.teacher_id || subject.teacher_id ? (
+                          <Link
+                            to={`/teachers/${s.teacher_id || subject.teacher_id}`}
+                            className="font-semibold text-odoo-700 hover:text-odoo-900 hover:underline inline-block"
+                            onClick={(e) => e.stopPropagation()}
+                            title="Open Teacher detail page"
+                          >
+                            {s.teacher_name || subject.teacher_name || 'Faculty'}
+                          </Link>
+                        ) : (
+                          <div className="font-semibold text-black">{s.teacher_name || 'Faculty'}</div>
+                        )}
                         <div className="text-[11px] text-slate-500">
                           {s.hall_number ? `Hall: ${s.hall_number}` : 'Main Campus'}
                         </div>

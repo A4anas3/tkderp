@@ -59,6 +59,18 @@ export const teacherApi = {
     const res = await api.get(`/teachers/${id}/roster`, { params });
     return res.data;
   },
+  getBreakup: async (id) => {
+    const res = await api.get(`/teachers/${id}/breakup`);
+    return res.data;
+  },
+  getHistory: async (id, params) => {
+    const res = await api.get(`/teachers/${id}/history`, { params });
+    return res.data;
+  },
+  getCollections: async (id) => {
+    const res = await api.get(`/teachers/${id}/collections`);
+    return res.data;
+  },
   uploadPhoto: async (id, file) => {
     const formData = new FormData();
     formData.append('file', file);

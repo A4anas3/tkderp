@@ -53,10 +53,20 @@ class TeacherStatusUpdate(BaseModel):
     status: str = Field(..., pattern="^(ACTIVE|INACTIVE)$")
     reason: Optional[str] = None
 
+class TeacherSubjectDetailItem(BaseModel):
+    id: uuid.UUID
+    name: str
+    subject_code: str
+    default_fee: float = 0.0
+    status: str = "ACTIVE"
+    class_category: Optional[str] = None
+    students_count: int = 0
+
 class TeacherResponse(TeacherBase):
     id: uuid.UUID
     teacher_code: str
     user_id: Optional[uuid.UUID] = None
+    subjects_taught: List[TeacherSubjectDetailItem] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -153,3 +163,125 @@ class TeacherEarningsResponse(BaseModel):
     payable: Decimal
     by_subject: List[TeacherSubjectEarningItem]
     payouts: List[dict]
+
+
+# --- Teacher History, Breakup & Collection Schemas (G3 Mirror) ---
+
+class TeacherHistoryEvent(BaseModel):
+    event_id: str
+    event_type: str  # ADMISSION, RENEWAL, EXPIRY, CHANGE, CANCELLATION
+    event_title: str
+    event_date: date
+    timestamp: datetime
+    admission_id: uuid.UUID
+    admission_number: str
+    item_id: uuid.UUID
+    student_id: uuid.UUID
+    student_code: str
+    student_name: str
+    mobile: Optional[str] = None
+    subject_id: Optional[uuid.UUID] = None
+    subject_name: str
+    subject_code: Optional[str] = None
+    valid_from: Optional[date] = None
+    valid_to: Optional[date] = None
+    fee_amount: float = 0.0
+    amount_collected: float = 0.0
+    balance_due: float = 0.0
+    status: str
+    reason_or_notes: Optional[str] = None
+    badge_variant: str = "primary"
+
+
+class TeacherHistoryResponse(BaseModel):
+    teacher_id: uuid.UUID
+    teacher_name: str
+    teacher_code: str
+    total_events: int
+    admissions_count: int
+    renewals_count: int
+    expiries_count: int
+    changes_count: int
+    cancellations_count: int
+    events: List[TeacherHistoryEvent] = []
+
+
+class TeacherSubjectBreakupItem(BaseModel):
+    subject_id: uuid.UUID
+    subject_code: str
+    subject_name: str
+    default_fee: float
+    status: str
+    students_enrolled: int
+    total_enrollments: int
+    fees_billed: float
+    collected: float
+    due: float
+    waived: float
+    refunded: float
+    net_revenue: float
+    collection_efficiency: float
+
+
+class TeacherStudentBreakupItem(BaseModel):
+    student_id: uuid.UUID
+    student_code: str
+    student_name: str
+    mobile: Optional[str] = None
+    subject_id: Optional[uuid.UUID] = None
+    subject_name: str
+    hall_number: Optional[str] = None
+    fee_billed: float
+    fee_collected: float
+    balance_due: float
+    waived: float
+    cycle_status: str
+    payment_status: str
+
+
+class TeacherBreakupResponse(BaseModel):
+    teacher_id: uuid.UUID
+    teacher_name: str
+    teacher_code: str
+    status: str
+    students_enrolled: int
+    total_enrollments: int
+    unique_students_count: int
+    total_fees_billed: float
+    total_collected: float
+    total_due: float
+    total_waived: float
+    total_refunded: float
+    net_revenue: float
+    collection_efficiency: float
+    subjects: List[TeacherSubjectBreakupItem] = []
+    students: List[TeacherStudentBreakupItem] = []
+
+
+class TeacherCollectionItem(BaseModel):
+    payment_id: uuid.UUID
+    payment_number: str
+    payment_date: datetime
+    amount: float
+    payment_mode: str
+    transaction_reference: Optional[str] = None
+    student_id: uuid.UUID
+    student_name: str
+    student_code: str
+    admission_id: uuid.UUID
+    admission_number: str
+    fee_period: Optional[str] = None
+    collector_name: str
+    notes: Optional[str] = None
+    subject_names: List[str] = []
+
+
+class TeacherCollectionsResponse(BaseModel):
+    teacher_id: uuid.UUID
+    teacher_name: str
+    teacher_code: str
+    total_collected: float
+    collections_count: int
+    by_mode: dict = {}
+    items: List[TeacherCollectionItem] = []
+

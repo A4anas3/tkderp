@@ -4,6 +4,7 @@ from sqlalchemy import select, func, or_, and_, desc, case
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Optional, List
+from collections import defaultdict
 import uuid
 import os
 import json
@@ -15,11 +16,15 @@ from app.modules.teachers.models import Teacher, TeacherEarning
 from app.modules.teachers.schemas import (
     TeacherCreate, TeacherUpdate, TeacherResponse, TeacherStatusUpdate,
     TeacherEnrollmentItem, TeacherRosterMetrics, TeacherRosterResponse, TeacherSubjectOption,
-    TeacherPayoutCreate, TeacherPayoutResponse, TeacherEarningsResponse, TeacherSubjectEarningItem
+    TeacherPayoutCreate, TeacherPayoutResponse, TeacherEarningsResponse, TeacherSubjectEarningItem,
+    TeacherSubjectDetailItem, TeacherHistoryEvent, TeacherHistoryResponse,
+    TeacherSubjectBreakupItem, TeacherStudentBreakupItem, TeacherBreakupResponse,
+    TeacherCollectionItem, TeacherCollectionsResponse
 )
 from app.modules.batches.models import Batch
 from app.modules.subjects.models import Subject
 from app.modules.admissions.models import Admission, AdmissionItem
+from app.modules.payments.models import Payment, PaymentAllocation, Refund
 from app.modules.students.models import Student
 from app.modules.expenses.models import SalaryRecord
 from app.database.models import AuditLog
@@ -104,7 +109,45 @@ async def get_teacher(teacher_id: uuid.UUID, db: AsyncSession = Depends(get_db),
     teacher = (await db.execute(select(Teacher).where(Teacher.id == teacher_id))).scalar_one_or_none()
     if not teacher:
         raise HTTPException(status_code=404, detail="Teacher not found")
-    return TeacherResponse.model_validate(teacher)
+
+    # Load subjects taught by this faculty member
+    subs_res = await db.execute(
+        select(Subject).where(Subject.teacher_id == teacher.id).order_by(Subject.name.asc())
+    )
+    subs = subs_res.scalars().all()
+
+    today = today_kolkata()
+    active_cond = active_student_subject_filter(AdmissionItem, Admission, today)
+    cnt_map = {}
+    if subs:
+        sub_ids = [s.id for s in subs]
+        cnt_stmt = (
+            select(AdmissionItem.subject_id, func.count(AdmissionItem.id))
+            .join(Admission, AdmissionItem.admission_id == Admission.id)
+            .where(
+                AdmissionItem.subject_id.in_(sub_ids),
+                active_cond
+            )
+            .group_by(AdmissionItem.subject_id)
+        )
+        cnt_map = dict((await db.execute(cnt_stmt)).all())
+
+    subjects_detail = [
+        TeacherSubjectDetailItem(
+            id=s.id,
+            name=s.name,
+            subject_code=s.subject_code,
+            default_fee=float(s.default_fee or 0),
+            status=s.status,
+            class_category=s.class_category,
+            students_count=cnt_map.get(s.id, 0)
+        )
+        for s in subs
+    ]
+
+    resp = TeacherResponse.model_validate(teacher)
+    resp.subjects_taught = subjects_detail
+    return resp
 
 @router.post("", response_model=TeacherResponse, status_code=status.HTTP_201_CREATED)
 async def create_teacher(
@@ -727,3 +770,528 @@ async def create_teacher_payout(
         salary_record_id=earning.salary_record_id,
         notes=earning.notes
     )
+
+
+@router.get("/{teacher_id}/breakup", response_model=TeacherBreakupResponse)
+async def get_teacher_breakup(
+    teacher_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user = Depends(require_staff)
+):
+    """
+    Teacher-wise financial breakup mirroring Subject module (G3):
+    Students currently enrolled, total fees billed, collected, due, waived, refunded,
+    plus per-subject breakup and enrolled scholar ledger.
+    All figures derived strictly from the backend ledger as single source of truth.
+    """
+    teacher = (await db.execute(select(Teacher).where(Teacher.id == teacher_id))).scalar_one_or_none()
+    if not teacher:
+        raise HTTPException(status_code=404, detail="Teacher not found")
+
+    today = today_kolkata()
+
+    # 1. Base teacher filter for course enrollments
+    b_ids = (await db.execute(select(Batch.id).where(Batch.teacher_id == teacher_id))).scalars().all()
+    s_ids = (await db.execute(select(Subject.id).where(Subject.teacher_id == teacher_id))).scalars().all()
+
+    where_cond = [AdmissionItem.teacher_id == teacher_id]
+    if b_ids: where_cond.append(AdmissionItem.batch_id.in_(b_ids))
+    if s_ids: where_cond.append(AdmissionItem.subject_id.in_(s_ids))
+    base_teacher_filter = or_(*where_cond)
+
+    # 2. Overall aggregation from database
+    active_cond = active_student_subject_filter(AdmissionItem, Admission, today)
+    overall_stmt = (
+        select(
+            func.coalesce(func.sum(AdmissionItem.net_price), Decimal("0.00")),
+            func.coalesce(func.sum(AdmissionItem.balance_due), Decimal("0.00")),
+            func.coalesce(func.sum(AdmissionItem.written_off_amount), Decimal("0.00")),
+            func.count(AdmissionItem.id),
+            func.count(case((active_cond, 1), else_=None)),
+            func.count(func.distinct(Admission.student_id))
+        )
+        .join(Admission, AdmissionItem.admission_id == Admission.id)
+        .where(and_(base_teacher_filter, Admission.status != "CANCELLED"))
+    )
+    billed_tot, due_tot, waived_tot, total_enr, active_enr, uniq_stu = (await db.execute(overall_stmt)).one()
+
+    # Ledger collected strictly from PaymentAllocation
+    ledger_coll_stmt = (
+        select(func.coalesce(func.sum(PaymentAllocation.allocated_amount), Decimal("0.00")))
+        .join(AdmissionItem, PaymentAllocation.admission_item_id == AdmissionItem.id)
+        .where(base_teacher_filter)
+    )
+    collected_tot = (await db.execute(ledger_coll_stmt)).scalar() or Decimal("0.00")
+
+    # Ledger refunded
+    ref_stmt = (
+        select(func.coalesce(func.sum(func.abs(PaymentAllocation.allocated_amount)), Decimal("0.00")))
+        .join(AdmissionItem, PaymentAllocation.admission_item_id == AdmissionItem.id)
+        .where(and_(base_teacher_filter, PaymentAllocation.allocated_amount < Decimal("0.00")))
+    )
+    refunded_tot = (await db.execute(ref_stmt)).scalar() or Decimal("0.00")
+
+    billed_f = float(billed_tot)
+    coll_f = float(collected_tot)
+    due_f = float(max(Decimal("0.00"), billed_tot - collected_tot - waived_tot))
+    waived_f = float(waived_tot)
+    ref_f = float(refunded_tot)
+    net_rev_f = float(collected_tot - refunded_tot)
+    eff_pct = min(100.0, round((coll_f / billed_f * 100), 1)) if billed_f > 0 else 100.0
+
+    # 3. Per-Subject Breakup
+    all_subj_ids = set(s_ids)
+    assigned_subj_ids = (await db.execute(
+        select(AdmissionItem.subject_id)
+        .where(base_teacher_filter, AdmissionItem.subject_id.is_not(None))
+        .distinct()
+    )).scalars().all()
+    all_subj_ids.update(assigned_subj_ids)
+
+    subjects_list = []
+    if all_subj_ids:
+        all_subjects = (await db.execute(
+            select(Subject).where(Subject.id.in_(all_subj_ids)).order_by(Subject.name.asc())
+        )).scalars().all()
+
+        sub_stmt = (
+            select(
+                AdmissionItem.subject_id,
+                func.coalesce(func.sum(AdmissionItem.net_price), Decimal("0.00")),
+                func.coalesce(func.sum(AdmissionItem.balance_due), Decimal("0.00")),
+                func.coalesce(func.sum(AdmissionItem.written_off_amount), Decimal("0.00")),
+                func.count(AdmissionItem.id),
+                func.count(case((active_cond, 1), else_=None))
+            )
+            .join(Admission, AdmissionItem.admission_id == Admission.id)
+            .where(and_(base_teacher_filter, AdmissionItem.subject_id.is_not(None), Admission.status != "CANCELLED"))
+            .group_by(AdmissionItem.subject_id)
+        )
+        sub_metrics_map = {row[0]: row[1:] for row in (await db.execute(sub_stmt)).all()}
+
+        s_coll_stmt = (
+            select(
+                AdmissionItem.subject_id,
+                func.coalesce(func.sum(PaymentAllocation.allocated_amount), Decimal("0.00"))
+            )
+            .join(AdmissionItem, PaymentAllocation.admission_item_id == AdmissionItem.id)
+            .where(and_(base_teacher_filter, AdmissionItem.subject_id.is_not(None)))
+            .group_by(AdmissionItem.subject_id)
+        )
+        s_coll_map = dict((await db.execute(s_coll_stmt)).all())
+
+        s_ref_stmt = (
+            select(
+                AdmissionItem.subject_id,
+                func.coalesce(func.sum(func.abs(PaymentAllocation.allocated_amount)), Decimal("0.00"))
+            )
+            .join(AdmissionItem, PaymentAllocation.admission_item_id == AdmissionItem.id)
+            .where(and_(base_teacher_filter, AdmissionItem.subject_id.is_not(None), PaymentAllocation.allocated_amount < Decimal("0.00")))
+            .group_by(AdmissionItem.subject_id)
+        )
+        s_ref_map = dict((await db.execute(s_ref_stmt)).all())
+
+        for sub in all_subjects:
+            s_billed, s_due, s_waived, s_tot_enr, s_act_enr = sub_metrics_map.get(sub.id, (Decimal("0.00"), Decimal("0.00"), Decimal("0.00"), 0, 0))
+            s_coll = s_coll_map.get(sub.id, Decimal("0.00"))
+            s_ref = s_ref_map.get(sub.id, Decimal("0.00"))
+
+            sb_f = float(s_billed)
+            sc_f = float(s_coll)
+            sd_f = float(max(Decimal("0.00"), s_billed - s_coll - s_waived))
+            sw_f = float(s_waived)
+            sr_f = float(s_ref)
+            s_eff = min(100.0, round((sc_f / sb_f * 100), 1)) if sb_f > 0 else 100.0
+
+            subjects_list.append(TeacherSubjectBreakupItem(
+                subject_id=sub.id,
+                subject_code=sub.subject_code,
+                subject_name=sub.name,
+                default_fee=float(sub.default_fee or 0),
+                status=sub.status,
+                students_enrolled=s_act_enr or 0,
+                total_enrollments=s_tot_enr or 0,
+                fees_billed=sb_f,
+                collected=sc_f,
+                due=sd_f,
+                waived=sw_f,
+                refunded=sr_f,
+                net_revenue=float(s_coll - s_ref),
+                collection_efficiency=s_eff
+            ))
+
+    # 4. Student-wise breakup list
+    stu_rows = (await db.execute(
+        select(AdmissionItem, Admission, Student, Subject)
+        .join(Admission, AdmissionItem.admission_id == Admission.id)
+        .join(Student, Admission.student_id == Student.id)
+        .outerjoin(Subject, AdmissionItem.subject_id == Subject.id)
+        .where(base_teacher_filter)
+        .order_by(desc(Admission.admission_date), Student.name.asc())
+    )).all()
+
+    stu_item_ids = [itm.id for itm, adm, stu, sub in stu_rows]
+    stu_coll_map = await get_item_allocated_collected_map(db, stu_item_ids)
+
+    students_list = []
+    for itm, adm, stu, sub in stu_rows:
+        c_end = itm.valid_to or adm.valid_to or (adm.admission_date + timedelta(days=30))
+        if adm.status in ("CANCELLED", "REVOKED"):
+            c_status = "CANCELLED"
+        elif today > c_end:
+            c_status = "INACTIVE"
+        else:
+            c_status = "ACTIVE"
+
+        c_collected = float(stu_coll_map.get(itm.id, Decimal("0.00")))
+        b_due = float(max(Decimal("0.00"), (itm.net_price or Decimal("0.00")) - Decimal(str(c_collected)) - (itm.written_off_amount or Decimal("0.00"))))
+
+        students_list.append(TeacherStudentBreakupItem(
+            student_id=stu.id,
+            student_code=stu.student_code,
+            student_name=stu.name,
+            mobile=stu.mobile,
+            subject_id=sub.id if sub else itm.subject_id,
+            subject_name=sub.name if sub else (itm.item_name_snapshot or "Subject"),
+            hall_number=itm.hall_number_snapshot or (sub.hall_number if sub else "Main"),
+            fee_billed=float(itm.net_price or 0),
+            fee_collected=c_collected,
+            balance_due=b_due,
+            waived=float(itm.written_off_amount or 0),
+            cycle_status=c_status,
+            payment_status=adm.payment_status
+        ))
+
+    return TeacherBreakupResponse(
+        teacher_id=teacher.id,
+        teacher_name=teacher.name,
+        teacher_code=teacher.teacher_code,
+        status=teacher.status,
+        students_enrolled=active_enr or 0,
+        total_enrollments=total_enr or 0,
+        unique_students_count=uniq_stu or 0,
+        total_fees_billed=billed_f,
+        total_collected=coll_f,
+        total_due=due_f,
+        total_waived=waived_f,
+        total_refunded=ref_f,
+        net_revenue=net_rev_f,
+        collection_efficiency=eff_pct,
+        subjects=subjects_list,
+        students=students_list
+    )
+
+
+@router.get("/{teacher_id}/history", response_model=TeacherHistoryResponse)
+async def get_teacher_history(
+    teacher_id: uuid.UUID,
+    event_type: Optional[str] = Query(None, description="Filter: ALL, ADMISSION, RENEWAL, EXPIRY, CHANGE, CANCELLATION"),
+    search: Optional[str] = Query(None, description="Search student, code, or subject"),
+    db: AsyncSession = Depends(get_db),
+    user = Depends(require_staff)
+):
+    """
+    Chronological history of every admission, renewal, expiry, change and cancellation
+    for that teacher's subjects.
+    """
+    teacher = (await db.execute(select(Teacher).where(Teacher.id == teacher_id))).scalar_one_or_none()
+    if not teacher:
+        raise HTTPException(status_code=404, detail="Teacher not found")
+
+    today = today_kolkata()
+
+    b_ids = (await db.execute(select(Batch.id).where(Batch.teacher_id == teacher_id))).scalars().all()
+    s_ids = (await db.execute(select(Subject.id).where(Subject.teacher_id == teacher_id))).scalars().all()
+
+    where_cond = [AdmissionItem.teacher_id == teacher_id]
+    if b_ids: where_cond.append(AdmissionItem.batch_id.in_(b_ids))
+    if s_ids: where_cond.append(AdmissionItem.subject_id.in_(s_ids))
+    base_teacher_filter = or_(*where_cond)
+
+    rows = (await db.execute(
+        select(AdmissionItem, Admission, Student, Subject)
+        .join(Admission, AdmissionItem.admission_id == Admission.id)
+        .join(Student, Admission.student_id == Student.id)
+        .outerjoin(Subject, AdmissionItem.subject_id == Subject.id)
+        .where(base_teacher_filter)
+        .order_by(desc(Admission.admission_date), desc(AdmissionItem.created_at))
+    )).all()
+
+    item_ids = [itm.id for itm, adm, stu, sub in rows]
+    coll_map = await get_item_allocated_collected_map(db, item_ids)
+
+    all_events = []
+    admissions_cnt = 0
+    renewals_cnt = 0
+    expiries_cnt = 0
+    changes_cnt = 0
+    cancellations_cnt = 0
+
+    for itm, adm, stu, sub in rows:
+        sub_name = sub.name if sub else (itm.item_name_snapshot or "Course Subject")
+        sub_code = sub.subject_code if sub else ""
+        c_coll = float(coll_map.get(itm.id, Decimal("0.00")))
+        b_due = float(itm.balance_due or 0)
+        net_p = float(itm.net_price or 0)
+
+        # 1. CANCELLATION event
+        is_cancelled = adm.status in ("CANCELLED", "REVOKED") or itm.status in ("CANCELLED", "REVOKED")
+        if is_cancelled:
+            cancellations_cnt += 1
+            ts = adm.revoked_at or itm.discontinued_at or itm.updated_at or itm.created_at
+            all_events.append(TeacherHistoryEvent(
+                event_id=f"cnc-{itm.id}",
+                event_type="CANCELLATION",
+                event_title=f"Enrollment Cancelled / Revoked ({adm.revoke_type or adm.status})",
+                event_date=ts.date() if isinstance(ts, datetime) else ts,
+                timestamp=ts if isinstance(ts, datetime) else datetime.combine(ts, datetime.min.time(), tzinfo=timezone.utc),
+                admission_id=adm.id,
+                admission_number=adm.admission_number,
+                item_id=itm.id,
+                student_id=stu.id,
+                student_code=stu.student_code,
+                student_name=stu.name,
+                mobile=stu.mobile,
+                subject_id=sub.id if sub else itm.subject_id,
+                subject_name=sub_name,
+                subject_code=sub_code,
+                valid_from=itm.valid_from,
+                valid_to=itm.valid_to,
+                fee_amount=net_p,
+                amount_collected=c_coll,
+                balance_due=b_due,
+                status="CANCELLED",
+                reason_or_notes=adm.revocation_reason or adm.notes or itm.lifecycle_reason or "Enrollment cancelled",
+                badge_variant="danger"
+            ))
+
+        # 2. CHANGE event (discontinued / swapped subject)
+        is_change = itm.status == "DISCONTINUED" or (itm.lifecycle_reason and "changed" in itm.lifecycle_reason.lower())
+        if is_change:
+            changes_cnt += 1
+            ts = itm.discontinued_at or itm.created_at
+            all_events.append(TeacherHistoryEvent(
+                event_id=f"chg-{itm.id}",
+                event_type="CHANGE",
+                event_title=f"Subject Changed ({sub_name})",
+                event_date=ts.date() if isinstance(ts, datetime) else ts,
+                timestamp=ts if isinstance(ts, datetime) else datetime.combine(ts, datetime.min.time(), tzinfo=timezone.utc),
+                admission_id=adm.id,
+                admission_number=adm.admission_number,
+                item_id=itm.id,
+                student_id=stu.id,
+                student_code=stu.student_code,
+                student_name=stu.name,
+                mobile=stu.mobile,
+                subject_id=sub.id if sub else itm.subject_id,
+                subject_name=sub_name,
+                subject_code=sub_code,
+                valid_from=itm.valid_from,
+                valid_to=itm.valid_to,
+                fee_amount=net_p,
+                amount_collected=c_coll,
+                balance_due=b_due,
+                status="DISCONTINUED",
+                reason_or_notes=itm.lifecycle_reason or "Subject changed / transferred",
+                badge_variant="purple"
+            ))
+
+        # 3. EXPIRY event (if past valid_to and not cancelled)
+        if itm.valid_to and itm.valid_to < today and not is_cancelled:
+            expiries_cnt += 1
+            days_ago = (today - itm.valid_to).days
+            ts = datetime.combine(itm.valid_to, datetime.max.time(), tzinfo=timezone.utc)
+            all_events.append(TeacherHistoryEvent(
+                event_id=f"exp-{itm.id}",
+                event_type="EXPIRY",
+                event_title=f"Course Cycle Expired ({days_ago}d ago)",
+                event_date=itm.valid_to,
+                timestamp=ts,
+                admission_id=adm.id,
+                admission_number=adm.admission_number,
+                item_id=itm.id,
+                student_id=stu.id,
+                student_code=stu.student_code,
+                student_name=stu.name,
+                mobile=stu.mobile,
+                subject_id=sub.id if sub else itm.subject_id,
+                subject_name=sub_name,
+                subject_code=sub_code,
+                valid_from=itm.valid_from,
+                valid_to=itm.valid_to,
+                fee_amount=net_p,
+                amount_collected=c_coll,
+                balance_due=b_due,
+                status="EXPIRED",
+                reason_or_notes=f"Monthly billing cycle ended on {itm.valid_to.strftime('%d %b %Y')}",
+                badge_variant="warning"
+            ))
+
+        # 4. RENEWAL vs ADMISSION event
+        is_renewal = itm.renewed_from_item_id is not None or (itm.renewal_count and itm.renewal_count > 0)
+        if is_renewal:
+            renewals_cnt += 1
+            cycle_num = itm.renewal_count or 1
+            ts = itm.created_at
+            all_events.append(TeacherHistoryEvent(
+                event_id=f"rnw-{itm.id}",
+                event_type="RENEWAL",
+                event_title=f"Course Renewal (Cycle #{cycle_num})",
+                event_date=itm.valid_from or adm.admission_date,
+                timestamp=ts,
+                admission_id=adm.id,
+                admission_number=adm.admission_number,
+                item_id=itm.id,
+                student_id=stu.id,
+                student_code=stu.student_code,
+                student_name=stu.name,
+                mobile=stu.mobile,
+                subject_id=sub.id if sub else itm.subject_id,
+                subject_name=sub_name,
+                subject_code=sub_code,
+                valid_from=itm.valid_from,
+                valid_to=itm.valid_to,
+                fee_amount=net_p,
+                amount_collected=c_coll,
+                balance_due=b_due,
+                status=itm.status,
+                reason_or_notes=f"Renewed course cycle for {sub_name}",
+                badge_variant="success"
+            ))
+        else:
+            admissions_cnt += 1
+            ts = itm.created_at or datetime.combine(adm.admission_date, datetime.min.time(), tzinfo=timezone.utc)
+            all_events.append(TeacherHistoryEvent(
+                event_id=f"adm-{itm.id}",
+                event_type="ADMISSION",
+                event_title=f"Initial Admission & Enrollment",
+                event_date=adm.admission_date,
+                timestamp=ts,
+                admission_id=adm.id,
+                admission_number=adm.admission_number,
+                item_id=itm.id,
+                student_id=stu.id,
+                student_code=stu.student_code,
+                student_name=stu.name,
+                mobile=stu.mobile,
+                subject_id=sub.id if sub else itm.subject_id,
+                subject_name=sub_name,
+                subject_code=sub_code,
+                valid_from=itm.valid_from,
+                valid_to=itm.valid_to,
+                fee_amount=net_p,
+                amount_collected=c_coll,
+                balance_due=b_due,
+                status=itm.status,
+                reason_or_notes=f"Admitted to {sub_name} under #{adm.admission_number}",
+                badge_variant="primary"
+            ))
+
+    # Sort chronologically descending
+    all_events.sort(key=lambda x: x.timestamp, reverse=True)
+
+    # Filter by event_type if specified
+    filtered_events = all_events
+    if event_type and event_type.upper() != "ALL":
+        filtered_events = [e for e in filtered_events if e.event_type.upper() == event_type.upper()]
+
+    if search and search.strip():
+        q = search.strip().lower()
+        filtered_events = [
+            e for e in filtered_events
+            if q in e.student_name.lower() or q in e.student_code.lower() or q in (e.mobile or "") or q in e.subject_name.lower() or q in (e.subject_code or "").lower() or q in e.admission_number.lower()
+        ]
+
+    return TeacherHistoryResponse(
+        teacher_id=teacher.id,
+        teacher_name=teacher.name,
+        teacher_code=teacher.teacher_code,
+        total_events=len(all_events),
+        admissions_count=admissions_cnt,
+        renewals_count=renewals_cnt,
+        expiries_count=expiries_cnt,
+        changes_count=changes_cnt,
+        cancellations_count=cancellations_cnt,
+        events=filtered_events
+    )
+
+
+@router.get("/{teacher_id}/collections", response_model=TeacherCollectionsResponse)
+async def get_teacher_collections(
+    teacher_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user = Depends(require_staff)
+):
+    """
+    Fee collections handled by this teacher where the ledger records it.
+    Matches Payment records where collected_by user or collector_name matches this teacher.
+    """
+    teacher = (await db.execute(select(Teacher).where(Teacher.id == teacher_id))).scalar_one_or_none()
+    if not teacher:
+        raise HTTPException(status_code=404, detail="Teacher not found")
+
+    conds = [Payment.collector_name_snapshot.ilike(f"%{teacher.name}%")]
+    if teacher.user_id:
+        conds.append(Payment.collected_by == teacher.user_id)
+    conds.append(Payment.collected_by == teacher.id)
+
+    stmt = (
+        select(Payment, Student, Admission)
+        .join(Student, Payment.student_id == Student.id)
+        .join(Admission, Payment.admission_id == Admission.id)
+        .where(or_(*conds))
+        .order_by(desc(Payment.payment_date))
+    )
+    rows = (await db.execute(stmt)).all()
+
+    # Preload subject names for allocations of these payments
+    payment_ids = [p.id for p, s, a in rows]
+    p_subj_map = defaultdict(list)
+    if payment_ids:
+        alloc_stmt = (
+            select(PaymentAllocation.payment_id, Subject.name)
+            .join(AdmissionItem, PaymentAllocation.admission_item_id == AdmissionItem.id)
+            .outerjoin(Subject, AdmissionItem.subject_id == Subject.id)
+            .where(PaymentAllocation.payment_id.in_(payment_ids))
+        )
+        for pid, sname in (await db.execute(alloc_stmt)).all():
+            if sname and sname not in p_subj_map[pid]:
+                p_subj_map[pid].append(sname)
+
+    items = []
+    tot_coll = Decimal("0.00")
+    by_mode = defaultdict(float)
+
+    for p, stu, adm in rows:
+        amt_f = float(p.amount)
+        tot_coll += p.amount
+        by_mode[p.payment_mode] += amt_f
+
+        items.append(TeacherCollectionItem(
+            payment_id=p.id,
+            payment_number=p.payment_number,
+            payment_date=p.payment_date,
+            amount=amt_f,
+            payment_mode=p.payment_mode,
+            transaction_reference=p.transaction_reference,
+            student_id=stu.id,
+            student_name=stu.name,
+            student_code=stu.student_code,
+            admission_id=adm.id,
+            admission_number=adm.admission_number,
+            fee_period=p.fee_period,
+            collector_name=p.collector_name_snapshot,
+            notes=p.notes,
+            subject_names=p_subj_map.get(p.id, [])
+        ))
+
+    return TeacherCollectionsResponse(
+        teacher_id=teacher.id,
+        teacher_name=teacher.name,
+        teacher_code=teacher.teacher_code,
+        total_collected=float(tot_coll),
+        collections_count=len(items),
+        by_mode=dict(by_mode),
+        items=items
+    )
+
