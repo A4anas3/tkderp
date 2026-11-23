@@ -219,7 +219,7 @@ export default function DemoPassModal({
             <ul className="list-disc pl-4 space-y-0.5">
               <li>Carry this trial pass to the allocated classroom during trial days.</li>
               <li>Teacher / Coordinator will verify the reference number prior to lecture admission.</li>
-              <li>Free demo trial is valid solely for the duration specified. To secure regular batch admission, contact the front desk.</li>
+              <li>Free demo trial is valid solely for the duration specified. To secure regular subject admission, contact the front desk.</li>
             </ul>
           </div>
 

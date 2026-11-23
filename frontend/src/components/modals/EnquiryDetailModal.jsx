@@ -100,7 +100,7 @@ export default function EnquiryDetailModal({
                 <div className="text-xs font-bold uppercase tracking-wider">
                   Status:{' '}
                   {hasCourse
-                    ? 'COURSE ENROLLED (PURCHASED BATCHES)'
+                    ? 'COURSE ENROLLED (PURCHASED SUBJECTS)'
                     : isConverted || hasStudent
                     ? 'STUDENT ADMITTED (NO COURSE PURCHASED YET)'
                     : isInterested

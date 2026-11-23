@@ -393,7 +393,7 @@ export default function QuickPaymentModal({
                   </div>
                 </div>
 
-                {/* Enrolled Courses / Batches Snapshot */}
+                {/* Enrolled Courses / Subjects Snapshot */}
                 {selectedAdmission.items && selectedAdmission.items.length > 0 && (
                   <div className="pt-1.5 border-t border-slate-200">
                     <div className="flex items-center gap-1 text-[11px] font-bold text-slate-700 mb-1">

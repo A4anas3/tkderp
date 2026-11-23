@@ -380,7 +380,7 @@ export default function TeacherDetailPage() {
             </div>
             <div className="text-xs text-slate-700 font-medium mt-0.5">
               {isActive
-                ? 'Faculty is actively assigned to subject curriculum and ongoing batch schedules'
+                ? 'Faculty is actively assigned to subject curriculum and schedules'
                 : 'Faculty member is currently inactive or on leave'}
             </div>
           </div>
@@ -620,7 +620,7 @@ export default function TeacherDetailPage() {
               <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
                 <tr>
                   <th className="p-3">Enrolled Student</th>
-                  <th className="p-3">Subject & Batch</th>
+                  <th className="p-3">Subject</th>
                   <th className="p-3">Hall Room</th>
                   <th className="p-3">Rolling Billing Cycle</th>
                   <th className="p-3 text-center">Cycle Status</th>
@@ -669,10 +669,10 @@ export default function TeacherDetailPage() {
                       </div>
                     </td>
 
-                    {/* Subject & Batch */}
+                    {/* Subject */}
                     <td className="p-3 text-slate-700">
                       <div className="font-semibold text-black">{s.subject_name || 'Subject'}</div>
-                      <div className="text-[11px] text-slate-500">{s.batch_name}</div>
+                      
                     </td>
 
                     {/* Hall Room */}

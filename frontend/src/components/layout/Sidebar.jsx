@@ -6,7 +6,6 @@ import {
   GraduationCap,
   ClipboardList,
   BookOpen,
-  CalendarDays,
   CreditCard,
   ReceiptIndianRupee,
   MessageSquare,
@@ -86,12 +85,6 @@ export default function Sidebar({ isOpen, onClose }) {
           to: '/subjects',
           label: 'Subjects & Classes',
           icon: BookOpen,
-          show: isAdmin,
-        },
-        {
-          to: '/batches',
-          label: 'Coaching Batches',
-          icon: CalendarDays,
           show: isAdmin,
         },
         {

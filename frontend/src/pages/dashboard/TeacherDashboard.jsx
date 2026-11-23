@@ -7,15 +7,16 @@ import { dashboardApi } from '../../services/allApis';
 export default function TeacherDashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeBatchId, setActiveBatchId] = useState(null);
+  const [activeSubjectId, setActiveSubjectId] = useState(null);
 
   useEffect(() => {
     const fetchTeacherStats = async () => {
       try {
         const res = await dashboardApi.getTeacher();
         setData(res);
-        if (res?.batches?.length > 0) {
-          setActiveBatchId(res.batches[0].batch_id);
+        const list = res?.subjects || res?.batches || [];
+        if (list.length > 0) {
+          setActiveSubjectId(list[0].batch_id || list[0].id);
         }
       } catch (err) {
         console.error('Failed to load teacher dashboard:', err);
@@ -38,7 +39,8 @@ export default function TeacherDashboard() {
     );
   }
 
-  const activeBatch = (data?.batches || []).find((b) => b.batch_id === activeBatchId);
+  const subjectsList = data?.subjects || data?.batches || [];
+  const activeSubject = subjectsList.find((b) => (b.batch_id || b.id) === activeSubjectId);
 
   return (
     <div className="space-y-5 sm:space-y-6">
@@ -58,8 +60,8 @@ export default function TeacherDashboard() {
 
         <div className="grid grid-cols-2 gap-2.5 sm:flex sm:gap-3 w-full sm:w-auto">
           <div className="flex-1 sm:flex-initial bg-white/15 backdrop-blur-xs border border-white/20 rounded-xl px-4 py-2.5 text-center">
-            <span className="text-[11px] sm:text-xs text-purple-100 block font-medium">Assigned Batches</span>
-            <span className="text-xl sm:text-2xl font-black text-white mt-0.5">{data?.batches_count ?? 0}</span>
+            <span className="text-[11px] sm:text-xs text-purple-100 block font-medium">Assigned Subjects</span>
+            <span className="text-xl sm:text-2xl font-black text-white mt-0.5">{data?.subjects_count ?? data?.batches_count ?? 0}</span>
           </div>
           <div className="flex-1 sm:flex-initial bg-white/15 backdrop-blur-xs border border-white/20 rounded-xl px-4 py-2.5 text-center">
             <span className="text-[11px] sm:text-xs text-purple-100 block font-medium">Enrolled Students</span>
@@ -68,9 +70,9 @@ export default function TeacherDashboard() {
         </div>
       </div>
 
-      {/* Batches Grid & Student Roster */}
+      {/* Subjects Grid & Student Roster */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* Left: Batches List */}
+        {/* Left: Subjects List */}
         <div className="lg:col-span-1 space-y-3">
           <div className="flex items-center justify-between pb-1">
             <div className="flex items-center gap-2">
@@ -78,26 +80,27 @@ export default function TeacherDashboard() {
                 <BookOpen className="w-3.5 h-3.5" />
               </div>
               <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-black">
-                My Assigned Batches
+                My Assigned Subjects
               </h2>
             </div>
             <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
-              {(data?.batches || []).length}
+              {subjectsList.length}
             </span>
           </div>
 
-          {(data?.batches || []).length === 0 ? (
+          {subjectsList.length === 0 ? (
             <div className="p-6 bg-white border border-slate-200 rounded-xl text-center text-xs text-slate-500 font-medium shadow-2xs">
-              No batches assigned currently.
+              No subjects assigned currently.
             </div>
           ) : (
-            data.batches.map((b) => {
-              const isSelected = b.batch_id === activeBatchId;
+            subjectsList.map((b) => {
+              const itemId = b.batch_id || b.id;
+              const isSelected = itemId === activeSubjectId;
               const studentCount = b.students?.length ?? b.student_count ?? 0;
               return (
                 <div
-                  key={b.batch_id}
-                  onClick={() => setActiveBatchId(b.batch_id)}
+                  key={itemId}
+                  onClick={() => setActiveSubjectId(itemId)}
                   className={`p-4 rounded-xl border transition-all cursor-pointer ${
                     isSelected
                       ? 'bg-purple-50/80 border-odoo-500 ring-2 ring-odoo-500/20 shadow-2xs'
@@ -134,30 +137,30 @@ export default function TeacherDashboard() {
           )}
         </div>
 
-        {/* Right: Enrolled Students in Selected Batch */}
+        {/* Right: Enrolled Students in Selected Subject */}
         <div className="lg:col-span-2">
           <div className="bg-white border border-slate-200/90 rounded-xl p-4 sm:p-5 shadow-2xs flex flex-col h-full">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3.5 border-b border-slate-100">
               <div>
                 <h2 className="text-sm sm:text-base font-bold text-black">
-                  {activeBatch ? `Student Roster: ${activeBatch.name}` : 'Select a Batch'}
+                  {activeSubject ? `Student Roster: ${activeSubject.name}` : 'Select a Subject'}
                 </h2>
                 <p className="text-[11px] text-slate-700 font-medium mt-0.5">
-                  {activeBatch?.schedule || ''} {activeBatch?.hall_number ? `• Hall: ${activeBatch.hall_number}` : ''}
+                  {activeSubject?.schedule || ''} {activeSubject?.hall_number ? `• Hall: ${activeSubject.hall_number}` : ''}
                 </p>
               </div>
 
-              {activeBatch && (
+              {activeSubject && (
                 <span className="text-xs font-bold text-odoo-800 bg-purple-50 border border-purple-200 px-3 py-1 rounded-full self-start sm:self-auto shadow-2xs">
-                  {activeBatch.students?.length ?? activeBatch.student_count ?? 0} Students Active
+                  {activeSubject.students?.length ?? activeSubject.student_count ?? 0} Students Active
                 </span>
               )}
             </div>
 
             <div className="mt-3.5 overflow-x-auto -webkit-overflow-scrolling-touch flex-1 rounded-lg border border-slate-200">
-              {!activeBatch || (activeBatch.students || []).length === 0 ? (
+              {!activeSubject || (activeSubject.students || []).length === 0 ? (
                 <p className="py-10 text-center text-xs text-slate-700 font-semibold bg-white">
-                  No students currently enrolled in this batch.
+                  No students currently enrolled in this subject.
                 </p>
               ) : (
                 <table className="w-full text-left text-xs min-w-[500px]">
@@ -170,7 +173,7 @@ export default function TeacherDashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 bg-white">
-                    {activeBatch.students.map((st, idx) => (
+                    {activeSubject.students.map((st, idx) => (
                       <tr key={st.student_id || st.id || idx} className="hover:bg-purple-50/20 transition-colors">
                         <td className="p-3 font-mono font-bold text-odoo-700">
                           {st.student_code || st.registration_no || '—'}

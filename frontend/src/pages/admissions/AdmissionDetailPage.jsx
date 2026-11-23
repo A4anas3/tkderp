@@ -262,7 +262,7 @@ export default function AdmissionDetailPage() {
             </div>
             <div className="text-xs text-slate-700 font-medium mt-0.5">
               {isActive
-                ? 'Student has active batch admission and valid class attendance rights'
+                ? 'Student has active enrollment and valid class attendance rights'
                 : admission.revocation_reason
                 ? `Access Revoked: ${admission.revocation_reason}`
                 : 'Enrollment has been deactivated or cancelled'}
@@ -357,12 +357,12 @@ export default function AdmissionDetailPage() {
         </div>
       </div>
 
-      {/* Itemized Purchased Courses / Batches */}
+      {/* Itemized Purchased Courses / Subjects */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
         <div className="p-4 border-b border-slate-100 flex items-center justify-between">
           <h3 className="font-bold text-black text-sm flex items-center gap-2">
             <BookOpen className="w-4 h-4 text-odoo-600" />
-            <span>Enrolled Subjects & Assigned Batches</span>
+            <span>Enrolled Subjects & Details</span>
           </h3>
           <span className="text-xs text-slate-500 font-medium">
             {admission.items?.length || 0} enrolled course(s)
@@ -373,7 +373,7 @@ export default function AdmissionDetailPage() {
           <table className="w-full text-left text-xs min-w-[650px]">
             <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
               <tr>
-                <th className="p-3">Course / Batch</th>
+                <th className="p-3">Course / Subject</th>
                 <th className="p-3">Faculty & Hall</th>
                 <th className="p-3">Rolling Cycle Window</th>
                 <th className="p-3 text-right">Fee Rate</th>

@@ -21,7 +21,7 @@ import { useAuth } from '../../context/AuthContext';
  * Matches hostel pattern:
  * - App Launcher (3x3 grid icon) opening Coaching ERP Apps modal
  * - Brand logo & title
- * - Module links (Dashboard, Students, Subjects, Batches, Admissions, Fees & Dues, Payments, Reminders, Teachers, Enquiries, Reports, Settings)
+ * - Module links (Dashboard, Students, Subjects, Admissions, Fees & Dues, Payments, Reminders, Teachers, Enquiries, Reports, Settings)
  * - Compact action buttons (Course Paid, Collect Fee, New Admission)
  * - Quick Search bar
  * - Admin role chip with dropdown
@@ -65,7 +65,6 @@ export default function Topbar({ onOpenAppMenu, onQuickStudent, onQuickPayment }
     { to: '/dashboard', label: 'Dashboard' },
     { to: '/students', label: 'Students' },
     { to: '/subjects', label: 'Subjects' },
-    { to: '/batches', label: 'Batches' },
     { to: '/admissions', label: 'Admissions' },
     { to: '/fees', label: 'Fees & Dues' },
     { to: '/payments', label: 'Payments' },
@@ -135,7 +134,7 @@ export default function Topbar({ onOpenAppMenu, onQuickStudent, onQuickPayment }
                 type="button"
                 onClick={() => navigate('/admissions/new')}
                 className="inline-flex items-center gap-1 h-8 min-h-[32px] py-1 px-2 text-xs font-bold rounded-md bg-purple-900/60 hover:bg-purple-900 active:bg-purple-950 text-white border border-purple-300/30 shadow-2xs whitespace-nowrap cursor-pointer transition-all"
-                title="Purchase & Pay for Course Batches"
+                title="Purchase & Pay for Courses"
               >
                 <Plus className="w-3.5 h-3.5" />
                 Course Paid

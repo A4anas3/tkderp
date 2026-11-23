@@ -333,7 +333,7 @@ export default function TeachersPage() {
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">Faculty & Teachers</h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Manage coaching teaching staff, credentials, and batch assignments
+            Manage coaching teaching staff, credentials, and subject assignments
           </p>
         </div>
 
@@ -548,7 +548,7 @@ export default function TeachersPage() {
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         title={editingTeacher ? 'Edit Faculty Details' : 'Add New Teacher'}
-        subtitle="Teaching faculty details are snapshotted in batches and admissions"
+        subtitle="Teaching faculty details are snapshotted in subject enrollments and admissions"
         maxWidth="max-w-lg"
       >
         <form onSubmit={handleSubmit} className="space-y-3">

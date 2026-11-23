@@ -460,11 +460,7 @@ export default function PublicIDCardPage() {
                             <span className="font-bold text-black leading-tight flex-1">
                               {course.course_name}
                             </span>
-                            {course.batch_name && (
-                              <span className="text-[10px] font-mono bg-white px-1.5 py-0.5 rounded border border-slate-300 text-slate-800 shrink-0">
-                                {course.batch_name}
-                              </span>
-                            )}
+
                           </div>
 
                           {/* Faculty & Hall Details */}

@@ -166,7 +166,7 @@ export default function IssueRefundModal({
                     Revoke Admission & Cancel Enrollment (Full Drop)
                   </span>
                   <span className="text-[11px] text-rose-700 block">
-                    Marks admission as REVOKED, removes student from active batch attendance lists, and voids any outstanding dues.
+                    Marks admission as REVOKED, removes student from active attendance lists, and voids any outstanding dues.
                   </span>
                 </div>
               </label>

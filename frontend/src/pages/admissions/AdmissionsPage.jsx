@@ -93,7 +93,7 @@ export default function AdmissionsPage() {
       ),
     },
     {
-      header: 'Purchased Items / Batches',
+      header: 'Purchased Subjects',
       render: (a) => (
         <div className="flex flex-wrap gap-1 max-w-xs">
           {(a.items || []).map((itm, i) => (
@@ -256,9 +256,9 @@ export default function AdmissionsPage() {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
-          <h1 className="text-xl font-bold text-black tracking-tight">Course Purchases & Batch Invoices</h1>
+          <h1 className="text-xl font-bold text-black tracking-tight">Course Purchases & Invoices</h1>
           <p className="text-xs text-slate-700 mt-0.5 font-medium">
-            Multi-batch course purchases, itemized discounts, inclusive GST, and fee settlement
+            Multi-subject course purchases, itemized discounts, inclusive GST, and fee settlement
           </p>
         </div>
       </div>

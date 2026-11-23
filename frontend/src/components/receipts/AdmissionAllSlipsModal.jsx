@@ -314,10 +314,10 @@ export default function AdmissionAllSlipsModal({
                   </span>
                 </div>
 
-                {/* Enrolled Courses / Batches */}
+                {/* Enrolled Courses / Subjects */}
                 <div className="space-y-1">
                   <span className="text-[10px] font-black text-black uppercase tracking-wider block">
-                    Enrolled Courses & Academic Batches
+                    Enrolled Courses & Academic Subjects
                   </span>
                   <div className="overflow-x-auto -webkit-overflow-scrolling-touch">
                     <table className="w-full text-left text-xs border border-slate-300">

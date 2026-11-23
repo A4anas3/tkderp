@@ -7,7 +7,7 @@ import Button from '../common/Button';
 import { admissionApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 
-export default function RevokeBatchModal({
+export default function CancelPurchaseModal({
   isOpen,
   onClose,
   admission,
@@ -44,7 +44,7 @@ export default function RevokeBatchModal({
       return;
     }
     if (!reason.trim()) {
-      error('Please provide a mandatory reason for cancelling this batch');
+      error('Please provide a mandatory reason for cancelling this purchase');
       return;
     }
 
@@ -71,7 +71,7 @@ export default function RevokeBatchModal({
 
       const res = await admissionApi.revoke(admission.id, payload);
       success(
-        `Batch purchase (${txnId}) cancelled successfully.${
+        `Course purchase (${txnId}) cancelled successfully.${
           refundVal > 0 ? ` Refunded ₹${refundVal} to student.` : ''
         }`
       );
@@ -81,7 +81,7 @@ export default function RevokeBatchModal({
         onSuccess(res, refundVal > 0);
       }
     } catch (err) {
-      error(err.message || 'Failed to cancel batch purchase');
+      error(err.message || 'Failed to cancel course purchase');
     } finally {
       setSubmitting(false);
     }
@@ -91,8 +91,8 @@ export default function RevokeBatchModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Cancel Course / Batch Purchase"
-      subtitle="Cancelling this batch drops the student from active class attendance lists and voids pending balance due"
+      title="Cancel Course Purchase"
+      subtitle="Cancelling this purchase drops the student from active class attendance lists and voids pending balance due"
       maxWidth="max-w-md"
     >
       <form onSubmit={handleSubmit} className="space-y-3.5">
@@ -109,7 +109,7 @@ export default function RevokeBatchModal({
 
           <div className="pt-1 border-t border-slate-200">
             <span className="text-[11px] font-semibold text-slate-600 block mb-0.5">
-              Enrolled Batch / Course Items:
+              Enrolled Subjects / Course Items:
             </span>
             <div className="space-y-0.5">
               {(admission.items || []).map((itm, i) => (
@@ -146,12 +146,12 @@ export default function RevokeBatchModal({
         {/* Reason for Revocation */}
         <div>
           <label className="block text-xs font-semibold text-black mb-1">
-            Reason for Revoking / Taking Back Batch <span className="text-rose-600">*</span>
+            Reason for Revoking / Cancelling Enrollment <span className="text-rose-600">*</span>
           </label>
           <textarea
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            placeholder="e.g. Student taking back this batch due to school timetable clash or changing stream"
+            placeholder="e.g. Student dropping subject due to school timetable clash or changing stream"
             rows={2}
             className="w-full rounded border border-slate-300 px-3 py-1.5 text-xs text-black bg-white focus:outline-none focus:border-rose-600 focus:ring-1 focus:ring-rose-600"
             required
@@ -216,7 +216,7 @@ export default function RevokeBatchModal({
 
         {isCannotCancel && (
           <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg text-xs font-semibold">
-            This admission or batch is expired or completed and cannot be cancelled.
+            This admission is expired or completed and cannot be cancelled.
           </div>
         )}
 
@@ -233,7 +233,7 @@ export default function RevokeBatchModal({
             icon={Undo2}
             className="w-full sm:w-auto"
           >
-            Confirm Batch Cancellation
+            Confirm Cancellation
           </Button>
         </div>
       </form>

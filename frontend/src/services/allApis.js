@@ -118,6 +118,12 @@ export const studentApi = {
     });
     return res.data;
   },
+  getLastFeePeriod: async (studentId, batchId) => {
+    const res = await api.get(`/students/${studentId}/last-batch-period`, {
+      params: { batch_id: batchId },
+    });
+    return res.data;
+  },
   getLastBatchPeriod: async (studentId, batchId) => {
     const res = await api.get(`/students/${studentId}/last-batch-period`, {
       params: { batch_id: batchId },
@@ -192,29 +198,6 @@ export const subjectApi = {
   },
   update: async (id, data) => {
     const res = await api.put(`/subjects/${id}`, data);
-    return res.data;
-  },
-};
-
-export const batchApi = {
-  list: async (params) => {
-    const res = await api.get('/batches', { params });
-    return res.data;
-  },
-  getAll: async () => {
-    const res = await api.get('/batches/all');
-    return res.data;
-  },
-  get: async (id) => {
-    const res = await api.get(`/batches/${id}`);
-    return res.data;
-  },
-  create: async (data) => {
-    const res = await api.post('/batches', data);
-    return res.data;
-  },
-  update: async (id, data) => {
-    const res = await api.put(`/batches/${id}`, data);
     return res.data;
   },
 };
@@ -404,10 +387,6 @@ export const reportApi = {
     const res = await api.get('/reports/teacher-breakup', { params });
     return res.data;
   },
-  getBatchBreakup: async (params) => {
-    const res = await api.get('/reports/batch-breakup', { params });
-    return res.data;
-  },
   getAdmissionsConversion: async (params) => {
     const res = await api.get('/reports/admissions-conversion', { params });
     return res.data;
@@ -431,10 +410,6 @@ export const reportApi = {
   // Legacy / detail aliases
   getSubjectRevenue: async (params) => {
     const res = await api.get('/reports/subject-revenue', { params });
-    return res.data;
-  },
-  getBatchRevenue: async (params) => {
-    const res = await api.get('/reports/batch-revenue', { params });
     return res.data;
   },
   getTeacherRevenue: async (params) => {

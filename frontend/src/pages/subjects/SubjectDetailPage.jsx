@@ -235,8 +235,7 @@ export default function SubjectDetailPage() {
           s.student_name?.toLowerCase().includes(q) ||
           s.student_code?.toLowerCase().includes(q) ||
           s.mobile?.includes(q) ||
-          s.teacher_name?.toLowerCase().includes(q) ||
-          s.batch_name?.toLowerCase().includes(q)
+          s.teacher_name?.toLowerCase().includes(q)
       );
     }
     return list;
@@ -674,7 +673,7 @@ export default function SubjectDetailPage() {
                       <td className="p-3 text-slate-700">
                         <div className="font-semibold text-black">{s.teacher_name || 'Faculty'}</div>
                         <div className="text-[11px] text-slate-500">
-                          {s.hall_number ? `Hall: ${s.hall_number}` : 'Main Campus'} • {s.batch_name}
+                          {s.hall_number ? `Hall: ${s.hall_number}` : 'Main Campus'}
                         </div>
                       </td>
 
@@ -874,7 +873,7 @@ export default function SubjectDetailPage() {
               <thead className="bg-slate-50 text-slate-800 font-bold border-b border-slate-200">
                 <tr>
                   <th className="p-3">Scholar Details</th>
-                  <th className="p-3">Batch & Hall</th>
+                  <th className="p-3">Hall</th>
                   <th className="p-3 text-right">Fee Billed</th>
                   <th className="p-3 text-right text-emerald-800">Collected</th>
                   <th className="p-3 text-right text-rose-700">Due</th>
@@ -897,8 +896,7 @@ export default function SubjectDetailPage() {
                         <span className="text-[10px] text-slate-500 font-mono">#{s.student_code}</span>
                       </td>
                       <td className="p-3 text-slate-700">
-                        <span>{s.batch_name || 'Regular'}</span>
-                        <span className="text-[10px] text-slate-500 block font-mono">{s.hall_number || 'Main Hall'}</span>
+                        <span className="font-medium">{s.hall_number || 'Main Hall'}</span>
                       </td>
                       <td className="p-3 text-right font-mono font-bold text-black">
                         ₹{(s.net_price || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}

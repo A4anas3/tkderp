@@ -424,9 +424,9 @@ export default function EnquiryDetailPage() {
             </div>
             <div className="text-xs text-slate-700 font-medium mt-0.5">
               {enquiry.has_course_purchase
-                ? `Student has purchased courses/batches and is actively enrolled. Admission #${enquiry.course_admission_number || ''}`
+                ? `Student has purchased courses and is actively enrolled. Admission #${enquiry.course_admission_number || ''}`
                 : isConverted || enquiry.has_student_admission
-                ? 'Student admission profile is created in system, but NO course or batch has been purchased yet.'
+                ? 'Student admission profile is created in system, but NO course or subject has been purchased yet.'
                 : isInterested
                 ? 'Student completed trial classes and confirmed interest in admission. Ready for formal enrollment!'
                 : isActiveDemo && !isExpired
@@ -506,7 +506,7 @@ export default function EnquiryDetailPage() {
           </div>
 
           <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
-            <span className="text-[11px] text-slate-500 block font-medium">Enquiry Purpose / Batch</span>
+            <span className="text-[11px] text-slate-500 block font-medium">Enquiry Purpose / Subject</span>
             <span className="font-bold text-black text-sm">
               {enquiry.purpose || 'Coaching Admission'}
             </span>
@@ -759,7 +759,7 @@ export default function EnquiryDetailPage() {
               className="w-full text-xs p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-black font-medium focus:ring-1 focus:ring-rose-500"
             >
               <option value="Fee too high / Budget issue">Fee too high / Budget constraint</option>
-              <option value="Timings / Batch schedule clash">Timings / Batch schedule clash</option>
+              <option value="Timings / Class schedule clash">Timings / Class schedule clash</option>
               <option value="Distance / Transportation issue">Distance / Commute issue</option>
               <option value="Joined another coaching institute">Joined another institute / competitor</option>
               <option value="Decided on self-study / school only">Opted for self-study / school</option>

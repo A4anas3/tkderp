@@ -61,7 +61,7 @@ import AdmissionAllSlipsModal from '../../components/receipts/AdmissionAllSlipsM
 import IssueRefundModal from '../../components/modals/IssueRefundModal';
 import RefundReceiptModal from '../../components/receipts/RefundReceiptModal';
 import RevokeStudentModal from '../../components/modals/RevokeStudentModal';
-import RevokeBatchModal from '../../components/modals/RevokeBatchModal';
+import CancelPurchaseModal from '../../components/modals/CancelPurchaseModal';
 import EditStudentModal from '../../components/modals/EditStudentModal';
 import EditValidityModal from '../../components/modals/EditValidityModal';
 import SuspendDiscontinueModal from '../../components/modals/SuspendDiscontinueModal';
@@ -214,14 +214,14 @@ export default function StudentDetailPage() {
 
   // Revocation & Refund Modals
   const [revokeModalOpen, setRevokeModalOpen] = useState(false);
-  const [revokeBatchModalOpen, setRevokeBatchModalOpen] = useState(false);
-  const [selectedAdmissionForBatchRevoke, setSelectedAdmissionForBatchRevoke] = useState(null);
+  const [cancelPurchaseModalOpen, setCancelPurchaseModalOpen] = useState(false);
+  const [selectedAdmissionForPurchaseCancel, setSelectedAdmissionForPurchaseCancel] = useState(null);
   const [refundModalOpen, setRefundModalOpen] = useState(false);
   const [selectedAdmissionForRefund, setSelectedAdmissionForRefund] = useState(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [refundReceiptToShow, setRefundReceiptToShow] = useState(null);
   const [restoring, setRestoring] = useState(false);
-  const [restoringBatchId, setRestoringBatchId] = useState(null);
+  const [restoringPurchaseId, setRestoringPurchaseId] = useState(null);
 
   // Admissions backend pagination & search
   const [admPage, setAdmPage] = useState(1);
@@ -468,26 +468,26 @@ export default function StudentDetailPage() {
     }
   };
 
-  const handleRestoreBatch = async (adm) => {
-    setRestoringBatchId(adm.id);
+  const handleRestorePurchase = async (adm) => {
+    setRestoringPurchaseId(adm.id);
     try {
       await admissionApi.restore(adm.id);
-      success(`Batch purchase ${adm.purchase_transaction_id || adm.admission_number} restored to ACTIVE`);
+      success(`Purchase ${adm.purchase_transaction_id || adm.admission_number} restored to ACTIVE`);
       fetchStudentData();
     } catch (err) {
-      error(err.message || 'Failed to restore batch purchase');
+      error(err.message || 'Failed to restore purchase');
     } finally {
-      setRestoringBatchId(null);
+      setRestoringPurchaseId(null);
     }
   };
 
-  const handleResumeBatch = async (adm) => {
+  const handleResumePurchase = async (adm) => {
     try {
       await admissionApi.resume(adm.id);
-      success(`Batch ${adm.purchase_transaction_id || adm.admission_number} resumed to ACTIVE`);
+      success(`Purchase ${adm.purchase_transaction_id || adm.admission_number} resumed to ACTIVE`);
       fetchStudentData();
     } catch (err) {
-      error(err.message || 'Failed to resume batch');
+      error(err.message || 'Failed to resume purchase');
     }
   };
 
@@ -726,7 +726,7 @@ export default function StudentDetailPage() {
               </Button>
             )}
 
-            {/* Purchase Another Course / Batch Shortcut */}
+            {/* Purchase Another Course / Subject Shortcut */}
             {!isRevoked && (
               <Button
                 size="xs"
@@ -741,8 +741,8 @@ export default function StudentDetailPage() {
                 }
                 className="w-full sm:w-auto justify-center"
               >
-                <span className="hidden sm:inline">Purchase Another Course / Batch</span>
-                <span className="sm:hidden">Purchase Batch / Course</span>
+                <span className="hidden sm:inline">Purchase Another Course / Subject</span>
+                <span className="sm:hidden">Purchase Subject / Course</span>
               </Button>
             )}
           </div>
@@ -877,7 +877,7 @@ export default function StudentDetailPage() {
               <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg space-y-1.5 text-xs">
                 <Badge variant="purple">ACTIVE ALL-ACCESS PASS</Badge>
                 <p className="text-purple-950 font-semibold pt-0.5">
-                  Student is entitled to attend all active batches & subjects.
+                  Student is entitled to attend all active subjects.
                 </p>
                 <p className="text-slate-800 text-[11px]">
                   Pass Valid Till: <strong className="text-black font-mono">{student.green_card_expiry || 'Permanent'}</strong>
@@ -1025,7 +1025,7 @@ export default function StudentDetailPage() {
                   <Badge variant="purple" size="xs">ALL ACCESS</Badge>
                 </div>
                 <p className="text-[11px] text-purple-900 font-medium mt-0.5">
-                  Entitled to attend all classes & batches • Pass validity:{' '}
+                  Entitled to attend all classes & subjects • Pass validity:{' '}
                   <span className="font-mono font-bold text-purple-950">
                     {enrollmentData.active_green_card.valid_from} → {enrollmentData.active_green_card.valid_to}
                   </span>
@@ -1868,14 +1868,14 @@ export default function StudentDetailPage() {
             {/* Mobile Cards for Invoices */}
             <div className="block sm:hidden space-y-3">
               {admissions.map((adm) => {
-                const isBatchCancelled = adm.status === 'REVOKED' || adm.status === 'CANCELLED';
+                const isPurchaseCancelled = adm.status === 'REVOKED' || adm.status === 'CANCELLED';
                 const validity = getValidityStatus(adm);
-                const canCancelBatch = Boolean(adm.can_cancel && (adm.items?.length > 0 ? adm.items.every((i) => i.can_cancel) : true));
+                const canCancelPurchase = Boolean(adm.can_cancel && (adm.items?.length > 0 ? adm.items.every((i) => i.can_cancel) : true));
                 return (
                   <div
                     key={adm.id}
                     className={`border rounded-xl p-3 space-y-2.5 ${
-                      isBatchCancelled ? 'bg-rose-50/50 border-rose-200' : 'bg-slate-50 border-slate-200'
+                      isPurchaseCancelled ? 'bg-rose-50/50 border-rose-200' : 'bg-slate-50 border-slate-200'
                     }`}
                   >
                     {/* Header */}
@@ -1889,7 +1889,7 @@ export default function StudentDetailPage() {
                         </span>
                       </div>
                       <div className="text-right space-y-1">
-                        {isBatchCancelled ? (
+                        {isPurchaseCancelled ? (
                           <Badge size="xs" variant="danger">
                             CANCELLED
                           </Badge>
@@ -1907,7 +1907,7 @@ export default function StudentDetailPage() {
                             {adm.payment_status === 'PARTIALLY_PAID' ? 'PARTIAL PAID' : adm.payment_status}
                           </Badge>
                         )}
-                        {validity.subtext && !isBatchCancelled && (
+                        {validity.subtext && !isPurchaseCancelled && (
                           <div className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${
                             validity.badgeVariant === 'success'
                               ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
@@ -1957,15 +1957,15 @@ export default function StudentDetailPage() {
                       </div>
                       <div>
                         <span className="text-[10px] text-slate-700 font-sans font-semibold block">Due</span>
-                        <span className={`font-bold ${isBatchCancelled ? 'line-through text-slate-400' : Number(adm.balance_due) > 0 ? 'text-rose-700' : 'text-slate-600'}`}>
-                          ₹{isBatchCancelled ? '0.00' : Number(adm.balance_due).toFixed(2)}
+                        <span className={`font-bold ${isPurchaseCancelled ? 'line-through text-slate-400' : Number(adm.balance_due) > 0 ? 'text-rose-700' : 'text-slate-600'}`}>
+                          ₹{isPurchaseCancelled ? '0.00' : Number(adm.balance_due).toFixed(2)}
                         </span>
-                        {Number(adm.balance_due) > 0 && !isBatchCancelled && (adm.status === 'EXPIRED' || validity.isExpired) && (
+                        {Number(adm.balance_due) > 0 && !isPurchaseCancelled && (adm.status === 'EXPIRED' || validity.isExpired) && (
                           <span className="block text-[9px] font-bold text-rose-800 uppercase bg-rose-100 border border-rose-300 px-1 rounded mt-0.5">
                             Expired
                           </span>
                         )}
-                        {Number(adm.written_off_amount) > 0 && !isBatchCancelled && (
+                        {Number(adm.written_off_amount) > 0 && !isPurchaseCancelled && (
                           <span className="block text-[9px] font-bold text-amber-900 bg-amber-100 border border-amber-300 px-1 rounded mt-0.5">
                             ₹{Number(adm.written_off_amount).toFixed(0)} waived
                           </span>
@@ -1988,7 +1988,7 @@ export default function StudentDetailPage() {
                         All Slips ▾
                       </Button>
 
-                      {Number(adm.balance_due) > 0 && !isBatchCancelled && !isRevoked && (
+                      {Number(adm.balance_due) > 0 && !isPurchaseCancelled && !isRevoked && (
                         <Button
                           size="xs"
                           variant="success-soft"
@@ -2003,7 +2003,7 @@ export default function StudentDetailPage() {
                         </Button>
                       )}
 
-                      {isAdmin && Number(adm.balance_due) > 0 && !isBatchCancelled && (
+                      {isAdmin && Number(adm.balance_due) > 0 && !isPurchaseCancelled && (
                         <Button
                           size="xs"
                           variant="amber"
@@ -2019,7 +2019,7 @@ export default function StudentDetailPage() {
                         </Button>
                       )}
 
-                      {isBatchCancelled ? (
+                      {isPurchaseCancelled ? (
                         <>
                           {isAdmin && Number(adm.amount_paid) > 0 && (
                             <Button
@@ -2039,8 +2039,8 @@ export default function StudentDetailPage() {
                               size="xs"
                               variant="info"
                               icon={RotateCcw}
-                              loading={restoringBatchId === adm.id}
-                              onClick={() => handleRestoreBatch(adm)}
+                              loading={restoringPurchaseId === adm.id}
+                              onClick={() => handleRestorePurchase(adm)}
                               className="flex-1 justify-center"
                             >
                               Restore
@@ -2049,17 +2049,17 @@ export default function StudentDetailPage() {
                         </>
                       ) : (
                         <>
-                          {isAdmin && canCancelBatch && (
+                          {isAdmin && canCancelPurchase && (
                             <Button
                               size="xs"
                               variant="danger-soft"
                               onClick={() => {
-                                setSelectedAdmissionForBatchRevoke(adm);
-                                setRevokeBatchModalOpen(true);
+                                setSelectedAdmissionForPurchaseCancel(adm);
+                                setCancelPurchaseModalOpen(true);
                               }}
                               className="flex-1 justify-center"
                             >
-                              Cancel Batch
+                              Cancel Purchase
                             </Button>
                           )}
                           {isAdmin && Number(adm.amount_paid) > 0 && (
@@ -2100,22 +2100,22 @@ export default function StudentDetailPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
                   {admissions.map((adm) => {
-                    const isBatchCancelled = adm.status === 'REVOKED' || adm.status === 'CANCELLED';
+                    const isPurchaseCancelled = adm.status === 'REVOKED' || adm.status === 'CANCELLED';
                     const validity = getValidityStatus(adm);
-                    const canCancelBatch = Boolean(adm.can_cancel && (adm.items?.length > 0 ? adm.items.every((i) => i.can_cancel) : true));
+                    const canCancelPurchase = Boolean(adm.can_cancel && (adm.items?.length > 0 ? adm.items.every((i) => i.can_cancel) : true));
                     return (
-                      <tr key={adm.id} className={`hover:bg-slate-50 transition ${isBatchCancelled ? 'bg-rose-50/40 opacity-85' : ''}`}>
+                      <tr key={adm.id} className={`hover:bg-slate-50 transition ${isPurchaseCancelled ? 'bg-rose-50/40 opacity-85' : ''}`}>
                         <td className="p-2.5 font-mono font-bold text-black">
                           <div>{adm.purchase_transaction_id || adm.admission_number}</div>
-                          {isBatchCancelled && (
+                          {isPurchaseCancelled && (
                             <span className="text-[10px] text-rose-700 font-semibold block">
-                              (Batch Cancelled)
+                              (Cancelled)
                             </span>
                           )}
                         </td>
                         <td className="p-2.5 text-slate-800">
                           <span className="font-bold text-black block">{adm.admission_date}</span>
-                          {isBatchCancelled ? (
+                          {isPurchaseCancelled ? (
                             <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded border bg-rose-50 text-rose-800 border-rose-200 mt-1">
                               {validity.subtext}
                             </span>
@@ -2170,7 +2170,7 @@ export default function StudentDetailPage() {
                           ₹{Number(adm.amount_paid).toFixed(2)}
                         </td>
                         <td className="p-2.5 text-right font-mono text-rose-700 font-bold">
-                          {isBatchCancelled ? (
+                          {isPurchaseCancelled ? (
                             <span className="line-through text-slate-400">₹0.00</span>
                           ) : (
                             <div>
@@ -2189,7 +2189,7 @@ export default function StudentDetailPage() {
                           )}
                         </td>
                         <td className="p-2.5 text-center">
-                          {isBatchCancelled ? (
+                          {isPurchaseCancelled ? (
                             <div className="space-y-0.5">
                               <Badge size="xs" variant="danger">
                                 CANCELLED
@@ -2246,7 +2246,7 @@ export default function StudentDetailPage() {
                             </Button>
 
                             {/* Collect Due Fee if pending */}
-                            {Number(adm.balance_due) > 0 && !isBatchCancelled && !isRevoked && (
+                            {Number(adm.balance_due) > 0 && !isPurchaseCancelled && !isRevoked && (
                               <Button
                                 size="xs"
                                 variant="success-soft"
@@ -2262,7 +2262,7 @@ export default function StudentDetailPage() {
                             )}
 
                             {/* Waive Due if pending (Admin only) */}
-                            {isAdmin && Number(adm.balance_due) > 0 && !isBatchCancelled && (
+                            {isAdmin && Number(adm.balance_due) > 0 && !isPurchaseCancelled && (
                               <Button
                                 size="xs"
                                 variant="amber"
@@ -2277,8 +2277,8 @@ export default function StudentDetailPage() {
                               </Button>
                             )}
 
-                            {/* If Cancelled: Offer Refund and Restore Batch */}
-                            {isBatchCancelled ? (
+                            {/* If Cancelled: Offer Refund and Restore Purchase */}
+                            {isPurchaseCancelled ? (
                               <>
                                 {isAdmin && Number(adm.amount_paid) > 0 && (
                                   <Button
@@ -2288,7 +2288,7 @@ export default function StudentDetailPage() {
                                       setSelectedAdmissionForRefund(adm);
                                       setRefundModalOpen(true);
                                     }}
-                                    title="Issue refund on cancelled batch"
+                                    title="Issue refund on cancelled purchase"
                                   >
                                     Refund
                                   </Button>
@@ -2298,27 +2298,27 @@ export default function StudentDetailPage() {
                                     size="xs"
                                     variant="info"
                                     icon={RotateCcw}
-                                    loading={restoringBatchId === adm.id}
-                                    onClick={() => handleRestoreBatch(adm)}
-                                    title="Restore cancelled batch to Active"
+                                    loading={restoringPurchaseId === adm.id}
+                                    onClick={() => handleRestorePurchase(adm)}
+                                    title="Restore cancelled purchase to Active"
                                   >
-                                    Restore Batch
+                                    Restore Purchase
                                   </Button>
                                 )}
                               </>
                             ) : (
                               <>
-                                {isAdmin && canCancelBatch && (
+                                {isAdmin && canCancelPurchase && (
                                   <Button
                                     size="xs"
                                     variant="danger-soft"
                                     onClick={() => {
-                                      setSelectedAdmissionForBatchRevoke(adm);
-                                      setRevokeBatchModalOpen(true);
+                                      setSelectedAdmissionForPurchaseCancel(adm);
+                                      setCancelPurchaseModalOpen(true);
                                     }}
-                                    title="Cancel student batch enrollment"
+                                    title="Cancel student enrollment"
                                   >
-                                    Cancel Batch
+                                    Cancel Purchase
                                   </Button>
                                 )}
                                 {isAdmin && Number(adm.amount_paid) > 0 && (
@@ -3226,20 +3226,20 @@ export default function StudentDetailPage() {
         }}
       />
 
-      {/* Revoke Batch Modal */}
-      <RevokeBatchModal
-        isOpen={revokeBatchModalOpen}
+      {/* Cancel Purchase Modal */}
+      <CancelPurchaseModal
+        isOpen={cancelPurchaseModalOpen}
         onClose={() => {
-          setRevokeBatchModalOpen(false);
-          setSelectedAdmissionForBatchRevoke(null);
+          setCancelPurchaseModalOpen(false);
+          setSelectedAdmissionForPurchaseCancel(null);
         }}
-        admission={selectedAdmissionForBatchRevoke}
+        admission={selectedAdmissionForPurchaseCancel}
         onSuccess={async (res, hasRefund) => {
           await fetchStudentData();
-          if (hasRefund && selectedAdmissionForBatchRevoke) {
+          if (hasRefund && selectedAdmissionForPurchaseCancel) {
             try {
               const refList = await paymentApi.listRefunds({
-                admission_id: selectedAdmissionForBatchRevoke.id,
+                admission_id: selectedAdmissionForPurchaseCancel.id,
                 page_size: 1,
               });
               if (refList.items?.length > 0) {

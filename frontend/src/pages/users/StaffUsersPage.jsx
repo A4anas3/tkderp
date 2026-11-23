@@ -275,7 +275,7 @@ export default function StaffUsersPage() {
               options={[
                 { value: 'ADMIN', label: 'Admin (Full Access)' },
                 { value: 'CASHIER', label: 'Cashier (Fees & Admissions)' },
-                { value: 'TEACHER', label: 'Teacher (Assigned Batches)' },
+                { value: 'TEACHER', label: 'Teacher (Assigned Subjects)' },
               ]}
             />
           </div>

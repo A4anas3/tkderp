@@ -252,7 +252,7 @@ export default function RefundReceiptModal({ isOpen, onClose, refund, refundData
             Official Reason & Approval Justification:
           </span>
           <p className="text-black font-semibold italic">
-            {data.reason || 'Batch dropped / academic schedule conflict'}
+            {data.reason || 'Subject dropped / academic schedule conflict'}
           </p>
           {data.notes && (
             <p className="text-[11px] text-slate-700 mt-1">
@@ -269,7 +269,7 @@ export default function RefundReceiptModal({ isOpen, onClose, refund, refundData
           terms={[
             'Fee refund has been settled in full accordance with institute policy & approval.',
             'The student / payee acknowledges receipt of the refunded sum shown above.',
-            'Batch seat allocation corresponding to this refunded voucher stands revoked/adjusted.',
+            'Course enrollment seat allocation corresponding to this refunded voucher stands revoked/adjusted.',
           ]}
         />
       </div>

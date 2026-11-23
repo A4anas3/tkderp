@@ -26,6 +26,7 @@ async def get_admin_dashboard(
     # Counts
     total_students = (await db.execute(select(func.count(Student.id)))).scalar_one()
     total_teachers = (await db.execute(select(func.count(Teacher.id)).where(Teacher.status == "ACTIVE"))).scalar_one()
+    active_subjects = (await db.execute(select(func.count(Subject.id)).where(Subject.status == "ACTIVE"))).scalar_one()
     active_batches = (await db.execute(select(func.count(Batch.id)).where(Batch.status == "ACTIVE"))).scalar_one()
     pending_enquiries = (await db.execute(select(func.count(Enquiry.id)).where(Enquiry.status.in_(["PENDING", "ACTIVE_DEMO", "INTERESTED"])))).scalar_one()
 
@@ -107,6 +108,7 @@ async def get_admin_dashboard(
         "metrics": {
             "total_students": total_students,
             "total_teachers": total_teachers,
+            "active_subjects": active_subjects,
             "active_batches": active_batches,
             "pending_enquiries": pending_enquiries,
             "urgent_demo_deadlines": demo_deadlines,
@@ -337,6 +339,8 @@ async def get_teacher_dashboard(
         "teacher_name": teacher.name if teacher else current_user.full_name,
         "specialization": teacher.specialization if teacher else "Faculty",
         "batches_count": len(batch_list),
+        "subjects_count": len(batch_list),
         "total_unique_students": len(total_students_set),
-        "batches": batch_list
+        "batches": batch_list,
+        "subjects": batch_list
     }

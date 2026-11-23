@@ -14,8 +14,6 @@ import EnquiriesPage from '../pages/enquiries/EnquiriesPage';
 import EnquiryDetailPage from '../pages/enquiries/EnquiryDetailPage';
 import SubjectsPage from '../pages/subjects/SubjectsPage';
 import SubjectDetailPage from '../pages/subjects/SubjectDetailPage';
-import BatchesPage from '../pages/batches/BatchesPage';
-import BatchDetailPage from '../pages/batches/BatchDetailPage';
 import GreenCardPage from '../pages/greencard/GreenCardPage';
 import AdmissionsPage from '../pages/admissions/AdmissionsPage';
 import NewAdmissionPage from '../pages/admissions/NewAdmissionPage';
@@ -208,7 +206,7 @@ export default function AppRoutes() {
           }
         />
 
-        {/* Subjects & Batches */}
+        {/* Subjects */}
         <Route
           path="subjects"
           element={
@@ -230,31 +228,6 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={['ADMIN']}>
               <SubjectDetailPage />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="batches"
-          element={
-            <ProtectedRoute allowedRoles={['ADMIN']}>
-              <BatchesPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="batches/:id"
-          element={
-            <ProtectedRoute allowedRoles={['ADMIN']}>
-              <BatchDetailPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="reports/batch/:id"
-          element={
-            <ProtectedRoute allowedRoles={['ADMIN']}>
-              <BatchDetailPage />
             </ProtectedRoute>
           }
         />

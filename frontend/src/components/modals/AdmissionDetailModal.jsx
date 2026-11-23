@@ -45,7 +45,7 @@ export default function AdmissionDetailModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Course Purchase & Batch Enrollment Details"
+      title="Course Purchase & Subject Enrollment Details"
       subtitle={`Transaction ID: ${admission.purchase_transaction_id || admission.admission_number}`}
       maxWidth="max-w-2xl"
     >
@@ -72,7 +72,7 @@ export default function AdmissionDetailModal({
               </div>
               <div className="text-[11px] text-slate-600 font-medium">
                 {isActive
-                  ? 'Student has active batch admission and class access'
+                  ? 'Student has active subject enrollment and class access'
                   : admission.revocation_reason
                   ? `Revoked: ${admission.revocation_reason}`
                   : 'Enrollment has been deactivated / cancelled'}
@@ -152,7 +152,7 @@ export default function AdmissionDetailModal({
           </div>
         </div>
 
-        {/* Itemized Purchased Courses / Batches */}
+        {/* Itemized Purchased Courses / Subjects */}
         <div>
           <h4 className="text-xs font-bold uppercase tracking-wider text-black mb-2 flex items-center gap-1.5">
             <BookOpen className="w-3.5 h-3.5 text-slate-600" />

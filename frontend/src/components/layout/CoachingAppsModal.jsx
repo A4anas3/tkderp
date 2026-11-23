@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import {
   Users,
   BookOpen,
-  CalendarDays,
   GraduationCap,
   Receipt,
   CreditCard,
@@ -49,15 +48,6 @@ export default function CoachingAppsModal({ isOpen, onClose }) {
       icon: BookOpen,
       route: '/subjects',
       color: 'bg-blue-600',
-      roles: ['ADMIN'],
-    },
-    {
-      id: 'batches',
-      name: 'Batches',
-      desc: 'Schedules & Timing',
-      icon: CalendarDays,
-      route: '/batches',
-      color: 'bg-violet-600',
       roles: ['ADMIN'],
     },
     {

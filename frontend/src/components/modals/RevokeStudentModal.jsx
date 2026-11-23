@@ -44,7 +44,7 @@ export default function RevokeStudentModal({
       isOpen={isOpen}
       onClose={onClose}
       title="Revoke Student Admission / Status"
-      subtitle="Revoking student deactivates their student profile, cancels all active batch enrollments, and voids outstanding dues"
+      subtitle="Revoking student deactivates their student profile, cancels all active enrollments, and voids outstanding dues"
       maxWidth="max-w-md"
     >
       <form onSubmit={handleSubmit} className="space-y-3.5">
@@ -55,7 +55,7 @@ export default function RevokeStudentModal({
           </div>
           <p className="text-rose-800">
             You are about to revoke <strong className="text-black">{student.name}</strong> ({student.student_code}).
-            All active course/batch enrollments will be automatically cancelled and any Green Card access deactivated.
+            All active course enrollments will be automatically cancelled and any Green Card access deactivated.
           </p>
         </div>
 

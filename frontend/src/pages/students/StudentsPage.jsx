@@ -228,7 +228,7 @@ export default function StudentsPage() {
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">Registered Students</h1>
           <p className="text-xs text-slate-600 mt-0.5">
-            Student database with profile photos (&le; 20 KB), batch fee cycles, and Kanban view
+            Student database with profile photos (&le; 20 KB), fee cycles, and Kanban view
           </p>
         </div>
 
@@ -480,9 +480,9 @@ export default function StudentsPage() {
                               `/admissions/new?student_id=${s.id}&name=${encodeURIComponent(s.name)}`
                             )
                           }
-                          title="Purchase Batch / Renew Fee"
+                          title="Purchase / Renew Subject Fee"
                         >
-                          + Batch
+                          + Enrol
                         </Button>
                       )}
                     </div>

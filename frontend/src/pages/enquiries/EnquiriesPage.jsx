@@ -2183,7 +2183,7 @@ export default function EnquiriesPage() {
             label="Counselor Follow-up Notes (Optional)"
             value={enquiryForm.notes}
             onChange={(e) => setEnquiryForm({ ...enquiryForm, notes: e.target.value })}
-            placeholder="e.g. Student referred by school friend, interested in JEE morning batch"
+            placeholder="e.g. Student referred by school friend, interested in JEE morning class"
           />
 
           <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
@@ -2234,7 +2234,7 @@ export default function EnquiriesPage() {
                 className="w-full text-xs p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-black font-semibold focus:ring-1 focus:ring-rose-500"
               >
                 <option value="Fee too high / Budget issue">Fee too high / Budget constraint</option>
-                <option value="Timings / Batch schedule clash">Timings / Batch schedule clash</option>
+                <option value="Timings / Class schedule clash">Timings / Class schedule clash</option>
                 <option value="Distance / Transportation issue">Distance / Commute issue</option>
                 <option value="Joined another coaching institute">Joined another institute / competitor</option>
                 <option value="Decided on self-study / school only">Opted for self-study / school</option>
@@ -2405,7 +2405,7 @@ export default function EnquiriesPage() {
               onChange={(e) =>
                 setCourseFormData({ ...courseFormData, notes: e.target.value })
               }
-              placeholder="e.g. Student requested to switch to Physics batch..."
+              placeholder="e.g. Student requested to switch to Physics subject..."
               className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg text-black focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600 font-medium"
             />
           </div>
@@ -2468,7 +2468,7 @@ export default function EnquiriesPage() {
               className="w-full text-xs p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-black font-semibold focus:ring-1 focus:ring-rose-500"
             >
               <option value="Fee too high / Budget issue">Fee too high / Budget constraint</option>
-              <option value="Timings / Batch schedule clash">Timings / Batch schedule clash</option>
+              <option value="Timings / Class schedule clash">Timings / Class schedule clash</option>
               <option value="Distance / Transportation issue">Distance / Commute issue</option>
               <option value="Joined another coaching institute">Joined another institute / competitor</option>
               <option value="Decided on self-study / school only">Opted for self-study / school</option>
@@ -2486,7 +2486,7 @@ export default function EnquiriesPage() {
               rows={3}
               value={customDropNotes}
               onChange={(e) => setCustomDropNotes(e.target.value)}
-              placeholder="e.g. Student requested evening batch which is currently full, or parent asked for 50% discount..."
+              placeholder="e.g. Student requested evening class which is currently full, or parent asked for 50% discount..."
               className="w-full text-xs p-2.5 bg-white border border-slate-300 rounded-lg text-black focus:ring-1 focus:ring-rose-500 font-medium"
             />
           </div>

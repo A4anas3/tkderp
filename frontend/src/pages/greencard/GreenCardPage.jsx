@@ -21,7 +21,7 @@ export default function GreenCardPage() {
     name: 'Green Card - All Access Annual Pass',
     price: '15000.00',
     validity_days: 365,
-    description: 'Unlimited access to all active batches and subjects for 1 academic year',
+    description: 'Unlimited access to all active subjects and classes for 1 academic year',
     is_active: true,
   });
 
@@ -47,7 +47,7 @@ export default function GreenCardPage() {
       name: 'Green Card - All Access Annual Pass',
       price: '15000.00',
       validity_days: 365,
-      description: 'Unlimited access to all active batches and subjects for 1 academic year',
+      description: 'Unlimited access to all active subjects and classes for 1 academic year',
       is_active: true,
     });
     setModalOpen(true);
@@ -107,7 +107,7 @@ export default function GreenCardPage() {
             Green Card — All-Access Pass Product
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Special purchasable institutional product granting unlimited access to all eligible active batches
+            Special purchasable institutional product granting unlimited access to all eligible active subjects
           </p>
         </div>
 
@@ -123,7 +123,7 @@ export default function GreenCardPage() {
           <Award className="w-10 h-10 text-purple-600 mx-auto" />
           <p className="text-sm font-bold text-black">No Green Card Product Configured</p>
           <p className="text-xs text-slate-500 max-w-sm mx-auto">
-            Configure the All-Access Green Card product to allow students to purchase universal access to all batches.
+            Configure the All-Access Green Card product to allow students to purchase universal access to all subjects.
           </p>
           <Button variant="primary" onClick={handleOpenAdd}>
             Create Initial Green Card Product
@@ -166,7 +166,7 @@ export default function GreenCardPage() {
 
                   <div className="flex justify-between items-center">
                     <span className="text-slate-700 font-bold">Access Scope:</span>
-                    <span className="font-bold text-odoo-800">All Active Batches</span>
+                    <span className="font-bold text-odoo-800">All Active Subjects</span>
                   </div>
                 </div>
               </div>
@@ -251,7 +251,7 @@ export default function GreenCardPage() {
             label="Plan Description"
             value={formData.description}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-            placeholder="e.g. Access all subjects and batches"
+            placeholder="e.g. Access all subjects and classes"
           />
 
           <label className="flex items-center gap-2 text-xs font-semibold text-black cursor-pointer pt-1">

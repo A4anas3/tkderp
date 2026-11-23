@@ -26,7 +26,7 @@ import {
   History,
   Send,
 } from 'lucide-react';
-import { remindersApi, subjectApi, batchApi } from '../../services/allApis';
+import { remindersApi, subjectApi } from '../../services/allApis';
 import StatCard from '../../components/common/StatCard';
 import Badge from '../../components/common/Badge';
 import Button from '../../components/common/Button';
@@ -150,12 +150,10 @@ export default function RemindersPage() {
 
   // Metadata for filter dropdowns
   const [subjectsList, setSubjectsList] = useState([]);
-  const [batchesList, setBatchesList] = useState([]);
 
   // Active filters
   const [statusFilter, setStatusFilter] = useState('pending'); // 'pending' | 'sent' | 'failed' | 'all'
   const [selectedSubjectFilter, setSelectedSubjectFilter] = useState('ALL');
-  const [selectedBatchFilter, setSelectedBatchFilter] = useState('ALL');
   const [dueAgeFilter, setDueAgeFilter] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -167,16 +165,12 @@ export default function RemindersPage() {
   const [failedModalItem, setFailedModalItem] = useState(null);
   const [failedReason, setFailedReason] = useState('Invalid phone number / unreachable');
 
-  // Preload subjects and batches once on mount
+  // Preload subjects once on mount
   useEffect(() => {
     async function loadMeta() {
       try {
-        const [subs, bats] = await Promise.all([
-          subjectApi.getAll(),
-          batchApi.getAll(),
-        ]);
+        const subs = await subjectApi.getAll();
         setSubjectsList(Array.isArray(subs) ? subs : []);
-        setBatchesList(Array.isArray(bats) ? bats : []);
       } catch (err) {
         console.warn('Failed to preload metadata for reminders filter:', err);
       }
@@ -209,9 +203,7 @@ export default function RemindersPage() {
       if (selectedSubjectFilter !== 'ALL') {
         params.subject_id = selectedSubjectFilter;
       }
-      if (selectedBatchFilter !== 'ALL') {
-        params.batch_id = selectedBatchFilter;
-      }
+
       if (dueAgeFilter !== 'ALL') {
         params.due_age = dueAgeFilter;
       }
@@ -231,7 +223,7 @@ export default function RemindersPage() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, selectedSubjectFilter, selectedBatchFilter, dueAgeFilter, debouncedSearch, page, pageSize]);
+  }, [statusFilter, selectedSubjectFilter, dueAgeFilter, debouncedSearch, page, pageSize]);
 
   useEffect(() => {
     loadQueue();
@@ -313,13 +305,11 @@ export default function RemindersPage() {
 
   const hasActiveFilters =
     selectedSubjectFilter !== 'ALL' ||
-    selectedBatchFilter !== 'ALL' ||
     dueAgeFilter !== 'ALL' ||
     searchQuery.trim() !== '';
 
   const clearFilters = () => {
     setSelectedSubjectFilter('ALL');
-    setSelectedBatchFilter('ALL');
     setDueAgeFilter('ALL');
     setSearchQuery('');
     setPage(1);
@@ -412,7 +402,7 @@ export default function RemindersPage() {
         />
       </div>
 
-      {/* Filter and Search Bar with Subject, Batch, Due-Age Filters */}
+      {/* Filter and Search Bar with Subject, Due-Age Filters */}
       <div className="bg-white border border-slate-200 rounded-xl p-3 sm:p-4 shadow-2xs space-y-3">
         {/* Status Queue Tabs */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
@@ -484,7 +474,7 @@ export default function RemindersPage() {
           </div>
         </div>
 
-        {/* Multi-Filters: Subject, Batch, Due-Age */}
+        {/* Multi-Filters: Subject, Due-Age */}
         <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 pt-1">
           {/* Subject Filter */}
           <div>
@@ -508,27 +498,7 @@ export default function RemindersPage() {
             </select>
           </div>
 
-          {/* Batch Filter */}
-          <div>
-            <label className="block text-[11px] font-bold text-black mb-1">
-              Filter by Batch
-            </label>
-            <select
-              value={selectedBatchFilter}
-              onChange={(e) => {
-                setSelectedBatchFilter(e.target.value);
-                setPage(1);
-              }}
-              className="w-full h-8 px-2 text-xs font-semibold text-black bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#714B67] shadow-2xs"
-            >
-              <option value="ALL">All Batches</option>
-              {batchesList.map((bat) => (
-                <option key={bat.id} value={bat.id}>
-                  {bat.name}
-                </option>
-              ))}
-            </select>
-          </div>
+
 
           {/* Due-Age Filter */}
           <div>
@@ -620,7 +590,7 @@ export default function RemindersPage() {
                   <tr>
                     <th className="py-3 px-3.5">Student Details</th>
                     <th className="py-3 px-3">Mobile Contact</th>
-                    <th className="py-3 px-3">Subject & Batch</th>
+                    <th className="py-3 px-3">Subject</th>
                     <th className="py-3 px-3 text-right">Due Amount</th>
                     <th className="py-3 px-3">Due Date & Age</th>
                     <th className="py-3 px-3 text-center">Delivery Status</th>
@@ -684,19 +654,13 @@ export default function RemindersPage() {
                           )}
                         </td>
 
-                        {/* Subject & Batch */}
+                        {/* Subject */}
                         <td className="py-3 px-3">
                           <div className="min-w-0">
                             <span className="font-bold text-black text-xs block truncate max-w-xs">
                               {rem.subject_name || rem.course_name}
                             </span>
                             <div className="text-[11px] text-slate-600 flex items-center gap-1 mt-0.5">
-                              {rem.batch_name ? (
-                                <span className="font-semibold text-slate-700">{rem.batch_name}</span>
-                              ) : (
-                                <span className="text-slate-500">Direct Subject</span>
-                              )}
-                              <span>•</span>
                               <span className="font-mono text-slate-500 text-[10px]">
                                 {rem.admission_number}
                               </span>
@@ -914,9 +878,7 @@ export default function RemindersPage() {
                         <span className="font-bold text-black truncate block">
                           {rem.subject_name || rem.course_name}
                         </span>
-                        {rem.batch_name && (
-                          <span className="text-[10px] text-slate-600 block">{rem.batch_name}</span>
-                        )}
+
                       </div>
                       <div>
                         <span className="text-slate-500 block text-[11px]">Due Amount</span>

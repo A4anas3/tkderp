@@ -43,19 +43,18 @@ import {
 } from 'lucide-react';
 import StatCard from '../../components/common/StatCard';
 import Badge from '../../components/common/Badge';
-import { reportApi, subjectApi, batchApi } from '../../services/allApis';
+import { reportApi, subjectApi } from '../../services/allApis';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 
 const PIE_COLORS = ['#059669', '#3b82f6', '#8b5cf6', '#f59e0b', '#ec4899', '#06b6d4', '#64748b'];
 
-// List of all 10 Reports with identifiers, titles, and icons
+// List of all 9 Reports with identifiers, titles, and icons
 const REPORT_TABS = [
   { id: 'collections', label: 'Collections', sublabel: 'Payment Modes & Cashiers', icon: CreditCard, color: 'emerald' },
   { id: 'dues-ageing', label: 'Dues & Ageing', sublabel: '0-30, 31-60, 61-90, 90+ Buckets', icon: Clock, color: 'rose' },
   { id: 'subject-breakup', label: 'Subject-wise', sublabel: 'Billed, Collected & Due', icon: BookOpen, color: 'purple' },
   { id: 'teacher-breakup', label: 'Teacher-wise', sublabel: 'Faculty Collections & Dues', icon: UserCheck, color: 'indigo' },
-  { id: 'batch-breakup', label: 'Batch-wise', sublabel: 'Enrolments & Collections', icon: CalendarDays, color: 'teal' },
   { id: 'admissions-conversion', label: 'Admissions & Conversion', sublabel: 'Enquiries, Sources & Conversion', icon: LifeBuoy, color: 'amber' },
   { id: 'waivers', label: 'Waivers', sublabel: 'Admin Due Forgiveness & Audit', icon: FileCheck2, color: 'amber' },
   { id: 'refunds', label: 'Refunds', sublabel: 'Disbursed Fees & Deductions', icon: RotateCcw, color: 'rose' },
@@ -90,7 +89,6 @@ export default function ReportsHubPage() {
 
   // Preloaded metadata
   const [subjectsList, setSubjectsList] = useState([]);
-  const [batchesList, setBatchesList] = useState([]);
 
   // Per-report filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -98,22 +96,17 @@ export default function ReportsHubPage() {
   const [cashierFilter, setCashierFilter] = useState('ALL');
   const [ageingBucketFilter, setAgeingBucketFilter] = useState('ALL');
   const [selectedSubjectFilter, setSelectedSubjectFilter] = useState('ALL');
-  const [selectedBatchFilter, setSelectedBatchFilter] = useState('ALL');
   const [enquirySourceFilter, setEnquirySourceFilter] = useState('ALL');
   const [expenseCategoryFilter, setExpenseCategoryFilter] = useState('ALL');
   const [refundModeFilter, setRefundModeFilter] = useState('ALL');
   const [summaryPeriod, setSummaryPeriod] = useState('daily'); // 'daily' | 'monthly'
 
-  // Preload subjects and batches once on mount
+  // Preload subjects once on mount
   useEffect(() => {
     async function loadMeta() {
       try {
-        const [subs, bats] = await Promise.all([
-          subjectApi.getAll(),
-          batchApi.getAll(),
-        ]);
+        const subs = await subjectApi.getAll();
         setSubjectsList(Array.isArray(subs) ? subs : []);
-        setBatchesList(Array.isArray(bats) ? bats : []);
       } catch (err) {
         console.warn('Failed to preload metadata for reports filters:', err);
       }
@@ -198,7 +191,6 @@ export default function ReportsHubPage() {
     if (activeTab === 'dues-ageing') {
       if (ageingBucketFilter !== 'ALL') params.ageing_bucket = ageingBucketFilter;
       if (selectedSubjectFilter !== 'ALL') params.subject_id = selectedSubjectFilter;
-      if (selectedBatchFilter !== 'ALL') params.batch_id = selectedBatchFilter;
     }
     if (activeTab === 'admissions-conversion') {
       if (enquirySourceFilter !== 'ALL') params.source = enquirySourceFilter;
@@ -226,7 +218,6 @@ export default function ReportsHubPage() {
     cashierFilter,
     ageingBucketFilter,
     selectedSubjectFilter,
-    selectedBatchFilter,
     enquirySourceFilter,
     expenseCategoryFilter,
     refundModeFilter,
@@ -252,9 +243,6 @@ export default function ReportsHubPage() {
           break;
         case 'teacher-breakup':
           res = await reportApi.getTeacherBreakup(params);
-          break;
-        case 'batch-breakup':
-          res = await reportApi.getBatchBreakup(params);
           break;
         case 'admissions-conversion':
           res = await reportApi.getAdmissionsConversion(params);
@@ -302,7 +290,6 @@ export default function ReportsHubPage() {
       let endpoint = `/reports/${activeTab}`;
       if (activeTab === 'subject-breakup') endpoint = '/reports/subject-breakup';
       if (activeTab === 'teacher-breakup') endpoint = '/reports/teacher-breakup';
-      if (activeTab === 'batch-breakup') endpoint = '/reports/batch-breakup';
 
       const response = await api.get(`${endpoint}/csv?${query.toString()}`, {
         responseType: 'blob',
@@ -555,23 +542,6 @@ export default function ReportsHubPage() {
                   {subjectsList.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold text-black mb-1">
-                  Batch Schedule
-                </label>
-                <select
-                  value={selectedBatchFilter}
-                  onChange={(e) => setSelectedBatchFilter(e.target.value)}
-                  className="w-full h-8 px-2 text-xs font-semibold text-black bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#714B67]"
-                >
-                  <option value="ALL">All Batches</option>
-                  {batchesList.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
                     </option>
                   ))}
                 </select>
@@ -988,7 +958,6 @@ export default function ReportsHubPage() {
                         <th className="p-2.5">Student</th>
                         <th className="p-2.5">Mobile</th>
                         <th className="p-2.5">Course Subject</th>
-                        <th className="p-2.5">Batch</th>
                         <th className="p-2.5 text-right">Fee Billed</th>
                         <th className="p-2.5 text-right text-emerald-700">Paid</th>
                         <th className="p-2.5 text-right font-black text-rose-700">Due Amount</th>
@@ -1012,7 +981,6 @@ export default function ReportsHubPage() {
                           </td>
                           <td className="p-2.5 font-mono text-slate-700">{i.mobile || '-'}</td>
                           <td className="p-2.5 font-bold text-black">{i.subject_name}</td>
-                          <td className="p-2.5 text-slate-700">{i.batch_name}</td>
                           <td className="p-2.5 text-right font-mono">₹{i.net_price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                           <td className="p-2.5 text-right font-mono text-emerald-700 font-semibold">₹{i.amount_collected.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                           <td className="p-2.5 text-right font-mono font-black text-rose-700">₹{i.balance_due.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
@@ -1216,7 +1184,6 @@ export default function ReportsHubPage() {
                         <th className="p-2.5">Faculty Member</th>
                         <th className="p-2.5">Specialization</th>
                         <th className="p-2.5">Subjects Taught</th>
-                        <th className="p-2.5 text-center">Batches</th>
                         <th className="p-2.5 text-center">Enrolled</th>
                         <th className="p-2.5 text-right">Billed (₹)</th>
                         <th className="p-2.5 text-right font-black text-emerald-800">Collections (₹)</th>
@@ -1245,11 +1212,10 @@ export default function ReportsHubPage() {
                                   </span>
                                 ))
                               ) : (
-                                <span className="text-slate-400 text-[10px]">Assigned via batch</span>
+                                <span className="text-slate-400 text-[10px]">Direct Subject</span>
                               )}
                             </div>
                           </td>
-                          <td className="p-2.5 text-center font-mono">{t.batches_count}</td>
                           <td className="p-2.5 text-center font-mono font-bold text-black">{t.enrolled_count}</td>
                           <td className="p-2.5 text-right font-mono">₹{(t.fees_billed || t.total_booked || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                           <td className="p-2.5 text-right font-mono font-black text-emerald-800">₹{(t.collections || t.total_collected || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
@@ -1264,112 +1230,7 @@ export default function ReportsHubPage() {
           )}
 
           {/* ========================================================= */}
-          {/* TAB 5: BATCH-WISE REPORT (e) */}
-          {/* ========================================================= */}
-          {activeTab === 'batch-breakup' && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                <StatCard
-                  title="Total Batches"
-                  value={`${Array.isArray(data) ? data.length : data?.items?.length || 0}`}
-                  subtext="Classroom schedules"
-                  icon={CalendarDays}
-                  color="teal"
-                />
-                <StatCard
-                  title="Total Enrolments"
-                  value={`${(
-                    (Array.isArray(data) ? data : data?.items || []).reduce(
-                      (acc, b) => acc + (b.enrolments || b.enrolled_count || 0),
-                      0
-                    )
-                  )}`}
-                  subtext="Enrolled student seats"
-                  icon={Users}
-                  color="indigo"
-                />
-                <StatCard
-                  title="Total Collections"
-                  value={`₹${(
-                    (Array.isArray(data) ? data : data?.items || []).reduce(
-                      (acc, b) => acc + (b.collections || b.total_collected || 0),
-                      0
-                    )
-                  ).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
-                  subtext="Allocated batch fee revenue"
-                  icon={CheckCircle2}
-                  color="emerald"
-                />
-                <StatCard
-                  title="Outstanding Dues"
-                  value={`₹${(
-                    (Array.isArray(data) ? data : data?.items || []).reduce(
-                      (acc, b) => acc + (b.dues || b.balance_due || 0),
-                      0
-                    )
-                  ).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
-                  subtext="Pending batch balances"
-                  icon={AlertTriangle}
-                  color="rose"
-                />
-              </div>
-
-              {/* Table */}
-              <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs">
-                <h3 className="text-xs font-black text-black uppercase tracking-wider mb-3 pb-2 border-b border-slate-100 flex items-center justify-between">
-                  <span>Batch-wise Enrolments, Collections & Dues</span>
-                  <Badge variant="primary" size="xs">Room & Hall Schedules</Badge>
-                </h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs text-left">
-                    <thead className="bg-slate-50 text-slate-800 font-bold border-b border-slate-200">
-                      <tr>
-                        <th className="p-2.5">Batch Name</th>
-                        <th className="p-2.5">Faculty</th>
-                        <th className="p-2.5">Hall</th>
-                        <th className="p-2.5 text-center">Enrolments</th>
-                        <th className="p-2.5 text-center">Active</th>
-                        <th className="p-2.5 text-right">Billed (₹)</th>
-                        <th className="p-2.5 text-right font-black text-emerald-800">Collections (₹)</th>
-                        <th className="p-2.5 text-right text-rose-700">Dues (₹)</th>
-                        <th className="p-2.5 text-center">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 font-semibold">
-                      {(Array.isArray(data) ? data : data?.items || []).map((b) => (
-                        <tr key={b.batch_id} className="hover:bg-slate-50">
-                          <td className="p-2.5">
-                            <span
-                              onClick={() => navigate(`/batches/${b.batch_id}`)}
-                              className="font-bold text-black hover:text-[#714B67] hover:underline cursor-pointer"
-                            >
-                              {b.batch_name}
-                            </span>
-                            <span className="block text-[10px] text-slate-500 font-mono">{b.batch_code}</span>
-                          </td>
-                          <td className="p-2.5 text-slate-800">{b.teacher_name || 'Faculty'}</td>
-                          <td className="p-2.5 text-slate-600 font-mono">{b.hall_number || 'Main'}</td>
-                          <td className="p-2.5 text-center font-mono font-bold text-black">{b.enrolled_count}</td>
-                          <td className="p-2.5 text-center font-mono text-emerald-700">{b.active_enrollments || 0}</td>
-                          <td className="p-2.5 text-right font-mono">₹{(b.fees_billed || b.total_booked || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                          <td className="p-2.5 text-right font-mono font-black text-emerald-800">₹{(b.collections || b.total_collected || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                          <td className="p-2.5 text-right font-mono text-rose-700">₹{(b.dues || b.balance_due || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                          <td className="p-2.5 text-center">
-                            <Badge variant={b.status === 'ACTIVE' ? 'success' : 'neutral'} size="xs">
-                              {b.status}
-                            </Badge>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ========================================================= */}
-          {/* TAB 6: ADMISSIONS & CONVERSION REPORT (f) */}
+          {/* TAB 5: ADMISSIONS & CONVERSION REPORT (e) */}
           {/* ========================================================= */}
           {activeTab === 'admissions-conversion' && (
             <div className="space-y-4">
@@ -1384,7 +1245,7 @@ export default function ReportsHubPage() {
                 <StatCard
                   title="Admissions Converted"
                   value={`${data?.summary?.total_converted || 0}`}
-                  subtext="Enrolled into coaching batches"
+                  subtext="Enrolled into coaching subjects"
                   icon={GraduationCap}
                   color="emerald"
                 />
@@ -2107,7 +1968,6 @@ export default function ReportsHubPage() {
                   <th className="p-1.5 border border-black">Student</th>
                   <th className="p-1.5 border border-black">Mobile</th>
                   <th className="p-1.5 border border-black">Subject</th>
-                  <th className="p-1.5 border border-black">Batch</th>
                   <th className="p-1.5 border border-black text-right">Billed (₹)</th>
                   <th className="p-1.5 border border-black text-right">Paid (₹)</th>
                   <th className="p-1.5 border border-black text-right">Due (₹)</th>
@@ -2131,19 +1991,7 @@ export default function ReportsHubPage() {
                 <tr>
                   <th className="p-1.5 border border-black">Teacher Name</th>
                   <th className="p-1.5 border border-black">Specialization</th>
-                  <th className="p-1.5 border border-black text-center">Batches</th>
                   <th className="p-1.5 border border-black text-center">Students</th>
-                  <th className="p-1.5 border border-black text-right">Billed (₹)</th>
-                  <th className="p-1.5 border border-black text-right">Collections (₹)</th>
-                  <th className="p-1.5 border border-black text-right">Dues (₹)</th>
-                </tr>
-              )}
-              {activeTab === 'batch-breakup' && (
-                <tr>
-                  <th className="p-1.5 border border-black">Batch Code & Name</th>
-                  <th className="p-1.5 border border-black">Teacher</th>
-                  <th className="p-1.5 border border-black">Hall Room</th>
-                  <th className="p-1.5 border border-black text-center">Enrolments</th>
                   <th className="p-1.5 border border-black text-right">Billed (₹)</th>
                   <th className="p-1.5 border border-black text-right">Collections (₹)</th>
                   <th className="p-1.5 border border-black text-right">Dues (₹)</th>
@@ -2226,7 +2074,6 @@ export default function ReportsHubPage() {
                     <td className="p-1 border border-black font-bold">{i.student_name} ({i.student_code})</td>
                     <td className="p-1 border border-black font-mono">{i.mobile || '-'}</td>
                     <td className="p-1 border border-black">{i.subject_name}</td>
-                    <td className="p-1 border border-black">{i.batch_name}</td>
                     <td className="p-1 border border-black text-right font-mono">₹{i.net_price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                     <td className="p-1 border border-black text-right font-mono">₹{i.amount_collected.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                     <td className="p-1 border border-black text-right font-mono font-black">₹{i.balance_due.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
@@ -2252,23 +2099,10 @@ export default function ReportsHubPage() {
                   <tr key={t.teacher_id}>
                     <td className="p-1 border border-black font-bold">{t.teacher_name}</td>
                     <td className="p-1 border border-black">{t.specialization}</td>
-                    <td className="p-1 border border-black text-center font-mono">{t.batches_count}</td>
                     <td className="p-1 border border-black text-center font-mono">{t.enrolled_count}</td>
                     <td className="p-1 border border-black text-right font-mono">₹{(t.fees_billed || t.total_booked || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                     <td className="p-1 border border-black text-right font-mono font-black">₹{(t.collections || t.total_collected || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                     <td className="p-1 border border-black text-right font-mono">₹{(t.due || t.balance_due || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                  </tr>
-                ))}
-              {activeTab === 'batch-breakup' &&
-                (Array.isArray(data) ? data : data?.items || []).map((b) => (
-                  <tr key={b.batch_id}>
-                    <td className="p-1 border border-black font-bold">{b.batch_name} ({b.batch_code})</td>
-                    <td className="p-1 border border-black">{b.teacher_name}</td>
-                    <td className="p-1 border border-black">{b.hall_number}</td>
-                    <td className="p-1 border border-black text-center font-mono">{b.enrolled_count}</td>
-                    <td className="p-1 border border-black text-right font-mono">₹{(b.fees_billed || b.total_booked || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td className="p-1 border border-black text-right font-mono font-black">₹{(b.collections || b.total_collected || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td className="p-1 border border-black text-right font-mono">₹{(b.dues || b.balance_due || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                   </tr>
                 ))}
               {activeTab === 'admissions-conversion' &&

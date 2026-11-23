@@ -309,11 +309,7 @@ export default function PublicVerifyPage() {
                         <span className="text-sm font-black text-black">
                           {course.course_name}
                         </span>
-                        {course.batch_name && (
-                          <span className="text-[11px] font-mono font-bold bg-slate-100 px-2 py-0.5 rounded border border-slate-300 text-slate-800 self-start sm:self-auto">
-                            {course.batch_name}
-                          </span>
-                        )}
+
                       </div>
 
                       {/* Course Details */}

@@ -299,7 +299,7 @@ export default function PaymentDetailPage() {
               <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
                 <tr>
                   <th className="p-3">Subject / Course</th>
-                  <th className="p-3">Batch Cohort</th>
+                  <th className="p-3">Hall</th>
                   <th className="p-3">Faculty</th>
                   <th className="p-3 text-right">Allocated Amount</th>
                 </tr>
@@ -311,7 +311,7 @@ export default function PaymentDetailPage() {
                       {alloc.subject_name || 'Subject'}
                     </td>
                     <td className="p-3 text-slate-700">
-                      {alloc.batch_name || 'Batch'}
+                      {alloc.hall_number || 'Main Campus'}
                     </td>
                     <td className="p-3 text-slate-700">
                       {alloc.teacher_name || 'Faculty'}

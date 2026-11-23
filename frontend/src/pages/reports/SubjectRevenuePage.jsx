@@ -36,7 +36,6 @@ import DateRangeFilter from '../../components/common/DateRangeFilter';
 import QuickPaymentModal from '../../components/modals/QuickPaymentModal';
 import SubjectDetailModal from '../../components/modals/SubjectDetailModal';
 import TeacherDetailModal from '../../components/modals/TeacherDetailModal';
-import BatchDetailModal from '../../components/modals/BatchDetailModal';
 import { reportApi } from '../../services/allApis';
 import { formatIndianDate, formatCycleLabel, evaluateCycleStatus } from '../../utils/dateCycleUtils';
 
@@ -112,8 +111,7 @@ function StudentRosterSubtable({ students = [], contextType = 'subject', onColle
             <tr>
               <th className="p-2.5">Student</th>
               {contextType === 'subject' && <th className="p-2.5">Faculty & Hall</th>}
-              {contextType === 'teacher' && <th className="p-2.5">Subject & Batch</th>}
-              {contextType === 'batch' && <th className="p-2.5">Hall Room</th>}
+              {contextType === 'teacher' && <th className="p-2.5">Subject</th>}
               <th className="p-2.5">Rolling Billing Cycle</th>
               <th className="p-2.5 text-center">Cycle Status</th>
               <th className="p-2.5 text-right">Fee Billed</th>
@@ -168,19 +166,13 @@ function StudentRosterSubtable({ students = [], contextType = 'subject', onColle
                 {contextType === 'subject' && (
                   <td className="p-2.5 text-slate-700">
                     <div className="font-semibold text-black">{s.teacher_name || 'Faculty'}</div>
-                    <div className="text-[11px] text-slate-600">{s.hall_number ? `Hall: ${s.hall_number}` : 'Main'} · {s.batch_name}</div>
+                    <div className="text-[11px] text-slate-600">{s.hall_number ? `Hall: ${s.hall_number}` : 'Main Campus'}</div>
                   </td>
                 )}
                 {contextType === 'teacher' && (
                   <td className="p-2.5 text-slate-700">
                     <div className="font-semibold text-black">{s.subject_name || 'Subject'}</div>
-                    <div className="text-[11px] text-slate-600">{s.batch_name} · Hall: {s.hall_number || 'Main'}</div>
-                  </td>
-                )}
-                {contextType === 'batch' && (
-                  <td className="p-2.5 text-slate-700">
-                    <div className="font-semibold text-black">{s.hall_number || 'Main'}</div>
-                    <div className="text-[11px] text-slate-600">{s.teacher_name}</div>
+                    <div className="text-[11px] text-slate-600">{s.hall_number ? `Hall: ${s.hall_number}` : 'Main Campus'}</div>
                   </td>
                 )}
 
@@ -320,16 +312,14 @@ function StudentRosterSubtable({ students = [], contextType = 'subject', onColle
 
 export default function SubjectRevenuePage() {
   const [subjectData, setSubjectData] = useState(null);
-  const [batchData, setBatchData] = useState([]);
   const [teacherData, setTeacherData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentFilters, setCurrentFilters] = useState({});
 
   // View state
-  const [activeTab, setActiveTab] = useState('all'); // 'all', 'subjects', 'teachers', 'batches'
+  const [activeTab, setActiveTab] = useState('all'); // 'all', 'subjects', 'teachers'
   const [expandedSubjects, setExpandedSubjects] = useState({});
   const [expandedTeachers, setExpandedTeachers] = useState({});
-  const [expandedBatches, setExpandedBatches] = useState({});
 
   // Searches & Pagination for each Ledger
   const [subjectSearch, setSubjectSearch] = useState('');
@@ -338,13 +328,9 @@ export default function SubjectRevenuePage() {
   const [teacherSearch, setTeacherSearch] = useState('');
   const [teacherPage, setTeacherPage] = useState(1);
 
-  const [batchSearch, setBatchSearch] = useState('');
-  const [batchPage, setBatchPage] = useState(1);
-
   // Detail Modals
   const [selectedSubjectDetail, setSelectedSubjectDetail] = useState(null);
   const [selectedTeacherDetail, setSelectedTeacherDetail] = useState(null);
-  const [selectedBatchDetail, setSelectedBatchDetail] = useState(null);
 
   // Fee collection modal state
   const [payModalOpen, setPayModalOpen] = useState(false);
@@ -353,13 +339,11 @@ export default function SubjectRevenuePage() {
   const fetchReports = useCallback(async (filters = {}) => {
     setLoading(true);
     try {
-      const [subRes, bRes, tRes] = await Promise.all([
+      const [subRes, tRes] = await Promise.all([
         reportApi.getSubjectRevenue(filters),
-        reportApi.getBatchRevenue(filters),
         reportApi.getTeacherRevenue(filters),
       ]);
       setSubjectData(subRes);
-      setBatchData(bRes || []);
       setTeacherData(tRes || []);
     } catch (err) {
       console.error('Failed to load revenue reports:', err);
@@ -388,13 +372,6 @@ export default function SubjectRevenuePage() {
     setExpandedTeachers((prev) => ({
       ...prev,
       [teacherId]: !prev[teacherId],
-    }));
-  };
-
-  const toggleBatchExpand = (batchId) => {
-    setExpandedBatches((prev) => ({
-      ...prev,
-      [batchId]: !prev[batchId],
     }));
   };
 
@@ -440,25 +417,6 @@ export default function SubjectRevenuePage() {
     const start = (currentTeacherPage - 1) * PAGE_SIZE;
     return filteredTeachers.slice(start, start + PAGE_SIZE);
   }, [filteredTeachers, currentTeacherPage]);
-
-  // Filtered and Paginated Batches
-  const filteredBatches = useMemo(() => {
-    if (!batchSearch.trim()) return batchData;
-    const q = batchSearch.toLowerCase().trim();
-    return batchData.filter(
-      (b) =>
-        b.batch_name?.toLowerCase().includes(q) ||
-        b.batch_code?.toLowerCase().includes(q) ||
-        b.teacher_name?.toLowerCase().includes(q)
-    );
-  }, [batchData, batchSearch]);
-
-  const batchTotalPages = Math.max(1, Math.ceil(filteredBatches.length / PAGE_SIZE));
-  const currentBatchPage = Math.min(batchPage, batchTotalPages);
-  const pagedBatches = useMemo(() => {
-    const start = (currentBatchPage - 1) * PAGE_SIZE;
-    return filteredBatches.slice(start, start + PAGE_SIZE);
-  }, [filteredBatches, currentBatchPage]);
 
   // Chart data formatting: Show active top subjects and avoid label crowding
   const chartData = useMemo(() => {
@@ -617,17 +575,6 @@ export default function SubjectRevenuePage() {
             >
               <GraduationCap className="w-3.5 h-3.5" />
               <span>Teacher Ledgers ({teacherData.length})</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('batches')}
-              className={`min-h-[36px] px-3 py-2 text-xs font-bold rounded-t-lg transition-colors cursor-pointer flex items-center gap-1.5 ${
-                activeTab === 'batches'
-                  ? 'bg-odoo-600 text-white shadow-xs'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
-            >
-              <Users className="w-3.5 h-3.5" />
-              <span>Batch Ledgers ({batchData.length})</span>
             </button>
           </div>
 
@@ -862,7 +809,6 @@ export default function SubjectRevenuePage() {
                       <th className="p-2.5">Teacher Code</th>
                       <th className="p-2.5">Faculty Name</th>
                       <th className="p-2.5">Specialization</th>
-                      <th className="p-2.5 text-center">Batches</th>
                       <th className="p-2.5 text-center">Students</th>
                       <th className="p-2.5 text-right">Total Billed</th>
                       <th className="p-2.5 text-right text-emerald-800">Collected</th>
@@ -873,7 +819,7 @@ export default function SubjectRevenuePage() {
                   <tbody className="divide-y divide-slate-100">
                     {pagedTeachers.length === 0 ? (
                       <tr>
-                        <td colSpan={9} className="py-6 text-center text-slate-500">
+                        <td colSpan={8} className="py-6 text-center text-slate-500">
                           No teachers matching '{teacherSearch}'.
                         </td>
                       </tr>
@@ -899,7 +845,6 @@ export default function SubjectRevenuePage() {
                                 <span>{t.teacher_name}</span>
                               </td>
                               <td className="p-2.5 text-slate-700 font-medium">{t.specialization}</td>
-                              <td className="p-2.5 text-center font-bold text-black">{t.batches_count}</td>
                               <td className="p-2.5 text-center">
                                 <span
                                   className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold transition-all ${
@@ -1016,202 +961,6 @@ export default function SubjectRevenuePage() {
             </div>
           )}
 
-          {/* 3. Batch-Wise Collections & Realized Revenue */}
-          {(activeTab === 'all' || activeTab === 'batches') && (
-            <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-slate-200 gap-2">
-                <div>
-                  <h2 className="text-sm font-bold text-black flex items-center gap-2">
-                    <Users className="w-4 h-4 text-odoo-600" />
-                    <span>Batch-Wise Collections & Realized Revenue</span>
-                  </h2>
-                  <p className="text-[11px] text-slate-500">
-                    Click any batch row or Detail to open dedicated batch roster & rolling fee cycles page
-                  </p>
-                </div>
-
-                {/* Batch Search Box */}
-                <div className="relative w-full sm:w-64">
-                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    placeholder="Search batch by name, code, teacher..."
-                    value={batchSearch}
-                    onChange={(e) => {
-                      setBatchSearch(e.target.value);
-                      setBatchPage(1);
-                    }}
-                    className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600 text-black placeholder:text-slate-400 font-medium"
-                  />
-                </div>
-              </div>
-
-              <div className="overflow-x-auto -webkit-overflow-scrolling-touch">
-                <table className="w-full text-left text-xs min-w-[700px]">
-                  <thead className="bg-slate-100 text-slate-800 font-semibold border-b border-slate-200">
-                    <tr>
-                      <th className="p-2.5">Batch Code</th>
-                      <th className="p-2.5">Batch Name</th>
-                      <th className="p-2.5">Faculty In-Charge</th>
-                      <th className="p-2.5">Hall No</th>
-                      <th className="p-2.5 text-center">Students</th>
-                      <th className="p-2.5 text-right">Total Billed</th>
-                      <th className="p-2.5 text-right text-emerald-800">Collected</th>
-                      <th className="p-2.5 text-right text-rose-700">Due</th>
-                      <th className="p-2.5 text-center">Status</th>
-                      <th className="p-2.5 text-center">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {pagedBatches.length === 0 ? (
-                      <tr>
-                        <td colSpan={10} className="py-6 text-center text-slate-500">
-                          No batches matching '{batchSearch}'.
-                        </td>
-                      </tr>
-                    ) : (
-                      pagedBatches.map((b, idx) => {
-                        const isExpanded = !!expandedBatches[b.batch_id];
-                        return (
-                          <React.Fragment key={idx}>
-                            <tr
-                              className={`hover:bg-slate-50 transition-colors cursor-pointer ${
-                                isExpanded ? 'bg-purple-50/20' : ''
-                              }`}
-                              onClick={() => navigate(`/batches/${b.batch_id}`)}
-                              title="Click to open dedicated batch page with student roster"
-                            >
-                              <td className="p-2.5 font-mono font-bold text-odoo-700">{b.batch_code}</td>
-                              <td className="p-2.5 font-bold text-black flex items-center gap-1.5">
-                                {isExpanded ? (
-                                  <ChevronDown className="w-4 h-4 text-odoo-600 shrink-0" />
-                                ) : (
-                                  <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
-                                )}
-                                <span>{b.batch_name}</span>
-                              </td>
-                              <td className="p-2.5 text-slate-700 font-medium">{b.teacher_name}</td>
-                              <td className="p-2.5 text-slate-700 font-semibold">{b.hall_number || 'Main'}</td>
-                              <td className="p-2.5 text-center">
-                                <span
-                                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold transition-all ${
-                                    isExpanded
-                                      ? 'bg-odoo-600 text-white shadow-xs'
-                                      : b.enrolled_count > 0
-                                      ? 'bg-purple-100 text-odoo-900 border border-odoo-200'
-                                      : 'bg-slate-100 text-slate-700'
-                                  }`}
-                                >
-                                  <Users className="w-3 h-3" />
-                                  {b.enrolled_count}
-                                </span>
-                              </td>
-                              <td className="p-2.5 text-right font-mono font-bold text-black">
-                                ₹{b.total_booked.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                              </td>
-                              <td className="p-2.5 text-right font-mono font-bold text-emerald-800">
-                                ₹{b.total_collected.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                              </td>
-                              <td className="p-2.5 text-right font-mono font-bold text-rose-700">
-                                ₹{b.balance_due.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                              </td>
-                              <td className="p-2.5 text-center">
-                                <Badge size="xs" variant={b.status === 'ACTIVE' ? 'success' : 'neutral'}>
-                                  {b.status}
-                                </Badge>
-                              </td>
-                              <td className="p-2.5 text-center" onClick={(e) => e.stopPropagation()}>
-                                <div className="flex items-center justify-center gap-1.5">
-                                  <button
-                                    onClick={() => navigate(`/batches/${b.batch_id}`)}
-                                    title="Open Dedicated Batch Roster Page"
-                                    className="px-2 py-0.5 text-[11px] font-bold bg-blue-50 hover:bg-blue-100 text-blue-700 rounded border border-blue-200 flex items-center gap-1 cursor-pointer transition-colors"
-                                  >
-                                    <ExternalLink className="w-3 h-3 text-blue-600" />
-                                    <span>Detail / Roster ↗</span>
-                                  </button>
-                                  <button
-                                    onClick={() => toggleBatchExpand(b.batch_id)}
-                                    title="Toggle in-page preview"
-                                    className="text-[11px] font-semibold text-slate-500 hover:text-slate-800 px-1 py-0.5"
-                                  >
-                                    {isExpanded ? 'Hide ▲' : 'Inline ▾'}
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-
-                            {/* Expanded Batch Student Roster */}
-                            {isExpanded && (
-                              <tr>
-                                <td colSpan={10} className="p-0 border-b border-odoo-200 bg-purple-50/20">
-                                  <div className="p-3 border-l-4 border-odoo-600">
-                                    <StudentRosterSubtable
-                                      students={b.students}
-                                      contextType="batch"
-                                      onCollectFee={handleOpenFeeModal}
-                                    />
-                                  </div>
-                                </td>
-                              </tr>
-                            )}
-                          </React.Fragment>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Batch Ledger Pagination */}
-              {batchTotalPages > 1 && (
-                <div className="flex items-center justify-between text-xs text-slate-600 pt-2 border-t border-slate-100">
-                  <span>
-                    Showing <strong className="text-black">{(currentBatchPage - 1) * PAGE_SIZE + 1}</strong> to{' '}
-                    <strong className="text-black">{Math.min(currentBatchPage * PAGE_SIZE, filteredBatches.length)}</strong> of{' '}
-                    <strong className="text-black">{filteredBatches.length}</strong> batches
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => setBatchPage(1)}
-                      disabled={currentBatchPage <= 1}
-                      className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                      title="First Page"
-                    >
-                      <ChevronsLeft className="w-3.5 h-3.5 text-black" />
-                    </button>
-                    <button
-                      onClick={() => setBatchPage((p) => Math.max(1, p - 1))}
-                      disabled={currentBatchPage <= 1}
-                      className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                      title="Previous Page"
-                    >
-                      <ChevronLeft className="w-3.5 h-3.5 text-black" />
-                    </button>
-                    <span className="px-2 py-0.5 font-medium text-black">
-                      Page {currentBatchPage} of {batchTotalPages}
-                    </span>
-                    <button
-                      onClick={() => setBatchPage((p) => Math.min(batchTotalPages, p + 1))}
-                      disabled={currentBatchPage >= batchTotalPages}
-                      className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                      title="Next Page"
-                    >
-                      <ChevronRight className="w-3.5 h-3.5 text-black" />
-                    </button>
-                    <button
-                      onClick={() => setBatchPage(batchTotalPages)}
-                      disabled={currentBatchPage >= batchTotalPages}
-                      className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                      title="Last Page"
-                    >
-                      <ChevronsRight className="w-3.5 h-3.5 text-black" />
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
         </>
       )}
 
@@ -1246,13 +995,7 @@ export default function SubjectRevenuePage() {
         onViewRoster={(t) => toggleTeacherExpand(t.teacher_id)}
       />
 
-      {/* Batch Detail Modal */}
-      <BatchDetailModal
-        isOpen={!!selectedBatchDetail}
-        onClose={() => setSelectedBatchDetail(null)}
-        batch={selectedBatchDetail}
-        onToggleRoster={(batchId) => toggleBatchExpand(batchId)}
-      />
+
     </div>
   );
 }

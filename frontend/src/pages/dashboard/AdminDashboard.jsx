@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Users,
   GraduationCap,
-  CalendarDays,
+  BookOpen,
   ClipboardList,
   AlertTriangle,
   ReceiptIndianRupee,
@@ -75,7 +75,7 @@ export default function AdminDashboard() {
             icon={Plus}
             onClick={() => navigate('/admissions/new')}
             className="min-h-[42px] sm:min-h-[34px] px-3.5 py-2 text-xs font-semibold rounded-lg shadow-2xs active:scale-[0.98] transition-all justify-center"
-            title="Purchase & Pay for Course Batches"
+            title="Purchase & Pay for Courses"
           >
             Course Paid
           </Button>
@@ -120,12 +120,12 @@ export default function AdminDashboard() {
           onClick={() => navigate('/teachers')}
         />
         <StatCard
-          title="Active Batches"
-          value={m.active_batches ?? 0}
-          subtext="Running classes"
-          icon={CalendarDays}
+          title="Active Subjects"
+          value={m.active_subjects ?? m.active_batches ?? 0}
+          subtext="Running subjects"
+          icon={BookOpen}
           color="purple"
-          onClick={() => navigate('/batches')}
+          onClick={() => navigate('/subjects')}
         />
         <StatCard
           title="Pending Enquiries"

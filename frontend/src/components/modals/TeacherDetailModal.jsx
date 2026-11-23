@@ -57,7 +57,7 @@ export default function TeacherDetailModal({
               </div>
               <div className="text-[11px] text-slate-600 font-medium">
                 {isActive
-                  ? 'Currently assigned to teach batches, subjects, and student cohorts'
+                  ? 'Currently assigned to teach subjects and student cohorts'
                   : 'Faculty is inactive or temporarily suspended'}
               </div>
             </div>

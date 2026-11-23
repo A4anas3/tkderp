@@ -45,7 +45,7 @@ export function extractActiveCourses(student, enrollmentData) {
         course_name: gc.subject_name || 'Green Card — All Access Annual Pass',
         subject_name: gc.subject_name || 'Green Card',
         teacher_name: gc.teacher_name || null,
-        batch_name: 'All Access Pass',
+        
         hall_number: gc.hall_number || null,
         valid_from: gc.valid_from,
         valid_to: gc.valid_to,
@@ -63,14 +63,13 @@ export function extractActiveCourses(student, enrollmentData) {
           course_name: subj.subject_name,
           subject_name: subj.subject_name,
           teacher_name: subj.teacher_name,
-          batch_name: subj.batch_name,
           hall_number: subj.hall_number,
           valid_from: subj.valid_from,
           valid_to: subj.valid_to,
           validity_text: formatValidityPeriod(subj.valid_from, subj.valid_to),
           days_remaining: subj.days_remaining,
           admission_number: subj.admission_number,
-          item_type: subj.item_type || 'BATCH_SUBJECT',
+          item_type: subj.item_type || 'SUBJECT',
         });
       });
     }
@@ -84,14 +83,13 @@ export function extractActiveCourses(student, enrollmentData) {
         course_name: line.subject_name,
         subject_name: line.subject_name,
         teacher_name: line.teacher_name,
-        batch_name: line.batch_name,
         hall_number: line.hall_number,
         valid_from: line.valid_from,
         valid_to: line.valid_to,
         validity_text: formatValidityPeriod(line.valid_from, line.valid_to),
         days_remaining: line.days_left,
         admission_number: line.slip_number,
-        item_type: line.item_type || 'BATCH_SUBJECT',
+        item_type: line.item_type || 'SUBJECT',
       });
     });
   }

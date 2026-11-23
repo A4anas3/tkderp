@@ -8,7 +8,7 @@ export default function ReceiptFooter({
   issuedDate = null,
   terms = [
     'Fees once deposited are strictly non-refundable and non-transferable under all circumstances.',
-    'Please retain this original computer-generated slip for student identity card issuance & batch entry.',
+    'Please retain this original computer-generated slip for student identity card issuance & class entry.',
     'Payments made via Cheque/Demand Draft/UPI are subject to actual bank clearing and realization.',
   ],
   customNote = null,

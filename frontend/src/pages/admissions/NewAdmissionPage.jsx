@@ -81,7 +81,7 @@ export default function NewAdmissionPage() {
     return d.toISOString().split('T')[0];
   });
   const [billingMonths, setBillingMonths] = useState(1);
-  const [lastBatchPeriodInfo, setLastBatchPeriodInfo] = useState(null);
+  const [lastFeePeriodInfo, setLastFeePeriodInfo] = useState(null);
 
   // Step 2: Selected Items
   const [items, setItems] = useState([]);
@@ -288,7 +288,7 @@ export default function NewAdmissionPage() {
   useEffect(() => {
     if (!studentId) {
       setExistingAdmissions([]);
-      setLastBatchPeriodInfo(null);
+      setLastFeePeriodInfo(null);
       setActiveEnrollment(null);
       setSelectedStudentObj(null);
       return;
@@ -300,18 +300,18 @@ export default function NewAdmissionPage() {
       try {
         const [admRes, periodRes, activeRes] = await Promise.all([
           admissionApi.list({ student_id: studentId, page_size: 20 }),
-          studentApi.getLastBatchPeriod(studentId),
+          studentApi.getLastFeePeriod(studentId),
           studentApi.getActiveEnrollment(studentId).catch(() => null),
         ]);
         setExistingAdmissions(admRes.items || []);
         setActiveEnrollment(activeRes || null);
 
         if (periodRes && periodRes.has_previous) {
-          setLastBatchPeriodInfo(periodRes);
+          setLastFeePeriodInfo(periodRes);
           setValidFrom(periodRes.suggested_start_date);
           setValidTo(calculateEndDateFromMonths(periodRes.suggested_start_date, billingMonths));
         } else {
-          setLastBatchPeriodInfo(null);
+          setLastFeePeriodInfo(null);
           setValidFrom(admissionDate);
           setValidTo(calculateEndDateFromMonths(admissionDate, billingMonths));
         }
@@ -1137,12 +1137,12 @@ export default function NewAdmissionPage() {
               </div>
             )}
 
-            {/* Last Batch Coverage Info (if any) */}
-            {lastBatchPeriodInfo?.has_previous && (
+            {/* Last Enrollment Coverage Info (if any) */}
+            {lastFeePeriodInfo?.has_previous && (
               <div className="bg-amber-50 border border-amber-200 rounded-md p-2.5 text-xs text-amber-950 flex items-center gap-2">
                 <CalendarDays className="w-4 h-4 text-amber-700 shrink-0" />
                 <span>
-                  Previous cycle ended on <strong>{lastBatchPeriodInfo.last_end_date}</strong>. Suggested new cycle starts on <strong>{lastBatchPeriodInfo.suggested_start_date}</strong>.
+                  Previous cycle ended on <strong>{lastFeePeriodInfo.last_end_date}</strong>. Suggested new cycle starts on <strong>{lastFeePeriodInfo.suggested_start_date}</strong>.
                 </span>
               </div>
             )}
@@ -1833,7 +1833,7 @@ export default function NewAdmissionPage() {
                 label="Internal Admission Notes (Optional)"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="e.g. Guardian accompanied, batch starts next Monday"
+                placeholder="e.g. Guardian accompanied, classes start next Monday"
               />
             </div>
 

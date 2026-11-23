@@ -215,7 +215,7 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission, admi
           </span>
         </div>
 
-        {/* Itemized Courses & Batches Table */}
+        {/* Itemized Courses & Subjects Table */}
         <div className="space-y-1">
           <span className="text-[10px] font-black text-black uppercase tracking-wider block">
             Enrolled Academic Courses & Subject Modules
@@ -225,7 +225,7 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission, admi
               <thead className="bg-slate-100 text-black font-bold border-b border-slate-300">
                 <tr>
                   <th className="p-1.5 w-8 text-center border-r border-slate-300">#</th>
-                  <th className="p-1.5 border-r border-slate-300">Batch / Module Description</th>
+                  <th className="p-1.5 border-r border-slate-300">Course / Module Description</th>
                   <th className="p-1.5 text-right border-r border-slate-300 w-24">Gross (₹)</th>
                   <th className="p-1.5 text-right border-r border-slate-300 w-24">Discount (₹)</th>
                   <th className="p-1.5 text-right w-24">Net Fee (₹)</th>
@@ -400,7 +400,7 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission, admi
           terms={[
             'Course admission is strictly subject to institute rules and disciplinary regulations.',
             'Fees once paid are non-refundable & non-transferable under any circumstances.',
-            'Preserve this slip for identity verification and continuous batch hall attendance.',
+            'Preserve this slip for identity verification and continuous class attendance.',
           ]}
         />
       </div>
