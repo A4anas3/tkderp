@@ -388,6 +388,11 @@ export default function AdmissionDetailPage() {
                 <tr key={idx} className="hover:bg-slate-50/60">
                   <td className="p-3">
                     <div className="font-bold text-black">{itm.item_name_snapshot || 'Course Enrollment'}</div>
+                    {itm.source_demo_number && (
+                      <span className="inline-block text-[11px] font-mono font-semibold text-purple-700 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded mt-0.5">
+                        Demo {itm.source_demo_number}
+                      </span>
+                    )}
                     <div className="text-[11px] text-slate-500 font-mono">
                       {itm.subject_code ? `Code: ${itm.subject_code}` : ''}
                     </div>

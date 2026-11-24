@@ -165,6 +165,20 @@ class AdmissionItem(BaseModel):
     student: Mapped[Optional["app.modules.students.models.Student"]] = relationship("app.modules.students.models.Student", lazy="joined")
     renewed_from_item: Mapped[Optional["AdmissionItem"]] = relationship("AdmissionItem", remote_side="AdmissionItem.id", lazy="selectin")
     subject: Mapped[Optional["app.modules.subjects.models.Subject"]] = relationship("app.modules.subjects.models.Subject", lazy="joined")
+    demo_item: Mapped[Optional["app.modules.enquiries.models.EnquiryDemoItem"]] = relationship(
+        "app.modules.enquiries.models.EnquiryDemoItem",
+        back_populates="admission_item",
+        foreign_keys="app.modules.enquiries.models.EnquiryDemoItem.converted_admission_item_id",
+        uselist=False,
+        lazy="select"
+    )
+
+    @property
+    def source_demo_number(self) -> Optional[str]:
+        demo = self.__dict__.get("demo_item")
+        if demo:
+            return demo.demo_reference_number
+        return None
 
     @property
     def schedule(self) -> Optional[str]:

@@ -69,7 +69,7 @@ import RenewSubjectModal from '../../components/modals/RenewSubjectModal';
 import ChangeSubjectModal from '../../components/modals/ChangeSubjectModal';
 import WaiveDueModal from '../../components/modals/WaiveDueModal';
 import StudentIDCardModal from '../../components/modals/StudentIDCardModal';
-import { getCleanCancelReason } from '../../utils/dateCycleUtils';
+import { getCleanCancelReason, formatIndianDate } from '../../utils/dateCycleUtils';
 
 function getValidityStatus(adm) {
   if (adm.status === 'SUSPENDED') {
@@ -175,6 +175,8 @@ export default function StudentDetailPage() {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [demos, setDemos] = useState([]);
+  const [demosLoading, setDemosLoading] = useState(false);
 
   // Tab State: 'HISTORY' | 'INVOICES' | 'LEDGER'
   const [activeMainTab, setActiveMainTab] = useState('HISTORY');
@@ -275,11 +277,28 @@ export default function StudentDetailPage() {
     }
   };
 
+  const fetchDemosData = async () => {
+    setDemosLoading(true);
+    try {
+      const res = await studentApi.getDemos(id);
+      setDemos(res || []);
+    } catch (err) {
+      console.warn('Failed to fetch student demos:', err);
+    } finally {
+      setDemosLoading(false);
+    }
+  };
+
   const fetchStudentProfile = async () => {
     setLoading(true);
     try {
       const stRes = await studentApi.get(id);
       setStudent(stRes);
+      if (stRes?.demos) {
+        setDemos(stRes.demos);
+      } else {
+        fetchDemosData();
+      }
       return stRes;
     } catch (err) {
       error(err.message || 'Failed to load student profile');
@@ -405,6 +424,7 @@ export default function StudentDetailPage() {
       await Promise.all([
         fetchStudentProfile(),
         fetchEnrollmentData(),
+        fetchDemosData(),
         fetchAdmissionsData(admPage, admPageSize, admSearch, admStatusFilter),
         fetchTransactionsData(txnPage, txnPageSize, txnSearch, txnModeFilter, txnTypeFilter),
         fetchStudentAuditLogs(auditPage, auditPageSize, auditSearch, auditActionFilter),
@@ -417,6 +437,7 @@ export default function StudentDetailPage() {
   useEffect(() => {
     fetchStudentProfile();
     fetchEnrollmentData();
+    fetchDemosData();
   }, [id]);
 
   useEffect(() => {
@@ -540,6 +561,145 @@ export default function StudentDetailPage() {
   const activeTotalFee = activeAdmissions.reduce((acc, a) => acc + Number(a.total_payable || 0), 0);
   const activeTotalPaid = activeAdmissions.reduce((acc, a) => acc + Number(a.amount_paid || 0), 0);
   const activeTotalDue = activeAdmissions.reduce((acc, a) => acc + Number(a.balance_due || 0), 0);
+
+  const renderDemosSection = () => {
+    const demoStatusVariants = {
+      SCHEDULED: 'primary',
+      ACTIVE: 'primary',
+      ATTENDED: 'warning',
+      CONVERTED: 'success',
+      DROPPED: 'neutral',
+      EXPIRED: 'danger',
+    };
+
+    return (
+      <div className="bg-white border border-slate-200 rounded-xl p-3.5 sm:p-4 shadow-xs space-y-3">
+        <div className="pb-3 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-odoo-600" />
+              <h2 className="text-sm font-bold text-black">Trial Demos & Conversion</h2>
+              {demos.length > 0 && (
+                <Badge size="xs" variant="purple">
+                  {demos.length} {demos.length === 1 ? 'Demo' : 'Demos'}
+                </Badge>
+              )}
+            </div>
+            <p className="text-xs text-slate-700 font-medium mt-0.5">
+              Trial classes attended by candidate, with linkage to enrolled course admissions
+            </p>
+          </div>
+          <Button
+            size="xs"
+            variant="secondary"
+            icon={RefreshCw}
+            loading={demosLoading}
+            onClick={fetchDemosData}
+          >
+            Refresh
+          </Button>
+        </div>
+
+        {demosLoading && demos.length === 0 ? (
+          <div className="p-8 text-center text-slate-500 text-xs">
+            <RefreshCw className="w-5 h-5 mx-auto mb-2 animate-spin text-odoo-600" />
+            Loading demo history...
+          </div>
+        ) : demos.length === 0 ? (
+          <div className="p-8 text-center bg-slate-50 border border-dashed border-slate-200 rounded-lg">
+            <Sparkles className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+            <p className="text-xs font-semibold text-slate-600">No trial demos recorded</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              This student has not taken any trial classes through the enquiry system.
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto border border-slate-200 rounded-lg">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 uppercase font-semibold text-[11px]">
+                <tr>
+                  <th className="p-3">Demo ID</th>
+                  <th className="p-3">Subject</th>
+                  <th className="p-3">Teacher</th>
+                  <th className="p-3">Hall</th>
+                  <th className="p-3">Trial Dates</th>
+                  <th className="p-3 text-center">Status</th>
+                  <th className="p-3">Purchased Course</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {demos.map((d) => {
+                  const isConverted = d.status === 'CONVERTED' || Boolean(d.converted_admission_item_id) || Boolean(d.linked_course);
+                  return (
+                    <tr key={d.id} className="hover:bg-slate-50/60 transition">
+                      <td className="p-3">
+                        <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-purple-50 border border-purple-200 text-odoo-900 inline-block">
+                          {d.demo_reference_number}
+                        </span>
+                        {d.enquiry_code && (
+                          <span className="text-[10px] text-slate-500 block mt-0.5 font-mono">
+                            Enquiry: {d.enquiry_code}
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-3">
+                        <div className="font-bold text-black">{d.subject_name}</div>
+                      </td>
+                      <td className="p-3">
+                        <div className="font-semibold text-black flex items-center gap-1">
+                          <User className="w-3 h-3 text-odoo-600" />
+                          {d.teacher_name || 'Faculty'}
+                        </div>
+                      </td>
+                      <td className="p-3">
+                        <div className="text-slate-700 flex items-center gap-1">
+                          <MapPin className="w-3 h-3 text-slate-400" />
+                          {d.hall || 'Main Hall'}
+                        </div>
+                      </td>
+                      <td className="p-3">
+                        <div className="font-mono font-bold text-black">
+                          {formatIndianDate(d.demo_start_date)}
+                          {d.demo_end_date && ` → ${formatIndianDate(d.demo_end_date)}`}
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          {d.demo_duration_days} days trial
+                        </div>
+                      </td>
+                      <td className="p-3 text-center">
+                        <Badge
+                          size="xs"
+                          variant={demoStatusVariants[d.status] || (isConverted ? 'success' : 'neutral')}
+                        >
+                          {d.status}
+                        </Badge>
+                      </td>
+                      <td className="p-3">
+                        {isConverted ? (
+                          <div>
+                            <div className="font-bold text-emerald-900">
+                              {d.linked_course?.subject || d.subject_name}
+                            </div>
+                            <div className="text-[11px] font-mono text-purple-700 font-semibold">
+                              {d.linked_course?.admission_number ? `${d.linked_course.admission_number}` : 'Admission Linked'}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-500 italic">
+                            Not converted yet
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="w-full min-w-0 max-w-full space-y-4">
@@ -1445,7 +1605,7 @@ export default function StudentDetailPage() {
       </div>
 
       {/* 2. Main Navigation Tabs */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 p-1 bg-slate-100 rounded-xl sm:bg-transparent sm:p-0 sm:border-b sm:border-slate-200 sm:flex sm:items-center sm:gap-2 sm:rounded-none">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-1 p-1 bg-slate-100 rounded-xl sm:bg-transparent sm:p-0 sm:border-b sm:border-slate-200 sm:flex sm:items-center sm:gap-2 sm:rounded-none">
         <button
           onClick={() => setActiveMainTab('HISTORY')}
           className={`flex items-center justify-center gap-1.5 px-2.5 sm:px-4 py-2 text-xs font-bold rounded-lg sm:rounded-none sm:border-b-2 transition ${
@@ -1461,6 +1621,23 @@ export default function StudentDetailPage() {
           {enrollmentData?.historical_subjects?.length > 0 && (
             <span className="px-1.5 py-0.2 text-[10px] rounded-full bg-slate-200 text-black font-mono font-bold">
               {enrollmentData.historical_subjects.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveMainTab('DEMOS')}
+          className={`flex items-center justify-center gap-1.5 px-2.5 sm:px-4 py-2 text-xs font-bold rounded-lg sm:rounded-none sm:border-b-2 transition ${
+            activeMainTab === 'DEMOS'
+              ? 'bg-white shadow-xs text-odoo-800 sm:bg-transparent sm:shadow-none sm:border-odoo-600 sm:text-odoo-700'
+              : 'text-slate-700 hover:text-black sm:border-transparent'
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5 shrink-0 text-odoo-600" />
+          <span>Demos</span>
+          {demos.length > 0 && (
+            <span className="px-1.5 py-0.2 text-[10px] rounded-full bg-purple-100 text-purple-900 font-mono font-bold">
+              {demos.length}
             </span>
           )}
         </button>
@@ -1777,7 +1954,19 @@ export default function StudentDetailPage() {
               </div>
             </div>
           )}
+
+          {/* Demos Section in History Tab */}
+          {demos.length > 0 && (
+            <div className="pt-2">
+              {renderDemosSection()}
+            </div>
+          )}
         </div>
+      )}
+
+      {/* TAB: Demos */}
+      {activeMainTab === 'DEMOS' && (
+        renderDemosSection()
       )}
 
       {/* TAB 2: Invoices & Billing History */}

@@ -36,6 +36,8 @@ class EnquiryDemoItemResponse(BaseModel):
     converted_admission_item_id: Optional[uuid.UUID] = None
     converted_student_id: Optional[uuid.UUID] = None
     converted_student_code: Optional[str] = None
+    converted_course_name: Optional[str] = None
+    converted_admission_number: Optional[str] = None
     days_remaining: Optional[int] = None
     status_label: Optional[str] = None
     badge_variant: Optional[str] = None
@@ -108,6 +110,7 @@ class ConvertEnquiryRequest(BaseModel):
     email: Optional[str] = None
     address: Optional[str] = None
     demo_item_ids: Optional[List[uuid.UUID]] = None  # Selective conversion of specific demo subjects
+    admission_id: Optional[uuid.UUID] = None
 
 # Register Row for individual demo passes / tickets
 class EnquiryDemoRegisterItem(BaseModel):
@@ -138,6 +141,8 @@ class EnquiryDemoRegisterItem(BaseModel):
     converted_admission_item_id: Optional[uuid.UUID] = None
     converted_student_id: Optional[uuid.UUID] = None
     converted_student_code: Optional[str] = None
+    converted_course_name: Optional[str] = None
+    converted_admission_number: Optional[str] = None
 
 # Analytics schemas
 class TeacherDemoMetric(BaseModel):

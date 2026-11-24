@@ -13,7 +13,7 @@ from app.core.config import settings
 from app.core.dependencies import require_staff, require_cashier_or_admin, require_admin
 from app.database.models import (
     Admission, AdmissionItem, Student, Payment, PaymentAllocation, GreenCardProduct, User, BatchSubject, Refund, AuditLog,
-    Subject, Batch, Teacher, FinancialTransaction, InstituteSetting
+    Subject, Batch, Teacher, FinancialTransaction, InstituteSetting, Enquiry, EnquiryDemoItem
 )
 from app.modules.admissions.schemas import (
     AdmissionCreate, AdmissionResponse, AdmissionCalculatePreviewRequest, AdmissionItemResponse, AdmissionRevokeRequest,
@@ -106,7 +106,7 @@ async def list_admissions(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
-    query = select(Admission).options(selectinload(Admission.items))
+    query = select(Admission).options(selectinload(Admission.items).selectinload(AdmissionItem.demo_item))
     count_query = select(func.count(Admission.id))
 
     if search:
@@ -378,6 +378,50 @@ async def create_admission(
 
     await db.flush()
 
+    # Link enquiry demo items if enquiry_id provided or matching enquiry exists for student
+    target_enquiry_id = payload.enquiry_id
+    if not target_enquiry_id:
+        enq_check = await db.execute(
+            select(Enquiry).options(selectinload(Enquiry.demo_items))
+            .where(Enquiry.converted_student_id == student.id)
+            .order_by(desc(Enquiry.created_at))
+        )
+        for candidate_enq in enq_check.scalars().all():
+            if any(
+                d.converted_admission_item_id is None and d.status != "CONVERTED" and any(
+                    (ai.subject_id and d.subject_id == ai.subject_id) or (d.subject_name_snapshot.lower() in ai.item_name_snapshot.lower())
+                    for ai in db_items
+                )
+                for d in candidate_enq.demo_items
+            ):
+                target_enquiry_id = candidate_enq.id
+                break
+
+    if target_enquiry_id:
+        enq_res = await db.execute(
+            select(Enquiry).options(selectinload(Enquiry.demo_items)).where(Enquiry.id == target_enquiry_id)
+        )
+        target_enq = enq_res.scalar_one_or_none()
+        if target_enq:
+            target_enq.converted_student_id = student.id
+            for ai in db_items:
+                matched_d = None
+                for d in target_enq.demo_items:
+                    if d.converted_admission_item_id is None and d.status != "CONVERTED":
+                        if ai.subject_id and d.subject_id == ai.subject_id:
+                            matched_d = d
+                            break
+                        elif not ai.subject_id and d.subject_name_snapshot.lower() in ai.item_name_snapshot.lower():
+                            matched_d = d
+                            break
+                if matched_d:
+                    matched_d.converted_admission_item_id = ai.id
+                    matched_d.status = "CONVERTED"
+                    ai.demo_item = matched_d
+
+            if target_enq.demo_items and all(d.status == "CONVERTED" for d in target_enq.demo_items):
+                target_enq.status = "CONVERTED"
+
     if has_gc:
         student.has_green_card = True
         student.green_card_expiry = max(student.green_card_expiry or date.min, adm_valid_from + timedelta(days=gc_validity_days))
@@ -546,7 +590,7 @@ async def get_admission(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
-    query = select(Admission).options(selectinload(Admission.items)).where(Admission.id == admission_id)
+    query = select(Admission).options(selectinload(Admission.items).selectinload(AdmissionItem.demo_item)).where(Admission.id == admission_id)
     res = await db.execute(query)
     admission = res.scalar_one_or_none()
     if not admission:

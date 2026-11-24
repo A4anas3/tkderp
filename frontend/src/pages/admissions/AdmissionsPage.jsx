@@ -101,7 +101,12 @@ export default function AdmissionsPage() {
               key={i}
               className="inline-block bg-slate-100 border border-slate-200 text-black px-1.5 py-0.5 rounded text-[11px]"
             >
-              {itm.item_name_snapshot}
+              <span>{itm.item_name_snapshot}</span>
+              {itm.source_demo_number && (
+                <span className="block text-[10px] font-mono text-purple-700 font-semibold">
+                  Demo {itm.source_demo_number}
+                </span>
+              )}
             </span>
           ))}
         </div>
@@ -369,7 +374,12 @@ export default function AdmissionsPage() {
                         key={i}
                         className="bg-slate-100 border border-slate-200 text-black px-1.5 py-0.5 rounded text-[10px] font-semibold"
                       >
-                        {itm.item_name_snapshot}
+                        <span>{itm.item_name_snapshot}</span>
+                        {itm.source_demo_number && (
+                          <span className="block text-[9px] font-mono text-purple-700 font-semibold">
+                            Demo {itm.source_demo_number}
+                          </span>
+                        )}
                       </span>
                     ))}
                   </div>

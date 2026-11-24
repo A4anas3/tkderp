@@ -56,3 +56,9 @@ class EnquiryDemoItem(BaseModel):
     converted_admission_item_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("admission_items.id", ondelete="SET NULL"), nullable=True)
 
     enquiry: Mapped["Enquiry"] = relationship("Enquiry", back_populates="demo_items")
+    admission_item: Mapped[Optional["app.modules.admissions.models.AdmissionItem"]] = relationship(
+        "app.modules.admissions.models.AdmissionItem",
+        back_populates="demo_item",
+        foreign_keys=[converted_admission_item_id],
+        lazy="selectin"
+    )

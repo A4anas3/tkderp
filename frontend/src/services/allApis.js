@@ -142,6 +142,10 @@ export const studentApi = {
     const res = await api.get(`/audit/student/${id}`, { params });
     return res.data;
   },
+  getDemos: async (id) => {
+    const res = await api.get(`/students/${id}/demos`);
+    return res.data;
+  },
   uploadPhoto: async (id, file) => {
     const formData = new FormData();
     formData.append('file', file);
@@ -207,8 +211,8 @@ export const enquiryApi = {
     const res = await api.put(`/enquiries/${id}`, data);
     return res.data;
   },
-  convert: async (id) => {
-    const res = await api.post(`/enquiries/${id}/convert`);
+  convert: async (id, data = {}) => {
+    const res = await api.post(`/enquiries/${id}/convert`, data);
     return res.data;
   },
   registerStudent: async (id, data = {}) => {

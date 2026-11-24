@@ -72,6 +72,7 @@ class AdmissionItemResponse(BaseModel):
     share_value: Decimal = Decimal("0.00")
     share_percent: Optional[Decimal] = None
     can_cancel: bool = True
+    source_demo_number: Optional[str] = None
 
     @model_validator(mode="before")
     @classmethod
@@ -110,6 +111,7 @@ class InitialPaymentData(BaseModel):
 
 class AdmissionCreate(BaseModel):
     student_id: uuid.UUID
+    enquiry_id: Optional[uuid.UUID] = None
     admission_date: date = Field(default_factory=date.today)
     items: List[AdmissionItemCreate] = Field(..., min_length=1)
     overall_discount_type: str = Field(default="NONE", pattern="^(NONE|FIXED|PERCENTAGE)$")

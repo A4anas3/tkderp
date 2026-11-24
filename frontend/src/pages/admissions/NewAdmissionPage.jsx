@@ -870,6 +870,7 @@ export default function NewAdmissionPage() {
 
       const payload = {
         student_id: studentId,
+        enquiry_id: paramEnquiryId || null,
         admission_date: admissionDate,
         valid_from: finalOverallFrom,
         valid_to: finalOverallTo,
@@ -888,7 +889,7 @@ export default function NewAdmissionPage() {
 
       if (paramEnquiryId) {
         try {
-          await enquiryApi.convert(paramEnquiryId);
+          await enquiryApi.convert(paramEnquiryId, { admission_id: res.id });
         } catch {
           // ignore if already converted
         }

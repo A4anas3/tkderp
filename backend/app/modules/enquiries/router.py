@@ -7,10 +7,11 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, and_, desc, case
+from sqlalchemy.orm import selectinload
 
 from app.database.session import get_db
 from app.core.dependencies import require_staff, require_cashier_or_admin
-from app.database.models import Enquiry, EnquiryDemoItem, Student, User, Teacher, Subject, Batch, Admission, AuditLog
+from app.database.models import Enquiry, EnquiryDemoItem, Student, User, Teacher, Subject, Batch, Admission, AdmissionItem, AuditLog
 from app.modules.enquiries.schemas import (
     EnquiryCreate, EnquiryUpdate, EnquiryResponse, ConvertEnquiryRequest,
     EnquiryDemoItemResponse, EnquiryDemoItemStatusUpdate, EnquiryDemoRegisterItem,
@@ -197,6 +198,15 @@ def _format_demo_item_response(itm: EnquiryDemoItem, today: date) -> EnquiryDemo
     else:
         lbl, var = "Active Demo", "warning" if rem <= 1 else "success"
 
+    c_course = None
+    c_adm_no = None
+    adm_item = itm.__dict__.get("admission_item")
+    if adm_item:
+        c_course = getattr(adm_item, "item_name_snapshot", None)
+        adm_parent = adm_item.__dict__.get("admission")
+        if adm_parent:
+            c_adm_no = getattr(adm_parent, "admission_number", None)
+
     return EnquiryDemoItemResponse(
         id=itm.id,
         enquiry_id=itm.enquiry_id,
@@ -214,6 +224,8 @@ def _format_demo_item_response(itm: EnquiryDemoItem, today: date) -> EnquiryDemo
         drop_reason=itm.drop_reason,
         notes=itm.notes,
         converted_admission_item_id=itm.converted_admission_item_id,
+        converted_course_name=c_course,
+        converted_admission_number=c_adm_no,
         days_remaining=rem,
         status_label=lbl,
         badge_variant=var
@@ -388,6 +400,9 @@ async def list_individual_demo_items(
     query = (
         select(EnquiryDemoItem, Enquiry)
         .join(Enquiry, EnquiryDemoItem.enquiry_id == Enquiry.id)
+        .options(
+            selectinload(EnquiryDemoItem.admission_item).selectinload(AdmissionItem.admission)
+        )
     )
     count_query = (
         select(func.count(EnquiryDemoItem.id))
@@ -468,6 +483,13 @@ async def list_individual_demo_items(
         else:
             lbl, var = "Active Demo", "warning" if rem <= 1 else "success"
 
+        c_course_name = None
+        c_adm_no = None
+        if ditm.admission_item:
+            c_course_name = ditm.admission_item.item_name_snapshot
+            if ditm.admission_item.admission:
+                c_adm_no = ditm.admission_item.admission.admission_number
+
         items.append(EnquiryDemoRegisterItem(
             demo_item_id=ditm.id,
             enquiry_id=enq.id,
@@ -495,7 +517,9 @@ async def list_individual_demo_items(
             notes=ditm.notes,
             converted_admission_item_id=ditm.converted_admission_item_id,
             converted_student_id=enq.converted_student_id,
-            converted_student_code=student_code_map.get(enq.converted_student_id) if enq.converted_student_id else None
+            converted_student_code=student_code_map.get(enq.converted_student_id) if enq.converted_student_id else None,
+            converted_course_name=c_course_name,
+            converted_admission_number=c_adm_no
         ))
 
     return PageResponse.create(items=items, total=total, params=PaginationParams(page=page, page_size=page_size))
@@ -899,7 +923,12 @@ async def get_enquiry(
         raise HTTPException(status_code=404, detail="Enquiry not found")
 
     today = date.today()
-    d_res = await db.execute(select(EnquiryDemoItem).where(EnquiryDemoItem.enquiry_id == enquiry.id).order_by(EnquiryDemoItem.demo_start_date.asc()))
+    d_res = await db.execute(
+        select(EnquiryDemoItem)
+        .options(selectinload(EnquiryDemoItem.admission_item).selectinload(AdmissionItem.admission))
+        .where(EnquiryDemoItem.enquiry_id == enquiry.id)
+        .order_by(EnquiryDemoItem.demo_start_date.asc())
+    )
     d_items = d_res.scalars().all()
     formatted_demo_items = [_format_demo_item_response(d, today) for d in d_items]
 
@@ -969,7 +998,12 @@ async def update_enquiry(
     await db.refresh(enquiry)
 
     today = date.today()
-    d_res = await db.execute(select(EnquiryDemoItem).where(EnquiryDemoItem.enquiry_id == enquiry.id).order_by(EnquiryDemoItem.demo_start_date.asc()))
+    d_res = await db.execute(
+        select(EnquiryDemoItem)
+        .options(selectinload(EnquiryDemoItem.admission_item).selectinload(AdmissionItem.admission))
+        .where(EnquiryDemoItem.enquiry_id == enquiry.id)
+        .order_by(EnquiryDemoItem.demo_start_date.asc())
+    )
     d_items = d_res.scalars().all()
     formatted_demo_items = [_format_demo_item_response(d, today) for d in d_items]
 
@@ -1159,7 +1193,7 @@ async def convert_enquiry_to_student(
     enquiry = res.scalar_one_or_none()
     if not enquiry:
         raise HTTPException(status_code=404, detail="Enquiry not found")
-    if enquiry.status == "CONVERTED" and enquiry.converted_student_id:
+    if enquiry.status == "CONVERTED" and enquiry.converted_student_id and not req.admission_id and not req.demo_item_ids:
         raise HTTPException(status_code=400, detail="Enquiry has already been converted to a student")
 
     # If student is already registered (from demo time or duplicate check), reuse that student!
@@ -1187,17 +1221,62 @@ async def convert_enquiry_to_student(
             commit=False
         )
 
-    enquiry.status = "CONVERTED"
     enquiry.converted_student_id = student.id
 
-    # Update demo items to CONVERTED
+    # Update demo items and link admission items
     d_stmt = select(EnquiryDemoItem).where(EnquiryDemoItem.enquiry_id == enquiry.id)
-    if req.demo_item_ids and len(req.demo_item_ids) > 0:
-        d_stmt = d_stmt.where(EnquiryDemoItem.id.in_(req.demo_item_ids))
-    
-    d_rows = (await db.execute(d_stmt)).scalars().all()
-    for d_itm in d_rows:
-        d_itm.status = "CONVERTED"
+    all_demos = list((await db.execute(d_stmt)).scalars().all())
+
+    if req.admission_id:
+        adm_res = await db.execute(
+            select(Admission).options(selectinload(Admission.items)).where(Admission.id == req.admission_id)
+        )
+        admission = adm_res.scalar_one_or_none()
+        if admission:
+            for adm_item in admission.items:
+                matched_d = None
+                for d in all_demos:
+                    if d.converted_admission_item_id is None and d.status != "CONVERTED":
+                        if adm_item.subject_id and d.subject_id == adm_item.subject_id:
+                            matched_d = d
+                            break
+                        elif not adm_item.subject_id and d.subject_name_snapshot.lower() in adm_item.item_name_snapshot.lower():
+                            matched_d = d
+                            break
+                if matched_d:
+                    matched_d.converted_admission_item_id = adm_item.id
+                    matched_d.status = "CONVERTED"
+    elif req.demo_item_ids and len(req.demo_item_ids) > 0:
+        for d in all_demos:
+            if d.id in req.demo_item_ids:
+                d.status = "CONVERTED"
+    else:
+        # Check recent admissions of student to link matching items
+        stu_adm_res = await db.execute(
+            select(Admission).options(selectinload(Admission.items))
+            .where(Admission.student_id == student.id)
+            .order_by(desc(Admission.admission_date), desc(Admission.created_at))
+        )
+        recent_admissions = stu_adm_res.scalars().all()
+        matched_any = False
+        if recent_admissions:
+            for adm in recent_admissions:
+                for adm_item in adm.items:
+                    for d in all_demos:
+                        if d.converted_admission_item_id is None and d.status != "CONVERTED":
+                            if (adm_item.subject_id and d.subject_id == adm_item.subject_id) or (d.subject_name_snapshot.lower() in adm_item.item_name_snapshot.lower()):
+                                d.converted_admission_item_id = adm_item.id
+                                d.status = "CONVERTED"
+                                matched_any = True
+                                break
+        if not matched_any:
+            for d in all_demos:
+                d.status = "CONVERTED"
+
+    if all_demos and all(d.status == "CONVERTED" for d in all_demos):
+        enquiry.status = "CONVERTED"
+    elif not all_demos:
+        enquiry.status = "CONVERTED"
 
     audit = AuditLog(
         user_id=current_user.id,

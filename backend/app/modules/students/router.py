@@ -17,7 +17,7 @@ from app.core.config import settings
 from app.database.session import get_db
 from app.modules.users.models import User
 from app.modules.students.models import Student
-from app.database.models import Teacher, Subject
+from app.database.models import Teacher, Subject, Enquiry, EnquiryDemoItem
 from app.modules.admissions.models import Admission, AdmissionItem
 from app.modules.payments.models import Payment, Refund, PaymentAllocation, FinancialTransaction
 from app.modules.batches.models import Batch
@@ -25,7 +25,8 @@ from app.modules.audit.models import AuditLog
 from app.modules.audit.schemas import AuditLogResponse
 from app.modules.students.schemas import (
     StudentCreate, StudentUpdate, StudentRevokeRequest,
-    StudentResponse, StudentDetailResponse, StudentLineResponse
+    StudentResponse, StudentDetailResponse, StudentLineResponse,
+    StudentDemoItemResponse, StudentDemoLinkedCourse
 )
 from app.modules.admissions.schemas import AdmissionResponse, RenewalsDueItemResponse
 from app.modules.payments.schemas import FinancialTransactionResponse
@@ -311,7 +312,7 @@ async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db),
     # Load all admissions with their items
     adms_stmt = (
         select(Admission)
-        .options(selectinload(Admission.items))
+        .options(selectinload(Admission.items).selectinload(AdmissionItem.demo_item))
         .where(Admission.student_id == student_id)
         .order_by(Admission.admission_date.desc(), Admission.created_at.desc())
     )
@@ -502,7 +503,71 @@ async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db),
     res.revoked = revoked_lines
     res.slips = [AdmissionResponse.model_validate(adm) for adm in admissions]
     res.transactions = [FinancialTransactionResponse.model_validate(tx) for tx in txns]
+    res.demos = await _get_demos_for_student(db, student)
     return res
+
+async def _get_demos_for_student(db: AsyncSession, student: Student) -> List[StudentDemoItemResponse]:
+    cond = (Enquiry.converted_student_id == student.id)
+    norm_mob = normalize_mobile(student.mobile) if student.mobile else None
+    if norm_mob and len(norm_mob) >= 10:
+        last10 = norm_mob[-10:]
+        cond = or_(
+            Enquiry.converted_student_id == student.id,
+            and_(Enquiry.converted_student_id.is_(None), Enquiry.mobile.like(f"%{last10}%"))
+        )
+
+    q = (
+        select(EnquiryDemoItem, Enquiry)
+        .join(Enquiry, EnquiryDemoItem.enquiry_id == Enquiry.id)
+        .options(
+            selectinload(EnquiryDemoItem.admission_item).selectinload(AdmissionItem.admission)
+        )
+        .where(cond)
+        .order_by(desc(EnquiryDemoItem.demo_start_date), desc(EnquiryDemoItem.created_at))
+    )
+    rows = (await db.execute(q)).all()
+
+    demos = []
+    for ditm, enq in rows:
+        linked = None
+        if ditm.converted_admission_item_id and ditm.admission_item:
+            adm_no = ditm.admission_item.admission.admission_number if ditm.admission_item.admission else "ADM-UNKNOWN"
+            linked = StudentDemoLinkedCourse(
+                admission_item_id=ditm.admission_item.id,
+                subject=ditm.admission_item.item_name_snapshot,
+                admission_number=adm_no
+            )
+        demos.append(StudentDemoItemResponse(
+            id=ditm.id,
+            demo_reference_number=ditm.demo_reference_number,
+            subject_id=ditm.subject_id,
+            subject_name=ditm.subject_name_snapshot,
+            teacher_id=ditm.teacher_id,
+            teacher_name=ditm.teacher_name_snapshot,
+            hall=ditm.hall_number_snapshot,
+            demo_start_date=ditm.demo_start_date,
+            demo_end_date=ditm.demo_end_date,
+            demo_duration_days=ditm.demo_duration_days,
+            status=ditm.status,
+            notes=ditm.notes,
+            drop_reason=ditm.drop_reason,
+            enquiry_id=enq.id,
+            enquiry_code=enq.enquiry_code,
+            converted_admission_item_id=ditm.converted_admission_item_id,
+            linked_course=linked
+        ))
+    return demos
+
+@router.get("/{student_id}/demos", response_model=List[StudentDemoItemResponse])
+async def get_student_demos(
+    student_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user = Depends(require_staff)
+):
+    student = (await db.execute(select(Student).where(Student.id == student_id))).scalar_one_or_none()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    return await _get_demos_for_student(db, student)
 
 @router.get("/{student_id}/audit", response_model=PageResponse[AuditLogResponse])
 async def get_student_audit_alias(
@@ -685,7 +750,7 @@ async def revoke_student(
     # Automatically revoke/cancel all active batch purchases and active enrollments of this student
     stmt = (
         select(Admission)
-        .options(selectinload(Admission.items))
+        .options(selectinload(Admission.items).selectinload(AdmissionItem.demo_item))
         .where(Admission.student_id == student_id)
     )
     student_adms_res = await db.execute(stmt)
@@ -761,7 +826,7 @@ async def restore_student(
     # Load all admissions with items
     stmt = (
         select(Admission)
-        .options(selectinload(Admission.items))
+        .options(selectinload(Admission.items).selectinload(AdmissionItem.demo_item))
         .where(Admission.student_id == student_id)
     )
     student_adms_res = await db.execute(stmt)

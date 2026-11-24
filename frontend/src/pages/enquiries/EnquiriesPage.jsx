@@ -1087,11 +1087,22 @@ export default function EnquiriesPage() {
           DROPPED: 'neutral',
           EXPIRED: 'danger',
         };
+        const courseName = d.converted_course_name || (d.status === 'CONVERTED' ? (d.subject_name || d.subject_name_snapshot) : null);
         return (
           <div>
-            <Badge size="xs" variant={variants[d.status] || 'neutral'}>
+            <Badge size="xs" variant={variants[d.status] || (d.status === 'CONVERTED' ? 'success' : 'neutral')}>
               {d.status}
             </Badge>
+            {d.status === 'CONVERTED' && courseName && (
+              <span className="text-[10px] text-emerald-800 font-semibold block mt-0.5 truncate max-w-[130px]" title={courseName}>
+                {courseName}
+              </span>
+            )}
+            {d.status === 'CONVERTED' && d.converted_admission_number && (
+              <span className="text-[9px] text-slate-500 font-mono block">
+                {d.converted_admission_number}
+              </span>
+            )}
             {d.drop_reason && (
               <span className="text-[10px] text-slate-500 block truncate max-w-[120px]" title={d.drop_reason}>
                 {d.drop_reason}

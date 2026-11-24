@@ -92,6 +92,34 @@ class StudentLineResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+class StudentDemoLinkedCourse(BaseModel):
+    admission_item_id: uuid.UUID
+    subject: str
+    admission_number: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+class StudentDemoItemResponse(BaseModel):
+    id: uuid.UUID
+    demo_reference_number: str
+    subject_id: Optional[uuid.UUID] = None
+    subject_name: str
+    teacher_id: Optional[uuid.UUID] = None
+    teacher_name: Optional[str] = None
+    hall: Optional[str] = None
+    demo_start_date: date
+    demo_end_date: date
+    demo_duration_days: int
+    status: str
+    notes: Optional[str] = None
+    drop_reason: Optional[str] = None
+    enquiry_id: uuid.UUID
+    enquiry_code: Optional[str] = None
+    converted_admission_item_id: Optional[uuid.UUID] = None
+    linked_course: Optional[StudentDemoLinkedCourse] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
 class StudentDetailResponse(StudentResponse):
     total_billed: Decimal = Decimal("0.00")
     total_paid: Decimal = Decimal("0.00")
@@ -110,3 +138,4 @@ class StudentDetailResponse(StudentResponse):
     revoked: List[StudentLineResponse] = []
     slips: List[Any] = []
     transactions: List[Any] = []
+    demos: List[StudentDemoItemResponse] = []
