@@ -77,6 +77,9 @@ export default function ExpensesPage() {
     base_salary: '25000.00',
     holidays_count: '0',
     salary_amount: '25000.00',
+    paid_amount: '25000.00',
+    payment_mode: 'UPI',
+    payment_date: new Date().toISOString().split('T')[0],
     due_date: new Date().toISOString().split('T')[0],
     notes: '',
   });
@@ -208,6 +211,7 @@ export default function ExpensesPage() {
           ...prev,
           employee_id: matched.id,
           salary_amount: calc.payable.toFixed(2),
+          paid_amount: calc.payable.toFixed(2),
         }));
       })
       .catch(() => {
@@ -275,6 +279,7 @@ export default function ExpensesPage() {
     setSalForm((prev) => ({
       ...prev,
       salary_amount: calc.payable.toFixed(2),
+      paid_amount: calc.payable.toFixed(2),
     }));
     success(
       `Payable auto-calculated: ₹${calc.payable.toFixed(2)} (${calc.absentDays} absent days deducted at ₹${calc.perDayRate.toFixed(2)}/day, ${calc.holidays} holidays fully paid)`
@@ -340,16 +345,24 @@ export default function ExpensesPage() {
     }
   };
 
-  // Create Salary Record
+  // Create Salary Record & Disburse Payment in One Click
   const handleCreateSalary = async (e) => {
     e.preventDefault();
     if (!salForm.employee_name_snapshot.trim() || !salForm.salary_amount) {
       error('Employee name and salary amount are required');
       return;
     }
+
+    const paidAmt = parseFloat(salForm.paid_amount);
+    if (!salForm.paid_amount || isNaN(paidAmt) || paidAmt <= 0) {
+      error('Paid amount must be greater than 0');
+      return;
+    }
+
     setSubmitting(true);
+    let createdRecord = null;
     try {
-      await expenseApi.createSalary({
+      createdRecord = await expenseApi.createSalary({
         employee_id: salForm.employee_id || undefined,
         employee_name_snapshot: salForm.employee_name_snapshot.trim(),
         employee_type: salForm.employee_type,
@@ -360,11 +373,42 @@ export default function ExpensesPage() {
         holidays_count: parseInt(salForm.holidays_count, 10) || 0,
         notes: salForm.notes.trim() || null,
       });
-      success(`Monthly salary record created for ${salForm.employee_name_snapshot}`);
-      setSalModalOpen(false);
-      loadSalaries();
     } catch (err) {
       error(err.message || 'Failed to create salary record');
+      setSubmitting(false);
+      return;
+    }
+
+    try {
+      const mode = salForm.payment_mode || 'UPI';
+      const payDate = salForm.payment_date || new Date().toISOString().split('T')[0];
+      await expenseApi.paySalary(createdRecord.id, {
+        paid_amount: paidAmt,
+        payment_mode: mode,
+        payment_date: payDate,
+        notes: salForm.notes.trim() || null,
+      });
+      success(`Salary payment recorded via ${mode} for ${salForm.employee_name_snapshot}`);
+      setSalModalOpen(false);
+      setSalForm({
+        employee_id: '',
+        employee_name_snapshot: '',
+        employee_type: 'TEACHER',
+        month_year: curMonthStr,
+        base_salary: '25000.00',
+        holidays_count: '0',
+        salary_amount: '25000.00',
+        paid_amount: '25000.00',
+        payment_mode: 'UPI',
+        payment_date: new Date().toISOString().split('T')[0],
+        due_date: new Date().toISOString().split('T')[0],
+        notes: '',
+      });
+      loadSalaries();
+    } catch (payErr) {
+      error(`Salary record created, but payment failed: ${payErr.message || 'Payment recording failed'}. Record remains PENDING.`);
+      setSalModalOpen(false);
+      loadSalaries();
     } finally {
       setSubmitting(false);
     }
@@ -979,6 +1023,7 @@ export default function ExpensesPage() {
                     ...prev,
                     base_salary: bVal,
                     salary_amount: calc.payable.toFixed(2),
+                    paid_amount: calc.payable.toFixed(2),
                   }));
                 }}
                 placeholder="e.g. 25000.00"
@@ -1008,6 +1053,7 @@ export default function ExpensesPage() {
                     ...prev,
                     holidays_count: hVal,
                     salary_amount: calc.payable.toFixed(2),
+                    paid_amount: calc.payable.toFixed(2),
                   }));
                 }}
                 placeholder="e.g. 4"
@@ -1106,7 +1152,14 @@ export default function ExpensesPage() {
                 step="0.01"
                 min="0.01"
                 value={salForm.salary_amount}
-                onChange={(e) => setSalForm({ ...salForm, salary_amount: e.target.value })}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSalForm((prev) => ({
+                    ...prev,
+                    salary_amount: val,
+                    paid_amount: val,
+                  }));
+                }}
                 required
               />
               <span className="text-[10px] text-slate-500 block mt-0.5">
@@ -1114,6 +1167,42 @@ export default function ExpensesPage() {
               </span>
             </div>
 
+            <div>
+              <Input
+                label="Paid Amount (₹)"
+                type="number"
+                step="0.01"
+                value={salForm.paid_amount}
+                onChange={(e) => setSalForm({ ...salForm, paid_amount: e.target.value })}
+                placeholder="e.g. 25000.00"
+              />
+              <span className="text-[10px] text-slate-500 block mt-0.5">
+                Actual disbursed amount (editable for partial payment)
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Select
+              label="Payment Mode"
+              value={salForm.payment_mode}
+              onChange={(e) => setSalForm({ ...salForm, payment_mode: e.target.value })}
+              options={[
+                { value: 'UPI', label: 'UPI' },
+                { value: 'CASH', label: 'Cash' },
+              ]}
+            />
+
+            <Input
+              label="Payment Date"
+              type="date"
+              value={salForm.payment_date}
+              onChange={(e) => setSalForm({ ...salForm, payment_date: e.target.value })}
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               label="Due Date"
               type="date"
@@ -1121,14 +1210,14 @@ export default function ExpensesPage() {
               onChange={(e) => setSalForm({ ...salForm, due_date: e.target.value })}
               required
             />
-          </div>
 
-          <Input
-            label="Internal Notes (Optional)"
-            value={salForm.notes}
-            onChange={(e) => setSalForm({ ...salForm, notes: e.target.value })}
-            placeholder="e.g. Month-end faculty payout"
-          />
+            <Input
+              label="Internal Notes (Optional)"
+              value={salForm.notes}
+              onChange={(e) => setSalForm({ ...salForm, notes: e.target.value })}
+              placeholder="e.g. Month-end faculty payout"
+            />
+          </div>
 
           <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
             <Button variant="secondary" onClick={() => setSalModalOpen(false)} disabled={submitting}>
