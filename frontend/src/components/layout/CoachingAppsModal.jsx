@@ -18,6 +18,7 @@ import {
   Wallet,
   CalendarCheck,
   RotateCcw,
+  UserCog,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -179,10 +180,19 @@ export default function CoachingAppsModal({ isOpen, onClose }) {
       color: 'bg-slate-700',
       roles: ['ADMIN'],
     },
+    {
+      id: 'users',
+      name: 'Staff & Roles',
+      desc: 'Users, Passwords & Roles',
+      icon: UserCog,
+      route: '/users',
+      color: 'bg-indigo-700',
+      roles: ['ADMIN'],
+    },
   ];
 
-  // If role is ADMIN, all 13 apps are shown. Otherwise filter by roles if defined.
-  const currentRole = role || 'ADMIN';
+  // If role is ADMIN, all apps are shown. Otherwise filter by roles if defined.
+  const currentRole = (role || 'ADMIN').toUpperCase();
   const allowedApps = allApps.filter((app) =>
     currentRole === 'ADMIN' ? true : app.roles.includes(currentRole)
   );
