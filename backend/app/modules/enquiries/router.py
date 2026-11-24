@@ -241,12 +241,16 @@ def _format_demo_item_response(itm: EnquiryDemoItem, today: date) -> EnquiryDemo
 
     c_course = None
     c_adm_no = None
+    c_adm_id = None
     adm_item = itm.__dict__.get("admission_item")
     if adm_item:
         c_course = getattr(adm_item, "item_name_snapshot", None)
+        c_adm_id = getattr(adm_item, "admission_id", None)
         adm_parent = adm_item.__dict__.get("admission")
         if adm_parent:
             c_adm_no = getattr(adm_parent, "admission_number", None)
+            if not c_adm_id:
+                c_adm_id = getattr(adm_parent, "id", None)
 
     return EnquiryDemoItemResponse(
         id=itm.id,
@@ -265,6 +269,7 @@ def _format_demo_item_response(itm: EnquiryDemoItem, today: date) -> EnquiryDemo
         drop_reason=itm.drop_reason,
         notes=itm.notes,
         converted_admission_item_id=itm.converted_admission_item_id,
+        converted_admission_id=c_adm_id,
         converted_course_name=c_course,
         converted_admission_number=c_adm_no,
         days_remaining=rem,
@@ -301,7 +306,8 @@ async def list_enquiries(
             Enquiry.student_name.ilike(search_pattern),
             Enquiry.enquiry_code.ilike(search_pattern),
             Enquiry.mobile.ilike(search_pattern),
-            Enquiry.interested_subject.ilike(search_pattern)
+            Enquiry.interested_subject.ilike(search_pattern),
+            Enquiry.demo_items.any(EnquiryDemoItem.demo_reference_number.ilike(search_pattern))
         )
         query = query.where(filter_clause)
         count_query = count_query.where(filter_clause)
@@ -539,8 +545,10 @@ async def list_individual_demo_items(
 
         c_course_name = None
         c_adm_no = None
+        c_adm_id = None
         if ditm.admission_item:
             c_course_name = ditm.admission_item.item_name_snapshot
+            c_adm_id = ditm.admission_item.admission_id
             if ditm.admission_item.admission:
                 c_adm_no = ditm.admission_item.admission.admission_number
 
@@ -570,6 +578,7 @@ async def list_individual_demo_items(
             drop_reason=ditm.drop_reason,
             notes=ditm.notes,
             converted_admission_item_id=ditm.converted_admission_item_id,
+            converted_admission_id=c_adm_id,
             converted_student_id=enq.converted_student_id,
             converted_student_code=student_code_map.get(enq.converted_student_id) if enq.converted_student_id else None,
             converted_course_name=c_course_name,

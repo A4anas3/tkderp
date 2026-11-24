@@ -709,7 +709,19 @@ export default function StudentDetailPage() {
                               {d.linked_course?.subject || d.subject_name}
                             </div>
                             <div className="text-[11px] font-mono text-purple-700 font-semibold">
-                              {d.linked_course?.admission_number ? `${d.linked_course.admission_number}` : 'Admission Linked'}
+                              {d.linked_course?.admission_id ? (
+                                <button
+                                  type="button"
+                                  onClick={() => navigate(`/enrollments/${d.linked_course.admission_id}`)}
+                                  className="hover:underline inline-flex items-center gap-0.5 cursor-pointer"
+                                  title="View linked enrollment"
+                                >
+                                  <span>{d.linked_course.admission_number || 'Enrollment Linked'}</span>
+                                  <ArrowUpRight className="w-3 h-3" />
+                                </button>
+                              ) : (
+                                d.linked_course?.admission_number ? `${d.linked_course.admission_number}` : 'Admission Linked'
+                              )}
                             </div>
                           </div>
                         ) : (
@@ -1314,6 +1326,11 @@ export default function StudentDetailPage() {
                         <span className="text-[10px] text-odoo-800 bg-purple-100/70 border border-purple-200 px-1.5 py-0.2 rounded font-mono font-bold">
                           #{item.admission_number}
                         </span>
+                        {item.source_demo_number && (
+                          <span className="text-[10px] text-purple-800 bg-purple-50 border border-purple-200 px-1.5 py-0.2 rounded font-mono font-semibold">
+                            Demo {item.source_demo_number}
+                          </span>
+                        )}
                         {item.is_renewed && (
                           <Badge variant="success" size="xs">
                             Renewed ({item.cycle_count} Mo)
@@ -1487,10 +1504,15 @@ export default function StudentDetailPage() {
                             </Badge>
                           )}
                         </div>
-                        <div className="flex items-center gap-1 mt-0.5">
+                        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                           <span className="text-[10px] text-odoo-800 bg-purple-50 border border-purple-200 px-1.5 py-0.2 rounded font-mono font-bold">
                             Invoice #{item.admission_number}
                           </span>
+                          {item.source_demo_number && (
+                            <span className="text-[10px] text-purple-800 bg-purple-50 border border-purple-200 px-1.5 py-0.2 rounded font-mono font-semibold">
+                              Demo {item.source_demo_number}
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="py-2.5 px-3">
@@ -1803,6 +1825,11 @@ export default function StudentDetailPage() {
                           <span className="text-[10px] text-slate-700 font-mono block">
                             #{item.admission_number}
                           </span>
+                          {item.source_demo_number && (
+                            <span className="inline-block text-[10px] text-purple-800 bg-purple-50 border border-purple-200 px-1.5 py-0.2 rounded font-mono font-semibold mt-0.5">
+                              Demo {item.source_demo_number}
+                            </span>
+                          )}
                         </div>
                         <div>{statusBadge}</div>
                       </div>
@@ -1927,6 +1954,11 @@ export default function StudentDetailPage() {
                             <span className="block text-[10px] text-slate-700 font-mono">
                               #{item.admission_number}
                             </span>
+                            {item.source_demo_number && (
+                              <span className="inline-block text-[10px] text-purple-800 bg-purple-50 border border-purple-200 px-1.5 py-0.2 rounded font-mono font-semibold mt-0.5">
+                                Demo {item.source_demo_number}
+                              </span>
+                            )}
                           </td>
                           <td className="py-2.5 px-3 text-slate-800 font-medium">
                             {item.teacher_name || '—'}
@@ -2179,6 +2211,11 @@ export default function StudentDetailPage() {
                           className="bg-white border border-slate-200 text-black p-2 rounded-lg text-xs"
                         >
                           <span className="font-bold text-odoo-900 block">{itm.item_name_snapshot}</span>
+                          {itm.source_demo_number && (
+                            <span className="inline-block text-[10px] font-mono font-semibold text-purple-800 bg-purple-50 border border-purple-200 px-1.5 py-0.2 rounded mt-0.5">
+                              Demo {itm.source_demo_number}
+                            </span>
+                          )}
                           {(itm.teacher_name_snapshot || itm.hall_number_snapshot) && (
                             <span className="text-[11px] text-slate-700 font-medium block mt-0.5">
                               {itm.teacher_name_snapshot && `Faculty: ${itm.teacher_name_snapshot}`}
@@ -2404,6 +2441,11 @@ export default function StudentDetailPage() {
                                 className="bg-slate-50 border border-slate-200 text-black px-2 py-0.5 rounded text-[11px]"
                               >
                                 <span className="font-bold text-odoo-900 block">{itm.item_name_snapshot}</span>
+                                {itm.source_demo_number && (
+                                  <span className="inline-block text-[10px] font-mono font-semibold text-purple-800 bg-purple-50 border border-purple-200 px-1.5 py-0.2 rounded mt-0.5">
+                                    Demo {itm.source_demo_number}
+                                  </span>
+                                )}
                                 {(itm.teacher_name_snapshot || itm.hall_number_snapshot) && (
                                   <span className="text-[10px] text-slate-700 font-medium block">
                                     {itm.teacher_name_snapshot && `Faculty: ${itm.teacher_name_snapshot}`}

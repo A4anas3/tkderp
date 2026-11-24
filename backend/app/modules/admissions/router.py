@@ -115,7 +115,10 @@ async def list_admissions(
             Admission.admission_number.ilike(search_pattern),
             Admission.student_name_snapshot.ilike(search_pattern),
             Admission.items.any(AdmissionItem.item_name_snapshot.ilike(search_pattern)),
-            Admission.items.any(AdmissionItem.teacher_name_snapshot.ilike(search_pattern))
+            Admission.items.any(AdmissionItem.teacher_name_snapshot.ilike(search_pattern)),
+            Admission.items.any(
+                AdmissionItem.demo_item.has(EnquiryDemoItem.demo_reference_number.ilike(search_pattern))
+            )
         )
         query = query.where(filter_clause)
         count_query = count_query.where(filter_clause)
@@ -379,48 +382,58 @@ async def create_admission(
     await db.flush()
 
     # Link enquiry demo items if enquiry_id provided or matching enquiry exists for student
-    target_enquiry_id = payload.enquiry_id
-    if not target_enquiry_id:
-        enq_check = await db.execute(
-            select(Enquiry).options(selectinload(Enquiry.demo_items))
-            .where(Enquiry.converted_student_id == student.id)
-            .order_by(desc(Enquiry.created_at))
-        )
-        for candidate_enq in enq_check.scalars().all():
-            if any(
-                d.converted_admission_item_id is None and d.status != "CONVERTED" and any(
-                    (ai.subject_id and d.subject_id == ai.subject_id) or (d.subject_name_snapshot.lower() in ai.item_name_snapshot.lower())
-                    for ai in db_items
-                )
-                for d in candidate_enq.demo_items
-            ):
-                target_enquiry_id = candidate_enq.id
-                break
+    def _demo_matches_item(d: EnquiryDemoItem, ai: AdmissionItem, strict_subject_id: bool) -> bool:
+        if d.converted_admission_item_id is not None or d.status == "CONVERTED":
+            return False
+        if ai.subject_id and d.subject_id:
+            return d.subject_id == ai.subject_id
+        if strict_subject_id:
+            return False
+        d_name = (d.subject_name_snapshot or "").strip().lower()
+        ai_name = (ai.item_name_snapshot or "").strip().lower()
+        return bool(d_name and ai_name and (d_name in ai_name or ai_name in d_name))
 
-    if target_enquiry_id:
+    candidate_enquiries: List[Enquiry] = []
+    if payload.enquiry_id:
         enq_res = await db.execute(
-            select(Enquiry).options(selectinload(Enquiry.demo_items)).where(Enquiry.id == target_enquiry_id)
+            select(Enquiry).options(selectinload(Enquiry.demo_items)).where(Enquiry.id == payload.enquiry_id)
         )
-        target_enq = enq_res.scalar_one_or_none()
-        if target_enq:
-            target_enq.converted_student_id = student.id
-            for ai in db_items:
-                matched_d = None
-                for d in target_enq.demo_items:
-                    if d.converted_admission_item_id is None and d.status != "CONVERTED":
-                        if ai.subject_id and d.subject_id == ai.subject_id:
-                            matched_d = d
-                            break
-                        elif not ai.subject_id and d.subject_name_snapshot.lower() in ai.item_name_snapshot.lower():
-                            matched_d = d
-                            break
-                if matched_d:
-                    matched_d.converted_admission_item_id = ai.id
-                    matched_d.status = "CONVERTED"
-                    ai.demo_item = matched_d
+        explicit_enq = enq_res.scalar_one_or_none()
+        if explicit_enq:
+            explicit_enq.converted_student_id = student.id
+            candidate_enquiries.append(explicit_enq)
 
-            if target_enq.demo_items and all(d.status == "CONVERTED" for d in target_enq.demo_items):
-                target_enq.status = "CONVERTED"
+    enq_check = await db.execute(
+        select(Enquiry).options(selectinload(Enquiry.demo_items))
+        .where(Enquiry.converted_student_id == student.id)
+        .order_by(desc(Enquiry.created_at))
+    )
+    for stu_enq in enq_check.scalars().all():
+        if all(existing.id != stu_enq.id for existing in candidate_enquiries):
+            candidate_enquiries.append(stu_enq)
+
+    touched_enquiries = set()
+    for ai in db_items:
+        matched_d = None
+        for strict in (True, False):
+            for cand_enq in candidate_enquiries:
+                for d in cand_enq.demo_items:
+                    if _demo_matches_item(d, ai, strict_subject_id=strict):
+                        matched_d = d
+                        touched_enquiries.add(cand_enq)
+                        break
+                if matched_d:
+                    break
+            if matched_d:
+                break
+        if matched_d:
+            matched_d.converted_admission_item_id = ai.id
+            matched_d.status = "CONVERTED"
+            ai.demo_item = matched_d
+
+    for cand_enq in touched_enquiries:
+        if cand_enq.demo_items and all(d.status == "CONVERTED" for d in cand_enq.demo_items):
+            cand_enq.status = "CONVERTED"
 
     if has_gc:
         student.has_green_card = True

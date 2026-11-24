@@ -302,9 +302,19 @@ export default function EnquiryDetailPage() {
               <h1 className="text-lg sm:text-xl font-black text-black break-words leading-tight">
                 Student Enquiry & Trial Class Details
               </h1>
-              <span className="font-mono text-xs px-2 py-0.5 bg-slate-100 text-slate-800 rounded font-bold border border-slate-200 shrink-0">
-                {enquiry.id.slice(0, 8)}
-              </span>
+              {enquiry.enquiry_code && (
+                <span className="font-mono text-xs px-2 py-0.5 bg-slate-100 text-slate-800 rounded font-bold border border-slate-200 shrink-0">
+                  {enquiry.enquiry_code}
+                </span>
+              )}
+              {(enquiry.demo_items || []).map((item) => (
+                <span
+                  key={item.id || item.demo_reference_number}
+                  className="font-mono text-xs px-2 py-0.5 bg-purple-50 text-odoo-900 rounded font-bold border border-purple-200 shrink-0"
+                >
+                  Demo ID: {item.demo_reference_number}
+                </span>
+              ))}
             </div>
             <p className="text-xs text-slate-500 font-mono truncate mt-0.5">
               Registered on {formatIndianDate(enquiry.enquiry_date)}
@@ -654,6 +664,25 @@ export default function EnquiryDetailPage() {
                       {item.status}
                     </Badge>
                   </div>
+                  {item.status === 'CONVERTED' && (item.converted_admission_number || item.converted_course_name) && (
+                    <div className="mt-1 flex items-center sm:justify-end gap-1.5">
+                      {item.converted_admission_id ? (
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/enrollments/${item.converted_admission_id}`)}
+                          className="text-[11px] font-mono font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded inline-flex items-center gap-1 cursor-pointer"
+                          title="View linked enrollment record"
+                        >
+                          <span>Enrolled: {item.converted_admission_number || item.converted_course_name}</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </button>
+                      ) : (
+                        <span className="text-[11px] font-mono font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
+                          Enrolled: {item.converted_admission_number || item.converted_course_name}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

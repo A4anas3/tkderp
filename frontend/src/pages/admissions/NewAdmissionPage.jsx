@@ -86,6 +86,7 @@ export default function NewAdmissionPage() {
 
   // Step 2: Selected Items
   const [items, setItems] = useState([]);
+  const [enquiryDetails, setEnquiryDetails] = useState(null);
 
   // Step 3: Discounts & GST
   const [overallDiscountType, setOverallDiscountType] = useState('NONE');
@@ -211,25 +212,35 @@ export default function NewAdmissionPage() {
       setGreenCards(gcRes || []);
       setTeachers(loadedTeachers);
 
+      // Fetch enquiry details if coming from an enquiry/demo (to display demo IDs & auto-link student)
+      let loadedEnquiryData = null;
+      if (paramEnquiryId) {
+        try {
+          loadedEnquiryData = await enquiryApi.get(paramEnquiryId);
+          setEnquiryDetails(loadedEnquiryData);
+        } catch (err) {
+          console.warn('Failed to fetch enquiry details:', err);
+        }
+      }
+
       // If came from enquiry and student is not yet registered
       if (paramEnquiryId && !paramStudentId) {
         let matchedStudent = null;
 
         // Check if enquiry itself already has a linked student
-        try {
-          const enqData = await enquiryApi.get(paramEnquiryId);
-          if (enqData?.converted_student_id) {
-            matchedStudent = loadedStudents.find((s) => s.id === enqData.converted_student_id);
-            if (!matchedStudent) {
-              const sObj = await studentApi.get(enqData.converted_student_id);
+        if (loadedEnquiryData?.converted_student_id) {
+          matchedStudent = loadedStudents.find((s) => s.id === loadedEnquiryData.converted_student_id);
+          if (!matchedStudent) {
+            try {
+              const sObj = await studentApi.get(loadedEnquiryData.converted_student_id);
               if (sObj) {
                 matchedStudent = sObj;
                 setStudents((prev) => [sObj, ...prev]);
               }
+            } catch (err) {
+              console.warn('Failed to load converted student:', err);
             }
           }
-        } catch (err) {
-          console.warn('Failed to check enquiry converted student:', err);
         }
 
         // Duplicate check on normalised mobile number (last 10 digits) ONLY
@@ -964,8 +975,19 @@ export default function NewAdmissionPage() {
               <UserPlus className="w-4 h-4" />
             </div>
             <div>
-              <div className="text-xs font-bold text-odoo-900 uppercase tracking-wider">
-                Converting Enquiry for: <span className="text-black font-black">{paramName || 'Enquiry Student'}</span>
+              <div className="text-xs font-bold text-odoo-900 uppercase tracking-wider flex flex-wrap items-center gap-1.5">
+                <span>
+                  Converting Enquiry for: <span className="text-black font-black">{paramName || enquiryDetails?.student_name || 'Enquiry Student'}</span>
+                </span>
+                {(enquiryDetails?.demo_items || []).map((d) => (
+                  <span
+                    key={d.id || d.demo_reference_number}
+                    className="font-mono font-bold text-[10px] px-1.5 py-0.2 rounded bg-white border border-purple-300 text-odoo-900 normal-case"
+                    title={d.subject_name_snapshot || ''}
+                  >
+                    Demo ID: {d.demo_reference_number}
+                  </span>
+                ))}
               </div>
               <div className="text-[11px] text-odoo-800 font-medium">
                 {paramMobile ? `📞 ${paramMobile} • ` : ''}

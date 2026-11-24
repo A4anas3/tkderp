@@ -179,6 +179,11 @@ export default function AdmissionDetailModal({
                         {itm.item_type === 'GREEN_CARD' && <Award className="w-3.5 h-3.5 text-purple-600" />}
                         <span>{itm.item_name_snapshot}</span>
                       </div>
+                      {itm.source_demo_number && (
+                        <span className="inline-block text-[10px] font-mono font-semibold text-purple-700 bg-purple-50 border border-purple-200 px-1.5 py-0.2 rounded mt-0.5">
+                          Demo {itm.source_demo_number}
+                        </span>
+                      )}
                       {itm.valid_from && itm.valid_to && (
                         <span className="text-[10px] text-slate-500 font-mono block">
                           Cycle: {formatCycleLabel(itm.valid_from, itm.valid_to)}

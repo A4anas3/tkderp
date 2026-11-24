@@ -370,9 +370,11 @@ export default function DemosPage() {
                         <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-purple-50 border border-purple-200 text-odoo-900 inline-block">
                           {d.demo_reference_number}
                         </span>
-                        <span className="text-[10px] text-slate-400 font-mono block mt-0.5">
-                          #{(d.demo_item_id || d.id)?.slice(0, 8)}
-                        </span>
+                        {d.enquiry_code && (
+                          <span className="text-[10px] text-slate-500 font-mono block mt-0.5">
+                            Enquiry: {d.enquiry_code}
+                          </span>
+                        )}
                       </td>
 
                       {/* 2. Student Name */}
@@ -513,19 +515,24 @@ export default function DemosPage() {
           isOpen={!!detailItem}
           onClose={() => setDetailItem(null)}
           title="Active Trial Demo Details"
-          subtitle={`Reference Ticket: ${detailItem.demo_reference_number}`}
+          subtitle={`Demo ID: ${detailItem.demo_reference_number}`}
           maxWidth="max-w-xl"
         >
           <div className="space-y-4">
             {/* Top Status Header */}
-            <div className="p-3.5 rounded-lg border bg-purple-50 border-purple-200 text-odoo-950 flex items-center justify-between">
+            <div className="p-3.5 rounded-lg border bg-purple-50 border-purple-200 text-odoo-950 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2.5">
                 <Clock className="w-5 h-5 text-odoo-600 shrink-0" />
                 <div>
-                  <div className="font-bold text-xs uppercase tracking-wider text-odoo-900">
-                    Live Active Trial Pass
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-bold text-xs uppercase tracking-wider text-odoo-900">
+                      Live Active Trial Pass
+                    </span>
+                    <span className="font-mono font-bold text-[11px] px-2 py-0.5 rounded bg-white border border-purple-300 text-odoo-900">
+                      {detailItem.demo_reference_number}
+                    </span>
                   </div>
-                  <div className="text-[11px] text-slate-600 font-medium">
+                  <div className="text-[11px] text-slate-600 font-medium mt-0.5">
                     Trial window ends on {formatIndianDate(detailItem.demo_end_date)}
                   </div>
                 </div>

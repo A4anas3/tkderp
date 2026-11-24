@@ -64,7 +64,11 @@ export default function EnquiryDetailModal({
         isOpen={isOpen}
         onClose={onClose}
         title="Student Enquiry & Trial Demo Details"
-        subtitle={`Enquiry ID: ${enquiry.id.slice(0, 8)}...`}
+        subtitle={
+          demoItems.length > 0
+            ? `Demo ID: ${demoItems.map((item) => item.demo_reference_number).join(', ')}`
+            : `Enquiry: ${enquiry.enquiry_code || enquiry.id.slice(0, 8)}`
+        }
         maxWidth="max-w-xl"
       >
         <div className="space-y-4">
@@ -224,6 +228,11 @@ export default function EnquiryDetailModal({
                       <Badge size="xs" variant={item.status === 'CONVERTED' ? 'success' : item.status === 'ATTENDED' ? 'warning' : 'primary'}>
                         {item.status}
                       </Badge>
+                      {item.status === 'CONVERTED' && (item.converted_admission_number || item.converted_course_name) && (
+                        <span className="block text-[10px] font-mono font-bold text-emerald-800 mt-0.5">
+                          Enrolled: {item.converted_admission_number || item.converted_course_name}
+                        </span>
+                      )}
                     </div>
                   </div>
                 ))}

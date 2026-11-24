@@ -157,9 +157,19 @@ export default function CashierDashboard() {
                 className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs hover:bg-slate-50/80 px-2 rounded-lg transition-colors"
               >
                 <div className="min-w-0 flex-1">
-                  <span className="font-bold text-black text-xs sm:text-sm truncate block">
-                    {d.student_name}
-                  </span>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="font-bold text-black text-xs sm:text-sm truncate">
+                      {d.student_name}
+                    </span>
+                    {(d.demo_reference_numbers || []).map((refNo) => (
+                      <span
+                        key={refNo}
+                        className="font-mono font-bold text-[10px] px-1.5 py-0.2 rounded bg-purple-50 border border-purple-200 text-odoo-900"
+                      >
+                        {refNo}
+                      </span>
+                    ))}
+                  </div>
                   <div className="text-[11px] text-slate-700 truncate mt-0.5 font-medium">
                     Subject: <strong className="text-black font-semibold">{d.interested_subject || 'General'}</strong>
                     {d.mobile && (

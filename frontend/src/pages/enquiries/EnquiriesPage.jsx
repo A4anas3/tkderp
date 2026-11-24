@@ -33,6 +33,8 @@ import {
   AlertTriangle,
   ArrowRight,
   Loader2,
+  Eye,
+  FileText,
 } from 'lucide-react';
 import DataTable from '../../components/common/DataTable';
 import Modal from '../../components/common/Modal';
@@ -114,7 +116,8 @@ export default function EnquiriesPage() {
   const [demoSubjectFilter, setDemoSubjectFilter] = useState('');
   const [demosLoading, setDemosLoading] = useState(false);
 
-  // Demo item status modal (Attended / Dropped)
+  // Demo item status modal (Attended / Dropped) and detail view modal
+  const [detailDemoItem, setDetailDemoItem] = useState(null);
   const [demoStatusModalOpen, setDemoStatusModalOpen] = useState(false);
   const [selectedDemoItem, setSelectedDemoItem] = useState(null);
   const [targetDemoStatus, setTargetDemoStatus] = useState('ATTENDED');
@@ -729,6 +732,19 @@ export default function EnquiriesPage() {
               <div className="text-[11px] text-slate-500 font-medium">
                 {e.purpose || 'Coaching Trial'}
               </div>
+              {e.demo_items && e.demo_items.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {e.demo_items.map((ditm) => (
+                    <span
+                      key={ditm.id || ditm.demo_reference_number}
+                      className="font-mono font-bold text-[10px] px-1.5 py-0.2 rounded bg-purple-50 border border-purple-200 text-odoo-900"
+                      title={ditm.subject_name_snapshot || ''}
+                    >
+                      {ditm.demo_reference_number}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
             <button
               onClick={(ev) => handleOpenCourseUpdate(e, ev)}
@@ -1085,15 +1101,17 @@ export default function EnquiriesPage() {
   // ==========================================
   const demoColumns = [
     {
-      header: 'Demo Reference #',
+      header: 'Demo ID',
       render: (d) => (
         <div>
           <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-purple-50 border border-purple-200 text-odoo-900 inline-block">
             {d.demo_reference_number}
           </span>
-          <span className="text-[10px] text-slate-500 block mt-0.5">
-            Ref ID: #{(d.demo_item_id || d.id)?.slice(0, 8)}
-          </span>
+          {d.enquiry_code && (
+            <span className="text-[10px] text-slate-500 font-mono block mt-0.5">
+              Enquiry: {d.enquiry_code}
+            </span>
+          )}
         </div>
       ),
     },
@@ -1186,9 +1204,23 @@ export default function EnquiriesPage() {
               </span>
             )}
             {d.status === 'CONVERTED' && d.converted_admission_number && (
-              <span className="text-[9px] text-slate-500 font-mono block">
-                {d.converted_admission_number}
-              </span>
+              d.converted_admission_id ? (
+                <button
+                  type="button"
+                  onClick={(ev) => {
+                    ev.stopPropagation();
+                    navigate(`/enrollments/${d.converted_admission_id}`);
+                  }}
+                  className="text-[10px] text-odoo-700 hover:text-odoo-900 hover:underline font-mono font-bold block mt-0.5 mx-auto cursor-pointer"
+                  title="View linked enrollment record"
+                >
+                  {d.converted_admission_number} ↗
+                </button>
+              ) : (
+                <span className="text-[9px] text-slate-500 font-mono block">
+                  {d.converted_admission_number}
+                </span>
+              )
             )}
             {d.drop_reason && (
               <span className="text-[10px] text-slate-500 block truncate max-w-[120px]" title={d.drop_reason}>
@@ -1206,9 +1238,23 @@ export default function EnquiriesPage() {
         <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
           <Button
             size="xs"
+            variant="secondary"
+            icon={Eye}
+            onClick={(ev) => {
+              ev.stopPropagation();
+              setDetailDemoItem(d);
+            }}
+            title="View Demo Details"
+          >
+            View
+          </Button>
+
+          <Button
+            size="xs"
             variant="indigo"
             icon={Printer}
-            onClick={() => {
+            onClick={(ev) => {
+              ev.stopPropagation();
               setPassModalEnquiry({
                 id: d.enquiry_id,
                 student_name: d.student_name,
@@ -1250,14 +1296,15 @@ export default function EnquiriesPage() {
                 size="xs"
                 variant="primary"
                 onClick={(ev) =>
-                  handleConvertToAdmission(
+                    handleConvertToAdmission(
                     {
                       id: d.enquiry_id,
                       student_name: d.student_name,
                       mobile: d.mobile,
+                      converted_student_id: d.converted_student_id,
                     },
                     ev,
-                    d.subject_name_snapshot
+                    d.subject_name_snapshot || d.subject_name
                   )
                 }
                 title="Convert to full enrollment"
@@ -1637,6 +1684,22 @@ export default function EnquiriesPage() {
                               : 'Active'}
                           </Badge>
                         </div>
+                        {((d.demo_items && d.demo_items.length > 0) || d.demo_reference_number) && (
+                          <div className="flex flex-wrap items-center gap-1 mt-1">
+                            {(d.demo_items && d.demo_items.length > 0
+                              ? d.demo_items
+                              : [{ id: d.id, demo_reference_number: d.demo_reference_number }]
+                            ).map((item, idx) => (
+                              <span
+                                key={item.id || item.demo_reference_number || idx}
+                                className="font-mono font-bold text-[10px] px-1.5 py-0.5 rounded bg-purple-50 border border-purple-200 text-odoo-900 inline-block"
+                                title={item.subject_name_snapshot || ''}
+                              >
+                                Demo ID: {item.demo_reference_number}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                         <div className="flex items-center justify-between mt-1">
                           <p className="text-[11px] text-slate-600">
                             Subject: <strong className="text-black">{d.interested_subject || 'General'}</strong>
@@ -1763,7 +1826,7 @@ export default function EnquiriesPage() {
             onRefresh={loadEnquiries}
             loading={enquiriesLoading}
             onRowClick={(e) => navigate(`/enquiries/${e.id}`)}
-            searchPlaceholder="Search enquiry by student name or mobile..."
+            searchPlaceholder="Search enquiry by student name, mobile, or Demo ID..."
             emptyMessage="No enquiry records found for this filter."
           />
         </div>
@@ -1861,7 +1924,8 @@ export default function EnquiriesPage() {
             }}
             onRefresh={loadDemos}
             loading={demosLoading}
-            searchPlaceholder="Search by reference number (e.g. DEM-2026-0001), student, or teacher..."
+            onRowClick={(d) => setDetailDemoItem(d)}
+            searchPlaceholder="Search by Demo ID (e.g. DEM-2026-0001), student, or teacher..."
             emptyMessage="No trial demo records found matching criteria."
           />
         </div>
@@ -2716,6 +2780,190 @@ export default function EnquiriesPage() {
         onConvertToAdmission={(e) => handleConvertToAdmission(e)}
         onRegisterStudent={(e) => handleRegisterStudent(e)}
       />
+
+      {/* ========================================================= */}
+      {/* MODAL: INDIVIDUAL DEMO DETAIL VIEW */}
+      {/* ========================================================= */}
+      {detailDemoItem && (
+        <Modal
+          isOpen={!!detailDemoItem}
+          onClose={() => setDetailDemoItem(null)}
+          title="Trial Demo Details"
+          subtitle={`Demo ID: ${detailDemoItem.demo_reference_number}`}
+          maxWidth="max-w-xl"
+        >
+          <div className="space-y-4 text-xs">
+            <div className="p-3.5 rounded-lg border bg-purple-50 border-purple-200 text-odoo-950 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <Clock className="w-5 h-5 text-odoo-600 shrink-0" />
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-bold text-xs uppercase tracking-wider text-odoo-900">
+                      Demo Tracking ID
+                    </span>
+                    <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-white border border-purple-300 text-odoo-900">
+                      {detailDemoItem.demo_reference_number}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-600 font-medium mt-0.5">
+                    {detailDemoItem.enquiry_code && `Enquiry: ${detailDemoItem.enquiry_code} • `}
+                    Trial window: {formatIndianDate(detailDemoItem.demo_start_date)}
+                    {detailDemoItem.demo_end_date && ` → ${formatIndianDate(detailDemoItem.demo_end_date)}`}
+                  </div>
+                </div>
+              </div>
+              <Badge
+                size="sm"
+                variant={
+                  detailDemoItem.status === 'CONVERTED'
+                    ? 'success'
+                    : detailDemoItem.status === 'ATTENDED'
+                    ? 'warning'
+                    : detailDemoItem.status === 'DROPPED'
+                    ? 'neutral'
+                    : detailDemoItem.status === 'EXPIRED'
+                    ? 'danger'
+                    : 'primary'
+                }
+              >
+                {detailDemoItem.status}
+              </Badge>
+            </div>
+
+            <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 space-y-2">
+              <span className="font-bold text-slate-800 text-[11px] uppercase tracking-wider block">
+                Candidate Details
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <span className="text-[11px] text-slate-500 block">Student Name</span>
+                  <span className="font-bold text-slate-900">{detailDemoItem.student_name}</span>
+                </div>
+                <div>
+                  <span className="text-[11px] text-slate-500 block">Contact Mobile</span>
+                  <span className="font-mono font-semibold text-slate-800">
+                    {detailDemoItem.mobile || '—'}
+                  </span>
+                </div>
+                {detailDemoItem.converted_student_code && (
+                  <div>
+                    <span className="text-[11px] text-slate-500 block">Student Code</span>
+                    <span className="font-mono font-bold text-odoo-800">{detailDemoItem.converted_student_code}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 space-y-2">
+              <span className="font-bold text-slate-800 text-[11px] uppercase tracking-wider block">
+                Trial Class Schedule
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <span className="text-[11px] text-slate-500 block">Subject</span>
+                  <span className="font-bold text-slate-900">{detailDemoItem.subject_name || detailDemoItem.subject_name_snapshot || '—'}</span>
+                </div>
+                <div>
+                  <span className="text-[11px] text-slate-500 block">Assigned Faculty</span>
+                  <span className="font-bold text-slate-900">{detailDemoItem.teacher_name || detailDemoItem.teacher_name_snapshot || '—'}</span>
+                </div>
+                <div>
+                  <span className="text-[11px] text-slate-500 block">Classroom / Hall</span>
+                  <span className="font-bold text-slate-900">{detailDemoItem.hall_number || detailDemoItem.hall_number_snapshot || 'Main Hall'}</span>
+                </div>
+                <div>
+                  <span className="text-[11px] text-slate-500 block">Duration</span>
+                  <span className="font-mono font-bold text-slate-900">{detailDemoItem.demo_duration_days || 3} days</span>
+                </div>
+              </div>
+            </div>
+
+            {(detailDemoItem.status === 'CONVERTED' || detailDemoItem.converted_admission_number || detailDemoItem.converted_course_name) && (
+              <div className="bg-emerald-50 p-3.5 rounded-lg border border-emerald-200 flex items-center justify-between gap-2">
+                <div>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-900 block">
+                    Converted to Enrollment
+                  </span>
+                  <div className="font-bold text-black mt-0.5">
+                    {detailDemoItem.converted_course_name || detailDemoItem.subject_name}
+                  </div>
+                  {detailDemoItem.converted_admission_number && (
+                    <span className="text-[11px] font-mono font-semibold text-emerald-800">
+                      Enrollment: {detailDemoItem.converted_admission_number}
+                    </span>
+                  )}
+                </div>
+                {detailDemoItem.converted_admission_id && (
+                  <Button
+                    size="xs"
+                    variant="success"
+                    icon={ExternalLink}
+                    onClick={() => {
+                      const targetId = detailDemoItem.converted_admission_id;
+                      setDetailDemoItem(null);
+                      navigate(`/enrollments/${targetId}`);
+                    }}
+                  >
+                    View Enrollment
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {(detailDemoItem.notes || detailDemoItem.drop_reason) && (
+              <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-1">
+                {detailDemoItem.drop_reason && (
+                  <p className="text-rose-700 font-semibold">Drop Reason: {detailDemoItem.drop_reason}</p>
+                )}
+                {detailDemoItem.notes && (
+                  <p className="text-slate-700 whitespace-pre-wrap">{detailDemoItem.notes}</p>
+                )}
+              </div>
+            )}
+
+            <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+              <Button
+                size="sm"
+                variant="indigo"
+                icon={Printer}
+                onClick={() => {
+                  const target = detailDemoItem;
+                  setDetailDemoItem(null);
+                  setPassModalEnquiry({
+                    id: target.enquiry_id,
+                    student_name: target.student_name,
+                    mobile: target.mobile,
+                    created_at: target.created_at,
+                    status: target.status,
+                  });
+                  setPassModalDemoItem(target);
+                }}
+              >
+                Print Demo Slip
+              </Button>
+              <div className="flex items-center gap-2">
+                {detailDemoItem.enquiry_id && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    icon={ExternalLink}
+                    onClick={() => {
+                      const enqId = detailDemoItem.enquiry_id;
+                      setDetailDemoItem(null);
+                      navigate(`/enquiries/${enqId}`);
+                    }}
+                  >
+                    Full Enquiry
+                  </Button>
+                )}
+                <Button size="sm" variant="primary" onClick={() => setDetailDemoItem(null)}>
+                  Close
+                </Button>
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {/* ========================================================= */}
       {/* MODAL: QUICK UPDATE COURSE / SUBJECT */}

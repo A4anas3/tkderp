@@ -34,6 +34,7 @@ class EnquiryDemoItemResponse(BaseModel):
     drop_reason: Optional[str] = None
     notes: Optional[str] = None
     converted_admission_item_id: Optional[uuid.UUID] = None
+    converted_admission_id: Optional[uuid.UUID] = None
     converted_student_id: Optional[uuid.UUID] = None
     converted_student_code: Optional[str] = None
     converted_course_name: Optional[str] = None
@@ -141,6 +142,7 @@ class EnquiryDemoRegisterItem(BaseModel):
     drop_reason: Optional[str] = None
     notes: Optional[str] = None
     converted_admission_item_id: Optional[uuid.UUID] = None
+    converted_admission_id: Optional[uuid.UUID] = None
     converted_student_id: Optional[uuid.UUID] = None
     converted_student_code: Optional[str] = None
     converted_course_name: Optional[str] = None

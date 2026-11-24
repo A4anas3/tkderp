@@ -466,7 +466,8 @@ async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db),
             access_status=itm.access_status,
             item_type=itm.item_type,
             is_expired=is_line_expired,
-            is_overdue=is_line_overdue
+            is_overdue=is_line_overdue,
+            source_demo_number=itm.source_demo_number
         )
 
         if is_line_revoked:
@@ -538,6 +539,7 @@ async def _get_demos_for_student(db: AsyncSession, student: Student) -> List[Stu
             adm_no = ditm.admission_item.admission.admission_number if ditm.admission_item.admission else "ADM-UNKNOWN"
             linked = StudentDemoLinkedCourse(
                 admission_item_id=ditm.admission_item.id,
+                admission_id=ditm.admission_item.admission_id,
                 subject=ditm.admission_item.item_name_snapshot,
                 admission_number=adm_no
             )
@@ -1219,6 +1221,7 @@ async def get_student_active_enrollment(
     # Fetch all admission items with parent admissions
     stmt = (
         select(AdmissionItem, Admission)
+        .options(selectinload(AdmissionItem.demo_item))
         .join(Admission, AdmissionItem.admission_id == Admission.id)
         .where(Admission.student_id == student_id)
         .order_by(desc(func.coalesce(AdmissionItem.valid_to, Admission.valid_to)), desc(Admission.admission_date))
@@ -1341,7 +1344,8 @@ async def get_student_active_enrollment(
             "is_expired": is_item_expired,
             "is_overdue": is_item_overdue,
             "lifecycle_reason": item.lifecycle_reason or adm.revocation_reason,
-            "can_cancel": can_cancel
+            "can_cancel": can_cancel,
+            "source_demo_number": item.source_demo_number
         }
 
         if item.item_type == "GREEN_CARD":
@@ -1400,6 +1404,11 @@ async def get_student_active_enrollment(
         if latest_end:
             days_remaining = (latest_end - today).days
 
+        source_demo_no = next(
+            (x[0].source_demo_number for x in cycle_list if x[0].source_demo_number),
+            None
+        )
+
         consolidated = {
             "id": latest_dict["id"],
             "admission_id": latest_dict["admission_id"],
@@ -1425,7 +1434,8 @@ async def get_student_active_enrollment(
             "is_overdue": False,
             "is_renewed": len(cycle_list) > 1 or bool(getattr(latest_item, "renewed_from_item_id", None) or (getattr(latest_item, "renewal_count", 0) or 0) > 0),
             "cycle_count": max(len(cycle_list), (getattr(latest_item, "renewal_count", 0) or 0) + 1),
-            "lifecycle_reason": latest_dict["lifecycle_reason"]
+            "lifecycle_reason": latest_dict["lifecycle_reason"],
+            "source_demo_number": source_demo_no
         }
 
         active_subjects.append(consolidated)

@@ -83,6 +83,7 @@ class StudentLineResponse(BaseModel):
     item_type: str = "BATCH_SUBJECT"
     is_expired: bool = False
     is_overdue: bool = False
+    source_demo_number: Optional[str] = None
 
     @field_validator("last_paid_date", mode="before")
     @classmethod
@@ -95,6 +96,7 @@ class StudentLineResponse(BaseModel):
 
 class StudentDemoLinkedCourse(BaseModel):
     admission_item_id: uuid.UUID
+    admission_id: Optional[uuid.UUID] = None
     subject: str
     admission_number: str
 

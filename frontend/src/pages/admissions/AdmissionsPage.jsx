@@ -306,7 +306,7 @@ export default function AdmissionsPage() {
               setSearch(e.target.value);
               setPage(1);
             }}
-            placeholder="Search student or ID..."
+            placeholder="Search student, ID, or Demo ID..."
             className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 rounded-md bg-white text-black placeholder:text-slate-400 focus:outline-none focus:border-odoo-600 min-h-[40px]"
           />
         </div>
@@ -520,7 +520,7 @@ export default function AdmissionsPage() {
           onRefresh={loadAdmissions}
           loading={loading}
           onRowClick={(row) => navigate(`/enrollments/${row.id}`)}
-          searchPlaceholder="Search by purchase transaction ID or student name..."
+          searchPlaceholder="Search by purchase ID, student name, or Demo ID..."
           emptyMessage="No course purchases found."
         />
       </div>

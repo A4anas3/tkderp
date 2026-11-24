@@ -166,6 +166,7 @@ async def get_cashier_dashboard(
     # Upcoming Demos
     demo_res = await db.execute(
         select(Enquiry)
+        .options(selectinload(Enquiry.demo_items))
         .where(
             Enquiry.status.in_(["PENDING", "ACTIVE_DEMO", "INTERESTED"]),
             Enquiry.demo_deadline.isnot(None),
@@ -182,7 +183,9 @@ async def get_cashier_dashboard(
             "mobile": e.mobile,
             "demo_deadline": str(e.demo_deadline) if e.demo_deadline else None,
             "remaining_days": (e.demo_deadline - today).days if e.demo_deadline else None,
-            "status": e.status
+            "status": e.status,
+            "converted_student_id": str(e.converted_student_id) if e.converted_student_id else None,
+            "demo_reference_numbers": [d.demo_reference_number for d in (e.demo_items or [])],
         }
         for e in demo_res.scalars().all()
     ]
