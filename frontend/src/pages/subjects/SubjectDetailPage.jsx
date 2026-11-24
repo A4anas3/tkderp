@@ -488,7 +488,7 @@ export default function SubjectDetailPage() {
             <div>
               <h3 className="font-bold text-black text-sm flex items-center gap-2">
                 <BookOpen className="w-4 h-4 text-odoo-600" />
-                <span>Assigned Course Enrollments ({filteredStudents.length})</span>
+                <span>Assigned Course Enrollments ({rosterTotal})</span>
               </h3>
               <p className="text-[11px] text-slate-500 font-medium mt-0.5">
                 Active and expired course cycles • Filtered by cycle status and search
@@ -602,7 +602,7 @@ export default function SubjectDetailPage() {
           </div>
 
           {/* Roster Table */}
-          {filteredStudents.length === 0 ? (
+          {students.length === 0 ? (
             <div className="py-10 text-center text-xs text-slate-500 bg-slate-50 rounded-lg border border-dashed border-slate-200 space-y-2">
               <BookOpen className="w-8 h-8 text-slate-300 mx-auto" />
               <div className="font-semibold text-black">No course enrollments found</div>

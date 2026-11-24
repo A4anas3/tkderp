@@ -81,6 +81,8 @@ export default function ExpensesPage() {
     notes: '',
   });
 
+  const [paidSalariesForMonth, setPaidSalariesForMonth] = useState([]);
+
   // Pay Salary Modal
   const [paySalaryModalOpen, setPaySalaryModalOpen] = useState(false);
   const [selectedSalRecord, setSelectedSalRecord] = useState(null);
@@ -212,6 +214,55 @@ export default function ExpensesPage() {
         setSalTeacherAbsentCount(0);
       });
   }, [salForm.employee_name_snapshot, salForm.month_year, salForm.employee_type, teachers, calculatePayableSalary]);
+
+  // Load paid salary records for the selected month to show informational 'Already paid' note
+  useEffect(() => {
+    if (!salModalOpen || !salForm.month_year) return;
+    let isCurrent = true;
+    expenseApi
+      .listSalaries({
+        month_year: salForm.month_year.trim(),
+        status_filter: 'PAID',
+        page_size: 100,
+      })
+      .then((res) => {
+        if (isCurrent) {
+          setPaidSalariesForMonth(res?.items || []);
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to fetch paid salaries for month:', err);
+      });
+    return () => {
+      isCurrent = false;
+    };
+  }, [salModalOpen, salForm.month_year]);
+
+  // Informational check: has this employee already received paid salary for the selected month?
+  const isAlreadyPaid = useMemo(() => {
+    const rawName = salForm.employee_name_snapshot?.trim();
+    if (!rawName) return false;
+    const normName = rawName.toLowerCase();
+    const empId = salForm.employee_id;
+    const curMonth = salForm.month_year?.trim();
+
+    // Check all candidates across paidSalariesForMonth and loaded salaries
+    const candidateList = [...paidSalariesForMonth, ...salaries];
+    return candidateList.some((r) => {
+      if (r.month_year !== curMonth) return false;
+      const isPaid =
+        r.status === 'PAID' ||
+        (Number(r.paid_amount || 0) > 0 &&
+          Number(r.paid_amount || 0) >= Number(r.salary_amount || 0));
+      if (!isPaid) return false;
+
+      if (empId && r.employee_id && String(r.employee_id) === String(empId)) {
+        return true;
+      }
+      const rName = r.employee_name_snapshot?.trim()?.toLowerCase();
+      return rName && rName === normName;
+    });
+  }, [salForm.employee_name_snapshot, salForm.employee_id, salForm.month_year, paidSalariesForMonth, salaries]);
 
   // Explicit auto-calculate action triggered by user button
   const handleAutoCalculate = () => {
@@ -837,9 +888,17 @@ export default function ExpensesPage() {
               <Input
                 label="Or Enter Custom Employee Name"
                 value={salForm.employee_name_snapshot}
-                onChange={(e) =>
-                  setSalForm({ ...salForm, employee_name_snapshot: e.target.value })
-                }
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const matched = teachers.find(
+                    (t) => t.name.toLowerCase() === val.trim().toLowerCase()
+                  );
+                  setSalForm((prev) => ({
+                    ...prev,
+                    employee_name_snapshot: val,
+                    employee_id: matched ? matched.id : '',
+                  }));
+                }}
                 placeholder="e.g. Office Attendant / Sweeper"
                 required
               />
@@ -864,7 +923,7 @@ export default function ExpensesPage() {
                   <button
                     type="button"
                     onClick={() => setSalForm((prev) => ({ ...prev, month_year: curMonthStr }))}
-                    className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold transition cursor-pointer ${
+                    className={`text-[9px] px-1 py-0.5 rounded font-mono font-bold transition cursor-pointer ${
                       salForm.month_year === curMonthStr
                         ? 'bg-odoo-600 text-white'
                         : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
@@ -875,7 +934,7 @@ export default function ExpensesPage() {
                   <button
                     type="button"
                     onClick={() => setSalForm((prev) => ({ ...prev, month_year: prevMonthStr }))}
-                    className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold transition cursor-pointer ${
+                    className={`text-[9px] px-1 py-0.5 rounded font-mono font-bold transition cursor-pointer ${
                       salForm.month_year === prevMonthStr
                         ? 'bg-odoo-600 text-white'
                         : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
@@ -891,6 +950,11 @@ export default function ExpensesPage() {
                 placeholder="YYYY-MM (e.g. 2026-11)"
                 required
               />
+              {isAlreadyPaid && (
+                <span className="text-[10px] text-amber-600 font-medium block mt-0.5">
+                  Already paid
+                </span>
+              )}
             </div>
           </div>
 
