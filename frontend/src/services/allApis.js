@@ -211,6 +211,10 @@ export const enquiryApi = {
     const res = await api.post(`/enquiries/${id}/convert`);
     return res.data;
   },
+  registerStudent: async (id, data = {}) => {
+    const res = await api.post(`/enquiries/${id}/register-student`, data);
+    return res.data;
+  },
 };
 
 export const subjectApi = {

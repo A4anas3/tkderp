@@ -1,6 +1,7 @@
 import uuid
 import json
 import calendar
+import re
 from datetime import date, timedelta
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -13,7 +14,8 @@ from app.database.models import Enquiry, EnquiryDemoItem, Student, User, Teacher
 from app.modules.enquiries.schemas import (
     EnquiryCreate, EnquiryUpdate, EnquiryResponse, ConvertEnquiryRequest,
     EnquiryDemoItemResponse, EnquiryDemoItemStatusUpdate, EnquiryDemoRegisterItem,
-    DemoAnalyticsResponse, DemoAnalyticsSummary, TeacherDemoMetric, SubjectDemoMetric
+    DemoAnalyticsResponse, DemoAnalyticsSummary, TeacherDemoMetric, SubjectDemoMetric,
+    RegisterStudentFromEnquiryRequest, StudentMatchItem, RegisterStudentResponse
 )
 from app.common.pagination import PaginationParams, PageResponse
 
@@ -59,6 +61,127 @@ async def _generate_demo_reference_number(db: AsyncSession, offset: int = 0) -> 
     
     cnt = last_seq + 1 + offset
     return f"DEM-{year_str}-{cnt:04d}"
+
+
+def extract_last_10_mobile(mobile_str: Optional[str]) -> Optional[str]:
+    """Strips spaces, country codes, and non-digit characters, and extracts the last 10 digits."""
+    if not mobile_str:
+        return None
+    digits = re.sub(r"\D", "", str(mobile_str).strip())
+    if len(digits) >= 10:
+        return digits[-10:]
+    return None
+
+
+async def _generate_student_code(db: AsyncSession) -> str:
+    """Generate sequential unique student registration code STU{YYYY}{NNNN}."""
+    year_str = date.today().strftime("%Y")
+    cnt_res = await db.execute(select(func.count(Student.id)))
+    candidate_seq = (cnt_res.scalar_one() or 0) + 1
+    while True:
+        candidate_code = f"STU{year_str}{candidate_seq:04d}"
+        exists = (await db.execute(select(Student.id).where(Student.student_code == candidate_code).limit(1))).scalar_one_or_none()
+        if not exists:
+            return candidate_code
+        candidate_seq += 1
+
+
+async def _find_matching_students_by_mobile(db: AsyncSession, last_10_mobile: str) -> List[Student]:
+    """
+    Find existing students matching on the normalised mobile number ONLY (last 10 digits).
+    Does NOT use the name in the match at all.
+    """
+    try:
+        stmt = (
+            select(Student)
+            .where(
+                Student.mobile.isnot(None),
+                func.right(func.regexp_replace(Student.mobile, r'[^0-9]', '', 'g'), 10) == last_10_mobile
+            )
+            .order_by(Student.registration_date.asc(), Student.created_at.asc())
+        )
+        candidates = (await db.execute(stmt)).scalars().all()
+    except Exception:
+        stmt = select(Student).where(Student.mobile.isnot(None)).order_by(Student.registration_date.asc(), Student.created_at.asc())
+        candidates = (await db.execute(stmt)).scalars().all()
+
+    return [s for s in candidates if extract_last_10_mobile(s.mobile) == last_10_mobile]
+
+
+async def _create_student_from_enquiry(
+    db: AsyncSession,
+    enquiry: Enquiry,
+    current_user_id: Optional[uuid.UUID] = None,
+    father_name: Optional[str] = None,
+    email: Optional[str] = None,
+    address: Optional[str] = None,
+    commit: bool = True
+) -> Student:
+    """
+    Creates student pre-filled from enquiry (student_name, mobile, father_name, school_college)
+    with the same validation as normal student creation.
+    Reused across demo registration and admission conversion to prevent duplication.
+    """
+    name = (enquiry.student_name or "").strip()
+    if len(name) < 2:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Student name must be at least 2 characters long"
+        )
+
+    norm_mob = extract_last_10_mobile(enquiry.mobile)
+    if enquiry.mobile and not norm_mob:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Mobile number must be exactly 10 numeric digits"
+        )
+
+    # Combine school_college and existing enquiry notes
+    notes_parts = []
+    if enquiry.school_college and enquiry.school_college.strip():
+        notes_parts.append(f"School/College: {enquiry.school_college.strip()}")
+    if enquiry.notes and enquiry.notes.strip():
+        notes_parts.append(enquiry.notes.strip())
+    combined_notes = " • ".join(notes_parts) if notes_parts else None
+
+    # Sequential unique student registration code STU{Year}{Count:04d}
+    candidate_code = await _generate_student_code(db)
+
+    student = Student(
+        student_code=candidate_code,
+        name=name,
+        father_name=(father_name or enquiry.father_name or "").strip() or None,
+        mobile=norm_mob,
+        email=(email.strip().lower() if email else None),
+        address=(address.strip() if address else None),
+        registration_date=date.today(),
+        status="ACTIVE",
+        notes=combined_notes
+    )
+    db.add(student)
+    await db.flush()
+
+    audit = AuditLog(
+        user_id=current_user_id,
+        action="STUDENT_CREATED_FROM_ENQUIRY",
+        entity_type="STUDENT",
+        entity_id=student.id,
+        details=json.dumps({
+            "student_id": str(student.id),
+            "student_code": student.student_code,
+            "name": student.name,
+            "mobile": student.mobile,
+            "enquiry_id": str(enquiry.id),
+            "enquiry_code": enquiry.enquiry_code
+        })
+    )
+    db.add(audit)
+
+    if commit:
+        await db.commit()
+        await db.refresh(student)
+
+    return student
 
 
 def _format_demo_item_response(itm: EnquiryDemoItem, today: date) -> EnquiryDemoItemResponse:
@@ -323,6 +446,14 @@ async def list_individual_demo_items(
     rows = (await db.execute(query)).all()
 
     today = date.today()
+    # Batch resolve student codes for enquiries if converted_student_id exists
+    student_ids = [enq.converted_student_id for _, enq in rows if enq.converted_student_id]
+    student_code_map = {}
+    if student_ids:
+        s_res = await db.execute(select(Student.id, Student.student_code).where(Student.id.in_(student_ids)))
+        for sid, scode in s_res.all():
+            student_code_map[sid] = scode
+
     items = []
     for ditm, enq in rows:
         rem = (ditm.demo_end_date - today).days
@@ -362,7 +493,9 @@ async def list_individual_demo_items(
             badge_variant=var,
             drop_reason=ditm.drop_reason,
             notes=ditm.notes,
-            converted_admission_item_id=ditm.converted_admission_item_id
+            converted_admission_item_id=ditm.converted_admission_item_id,
+            converted_student_id=enq.converted_student_id,
+            converted_student_code=student_code_map.get(enq.converted_student_id) if enq.converted_student_id else None
         ))
 
     return PageResponse.create(items=items, total=total, params=PaginationParams(page=page, page_size=page_size))
@@ -843,6 +976,172 @@ async def update_enquiry(
     return await _resolve_single_enquiry_response(db, enquiry, formatted_demo_items, today)
 
 
+@router.post("/{enquiry_id}/register-student", response_model=RegisterStudentResponse, status_code=status.HTTP_200_OK)
+async def register_student_from_enquiry(
+    enquiry_id: uuid.UUID,
+    payload: Optional[RegisterStudentFromEnquiryRequest] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_cashier_or_admin)
+):
+    """
+    Registers a student from enquiry at demo time, before any course purchase,
+    with duplicate check on normalised mobile number ONLY.
+    - If exact 1 match found: links to existing student, does NOT create new student.
+    - If multiple matches found: returns matches so staff can select.
+    - If selected_student_id provided: links to that student.
+    - If no match found: creates student pre-filled from enquiry and links converted_student_id.
+    - Registration alone does NOT change enquiry status and does NOT mark it CONVERTED.
+    """
+    res = await db.execute(select(Enquiry).where(Enquiry.id == enquiry_id))
+    enquiry = res.scalar_one_or_none()
+    if not enquiry:
+        raise HTTPException(status_code=404, detail="Enquiry not found")
+
+    req = payload or RegisterStudentFromEnquiryRequest()
+
+    # 1. If already linked to a student profile, return existing profile info
+    if enquiry.converted_student_id and not req.selected_student_id:
+        stu_res = await db.execute(select(Student).where(Student.id == enquiry.converted_student_id))
+        existing_student = stu_res.scalar_one_or_none()
+        if existing_student:
+            return RegisterStudentResponse(
+                success=True,
+                already_registered=True,
+                multiple_matches=False,
+                student_id=existing_student.id,
+                student_code=existing_student.student_code,
+                student_name=existing_student.name,
+                mobile=existing_student.mobile,
+                message=f"Already registered with student code {existing_student.student_code}"
+            )
+
+    # 2. If user explicitly selected a student from multiple matches
+    if req.selected_student_id:
+        stu_res = await db.execute(select(Student).where(Student.id == req.selected_student_id))
+        selected_student = stu_res.scalar_one_or_none()
+        if not selected_student:
+            raise HTTPException(status_code=404, detail="Selected student profile not found")
+
+        enquiry.converted_student_id = selected_student.id
+        audit = AuditLog(
+            user_id=current_user.id,
+            action="STUDENT_LINKED_FROM_ENQUIRY",
+            entity_type="STUDENT",
+            entity_id=selected_student.id,
+            details=json.dumps({
+                "student_id": str(selected_student.id),
+                "student_code": selected_student.student_code,
+                "name": selected_student.name,
+                "enquiry_id": str(enquiry.id),
+                "enquiry_code": enquiry.enquiry_code,
+                "reason": "Manually selected from multiple mobile matches"
+            })
+        )
+        db.add(audit)
+        await db.commit()
+        await db.refresh(enquiry)
+
+        return RegisterStudentResponse(
+            success=True,
+            already_registered=True,
+            multiple_matches=False,
+            student_id=selected_student.id,
+            student_code=selected_student.student_code,
+            student_name=selected_student.name,
+            mobile=selected_student.mobile,
+            message=f"Already registered with student code {selected_student.student_code}"
+        )
+
+    # 3. Duplicate check FIRST on normalised mobile number ONLY (last 10 digits)
+    norm_mob = extract_last_10_mobile(enquiry.mobile)
+    if not norm_mob:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A valid 10-digit mobile number is required to register student"
+        )
+
+    matches = await _find_matching_students_by_mobile(db, norm_mob)
+
+    # 3a. Multiple students share the same mobile number
+    if len(matches) > 1 and not req.force_create:
+        return RegisterStudentResponse(
+            success=True,
+            already_registered=False,
+            multiple_matches=True,
+            matches=[
+                StudentMatchItem(
+                    id=m.id,
+                    student_code=m.student_code,
+                    name=m.name,
+                    father_name=m.father_name,
+                    mobile=m.mobile,
+                    registration_date=m.registration_date,
+                    status=m.status
+                )
+                for m in matches
+            ],
+            message=f"Multiple students ({len(matches)}) found with mobile number ending in {norm_mob}. Please select the matching student."
+        )
+
+    # 3b. Exactly 1 match found -> link to existing student
+    if len(matches) == 1 and not req.force_create:
+        matched = matches[0]
+        enquiry.converted_student_id = matched.id
+        audit = AuditLog(
+            user_id=current_user.id,
+            action="STUDENT_LINKED_FROM_ENQUIRY",
+            entity_type="STUDENT",
+            entity_id=matched.id,
+            details=json.dumps({
+                "student_id": str(matched.id),
+                "student_code": matched.student_code,
+                "name": matched.name,
+                "mobile": matched.mobile,
+                "enquiry_id": str(enquiry.id),
+                "enquiry_code": enquiry.enquiry_code,
+                "reason": "Existing student matched by normalised mobile"
+            })
+        )
+        db.add(audit)
+        await db.commit()
+        await db.refresh(enquiry)
+
+        return RegisterStudentResponse(
+            success=True,
+            already_registered=True,
+            multiple_matches=False,
+            student_id=matched.id,
+            student_code=matched.student_code,
+            student_name=matched.name,
+            mobile=matched.mobile,
+            message=f"Already registered with student code {matched.student_code}"
+        )
+
+    # 3c. No match -> create new student pre-filled from enquiry
+    student = await _create_student_from_enquiry(
+        db=db,
+        enquiry=enquiry,
+        current_user_id=current_user.id,
+        commit=False
+    )
+    enquiry.converted_student_id = student.id
+    # Note: Registration alone must NOT change enquiry demo status and must NOT mark it CONVERTED!
+    await db.commit()
+    await db.refresh(enquiry)
+    await db.refresh(student)
+
+    return RegisterStudentResponse(
+        success=True,
+        already_registered=False,
+        multiple_matches=False,
+        student_id=student.id,
+        student_code=student.student_code,
+        student_name=student.name,
+        mobile=student.mobile,
+        message=f"Student {student.name} ({student.student_code}) registered successfully"
+    )
+
+
 @router.post("/{enquiry_id}/convert", status_code=status.HTTP_200_OK)
 async def convert_enquiry_to_student(
     enquiry_id: uuid.UUID,
@@ -853,6 +1152,7 @@ async def convert_enquiry_to_student(
     """
     Converts enquiry to student profile and updates child demo items to CONVERTED.
     Supports selective conversion of specific demo subjects.
+    Reuses existing converted_student_id if student was already registered at demo time.
     """
     req = payload or ConvertEnquiryRequest()
     res = await db.execute(select(Enquiry).where(Enquiry.id == enquiry_id))
@@ -862,29 +1162,30 @@ async def convert_enquiry_to_student(
     if enquiry.status == "CONVERTED" and enquiry.converted_student_id:
         raise HTTPException(status_code=400, detail="Enquiry has already been converted to a student")
 
-    # Generate unique student registration code
-    year_str = date.today().strftime("%Y")
-    cnt_res = await db.execute(select(func.count(Student.id)))
-    candidate_seq = (cnt_res.scalar_one() or 0) + 1
-    while True:
-        candidate_code = f"STU{year_str}{candidate_seq:04d}"
-        exists = (await db.execute(select(Student.id).where(Student.student_code == candidate_code).limit(1))).scalar_one_or_none()
-        if not exists:
-            reg_no = candidate_code
-            break
-        candidate_seq += 1
+    # If student is already registered (from demo time or duplicate check), reuse that student!
+    student = None
+    if enquiry.converted_student_id:
+        stu_res = await db.execute(select(Student).where(Student.id == enquiry.converted_student_id))
+        student = stu_res.scalar_one_or_none()
 
-    student = Student(
-        student_code=reg_no,
-        name=enquiry.student_name,
-        father_name=req.father_name or enquiry.father_name,
-        mobile=enquiry.mobile,
-        email=req.email,
-        address=req.address,
-        status="ACTIVE"
-    )
-    db.add(student)
-    await db.flush()
+    if not student:
+        # Check duplicate first on normalised mobile
+        norm_mob = extract_last_10_mobile(enquiry.mobile)
+        if norm_mob:
+            matches = await _find_matching_students_by_mobile(db, norm_mob)
+            if matches:
+                student = matches[0]
+
+    if not student:
+        student = await _create_student_from_enquiry(
+            db=db,
+            enquiry=enquiry,
+            current_user_id=current_user.id,
+            father_name=req.father_name,
+            email=req.email,
+            address=req.address,
+            commit=False
+        )
 
     enquiry.status = "CONVERTED"
     enquiry.converted_student_id = student.id
@@ -900,7 +1201,7 @@ async def convert_enquiry_to_student(
 
     audit = AuditLog(
         user_id=current_user.id,
-        action="STUDENT_CREATED_FROM_ENQUIRY",
+        action="ENQUIRY_CONVERTED_TO_ADMISSION",
         entity_type="STUDENT",
         entity_id=student.id,
         details=json.dumps({

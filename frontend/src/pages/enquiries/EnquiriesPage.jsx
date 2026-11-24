@@ -39,6 +39,7 @@ import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
 import EnquiryDetailModal from '../../components/modals/EnquiryDetailModal';
 import DemoPassModal from '../../components/modals/DemoPassModal';
+import RegisterStudentModal from '../../components/modals/RegisterStudentModal';
 import { enquiryApi, subjectApi, teacherApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 import { cleanMobileInput } from '../../utils/phoneUtils';
@@ -93,6 +94,10 @@ export default function EnquiriesPage() {
   const [detailEnquiry, setDetailEnquiry] = useState(null);
   const [passModalEnquiry, setPassModalEnquiry] = useState(null);
   const [passModalDemoItem, setPassModalDemoItem] = useState(null);
+  const [registerModalOpen, setRegisterModalOpen] = useState(false);
+  const [registerModalEnquiry, setRegisterModalEnquiry] = useState(null);
+  const [registerResultData, setRegisterResultData] = useState(null);
+  const [registeringStudent, setRegisteringStudent] = useState(false);
 
   // ==========================================
   // TAB 2: DEMO REGISTER STATE
@@ -475,6 +480,36 @@ export default function EnquiriesPage() {
     );
   };
 
+  // Register Student before course purchase
+  const handleRegisterStudent = async (enq, ev, selectedStudentId = null, forceCreate = false) => {
+    if (ev) ev.stopPropagation();
+    setRegisteringStudent(true);
+    try {
+      const payload = {};
+      if (selectedStudentId) payload.selected_student_id = selectedStudentId;
+      if (forceCreate) payload.force_create = true;
+
+      const res = await enquiryApi.registerStudent(enq.id, payload);
+      setRegisterModalEnquiry(enq);
+      setRegisterResultData(res);
+      setRegisterModalOpen(true);
+
+      if (!res.multiple_matches) {
+        if (res.already_registered) {
+          success(`Already registered with student code ${res.student_code}`);
+        } else {
+          success(`Student ${res.student_name || enq.student_name} registered (${res.student_code})`);
+        }
+        loadEnquiries();
+        loadSummary();
+      }
+    } catch (err) {
+      error(err.message || 'Failed to register student from enquiry');
+    } finally {
+      setRegisteringStudent(false);
+    }
+  };
+
   const handleMarkInterested = async (enq, ev) => {
     if (ev) ev.stopPropagation();
     try {
@@ -700,9 +735,23 @@ export default function EnquiriesPage() {
                 <Badge size="xs" variant="primary">
                   Admitted (No Course)
                 </Badge>
-                <span className="text-[10px] text-amber-700 block font-semibold mt-0.5">
-                  {e.converted_student_code || 'Student Registered'}
-                </span>
+                {e.converted_student_id ? (
+                  <button
+                    type="button"
+                    onClick={(ev) => {
+                      ev.stopPropagation();
+                      navigate(`/students/${e.converted_student_id}`);
+                    }}
+                    className="text-[10px] text-amber-700 hover:text-odoo-700 hover:underline block font-semibold mt-0.5 cursor-pointer mx-auto"
+                    title="View Student Profile"
+                  >
+                    {e.converted_student_code || 'Student Registered'} ↗
+                  </button>
+                ) : (
+                  <span className="text-[10px] text-amber-700 block font-semibold mt-0.5">
+                    {e.converted_student_code || 'Student Registered'}
+                  </span>
+                )}
               </div>
             );
           }
@@ -731,7 +780,7 @@ export default function EnquiriesPage() {
     },
     {
       header: 'Action',
-      className: 'text-right w-56',
+      className: 'text-right w-64',
       render: (e) => {
         const isConverted = e.status === 'CONVERTED';
         const hasCourse = Boolean(e.has_course_purchase);
@@ -803,6 +852,17 @@ export default function EnquiriesPage() {
               <>
                 <Button
                   size="xs"
+                  variant="teal-soft"
+                  icon={UserCheck}
+                  disabled={registeringStudent}
+                  onClick={(ev) => handleRegisterStudent(e, ev)}
+                  title="Register student before course purchase"
+                >
+                  Register
+                </Button>
+
+                <Button
+                  size="xs"
                   variant="primary"
                   onClick={(ev) => handleConvertToAdmission(e, ev)}
                   title="Convert to Admission & Collect Fees"
@@ -835,6 +895,18 @@ export default function EnquiriesPage() {
                       onClick={(ev) => ev.stopPropagation()}
                       className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-xl border border-slate-200 py-1 z-30 text-xs divide-y divide-slate-100"
                     >
+                      <button
+                        type="button"
+                        onClick={(ev) => {
+                          setActiveActionMenuId(null);
+                          handleRegisterStudent(e, ev);
+                        }}
+                        className="w-full text-left px-3 py-1.5 hover:bg-purple-50 flex items-center gap-2 text-odoo-700 font-medium cursor-pointer"
+                      >
+                        <UserCheck className="w-3.5 h-3.5 text-odoo-600" />
+                        <span>Register Student</span>
+                      </button>
+
                       <button
                         type="button"
                         onClick={() => {
@@ -2292,6 +2364,26 @@ export default function EnquiriesPage() {
       />
 
       {/* ========================================================= */}
+      {/* MODAL: REGISTER STUDENT BEFORE COURSE PURCHASE */}
+      {/* ========================================================= */}
+      <RegisterStudentModal
+        isOpen={registerModalOpen}
+        onClose={() => {
+          setRegisterModalOpen(false);
+          setRegisterModalEnquiry(null);
+          setRegisterResultData(null);
+        }}
+        enquiry={registerModalEnquiry}
+        resultData={registerResultData}
+        onSelectStudent={(selectedId, forceCreate) => {
+          if (registerModalEnquiry) {
+            handleRegisterStudent(registerModalEnquiry, null, selectedId, forceCreate);
+          }
+        }}
+        submitting={registeringStudent}
+      />
+
+      {/* ========================================================= */}
       {/* MODAL: ENQUIRY DETAIL VIEW */}
       {/* ========================================================= */}
       <EnquiryDetailModal
@@ -2299,6 +2391,7 @@ export default function EnquiriesPage() {
         onClose={() => setDetailEnquiry(null)}
         enquiry={detailEnquiry}
         onConvertToAdmission={(e) => handleConvertToAdmission(e)}
+        onRegisterStudent={(e) => handleRegisterStudent(e)}
       />
 
       {/* ========================================================= */}

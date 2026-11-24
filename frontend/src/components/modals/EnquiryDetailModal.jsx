@@ -11,7 +11,8 @@ import {
   Printer,
   Hash,
   MapPin,
-  User
+  User,
+  UserCheck,
 } from 'lucide-react';
 import Modal from '../common/Modal';
 import Button from '../common/Button';
@@ -24,6 +25,7 @@ export default function EnquiryDetailModal({
   onClose,
   enquiry,
   onConvertToAdmission,
+  onRegisterStudent,
 }) {
   const [passModalOpen, setPassModalOpen] = useState(false);
 
@@ -286,6 +288,21 @@ export default function EnquiryDetailModal({
               <Button size="sm" variant="secondary" onClick={onClose}>
                 Close
               </Button>
+
+              {!hasCourse && !hasStudent && !isConverted && onRegisterStudent && (
+                <Button
+                  size="sm"
+                  variant="teal-soft"
+                  icon={UserCheck}
+                  onClick={() => {
+                    onClose();
+                    onRegisterStudent(enquiry);
+                  }}
+                  title="Register student before course purchase"
+                >
+                  Register Student
+                </Button>
+              )}
 
               {!hasCourse && onConvertToAdmission && (
                 <Button

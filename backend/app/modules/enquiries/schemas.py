@@ -34,6 +34,8 @@ class EnquiryDemoItemResponse(BaseModel):
     drop_reason: Optional[str] = None
     notes: Optional[str] = None
     converted_admission_item_id: Optional[uuid.UUID] = None
+    converted_student_id: Optional[uuid.UUID] = None
+    converted_student_code: Optional[str] = None
     days_remaining: Optional[int] = None
     status_label: Optional[str] = None
     badge_variant: Optional[str] = None
@@ -134,6 +136,8 @@ class EnquiryDemoRegisterItem(BaseModel):
     drop_reason: Optional[str] = None
     notes: Optional[str] = None
     converted_admission_item_id: Optional[uuid.UUID] = None
+    converted_student_id: Optional[uuid.UUID] = None
+    converted_student_code: Optional[str] = None
 
 # Analytics schemas
 class TeacherDemoMetric(BaseModel):
@@ -169,3 +173,30 @@ class DemoAnalyticsResponse(BaseModel):
     by_teacher: List[TeacherDemoMetric]
     by_subject: List[SubjectDemoMetric]
     filters: Dict[str, Any]
+
+# Student Registration from Enquiry schemas
+class RegisterStudentFromEnquiryRequest(BaseModel):
+    selected_student_id: Optional[uuid.UUID] = None
+    force_create: bool = False
+
+class StudentMatchItem(BaseModel):
+    id: uuid.UUID
+    student_code: str
+    name: str
+    father_name: Optional[str] = None
+    mobile: Optional[str] = None
+    registration_date: Optional[date] = None
+    status: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+class RegisterStudentResponse(BaseModel):
+    success: bool = True
+    already_registered: bool = False
+    multiple_matches: bool = False
+    student_id: Optional[uuid.UUID] = None
+    student_code: Optional[str] = None
+    student_name: Optional[str] = None
+    mobile: Optional[str] = None
+    message: str
+    matches: List[StudentMatchItem] = []

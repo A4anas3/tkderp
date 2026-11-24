@@ -20,6 +20,7 @@ import {
   Hash,
   MapPin,
   User,
+  UserCheck,
 } from 'lucide-react';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
@@ -27,6 +28,7 @@ import Modal from '../../components/common/Modal';
 import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
 import DemoPassModal from '../../components/modals/DemoPassModal';
+import RegisterStudentModal from '../../components/modals/RegisterStudentModal';
 import { enquiryApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 import { formatIndianDate } from '../../utils/dateCycleUtils';
@@ -40,6 +42,9 @@ export default function EnquiryDetailPage() {
   const [enquiry, setEnquiry] = useState(null);
   const [loading, setLoading] = useState(true);
   const [passModalOpen, setPassModalOpen] = useState(false);
+  const [registerModalOpen, setRegisterModalOpen] = useState(false);
+  const [registerResultData, setRegisterResultData] = useState(null);
+  const [registeringStudent, setRegisteringStudent] = useState(false);
 
   // Edit Modal State
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -185,6 +190,32 @@ export default function EnquiryDetailPage() {
       params.set('student_id', enquiry.converted_student_id);
     }
     navigate(`/admissions/new?${params.toString()}`);
+  };
+
+  const handleRegisterStudent = async (selectedStudentId = null, forceCreate = false) => {
+    setRegisteringStudent(true);
+    try {
+      const payload = {};
+      if (selectedStudentId) payload.selected_student_id = selectedStudentId;
+      if (forceCreate) payload.force_create = true;
+
+      const res = await enquiryApi.registerStudent(id, payload);
+      setRegisterResultData(res);
+      setRegisterModalOpen(true);
+
+      if (!res.multiple_matches) {
+        if (res.already_registered) {
+          success(`Already registered with student code ${res.student_code}`);
+        } else {
+          success(`Student ${res.student_name || enquiry.student_name} registered (${res.student_code})`);
+        }
+        loadEnquiry();
+      }
+    } catch (err) {
+      error(err.message || 'Failed to register student');
+    } finally {
+      setRegisteringStudent(false);
+    }
   };
 
   if (loading) {
@@ -348,7 +379,7 @@ export default function EnquiryDetailPage() {
             >
               View Course Bill ({enquiry.course_admission_number || 'Enrolled ✓'}) ↗
             </Button>
-          ) : enquiry.has_student_admission || isConverted ? (
+          ) : enquiry.has_student_admission || isConverted || enquiry.converted_student_id ? (
             <Button
               variant="primary"
               icon={UserPlus}
@@ -359,14 +390,26 @@ export default function EnquiryDetailPage() {
               Buy Course / Collect Fees ↗
             </Button>
           ) : (
-            <Button
-              variant="primary"
-              icon={UserPlus}
-              onClick={handleConvertToAdmission}
-              size="sm"
-            >
-              Convert to Admission ↗
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="teal-soft"
+                icon={UserCheck}
+                onClick={() => handleRegisterStudent()}
+                size="sm"
+                disabled={registeringStudent}
+                title="Register student before course purchase"
+              >
+                Register Student
+              </Button>
+              <Button
+                variant="primary"
+                icon={UserPlus}
+                onClick={handleConvertToAdmission}
+                size="sm"
+              >
+                Convert to Admission ↗
+              </Button>
+            </div>
           )}
         </div>
       </div>
@@ -376,7 +419,7 @@ export default function EnquiryDetailPage() {
         className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs ${
           enquiry.has_course_purchase
             ? 'bg-emerald-50 border-emerald-400 text-emerald-950'
-            : isConverted || enquiry.has_student_admission
+            : isConverted || enquiry.has_student_admission || enquiry.converted_student_id
             ? 'bg-blue-50 border-blue-300 text-blue-950'
             : isInterested
             ? 'bg-emerald-50 border-emerald-400 text-emerald-950'
@@ -392,7 +435,7 @@ export default function EnquiryDetailPage() {
         <div className="flex items-center gap-3">
           {enquiry.has_course_purchase ? (
             <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0" />
-          ) : isConverted || enquiry.has_student_admission ? (
+          ) : isConverted || enquiry.has_student_admission || enquiry.converted_student_id ? (
             <CheckCircle2 className="w-6 h-6 text-blue-600 shrink-0" />
           ) : isInterested ? (
             <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0" />
@@ -410,8 +453,8 @@ export default function EnquiryDetailPage() {
               Enquiry Status:{' '}
               {enquiry.has_course_purchase
                 ? `COURSE ENROLLED & PAID (${enquiry.course_admission_number || 'ADMISSION COMPLETED'})`
-                : isConverted || enquiry.has_student_admission
-                ? `STUDENT ADMITTED (NO COURSE PURCHASED YET) ${enquiry.converted_student_code ? `• ${enquiry.converted_student_code}` : ''}`
+                : isConverted || enquiry.has_student_admission || enquiry.converted_student_id
+                ? `STUDENT REGISTERED (NO COURSE PURCHASED YET) ${enquiry.converted_student_code ? `• ${enquiry.converted_student_code}` : ''}`
                 : isInterested
                 ? '👍 INTERESTED IN ADMISSION (POST-DEMO)'
                 : isActiveDemo && !isExpired
@@ -425,8 +468,20 @@ export default function EnquiryDetailPage() {
             <div className="text-xs text-slate-700 font-medium mt-0.5">
               {enquiry.has_course_purchase
                 ? `Student has purchased courses and is actively enrolled. Admission #${enquiry.course_admission_number || ''}`
-                : isConverted || enquiry.has_student_admission
-                ? 'Student admission profile is created in system, but NO course or subject has been purchased yet.'
+                : isConverted || enquiry.has_student_admission || enquiry.converted_student_id
+                ? (
+                  <span>
+                    Student admission profile is created in system, but NO course or subject has been purchased yet.{' '}
+                    {enquiry.converted_student_id && (
+                      <Link
+                        to={`/students/${enquiry.converted_student_id}`}
+                        className="font-mono text-odoo-700 hover:text-odoo-900 underline font-bold"
+                      >
+                        View Profile ({enquiry.converted_student_code || 'Student'}) ↗
+                      </Link>
+                    )}
+                  </span>
+                )
                 : isInterested
                 ? 'Student completed trial classes and confirmed interest in admission. Ready for formal enrollment!'
                 : isActiveDemo && !isExpired
@@ -443,7 +498,7 @@ export default function EnquiryDetailPage() {
           variant={
             enquiry.has_course_purchase
               ? 'success'
-              : isConverted || enquiry.has_student_admission
+              : isConverted || enquiry.has_student_admission || enquiry.converted_student_id
               ? 'info'
               : statusVariant
           }
@@ -806,6 +861,20 @@ export default function EnquiryDetailPage() {
         isOpen={passModalOpen}
         onClose={() => setPassModalOpen(false)}
         enquiry={enquiry}
+      />
+      {/* Register Student Modal */}
+      <RegisterStudentModal
+        isOpen={registerModalOpen}
+        onClose={() => {
+          setRegisterModalOpen(false);
+          setRegisterResultData(null);
+        }}
+        enquiry={enquiry}
+        resultData={registerResultData}
+        onSelectStudent={(selectedId, forceCreate) => {
+          handleRegisterStudent(selectedId, forceCreate);
+        }}
+        submitting={registeringStudent}
       />
     </div>
   );

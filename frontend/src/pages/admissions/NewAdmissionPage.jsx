@@ -212,30 +212,47 @@ export default function NewAdmissionPage() {
       setTeachers(loadedTeachers);
 
       // If came from enquiry and student is not yet registered
-      if (paramEnquiryId && !paramStudentId && paramName) {
+      if (paramEnquiryId && !paramStudentId) {
         let matchedStudent = null;
-        const cleanParamMob = cleanMobileInput(paramMobile);
-        if (cleanParamMob && cleanParamMob.length === 10) {
-          try {
-            const checkRes = await studentApi.checkMobile(cleanParamMob);
-            if (checkRes?.exists && checkRes?.student) {
-              matchedStudent = checkRes.student;
+
+        // Check if enquiry itself already has a linked student
+        try {
+          const enqData = await enquiryApi.get(paramEnquiryId);
+          if (enqData?.converted_student_id) {
+            matchedStudent = loadedStudents.find((s) => s.id === enqData.converted_student_id);
+            if (!matchedStudent) {
+              const sObj = await studentApi.get(enqData.converted_student_id);
+              if (sObj) {
+                matchedStudent = sObj;
+                setStudents((prev) => [sObj, ...prev]);
+              }
             }
-          } catch (err) {
-            console.warn('Failed to verify mobile:', err);
           }
+        } catch (err) {
+          console.warn('Failed to check enquiry converted student:', err);
         }
 
-        if (!matchedStudent) {
-          matchedStudent = loadedStudents.find(
-            (s) => s.name.trim().toLowerCase() === paramName.trim().toLowerCase()
-          );
+        // Duplicate check on normalised mobile number (last 10 digits) ONLY
+        if (!matchedStudent && paramMobile) {
+          const cleanParamMob = cleanMobileInput(paramMobile);
+          const last10 = cleanParamMob && cleanParamMob.length >= 10 ? cleanParamMob.slice(-10) : cleanParamMob;
+          if (last10 && last10.length === 10) {
+            try {
+              const checkRes = await studentApi.checkMobile(last10);
+              if (checkRes?.exists && checkRes?.student) {
+                matchedStudent = checkRes.student;
+              }
+            } catch (err) {
+              console.warn('Failed to verify mobile:', err);
+            }
+          }
         }
 
         if (matchedStudent) {
           setStudentId(matchedStudent.id);
-          success(`Found registered profile for ${matchedStudent.name}. Auto-selected!`);
-        } else {
+          success(`Found registered profile for ${matchedStudent.name} (${matchedStudent.student_code}). Auto-selected!`);
+        } else if (paramName) {
+          const cleanParamMob = cleanMobileInput(paramMobile);
           setQuickStudentInitialData({
             name: paramName,
             mobile: cleanParamMob || '',
