@@ -55,10 +55,33 @@ api.interceptors.response.use(
         window.location.href = '/login';
       }
     }
-    let message =
-      error.response?.data?.detail ||
-      error.message ||
-      'An unexpected error occurred';
+    const rawDetail = error.response?.data?.detail;
+    let message;
+    if (Array.isArray(rawDetail)) {
+      message = rawDetail
+        .map((item) => {
+          if (!item) return '';
+          if (typeof item === 'string') return item;
+          const loc = Array.isArray(item.loc)
+            ? item.loc.filter((p) => p !== undefined && p !== null).join('.')
+            : (item.loc || '');
+          const msg = item.msg || item.message;
+          if (loc && msg) {
+            return `${loc}: ${msg}`;
+          }
+          return msg || (typeof item === 'object' ? JSON.stringify(item) : String(item));
+        })
+        .filter(Boolean)
+        .join('\n');
+    } else if (typeof rawDetail === 'string') {
+      message = rawDetail;
+    } else if (rawDetail && typeof rawDetail === 'object') {
+      message = JSON.stringify(rawDetail);
+    }
+
+    if (!message) {
+      message = error.message || 'An unexpected error occurred';
+    }
     if (!error.response?.data?.detail && typeof error.response?.data === 'string') {
       const cleanText = error.response.data.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
       if (cleanText) message = cleanText;

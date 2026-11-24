@@ -29,10 +29,10 @@ export default function SuspendDiscontinueModal({
     try {
       if (item) {
         if (isSuspend) {
-          await admissionApi.suspendItem(item.id, { reason: reason.trim() || undefined });
+          await admissionApi.suspendItem(item.id, { action: 'SUSPEND', reason: reason.trim() || undefined });
           success(`Subject "${targetName}" temporarily suspended.`);
         } else {
-          await admissionApi.discontinueItem(item.id, { reason: reason.trim() || undefined });
+          await admissionApi.discontinueItem(item.id, { action: 'DISCONTINUE', reason: reason.trim() || undefined });
           success(`Subject "${targetName}" marked as discontinued.`);
         }
       } else {
