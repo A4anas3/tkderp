@@ -12,6 +12,7 @@ from app.modules.expenses.models import ExpenseCategory, Expense, SalaryRecord
 from app.modules.assessments.models import Assessment, StudentMark
 from app.modules.audit.models import AuditLog
 from app.modules.reminders.models import ReminderQueue
+from app.modules.settings.models import InstituteSetting
 from app.common.models import NumberSequence, IdempotencyRecord
 
 __all__ = [
@@ -41,6 +42,7 @@ __all__ = [
     "StudentMark",
     "AuditLog",
     "ReminderQueue",
+    "InstituteSetting",
     "NumberSequence",
     "IdempotencyRecord"
 ]

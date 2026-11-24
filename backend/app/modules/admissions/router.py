@@ -13,18 +13,18 @@ from app.core.config import settings
 from app.core.dependencies import require_staff, require_cashier_or_admin, require_admin
 from app.database.models import (
     Admission, AdmissionItem, Student, Payment, PaymentAllocation, GreenCardProduct, User, BatchSubject, Refund, AuditLog,
-    Subject, Batch, Teacher, FinancialTransaction
+    Subject, Batch, Teacher, FinancialTransaction, InstituteSetting
 )
 from app.modules.admissions.schemas import (
     AdmissionCreate, AdmissionResponse, AdmissionCalculatePreviewRequest, AdmissionItemResponse, AdmissionRevokeRequest,
     AdmissionSlipsResponse, SlipItemResponse, AdmissionValidityUpdate, AdmissionLifecycleAction,
     AdmissionItemValidityUpdate, AdmissionItemLifecycleAction, SubjectRenewalRequest, SubjectChangeRequest,
     ItemRenewalRequest, RenewalsDueItemResponse, ItemRenewalSpec, AdmissionWaiveDueRequest,
-    RenewalCalculateRequest, RenewalCalculateResponse
+    RenewalCalculateRequest, RenewalCalculateResponse, UpdateAdmissionGSTRequest
 )
 from app.common.calculations import (
     calculate_admission_financials, allocate_payment_proportionally, compute_rolling_cycle_end,
-    calculate_course_duration_fee, calculate_course_duration_breakdown
+    calculate_course_duration_fee, calculate_course_duration_breakdown, round_money
 )
 from app.common.pagination import PaginationParams, PageResponse
 from app.common.numbering import next_number
@@ -220,6 +220,12 @@ async def create_admission(
         item_tos = [itm.valid_to for itm in payload.items if itm.valid_to]
         adm_valid_to = max(item_tos) if item_tos else compute_rolling_cycle_end(adm_valid_from, 1)[0]
 
+    gst_num = payload.gst_number
+    if payload.gst_enabled and not gst_num:
+        s_res = await db.execute(select(InstituteSetting).where(InstituteSetting.key == "institute_profile"))
+        s_obj = s_res.scalar_one_or_none()
+        gst_num = s_obj.gstin if s_obj else "09AAACT1234F1Z5"
+
     admission = Admission(
         admission_number=adm_no,
         student_id=student.id,
@@ -235,6 +241,7 @@ async def create_admission(
         gst_rate=calc["gst_rate"],
         taxable_base=calc["taxable_base"],
         gst_amount=calc["gst_amount"],
+        gst_number=gst_num,
         total_payable=calc["total_payable"],
         amount_paid=Decimal("0.00"),
         balance_due=calc["total_payable"],
@@ -622,6 +629,7 @@ async def get_admission_slips(
         "gst_rate": float(admission.gst_rate),
         "taxable_base": float(admission.taxable_base),
         "gst_amount": float(admission.gst_amount),
+        "gst_number": getattr(admission, "gst_number", None),
         "total_payable": float(admission.total_payable),
         "amount_paid": float(admission.amount_paid),
         "balance_due": float(admission.balance_due),
@@ -845,10 +853,75 @@ async def get_admission_slips(
         valid_from=admission.valid_from,
         valid_to=admission.valid_to,
         written_off_amount=admission.written_off_amount or Decimal("0.00"),
+        gst_enabled=admission.gst_enabled,
+        gst_rate=admission.gst_rate,
+        gst_number=getattr(admission, "gst_number", None),
         allocations=adm_dict["allocations"],
         items=admission.items,
         slips=slips
     )
+
+@router.patch("/{admission_id}/gst", response_model=AdmissionResponse)
+async def update_admission_gst(
+    admission_id: uuid.UUID,
+    payload: UpdateAdmissionGSTRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_cashier_or_admin)
+):
+    """
+    Toggle and save GST inclusion on an admission fee slip / invoice.
+    When enabled: adds GST calculated at the specified/saved percentage on the charges to the total.
+    When disabled: keeps base charges with no GST added.
+    Persists gst_enabled, gst_rate, gst_number with the admission invoice in database.
+    """
+    stmt = (
+        select(Admission)
+        .options(
+            selectinload(Admission.items).joinedload(AdmissionItem.subject).joinedload(Subject.teacher),
+            selectinload(Admission.student)
+        )
+        .where(Admission.id == admission_id)
+    )
+    res = await db.execute(stmt)
+    admission = res.scalar_one_or_none()
+    if not admission:
+        raise HTTPException(status_code=404, detail="Admission invoice not found")
+
+    admission.gst_enabled = payload.gst_enabled
+    if payload.gst_rate is not None:
+        admission.gst_rate = payload.gst_rate
+
+    if payload.gst_number is not None:
+        admission.gst_number = payload.gst_number.strip().upper()
+    elif not getattr(admission, "gst_number", None) and payload.gst_enabled:
+        s_stmt = select(InstituteSetting).where(InstituteSetting.key == "institute_profile")
+        s_res = await db.execute(s_stmt)
+        s_obj = s_res.scalar_one_or_none()
+        admission.gst_number = s_obj.gstin if s_obj else "09AAACT1234F1Z5"
+
+    # Base charges before tax (charges = subtotal - total_discount)
+    charges = max(Decimal("0.00"), admission.subtotal - admission.total_discount)
+    admission.taxable_base = charges
+    if admission.gst_enabled:
+        gst_amt = round_money(charges * (admission.gst_rate / Decimal("100.00")))
+        admission.gst_amount = gst_amt
+        admission.total_payable = charges + gst_amt
+    else:
+        admission.gst_amount = Decimal("0.00")
+        admission.total_payable = charges
+
+    admission.balance_due = max(Decimal("0.00"), admission.total_payable - admission.amount_paid)
+    if admission.balance_due <= Decimal("0.00"):
+        admission.payment_status = "PAID"
+    elif admission.amount_paid > Decimal("0.00"):
+        admission.payment_status = "PARTIALLY_PAID"
+    else:
+        admission.payment_status = "UNPAID"
+
+    db.add(admission)
+    await db.commit()
+    await db.refresh(admission)
+    return admission
 
 @router.post("/{admission_id}/cancel", response_model=AdmissionResponse)
 async def cancel_admission(

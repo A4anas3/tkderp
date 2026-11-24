@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Printer, Calendar, AlertTriangle } from 'lucide-react';
 import Modal from '../common/Modal';
 import Button from '../common/Button';
 import Badge from '../common/Badge';
 import ReceiptHeader from './ReceiptHeader';
 import ReceiptFooter from './ReceiptFooter';
+import { admissionApi, settingsApi } from '../../services/allApis';
 import {
   WhatsAppIcon,
   buildWhatsAppLink,
@@ -56,9 +57,90 @@ const formatFeePeriod = (validFrom, validTo) => {
 
 export default function AdmissionReceiptModal({ isOpen, onClose, admission, admissionData }) {
   const [copyMode, setCopyMode] = useState('STUDENT'); // 'STUDENT' | 'OFFICE' | 'BOTH'
+  const [includeGst, setIncludeGst] = useState(false);
+  const [gstRate, setGstRate] = useState(18.0);
+  const [gstNumber, setGstNumber] = useState('09AAACT1234F1Z5');
 
   const data = admission || admissionData;
-  if (!data) return null;
+
+  useEffect(() => {
+    if (!data) return;
+    setIncludeGst(Boolean(data.gst_enabled));
+    if (data.gst_rate !== undefined && Number(data.gst_rate) > 0) {
+      setGstRate(Number(data.gst_rate));
+    }
+    if (data.gst_number) {
+      setGstNumber(data.gst_number);
+    }
+
+    // Load saved institute GST settings from cache or backend
+    const cached = localStorage.getItem('institute_gst_settings');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (!data.gst_number && parsed.gstin) {
+          setGstNumber(parsed.gstin);
+        }
+        if ((!data.gst_rate || Number(data.gst_rate) === 0) && parsed.gst_rate !== undefined) {
+          setGstRate(Number(parsed.gst_rate));
+        }
+      } catch {
+        // ignore
+      }
+    } else {
+      settingsApi.getInstitute().then((res) => {
+        if (res) {
+          if (!data.gst_number && res.gstin) {
+            setGstNumber(res.gstin);
+          }
+          if ((!data.gst_rate || Number(data.gst_rate) === 0) && res.gst_rate !== undefined) {
+            setGstRate(Number(res.gst_rate));
+          }
+        }
+      }).catch(() => {});
+    }
+  }, [data?.id, data?.admission_number, data?.gst_enabled, data?.gst_rate, data?.gst_number]);
+
+  if (!isOpen || !data) return null;
+
+  const handleToggleGst = async () => {
+    const nextState = !includeGst;
+    setIncludeGst(nextState);
+
+    let activeRate = gstRate;
+    let activeGstin = gstNumber;
+
+    if (nextState && (!activeRate || activeRate <= 0)) {
+      const cached = localStorage.getItem('institute_gst_settings');
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (parsed.gst_rate) {
+            activeRate = Number(parsed.gst_rate);
+            setGstRate(activeRate);
+          }
+          if (parsed.gstin) {
+            activeGstin = parsed.gstin;
+            setGstNumber(activeGstin);
+          }
+        } catch {}
+      }
+    }
+
+    // Save with invoice/slip if admission id exists
+    const admId = data.id || data.admission_id;
+    if (admId) {
+      try {
+        await admissionApi.updateGst(admId, {
+          gst_enabled: nextState,
+          gst_rate: activeRate,
+          gst_number: activeGstin,
+        });
+      } catch (err) {
+        console.warn('Could not persist GST toggle to server:', err);
+      }
+    }
+  };
 
   const handlePrint = () => {
     window.print();
@@ -70,10 +152,16 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission, admi
 
   const subtotal = Number(data.subtotal || data.total_payable || 0);
   const totalDiscount = Number(data.total_discount || 0);
-  const totalPayable = Number(data.total_payable || 0);
+  const baseCharges = Math.max(0, subtotal - totalDiscount);
+  
+  // Fee calculation: base fee stays the same as right now; GST is added on top when enabled
+  const calculatedGstAmount = includeGst
+    ? Math.round((baseCharges * (gstRate / 100)) * 100) / 100
+    : 0;
+  const effectiveTotal = includeGst ? baseCharges + calculatedGstAmount : baseCharges;
   const amountPaid = Number(data.amount_paid || 0);
   const writtenOffAmount = Number(data.written_off_amount || 0);
-  const balanceDue = Number(data.balance_due !== undefined ? data.balance_due : totalPayable - amountPaid);
+  const effectiveBalanceDue = Math.max(0, effectiveTotal - amountPaid - writtenOffAmount);
   const isRevoked = data.status === 'REVOKED' || data.status === 'CANCELLED';
 
   const studentMobile = data.student_mobile || data.student?.mobile || '';
@@ -96,6 +184,7 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission, admi
           documentTitle="COURSE ENROLLMENT & ACADEMIC INVOICE"
           copyType={copyType}
           documentSubtitle={`Invoice Voucher: ${invoiceNumber}`}
+          gstNumber={includeGst ? gstNumber : null}
         />
 
         {/* Revocation Warning Banner if revoked or cancelled */}
@@ -378,32 +467,13 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission, admi
                   </tr>
                 )}
 
-                {data.gst_enabled ? (
-                  <>
-                    <tr>
-                      <td className="p-2 border-r border-slate-200 text-slate-700">
-                        Taxable Base Value
-                      </td>
-                      <td className="p-2 text-right font-mono text-black font-semibold">
-                        {formatCurrency(data.taxable_base)}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="p-2 border-r border-slate-200 text-slate-700">
-                        Inclusive GST ({data.gst_rate}%)
-                      </td>
-                      <td className="p-2 text-right font-mono text-black font-semibold">
-                        {formatCurrency(data.gst_amount)}
-                      </td>
-                    </tr>
-                  </>
-                ) : (
+                {includeGst && (
                   <tr>
                     <td className="p-2 border-r border-slate-200 text-slate-700">
-                      GST / Government Levies
+                      GST ({gstRate}%)
                     </td>
-                    <td className="p-2 text-right font-mono text-slate-700">
-                      Exempt / Included (0%)
+                    <td className="p-2 text-right font-mono text-black font-semibold">
+                      {formatCurrency(calculatedGstAmount)}
                     </td>
                   </tr>
                 )}
@@ -414,7 +484,7 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission, admi
                     Total Net Course Fee (Invoice Value)
                   </td>
                   <td className="p-2 text-right font-mono font-black text-sm sm:text-base text-black">
-                    {formatCurrency(totalPayable)}
+                    {formatCurrency(effectiveTotal)}
                   </td>
                 </tr>
 
@@ -441,12 +511,12 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission, admi
                 )}
 
                 {/* Remaining Balance Due */}
-                <tr className={balanceDue > 0 ? 'bg-rose-50 border-t-2 border-rose-300' : 'bg-emerald-50/50 border-t border-emerald-200'}>
+                <tr className={effectiveBalanceDue > 0 ? 'bg-rose-50 border-t-2 border-rose-300' : 'bg-emerald-50/50 border-t border-emerald-200'}>
                   <td className="p-2 border-r border-slate-200 font-black uppercase text-xs text-black">
                     Remaining Balance Due
                   </td>
-                  <td className={`p-2 text-right font-mono font-black text-sm sm:text-base ${balanceDue > 0 ? 'text-rose-700' : 'text-emerald-800'}`}>
-                    {balanceDue > 0 ? formatCurrency(balanceDue) : '₹0.00 (NIL / FULLY PAID)'}
+                  <td className={`p-2 text-right font-mono font-black text-sm sm:text-base ${effectiveBalanceDue > 0 ? 'text-rose-700' : 'text-emerald-800'}`}>
+                    {effectiveBalanceDue > 0 ? formatCurrency(effectiveBalanceDue) : '₹0.00 (NIL / FULLY PAID)'}
                   </td>
                 </tr>
               </tbody>
@@ -456,7 +526,7 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission, admi
 
         {/* Enterprise Footer with Amount in Words, Stamp & Signatures */}
         <ReceiptFooter
-          amount={amountPaid > 0 ? amountPaid : totalPayable}
+          amount={amountPaid > 0 ? amountPaid : effectiveTotal}
           issuedDate={data.admission_date}
           collectorName="Accounts Section"
           terms={[
@@ -511,6 +581,20 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission, admi
             >
               Both (Dual Slip)
             </button>
+            <div className="h-4 w-px bg-slate-300 mx-1 hidden sm:block" />
+            <button
+              type="button"
+              onClick={handleToggleGst}
+              className={`min-h-[32px] px-3 py-1 rounded text-xs font-bold transition-colors inline-flex items-center gap-1.5 cursor-pointer ${
+                includeGst
+                  ? 'bg-odoo-600 text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-800 hover:bg-slate-200'
+              }`}
+              title={includeGst ? 'GST included. Click to turn off.' : 'Click to include GST'}
+            >
+              <span className={`w-2 h-2 rounded-full ${includeGst ? 'bg-emerald-300' : 'bg-slate-400'}`}></span>
+              <span>GST: {includeGst ? `ON (${gstRate}%)` : 'OFF'}</span>
+            </button>
           </div>
 
           <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -558,8 +642,8 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission, admi
         {/* Footer controls */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-slate-200 no-print">
           <div>
-            <Badge variant={balanceDue > 0 ? 'warning' : 'success'}>
-              {balanceDue > 0 ? 'Admission with Balance Due' : 'Admission Fully Paid'}
+            <Badge variant={effectiveBalanceDue > 0 ? 'warning' : 'success'}>
+              {effectiveBalanceDue > 0 ? 'Admission with Balance Due' : 'Admission Fully Paid'}
             </Badge>
           </div>
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">

@@ -308,6 +308,10 @@ export const admissionApi = {
     const res = await api.post(`/admissions/${id}/resume`);
     return res.data;
   },
+  updateGst: async (id, data) => {
+    const res = await api.patch(`/admissions/${id}/gst`, data);
+    return res.data;
+  },
   discontinue: async (id, data) => {
     const res = await api.post(`/admissions/${id}/discontinue`, data);
     return res.data;
@@ -571,6 +575,17 @@ export const remindersApi = {
 export const renewalsApi = {
   getSummary: async (params) => {
     const res = await api.get('/renewals', { params });
+    return res.data;
+  },
+};
+
+export const settingsApi = {
+  getInstitute: async () => {
+    const res = await api.get('/settings/institute');
+    return res.data;
+  },
+  updateInstitute: async (data) => {
+    const res = await api.put('/settings/institute', data);
     return res.data;
   },
 };

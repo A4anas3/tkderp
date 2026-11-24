@@ -4,6 +4,7 @@ export default function ReceiptHeader({
   documentTitle = 'OFFICIAL RECEIPT',
   copyType = 'STUDENT COPY',
   documentSubtitle = null,
+  gstNumber = null,
 }) {
   return (
     <div className="border-b-2 border-black pb-3 text-black">
@@ -50,6 +51,14 @@ export default function ReceiptHeader({
             <p className="text-[10px] text-slate-700 font-semibold mt-0.5">
               Govt. Regd. No: <span className="text-black font-black">UP/TKD/2026/8941</span> • ISO 9001:2015 Certified
             </p>
+            {gstNumber && (
+              <p className="text-[10px] font-bold text-black mt-0.5 tracking-wide">
+                GSTIN / Tax ID:{' '}
+                <span className="font-mono font-black text-black bg-slate-100 px-1 py-0.2 rounded border border-slate-300">
+                  {gstNumber}
+                </span>
+              </p>
+            )}
           </div>
         </div>
 

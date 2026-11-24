@@ -25,11 +25,12 @@ class Admission(BaseModel):
     
     total_discount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("0.00"))
     
-    # GST (Inclusive)
+    # GST (Inclusive / On Fee)
     gst_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     gst_rate: Mapped[Decimal] = mapped_column(Numeric(6, 2), nullable=False, default=Decimal("18.00"))
     taxable_base: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("0.00"))
     gst_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("0.00"))
+    gst_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     
     total_payable: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("0.00"))
     amount_paid: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("0.00"))

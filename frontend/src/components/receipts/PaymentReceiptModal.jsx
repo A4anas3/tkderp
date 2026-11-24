@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Printer, Calendar, CheckCircle2, AlertCircle } from 'lucide-react';
 import Modal from '../common/Modal';
 import Button from '../common/Button';
 import Badge from '../common/Badge';
 import ReceiptHeader from './ReceiptHeader';
 import ReceiptFooter from './ReceiptFooter';
+import { admissionApi, settingsApi } from '../../services/allApis';
 import {
   WhatsAppIcon,
   buildWhatsAppLink,
@@ -56,9 +57,88 @@ const formatFeePeriod = (validFrom, validTo, feePeriod) => {
 
 export default function PaymentReceiptModal({ isOpen, onClose, receipt, payment }) {
   const [copyMode, setCopyMode] = useState('STUDENT'); // 'STUDENT' | 'OFFICE' | 'BOTH'
+  const [includeGst, setIncludeGst] = useState(false);
+  const [gstRate, setGstRate] = useState(18.0);
+  const [gstNumber, setGstNumber] = useState('09AAACT1234F1Z5');
 
   const data = receipt || payment;
-  if (!data) return null;
+
+  useEffect(() => {
+    if (!data) return;
+    setIncludeGst(Boolean(data.gst_enabled));
+    if (data.gst_rate !== undefined && Number(data.gst_rate) > 0) {
+      setGstRate(Number(data.gst_rate));
+    }
+    if (data.gst_number) {
+      setGstNumber(data.gst_number);
+    }
+
+    const cached = localStorage.getItem('institute_gst_settings');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (!data.gst_number && parsed.gstin) {
+          setGstNumber(parsed.gstin);
+        }
+        if ((!data.gst_rate || Number(data.gst_rate) === 0) && parsed.gst_rate !== undefined) {
+          setGstRate(Number(parsed.gst_rate));
+        }
+      } catch {
+        // ignore
+      }
+    } else {
+      settingsApi.getInstitute().then((res) => {
+        if (res) {
+          if (!data.gst_number && res.gstin) {
+            setGstNumber(res.gstin);
+          }
+          if ((!data.gst_rate || Number(data.gst_rate) === 0) && res.gst_rate !== undefined) {
+            setGstRate(Number(res.gst_rate));
+          }
+        }
+      }).catch(() => {});
+    }
+  }, [data?.id, data?.payment_number, data?.gst_enabled, data?.gst_rate, data?.gst_number]);
+
+  if (!isOpen || !data) return null;
+
+  const handleToggleGst = async () => {
+    const nextState = !includeGst;
+    setIncludeGst(nextState);
+
+    let activeRate = gstRate;
+    let activeGstin = gstNumber;
+
+    if (nextState && (!activeRate || activeRate <= 0)) {
+      const cached = localStorage.getItem('institute_gst_settings');
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (parsed.gst_rate) {
+            activeRate = Number(parsed.gst_rate);
+            setGstRate(activeRate);
+          }
+          if (parsed.gstin) {
+            activeGstin = parsed.gstin;
+            setGstNumber(activeGstin);
+          }
+        } catch {}
+      }
+    }
+
+    const admId = data.admission_id || data.admission?.id;
+    if (admId) {
+      try {
+        await admissionApi.updateGst(admId, {
+          gst_enabled: nextState,
+          gst_rate: activeRate,
+          gst_number: activeGstin,
+        });
+      } catch (err) {
+        console.warn('Could not persist GST toggle to server:', err);
+      }
+    }
+  };
 
   const handlePrint = () => {
     window.print();
@@ -69,11 +149,18 @@ export default function PaymentReceiptModal({ isOpen, onClose, receipt, payment 
   const feeCoverage = formatFeePeriod(data.valid_from, data.valid_to, data.fee_period);
 
   const totalCourseFee = Number(data.total_admission_payable || data.amount || 0);
+  const calculatedGstAmount = includeGst
+    ? Math.round((totalCourseFee * (gstRate / 100)) * 100) / 100
+    : 0;
+  const effectiveCourseFee = includeGst ? totalCourseFee + calculatedGstAmount : totalCourseFee;
+
   const currentPaid = Number(data.amount || 0);
   const totalPaidToDate = Number(data.total_amount_paid_so_far !== undefined ? data.total_amount_paid_so_far : currentPaid);
   const priorPaid = Math.max(0, totalPaidToDate - currentPaid);
   const writtenOffAmount = Number(data.written_off_amount || 0);
-  const balanceDue = Number(data.remaining_balance_due !== undefined ? data.remaining_balance_due : 0);
+  const effectiveBalanceDue = includeGst
+    ? Math.max(0, effectiveCourseFee - totalPaidToDate - writtenOffAmount)
+    : Number(data.remaining_balance_due !== undefined ? data.remaining_balance_due : 0);
 
   const studentMobile = data.student_mobile || data.student?.mobile || '';
   const whatsAppUrl = buildWhatsAppLink(
@@ -95,6 +182,7 @@ export default function PaymentReceiptModal({ isOpen, onClose, receipt, payment 
           documentTitle="OFFICIAL FEE PAYMENT RECEIPT"
           copyType={copyType}
           documentSubtitle={`Receipt Voucher No: ${paymentNumber}`}
+          gstNumber={includeGst ? gstNumber : null}
         />
 
         {/* Student & Bill Details: 2-Column Grid */}
@@ -268,9 +356,20 @@ export default function PaymentReceiptModal({ isOpen, onClose, receipt, payment 
                     Total Enrolled Course Fee (Gross Billed)
                   </td>
                   <td className="p-2 text-right font-mono font-bold text-black">
-                    {formatCurrency(totalCourseFee)}
+                    {formatCurrency(effectiveCourseFee)}
                   </td>
                 </tr>
+
+                {includeGst && (
+                  <tr>
+                    <td className="p-2 border-r border-slate-200 text-slate-700">
+                      Included GST ({gstRate}%)
+                    </td>
+                    <td className="p-2 text-right font-mono text-black font-semibold">
+                      {formatCurrency(calculatedGstAmount)}
+                    </td>
+                  </tr>
+                )}
 
                 {priorPaid > 0 && (
                   <tr>
@@ -315,12 +414,12 @@ export default function PaymentReceiptModal({ isOpen, onClose, receipt, payment 
                 )}
 
                 {/* Balance Due Row */}
-                <tr className={balanceDue > 0 ? 'bg-rose-50 border-t-2 border-rose-300' : 'bg-emerald-50/50 border-t border-emerald-200'}>
+                <tr className={effectiveBalanceDue > 0 ? 'bg-rose-50 border-t-2 border-rose-300' : 'bg-emerald-50/50 border-t border-emerald-200'}>
                   <td className="p-2 border-r border-slate-200 font-black uppercase text-xs text-black">
                     Outstanding Balance Due
                   </td>
-                  <td className={`p-2 text-right font-mono font-black text-sm sm:text-base ${balanceDue > 0 ? 'text-rose-700' : 'text-emerald-800'}`}>
-                    {balanceDue > 0 ? formatCurrency(balanceDue) : '₹0.00 (NIL / FULLY PAID)'}
+                  <td className={`p-2 text-right font-mono font-black text-sm sm:text-base ${effectiveBalanceDue > 0 ? 'text-rose-700' : 'text-emerald-800'}`}>
+                    {effectiveBalanceDue > 0 ? formatCurrency(effectiveBalanceDue) : '₹0.00 (NIL / FULLY PAID)'}
                   </td>
                 </tr>
               </tbody>
@@ -385,6 +484,20 @@ export default function PaymentReceiptModal({ isOpen, onClose, receipt, payment 
             >
               Both (Dual Slip)
             </button>
+            <div className="h-4 w-px bg-slate-300 mx-1 hidden sm:block" />
+            <button
+              type="button"
+              onClick={handleToggleGst}
+              className={`min-h-[32px] px-3 py-1 rounded text-xs font-bold transition-colors inline-flex items-center gap-1.5 cursor-pointer ${
+                includeGst
+                  ? 'bg-odoo-600 text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-800 hover:bg-slate-200'
+              }`}
+              title={includeGst ? 'GST included. Click to turn off.' : 'Click to include GST'}
+            >
+              <span className={`w-2 h-2 rounded-full ${includeGst ? 'bg-emerald-300' : 'bg-slate-400'}`}></span>
+              <span>GST: {includeGst ? `ON (${gstRate}%)` : 'OFF'}</span>
+            </button>
           </div>
 
           <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -432,8 +545,8 @@ export default function PaymentReceiptModal({ isOpen, onClose, receipt, payment 
         {/* Action Controls */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-2 border-t border-slate-200 no-print">
           <div className="flex items-center gap-1.5">
-            <Badge variant={balanceDue > 0 ? 'warning' : 'success'}>
-              {balanceDue > 0 ? 'Partially Paid' : 'Payment Cleared & Fully Settled'}
+            <Badge variant={effectiveBalanceDue > 0 ? 'warning' : 'success'}>
+              {effectiveBalanceDue > 0 ? 'Partially Paid' : 'Payment Cleared & Fully Settled'}
             </Badge>
           </div>
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">

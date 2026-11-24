@@ -20,6 +20,7 @@ import {
   Sparkles,
   CalendarCheck,
   RotateCcw,
+  Settings,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import Badge from '../common/Badge';
@@ -235,6 +236,12 @@ export default function Sidebar({ isOpen, onClose }) {
             to: '/users',
             label: 'Staff & Roles',
             icon: ShieldCheck,
+            show: true,
+          },
+          {
+            to: '/settings',
+            label: 'Institute Settings',
+            icon: Settings,
             show: true,
           },
           {

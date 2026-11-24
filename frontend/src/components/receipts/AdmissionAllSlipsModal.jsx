@@ -76,10 +76,28 @@ export default function AdmissionAllSlipsModal({
   const [activeTab, setActiveTab] = useState('ALL');
   const [printMode, setPrintMode] = useState(false);
 
+  const [includeGst, setIncludeGst] = useState(false);
+  const [gstRate, setGstRate] = useState(18.0);
+  const [gstNumber, setGstNumber] = useState('09AAACT1234F1Z5');
+
   // Sub-modal states for individual slip preview
   const [viewingAdmission, setViewingAdmission] = useState(null);
   const [viewingReceipt, setViewingReceipt] = useState(null);
   const [viewingRefund, setViewingRefund] = useState(null);
+
+  useEffect(() => {
+    // Check cached institute GST settings
+    const cached = localStorage.getItem('institute_gst_settings');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (parsed.gstin) setGstNumber(parsed.gstin);
+        if (parsed.gst_rate !== undefined) setGstRate(Number(parsed.gst_rate));
+      } catch {
+        // ignore
+      }
+    }
+  }, []);
 
   useEffect(() => {
     if (isOpen && admissionId) {
@@ -95,10 +113,53 @@ export default function AdmissionAllSlipsModal({
     try {
       const res = await admissionApi.getSlips(admissionId);
       setData(res);
+      if (res) {
+        if (res.gst_enabled !== undefined) setIncludeGst(Boolean(res.gst_enabled));
+        if (res.gst_rate !== undefined) setGstRate(Number(res.gst_rate));
+        if (res.gst_number) setGstNumber(res.gst_number);
+      }
     } catch (err) {
       console.error('Failed to load admission slips', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleToggleGst = async () => {
+    const nextState = !includeGst;
+    setIncludeGst(nextState);
+
+    let activeRate = gstRate;
+    let activeGstin = gstNumber;
+
+    if (nextState && (!activeRate || activeRate <= 0)) {
+      const cached = localStorage.getItem('institute_gst_settings');
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (parsed.gst_rate) {
+            activeRate = Number(parsed.gst_rate);
+            setGstRate(activeRate);
+          }
+          if (parsed.gstin) {
+            activeGstin = parsed.gstin;
+            setGstNumber(activeGstin);
+          }
+        } catch {}
+      }
+    }
+
+    const targetId = admissionId || data?.admission_id;
+    if (targetId) {
+      try {
+        await admissionApi.updateGst(targetId, {
+          gst_enabled: nextState,
+          gst_rate: activeRate,
+          gst_number: activeGstin,
+        });
+      } catch (err) {
+        console.warn('Could not persist GST toggle to server:', err);
+      }
     }
   };
 
@@ -215,6 +276,7 @@ export default function AdmissionAllSlipsModal({
                   documentTitle="STUDENT ADMISSION & COMPLETE ACCOUNT LEDGER"
                   copyType="OFFICE & AUDIT LEDGER"
                   documentSubtitle={`Account Ledger: ${data?.admission_number}`}
+                  gstNumber={includeGst ? gstNumber : null}
                 />
 
                 {/* 2-Column Student & Admission Details Grid */}
@@ -511,9 +573,19 @@ export default function AdmissionAllSlipsModal({
                             Total Billed Course Fee (Gross)
                           </td>
                           <td className="p-2 text-right font-mono font-bold text-black">
-                            {formatCurrency(totalBilled)}
+                            {formatCurrency(includeGst ? totalBilled + Math.round((totalBilled * (gstRate / 100)) * 100) / 100 : totalBilled)}
                           </td>
                         </tr>
+                        {includeGst && (
+                          <tr>
+                            <td className="p-2 border-r border-slate-200 text-slate-700">
+                              Included GST ({gstRate}%)
+                            </td>
+                            <td className="p-2 text-right font-mono text-black font-semibold">
+                              {formatCurrency(Math.round((totalBilled * (gstRate / 100)) * 100) / 100)}
+                            </td>
+                          </tr>
+                        )}
                         <tr className="bg-emerald-50 border-t border-emerald-300">
                           <td className="p-2 border-r border-emerald-200 font-black text-emerald-950 uppercase text-xs">
                             Total Realized Amount Paid Till Date
@@ -532,14 +604,20 @@ export default function AdmissionAllSlipsModal({
                             </td>
                           </tr>
                         )}
-                        <tr className={balanceDue > 0 ? 'bg-rose-50 border-t-2 border-rose-300' : 'bg-emerald-50/50 border-t border-emerald-200'}>
-                          <td className="p-2 border-r border-slate-200 font-black uppercase text-xs text-black">
-                            Current Outstanding Balance Due
-                          </td>
-                          <td className={`p-2 text-right font-mono font-black text-sm sm:text-base ${balanceDue > 0 ? 'text-rose-700' : 'text-emerald-800'}`}>
-                            {balanceDue > 0 ? formatCurrency(balanceDue) : '₹0.00 (NIL / FULLY SETTLED)'}
-                          </td>
-                        </tr>
+                        {(() => {
+                          const gstAmt = includeGst ? Math.round((totalBilled * (gstRate / 100)) * 100) / 100 : 0;
+                          const curBal = includeGst ? Math.max(0, totalBilled + gstAmt - totalPaid - totalWaived) : balanceDue;
+                          return (
+                            <tr className={curBal > 0 ? 'bg-rose-50 border-t-2 border-rose-300' : 'bg-emerald-50/50 border-t border-emerald-200'}>
+                              <td className="p-2 border-r border-slate-200 font-black uppercase text-xs text-black">
+                                Current Outstanding Balance Due
+                              </td>
+                              <td className={`p-2 text-right font-mono font-black text-sm sm:text-base ${curBal > 0 ? 'text-rose-700' : 'text-emerald-800'}`}>
+                                {curBal > 0 ? formatCurrency(curBal) : '₹0.00 (NIL / FULLY SETTLED)'}
+                              </td>
+                            </tr>
+                          );
+                        })()}
                       </tbody>
                     </table>
                   </div>
@@ -676,6 +754,20 @@ export default function AdmissionAllSlipsModal({
                           Waivers ({slips.filter((s) => s.slip_type === 'WAIVER_VOUCHER').length})
                         </button>
                       )}
+                      <div className="h-4 w-px bg-slate-300 mx-1 hidden sm:block" />
+                      <button
+                        type="button"
+                        onClick={handleToggleGst}
+                        className={`min-h-[32px] px-3 py-1 rounded text-xs font-bold transition-colors inline-flex items-center gap-1.5 cursor-pointer ${
+                          includeGst
+                            ? 'bg-odoo-600 text-white shadow-xs'
+                            : 'bg-slate-100 text-slate-800 hover:bg-slate-200'
+                        }`}
+                        title={includeGst ? 'GST included. Click to turn off.' : 'Click to include GST'}
+                      >
+                        <span className={`w-2 h-2 rounded-full ${includeGst ? 'bg-emerald-300' : 'bg-slate-400'}`}></span>
+                        <span>GST: {includeGst ? `ON (${gstRate}%)` : 'OFF'}</span>
+                      </button>
                     </div>
 
                     <Button

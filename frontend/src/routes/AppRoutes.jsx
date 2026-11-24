@@ -27,6 +27,7 @@ import SubjectRevenuePage from '../pages/reports/SubjectRevenuePage';
 import CashFlowPage from '../pages/reports/CashFlowPage';
 import ReportsHubPage from '../pages/reports/ReportsHubPage';
 import StaffUsersPage from '../pages/users/StaffUsersPage';
+import SettingsPage from '../pages/settings/SettingsPage';
 import AuditLogPage from '../pages/audit/AuditLogPage';
 import PublicVerifyPage from '../pages/verify/PublicVerifyPage';
 import PublicIDCardPage from '../pages/idcard/PublicIDCardPage';
@@ -320,8 +321,8 @@ export default function AppRoutes() {
         <Route
           path="settings"
           element={
-            <ProtectedRoute allowedRoles={['ADMIN']}>
-              <StaffUsersPage />
+            <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER']}>
+              <SettingsPage />
             </ProtectedRoute>
           }
         />

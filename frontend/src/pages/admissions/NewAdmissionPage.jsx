@@ -34,6 +34,7 @@ import {
   admissionApi,
   enquiryApi,
   teacherApi,
+  settingsApi,
 } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 import QuickStudentModal from '../../components/modals/QuickStudentModal';
@@ -91,6 +92,27 @@ export default function NewAdmissionPage() {
   const [overallDiscountValue, setOverallDiscountValue] = useState('0');
   const [gstEnabled, setGstEnabled] = useState(false);
   const [gstRate, setGstRate] = useState('18.00');
+  const [gstNumber, setGstNumber] = useState('09AAACT1234F1Z5');
+
+  // Load saved institute GST settings on mount
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem('institute_gst_settings');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed.gstin) setGstNumber(parsed.gstin);
+        if (parsed.gst_rate) setGstRate(String(parsed.gst_rate));
+      }
+    } catch {
+      // ignore
+    }
+    settingsApi.getInstitute().then((res) => {
+      if (res) {
+        if (res.gstin) setGstNumber(res.gstin);
+        if (res.gst_rate) setGstRate(String(res.gst_rate));
+      }
+    }).catch(() => {});
+  }, []);
 
   // Step 4: Payment Settlement & Notes
   const [paymentMode, setPaymentMode] = useState('CASH');
@@ -839,6 +861,7 @@ export default function NewAdmissionPage() {
         overall_discount_value: parseFloat(overallDiscountValue) || 0,
         gst_enabled: gstEnabled,
         gst_rate: parseFloat(gstRate) || 18,
+        gst_number: gstNumber,
         notes: notes.trim() || null,
         initial_payment: initialPaymentPayload,
       };
@@ -854,7 +877,12 @@ export default function NewAdmissionPage() {
         }
       }
 
-      setCompletedAdmission(res);
+      setCompletedAdmission({
+        ...res,
+        gst_enabled: gstEnabled,
+        gst_rate: parseFloat(gstRate) || 18,
+        gst_number: gstNumber,
+      });
     } catch (err) {
       error(err.message || 'Failed to complete admission');
     } finally {
@@ -1586,16 +1614,23 @@ export default function NewAdmissionPage() {
                 </label>
 
                 {gstEnabled && (
-                  <div className="flex items-center gap-2 pt-1">
-                    <span className="text-xs text-slate-600 font-medium">GST Rate (%):</span>
-                    <input
-                      type="number"
-                      step="0.5"
-                      min="0"
-                      value={gstRate}
-                      onChange={(e) => setGstRate(e.target.value)}
-                      className="w-20 h-8 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-black font-mono font-bold focus:outline-none focus:border-odoo-600"
-                    />
+                  <div className="space-y-1.5 pt-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-600 font-medium">GST Rate (%):</span>
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="0"
+                        value={gstRate}
+                        onChange={(e) => setGstRate(e.target.value)}
+                        className="w-20 h-8 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-black font-mono font-bold focus:outline-none focus:border-odoo-600"
+                      />
+                    </div>
+                    {gstNumber && (
+                      <div className="text-[11px] text-slate-600 font-mono">
+                        GSTIN: <span className="font-semibold text-black">{gstNumber}</span>
+                      </div>
+                    )}
                   </div>
                 )}
                 <p className="text-[10px] text-slate-500">

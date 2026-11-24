@@ -116,6 +116,7 @@ class AdmissionCreate(BaseModel):
     overall_discount_value: Decimal = Field(default=Decimal("0.00"), ge=0)
     gst_enabled: bool = False
     gst_rate: Decimal = Field(default=Decimal("18.00"), ge=0)
+    gst_number: Optional[str] = None
     notes: Optional[str] = None
     valid_from: Optional[date] = None
     valid_to: Optional[date] = None
@@ -170,6 +171,7 @@ class AdmissionResponse(BaseModel):
     gst_rate: Decimal
     taxable_base: Decimal
     gst_amount: Decimal
+    gst_number: Optional[str] = None
     total_payable: Decimal
     amount_paid: Decimal
     balance_due: Decimal
@@ -255,6 +257,11 @@ class SlipItemResponse(BaseModel):
     status_badge: str
     data: dict
 
+class UpdateAdmissionGSTRequest(BaseModel):
+    gst_enabled: bool
+    gst_rate: Optional[Decimal] = Field(default=Decimal("18.00"), ge=0)
+    gst_number: Optional[str] = None
+
 class AdmissionSlipsResponse(BaseModel):
     admission_id: uuid.UUID
     admission_number: str
@@ -273,6 +280,9 @@ class AdmissionSlipsResponse(BaseModel):
     valid_to: Optional[date] = None
     written_off_amount: Decimal = Decimal("0.00")
     can_cancel: bool = True
+    gst_enabled: bool = False
+    gst_rate: Decimal = Decimal("18.00")
+    gst_number: Optional[str] = None
     allocations: Optional[List[dict]] = None
     items: List[AdmissionItemResponse] = Field(default_factory=list)
     slips: List[SlipItemResponse] = Field(default_factory=list)

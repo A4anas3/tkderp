@@ -27,6 +27,7 @@ from app.modules.audit.router import router as audit_router
 from app.modules.verification.router import router as verification_router
 from app.modules.reminders.router import router as reminders_router
 from app.modules.renewals.router import router as renewals_router
+from app.modules.settings.router import router as settings_router
 from app.database.session import engine
 from app.database.models import Base
 
@@ -66,6 +67,22 @@ async def lifespan(app: FastAPI):
             """))
             await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_teacher_attendance_teacher_date ON teacher_attendance(teacher_id, date);"))
             await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_teacher_attendance_teacher_month ON teacher_attendance(teacher_id, month_year);"))
+            await conn.execute(text("ALTER TABLE admissions ADD COLUMN IF NOT EXISTS gst_number VARCHAR(50);"))
+            await conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS institute_settings (
+                    id UUID PRIMARY KEY,
+                    key VARCHAR(50) UNIQUE NOT NULL DEFAULT 'institute_profile',
+                    gstin VARCHAR(50) NOT NULL DEFAULT '09AAACT1234F1Z5',
+                    gst_rate NUMERIC(6, 2) NOT NULL DEFAULT 18.00,
+                    institute_name VARCHAR(200) NOT NULL DEFAULT 'THAKURDWARA COACHING INSTITUTE',
+                    address VARCHAR(300) NOT NULL DEFAULT 'Civil Lines Road, Thakurdwara, UP - 244601',
+                    phone VARCHAR(50) NOT NULL DEFAULT '+91 98765 43210',
+                    email VARCHAR(100) NOT NULL DEFAULT 'accounts@thakurdwara.edu.in',
+                    updated_by UUID REFERENCES users(id) ON DELETE SET NULL,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                );
+            """))
         except Exception:
             pass
     
@@ -128,6 +145,7 @@ app.include_router(verification_router)
 app.include_router(reminders_router)
 app.include_router(renewals_router)
 app.include_router(renewals_router, prefix="/renewals")
+app.include_router(settings_router)
 
 # Direct root alias for batches active summary
 @app.get("/batches/active-summary", tags=["Batches"])
