@@ -21,6 +21,7 @@ import { formatDemoDates } from '../../utils/idCardHelpers';
 import { computeDaysRemaining } from '../../utils/dateCycleUtils';
 import { useInstitute } from '../../context/InstituteContext';
 import InstituteLogo from '../../components/common/InstituteLogo';
+import VerifiedStamp from '../../components/common/VerifiedStamp';
 
 export default function PublicIDCardPage() {
   const { institute } = useInstitute();
@@ -622,16 +623,14 @@ export default function PublicIDCardPage() {
                     </div>
 
                     {/* Signatory & Seal */}
-                    <div className="text-right space-y-1">
+                    <div className="flex flex-col items-end text-right space-y-1 shrink-0">
                       <div className="w-24 border-b border-black inline-block pb-0.5">
                         <span className="font-serif italic text-[11px] text-slate-700">Auth Sign</span>
                       </div>
                       <p className="text-[9px] font-black uppercase text-black tracking-wider">
                         Authorized Signatory
                       </p>
-                      <p className="text-[8px] text-slate-600 font-medium">
-                        {instituteName} Verified
-                      </p>
+                      <VerifiedStamp instituteName={instituteName} />
                     </div>
                   </div>
 
