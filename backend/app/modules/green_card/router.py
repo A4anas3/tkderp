@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.database.session import get_db
-from app.core.dependencies import require_staff, require_admin
+from app.core.dependencies import require_cashier_or_admin, require_admin
 from app.database.models import GreenCardProduct, User
 from app.modules.green_card.schemas import GreenCardCreate, GreenCardUpdate, GreenCardResponse
 
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/green-card", tags=["Green Card"])
 @router.get("", response_model=list[GreenCardResponse])
 async def list_green_cards(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     result = await db.execute(select(GreenCardProduct).order_by(GreenCardProduct.created_at.desc()))
     return result.scalars().all()
@@ -22,7 +22,7 @@ async def list_green_cards(
 @router.get("/active", response_model=Optional[GreenCardResponse])
 async def get_active_green_card(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     result = await db.execute(select(GreenCardProduct).where(GreenCardProduct.is_active == True).limit(1))
     return result.scalar_one_or_none()

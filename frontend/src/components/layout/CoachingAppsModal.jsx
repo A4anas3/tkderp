@@ -115,7 +115,7 @@ export default function CoachingAppsModal({ isOpen, onClose }) {
       icon: QrCode,
       route: '/verify',
       color: 'bg-purple-600',
-      roles: ['ADMIN', 'CASHIER', 'TEACHER'],
+      roles: ['ADMIN', 'CASHIER'],
     },
     {
       id: 'teachers',

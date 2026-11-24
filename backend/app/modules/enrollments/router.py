@@ -8,7 +8,7 @@ from sqlalchemy import select, func, or_, and_, desc, asc
 from sqlalchemy.orm import lazyload
 
 from app.database.session import get_db
-from app.core.dependencies import require_staff
+from app.core.dependencies import require_cashier_or_admin
 from app.database.models import Admission, AdmissionItem, Student, Batch, Payment, PaymentAllocation
 from app.common.active_lines import today_kolkata, compute_days_remaining
 from app.modules.enrollments.schemas import EnrollmentItemResponse, EnrollmentListResponse
@@ -32,7 +32,7 @@ async def list_enrollments(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
-    user = Depends(require_staff)
+    user = Depends(require_cashier_or_admin)
 ):
     today = today_kolkata()
 

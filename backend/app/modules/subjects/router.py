@@ -14,6 +14,11 @@ from app.database.models import Subject, User, Teacher, Batch
 from app.modules.admissions.models import Admission, AdmissionItem
 from app.modules.students.models import Student
 from app.common.active_student import today_kolkata, active_student_subject_filter
+from app.common.teacher_scope import (
+    is_teacher_user,
+    resolve_teacher_for_user,
+    active_teacher_student_item_filter,
+)
 from app.modules.reports.ledger_queries import get_item_allocated_collected_map
 from app.common.calculations import evaluate_student_rolling_cycle
 from app.modules.subjects.schemas import SubjectCreate, SubjectUpdate, SubjectResponse
@@ -49,16 +54,12 @@ async def list_subjects(
         query = query.where(Subject.status == status_filter)
         count_query = count_query.where(Subject.status == status_filter)
 
-    if current_user.role == "TEACHER":
-        t_stmt = select(Teacher).where(Teacher.user_id == current_user.id)
-        t_rec = (await db.execute(t_stmt)).scalar_one_or_none()
-        if not t_rec:
-            t_stmt2 = select(Teacher).where(or_(Teacher.email == current_user.email, Teacher.name == current_user.full_name))
-            t_rec = (await db.execute(t_stmt2)).scalar_one_or_none()
-        teacher_id = t_rec.id if t_rec else None
-        if teacher_id:
-            query = query.where(Subject.teacher_id == teacher_id)
-            count_query = count_query.where(Subject.teacher_id == teacher_id)
+    if is_teacher_user(current_user):
+        teacher = await resolve_teacher_for_user(db, current_user)
+        if not teacher:
+            return PageResponse.create(items=[], total=0, params=PaginationParams(page=page, page_size=page_size))
+        query = query.where(Subject.teacher_id == teacher.id)
+        count_query = count_query.where(Subject.teacher_id == teacher.id)
 
     total_result = await db.execute(count_query)
     total = total_result.scalar_one()
@@ -77,15 +78,11 @@ async def get_all_active_subjects(
     current_user: User = Depends(require_staff)
 ):
     query = select(Subject).where(Subject.status == "ACTIVE")
-    if current_user.role == "TEACHER" and not all_institute:
-        t_stmt = select(Teacher).where(Teacher.user_id == current_user.id)
-        t_rec = (await db.execute(t_stmt)).scalar_one_or_none()
-        if not t_rec:
-            t_stmt2 = select(Teacher).where(or_(Teacher.email == current_user.email, Teacher.name == current_user.full_name))
-            t_rec = (await db.execute(t_stmt2)).scalar_one_or_none()
-        teacher_id = t_rec.id if t_rec else None
-        if teacher_id:
-            query = query.where(Subject.teacher_id == teacher_id)
+    if is_teacher_user(current_user):
+        teacher = await resolve_teacher_for_user(db, current_user)
+        if not teacher:
+            return []
+        query = query.where(Subject.teacher_id == teacher.id)
 
     result = await db.execute(query.order_by(Subject.name.asc()))
     return result.scalars().all()
@@ -179,15 +176,34 @@ async def get_subject_roster(
 ):
     today = today_kolkata()
     is_green_card = subject_id.upper() in ("GREEN-CARD", "GREEN-CARD-ALL-ACCESS", "GREEN_CARD")
-    
+    teacher_mode = is_teacher_user(current_user)
+
     if is_green_card:
+        if teacher_mode:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: you are not assigned to this subject",
+            )
         base_filter = and_(AdmissionItem.item_type == "GREEN_CARD", Admission.status != "CANCELLED")
     else:
         try:
             s_uuid = uuid.UUID(subject_id)
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid subject ID")
+        if teacher_mode:
+            subj = (await db.execute(select(Subject).where(Subject.id == s_uuid))).scalar_one_or_none()
+            if not subj:
+                raise HTTPException(status_code=404, detail="Subject not found")
+            teacher = await resolve_teacher_for_user(db, current_user)
+            if not teacher or subj.teacher_id != teacher.id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied: you are not assigned to this subject",
+                )
         base_filter = and_(AdmissionItem.subject_id == s_uuid, Admission.status != "CANCELLED")
+
+    if teacher_mode:
+        base_filter = and_(base_filter, Student.status == "ACTIVE", active_teacher_student_item_filter(today))
 
     active_cond = active_student_subject_filter(AdmissionItem, Admission, today)
     end_col = func.coalesce(AdmissionItem.valid_to, Admission.valid_to, Admission.admission_date + 30)
@@ -203,6 +219,7 @@ async def get_subject_roster(
             func.count(func.distinct(Admission.student_id))
         )
         .join(Admission, AdmissionItem.admission_id == Admission.id)
+        .join(Student, Admission.student_id == Student.id)
         .where(base_filter)
     )
     m_row = (await db.execute(metrics_stmt)).one()
@@ -320,6 +337,13 @@ async def get_subject(
     subject = res.scalar_one_or_none()
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
+    if is_teacher_user(current_user):
+        teacher = await resolve_teacher_for_user(db, current_user)
+        if not teacher or subject.teacher_id != teacher.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: you are not assigned to this subject",
+            )
     return subject
 
 @router.put("/{subject_id}", response_model=SubjectResponse)

@@ -8,7 +8,7 @@ from sqlalchemy import select, func, or_, and_, delete, case
 from sqlalchemy.orm import selectinload
 
 from app.database.session import get_db
-from app.core.dependencies import require_staff, require_admin
+from app.core.dependencies import require_cashier_or_admin, require_admin
 from app.database.models import Batch, BatchSubject, Teacher, Subject, AdmissionItem, Admission, User
 from app.modules.batches.schemas import (
     BatchCreate, BatchUpdate, BatchResponse, BatchSubjectResponse,
@@ -23,7 +23,7 @@ router = APIRouter(prefix="/api/batches", tags=["Batches"])
 @router.get("/active-summary", response_model=List[BatchActiveSummaryResponse])
 async def get_batches_active_summary(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     """
     Returns active summary per batch and per subject:
@@ -159,7 +159,7 @@ async def list_batches(
     teacher_id: Optional[uuid.UUID] = None,
     status_filter: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     query = select(Batch).options(selectinload(Batch.subjects).joinedload(BatchSubject.subject))
     count_query = select(func.count(Batch.id))
@@ -255,7 +255,7 @@ async def list_batches(
 @router.get("/all", response_model=list[BatchResponse])
 async def get_all_active_batches(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     query = (
         select(Batch)
@@ -442,7 +442,7 @@ async def create_batch(
 async def get_batch(
     batch_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     query = (
         select(Batch)

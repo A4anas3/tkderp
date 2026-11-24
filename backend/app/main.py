@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.database.session import get_db
-from app.core.dependencies import require_staff
+from app.core.dependencies import require_cashier_or_admin
 
 from app.core.config import settings
 from app.modules.auth.router import router as auth_router
@@ -169,7 +169,7 @@ app.include_router(settings_public_router)
 @app.get("/batches/active-summary", tags=["Batches"])
 async def batches_active_summary_alias(
     db=Depends(get_db),
-    current_user=Depends(require_staff)
+    current_user=Depends(require_cashier_or_admin)
 ):
     return await get_batches_active_summary(db=db, current_user=current_user)
 

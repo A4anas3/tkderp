@@ -276,21 +276,23 @@ export default function StudentsPage() {
           </div>
 
           {/* Status Filter Dropdown */}
-          <select
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              setPage(1);
-            }}
-            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-black focus:outline-none focus:border-odoo-600 min-h-[34px] w-full sm:w-auto shadow-2xs"
-          >
-            <option value="">All Students</option>
-            <option value="ACTIVE">Active Students (Current Courses)</option>
-            <option value="UPCOMING">Upcoming Students (Future Starts)</option>
-            <option value="EXPIRED">Expired Students (Validity Lapsed)</option>
-            <option value="DISCONTINUED">Discontinued Students</option>
-            <option value="INACTIVE">Inactive / Revoked Students</option>
-          </select>
+          {!isTeacher && (
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setPage(1);
+              }}
+              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-black focus:outline-none focus:border-odoo-600 min-h-[34px] w-full sm:w-auto shadow-2xs"
+            >
+              <option value="">All Students</option>
+              <option value="ACTIVE">Active Students (Current Courses)</option>
+              <option value="UPCOMING">Upcoming Students (Future Starts)</option>
+              <option value="EXPIRED">Expired Students (Validity Lapsed)</option>
+              <option value="DISCONTINUED">Discontinued Students</option>
+              <option value="INACTIVE">Inactive / Revoked Students</option>
+            </select>
+          )}
 
           {canManageAdmissions && (
             <Button variant="primary" icon={UserPlus} onClick={() => setAddModalOpen(true)} className="w-full sm:w-auto font-bold">

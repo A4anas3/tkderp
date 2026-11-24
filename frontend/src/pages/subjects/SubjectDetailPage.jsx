@@ -31,6 +31,7 @@ import QuickPaymentModal from '../../components/modals/QuickPaymentModal';
 import PaymentReceiptModal from '../../components/receipts/PaymentReceiptModal';
 import { subjectApi, reportApi, remindersApi, enquiryApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 import { formatIndianDate, formatCycleLabel } from '../../utils/dateCycleUtils';
 import { WhatsAppIcon } from '../../utils/whatsappHelpers';
 
@@ -40,10 +41,12 @@ export default function SubjectDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { success, error } = useToast();
+  const { isTeacher } = useAuth();
 
   const [subject, setSubject] = useState(null);
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [accessDenied, setAccessDenied] = useState(false);
   const [sendingSubjectReminders, setSendingSubjectReminders] = useState(false);
 
   const handleSendSubjectReminders = async () => {
@@ -100,13 +103,21 @@ export default function SubjectDetailPage() {
 
   const loadData = useCallback(async () => {
     setLoading(true);
+    setAccessDenied(false);
     try {
       // 1. Fetch core subject info, demo leads and conversion report concurrently
       const [sDataResult, demosResult, convReportResult] = await Promise.allSettled([
         subjectApi.get(id),
         enquiryApi.listDemos({ subject_id: id, page_size: 100 }),
-        reportApi.getAdmissionsConversion({}),
+        isTeacher ? Promise.resolve(null) : reportApi.getAdmissionsConversion({}),
       ]);
+
+      if (sDataResult.status === 'rejected' && sDataResult.reason?.response?.status === 403) {
+        setAccessDenied(true);
+        setSubject(null);
+        setLoading(false);
+        return;
+      }
 
       const sData = sDataResult.status === 'fulfilled' ? sDataResult.value : null;
       let currentSub = sData
@@ -169,33 +180,35 @@ export default function SubjectDetailPage() {
         setLoading(false);
       }
 
-      // 2. Fetch subject revenue report for financials in background
-      try {
-        const reportRes = await reportApi.getSubjectRevenue({});
-        const items = reportRes?.items || [];
-        const foundInReport = items.find(
-          (itm) => String(itm.subject_id) === String(id) || itm.subject_code === id
-        );
+      // 2. Fetch subject revenue report for financials in background (Admin only)
+      if (!isTeacher) {
+        try {
+          const reportRes = await reportApi.getSubjectRevenue({});
+          const items = reportRes?.items || [];
+          const foundInReport = items.find(
+            (itm) => String(itm.subject_id) === String(id) || itm.subject_code === id
+          );
 
-        if (foundInReport) {
-          setSubject((prev) => ({ ...prev, ...foundInReport }));
-        } else if (!currentSub) {
-          if (id === 'green-card-all-access' || id === 'GREEN-CARD') {
-            const gc = items.find((itm) => itm.subject_code === 'GREEN-CARD');
-            if (gc) {
-              setSubject(gc);
+          if (foundInReport) {
+            setSubject((prev) => ({ ...prev, ...foundInReport }));
+          } else if (!currentSub) {
+            if (id === 'green-card-all-access' || id === 'GREEN-CARD') {
+              const gc = items.find((itm) => itm.subject_code === 'GREEN-CARD');
+              if (gc) {
+                setSubject(gc);
+              }
             }
           }
+        } catch (repErr) {
+          console.warn('Failed to fetch full subject revenue:', repErr);
         }
-      } catch (repErr) {
-        console.warn('Failed to fetch full subject revenue:', repErr);
       }
     } catch (err) {
       error(err.message || 'Failed to load subject details');
     } finally {
       setLoading(false);
     }
-  }, [id, error]);
+  }, [id, error, isTeacher]);
 
   // Load paginated course enrollments directly from backend roster endpoint
   const loadRoster = useCallback(async () => {
@@ -274,11 +287,19 @@ export default function SubjectDetailPage() {
   if (!subject) {
     return (
       <div className="p-6 max-w-5xl mx-auto space-y-4">
-        <Button variant="secondary" icon={ArrowLeft} onClick={() => navigate('/reports/subject-revenue')}>
-          Back to Subject Revenue
+        <Button
+          variant="secondary"
+          icon={ArrowLeft}
+          onClick={() => navigate(isTeacher ? '/subjects' : '/reports/subject-revenue')}
+        >
+          {isTeacher ? 'Back to Subjects' : 'Back to Subject Revenue'}
         </Button>
         <div className="bg-white p-8 rounded-xl border border-slate-200 text-center">
-          <p className="text-sm font-semibold text-rose-700">Subject curriculum record not found.</p>
+          <p className="text-sm font-semibold text-rose-700">
+            {accessDenied
+              ? 'Access Denied: You are not assigned to this subject.'
+              : 'Subject curriculum record not found.'}
+          </p>
         </div>
       </div>
     );
@@ -294,9 +315,9 @@ export default function SubjectDetailPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-start sm:items-center gap-2.5 min-w-0">
           <button
-            onClick={() => navigate('/reports/subject-revenue')}
+            onClick={() => navigate(isTeacher ? '/subjects' : '/reports/subject-revenue')}
             className="p-2 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 transition-colors shadow-2xs cursor-pointer shrink-0 min-h-[38px] min-w-[38px] flex items-center justify-center"
-            title="Back to Subject Revenue"
+            title={isTeacher ? 'Back to Subjects' : 'Back to Subject Revenue'}
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
@@ -316,6 +337,7 @@ export default function SubjectDetailPage() {
         </div>
 
         {/* Action Buttons */}
+        {!isTeacher && (
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           {/* One-Click Send Subject Dues Reminders */}
           <Button
@@ -340,6 +362,7 @@ export default function SubjectDetailPage() {
             View All Ledgers
           </Button>
         </div>
+        )}
       </div>
 
       {/* Prominent Active vs Inactive Status Banner */}
@@ -377,6 +400,7 @@ export default function SubjectDetailPage() {
       </div>
 
       {/* Financial & Conversion KPI Summary Cards */}
+      {!isTeacher && (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 text-xs">
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
           <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Total Billed</span>
@@ -437,6 +461,7 @@ export default function SubjectDetailPage() {
           </div>
         </div>
       </div>
+      )}
 
       {/* Main Feature Tabs: History, Breakup & Conversion History */}
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2">
@@ -450,34 +475,38 @@ export default function SubjectDetailPage() {
           }`}
         >
           <History className="w-4 h-4" />
-          <span>Course History & Roster ({totalEnrollments})</span>
+          <span>{isTeacher ? `Active Roster (${activeCount})` : `Course History & Roster (${totalEnrollments})`}</span>
         </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('BREAKUP')}
-          className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-lg transition cursor-pointer ${
-            activeTab === 'BREAKUP'
-              ? 'bg-odoo-700 text-white shadow-2xs'
-              : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
-          }`}
-        >
-          <PieChart className="w-4 h-4" />
-          <span>Revenue & Fee Breakup</span>
-        </button>
+        {!isTeacher && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('BREAKUP')}
+            className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-lg transition cursor-pointer ${
+              activeTab === 'BREAKUP'
+                ? 'bg-odoo-700 text-white shadow-2xs'
+                : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            <PieChart className="w-4 h-4" />
+            <span>Revenue & Fee Breakup</span>
+          </button>
+        )}
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('CONVERSION')}
-          className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-lg transition cursor-pointer ${
-            activeTab === 'CONVERSION'
-              ? 'bg-odoo-700 text-white shadow-2xs'
-              : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
-          }`}
-        >
-          <TrendingUp className="w-4 h-4" />
-          <span>Enquiries & Conversion History ({conversionData.totalDemos || conversionData.items.length})</span>
-        </button>
+        {!isTeacher && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('CONVERSION')}
+            className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-lg transition cursor-pointer ${
+              activeTab === 'CONVERSION'
+                ? 'bg-odoo-700 text-white shadow-2xs'
+                : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            <TrendingUp className="w-4 h-4" />
+            <span>Enquiries & Conversion History ({conversionData.totalDemos || conversionData.items.length})</span>
+          </button>
+        )}
       </div>
 
       {/* TAB 1: Complete Course Enrollments Roster with Status Filtering */}
@@ -509,20 +538,22 @@ export default function SubjectDetailPage() {
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
             {/* Segmented Status Tabs */}
             <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0">
-              <button
-                type="button"
-                onClick={() => {
-                  setStatusFilter('ALL');
-                  setPage(1);
-                }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap cursor-pointer ${
-                  statusFilter === 'ALL'
-                    ? 'bg-black text-white shadow-2xs'
-                    : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
-                }`}
-              >
-                All ({totalEnrollments})
-              </button>
+              {!isTeacher && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStatusFilter('ALL');
+                    setPage(1);
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+                    statusFilter === 'ALL'
+                      ? 'bg-black text-white shadow-2xs'
+                      : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  All ({totalEnrollments})
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => {
@@ -530,29 +561,31 @@ export default function SubjectDetailPage() {
                   setPage(1);
                 }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
-                  statusFilter === 'ACTIVE'
+                  statusFilter === 'ACTIVE' || isTeacher
                     ? 'bg-emerald-700 text-white shadow-2xs'
                     : 'bg-white text-emerald-800 border border-emerald-200 hover:bg-emerald-50'
                 }`}
               >
-                <span className={`w-2 h-2 rounded-full ${statusFilter === 'ACTIVE' ? 'bg-white' : 'bg-emerald-500'}`} />
+                <span className={`w-2 h-2 rounded-full ${statusFilter === 'ACTIVE' || isTeacher ? 'bg-white' : 'bg-emerald-500'}`} />
                 Active ({activeCount})
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setStatusFilter('INACTIVE');
-                  setPage(1);
-                }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
-                  statusFilter === 'INACTIVE'
-                    ? 'bg-rose-700 text-white shadow-2xs'
-                    : 'bg-white text-rose-800 border border-rose-200 hover:bg-rose-50'
-                }`}
-              >
-                <span className={`w-2 h-2 rounded-full ${statusFilter === 'INACTIVE' ? 'bg-white' : 'bg-rose-500'}`} />
-                Inactive / Expired ({inactiveCount})
-              </button>
+              {!isTeacher && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStatusFilter('INACTIVE');
+                    setPage(1);
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+                    statusFilter === 'INACTIVE'
+                      ? 'bg-rose-700 text-white shadow-2xs'
+                      : 'bg-white text-rose-800 border border-rose-200 hover:bg-rose-50'
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${statusFilter === 'INACTIVE' ? 'bg-white' : 'bg-rose-500'}`} />
+                  Inactive / Expired ({inactiveCount})
+                </button>
+              )}
             </div>
 
             {/* Search Box */}
@@ -631,10 +664,10 @@ export default function SubjectDetailPage() {
                     <th className="p-3">Faculty & Hall</th>
                     <th className="p-3">Rolling Billing Cycle</th>
                     <th className="p-3 text-center">Cycle Status</th>
-                    <th className="p-3 text-right">Fee Billed</th>
-                    <th className="p-3 text-right text-emerald-800">Collected</th>
-                    <th className="p-3 text-right text-rose-700">Due</th>
-                    <th className="p-3 text-center">Payment</th>
+                    {!isTeacher && <th className="p-3 text-right">Fee Billed</th>}
+                    {!isTeacher && <th className="p-3 text-right text-emerald-800">Collected</th>}
+                    {!isTeacher && <th className="p-3 text-right text-rose-700">Due</th>}
+                    {!isTeacher && <th className="p-3 text-center">Payment</th>}
                     <th className="p-3 text-center">Actions</th>
                   </tr>
                 </thead>
@@ -678,7 +711,7 @@ export default function SubjectDetailPage() {
 
                       {/* Faculty & Hall */}
                       <td className="p-3 text-slate-700">
-                        {s.teacher_id || subject.teacher_id ? (
+                        {!isTeacher && (s.teacher_id || subject.teacher_id) ? (
                           <Link
                             to={`/teachers/${s.teacher_id || subject.teacher_id}`}
                             className="font-semibold text-odoo-700 hover:text-odoo-900 hover:underline inline-block"
@@ -688,7 +721,7 @@ export default function SubjectDetailPage() {
                             {s.teacher_name || subject.teacher_name || 'Faculty'}
                           </Link>
                         ) : (
-                          <div className="font-semibold text-black">{s.teacher_name || 'Faculty'}</div>
+                          <div className="font-semibold text-black">{s.teacher_name || subject.teacher_name || 'Faculty'}</div>
                         )}
                         <div className="text-[11px] text-slate-500">
                           {s.hall_number ? `Hall: ${s.hall_number}` : 'Main Campus'}
@@ -719,40 +752,48 @@ export default function SubjectDetailPage() {
                       </td>
 
                       {/* Fee Billed */}
-                      <td className="p-3 text-right font-mono font-bold text-black">
-                        ₹{(s.net_price || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </td>
+                      {!isTeacher && (
+                        <td className="p-3 text-right font-mono font-bold text-black">
+                          ₹{(s.net_price || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </td>
+                      )}
 
                       {/* Amount Collected */}
-                      <td className="p-3 text-right font-mono font-bold text-emerald-800">
-                        ₹{(s.amount_collected || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </td>
+                      {!isTeacher && (
+                        <td className="p-3 text-right font-mono font-bold text-emerald-800">
+                          ₹{(s.amount_collected || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </td>
+                      )}
 
                       {/* Balance Due */}
-                      <td className="p-3 text-right font-mono font-bold text-rose-700">
-                        ₹{(s.balance_due || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </td>
+                      {!isTeacher && (
+                        <td className="p-3 text-right font-mono font-bold text-rose-700">
+                          ₹{(s.balance_due || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </td>
+                      )}
 
                       {/* Payment Status */}
-                      <td className="p-3 text-center">
-                        <Badge
-                          size="xs"
-                          variant={
-                            s.payment_status === 'PAID'
-                              ? 'success'
-                              : s.payment_status === 'PARTIAL'
-                              ? 'warning'
-                              : 'danger'
-                          }
-                        >
-                          {s.payment_status}
-                        </Badge>
-                      </td>
+                      {!isTeacher && (
+                        <td className="p-3 text-center">
+                          <Badge
+                            size="xs"
+                            variant={
+                              s.payment_status === 'PAID'
+                                ? 'success'
+                                : s.payment_status === 'PARTIAL'
+                                ? 'warning'
+                                : 'danger'
+                            }
+                          >
+                            {s.payment_status}
+                          </Badge>
+                        </td>
+                      )}
 
                       {/* Actions */}
                       <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-center gap-1.5 whitespace-nowrap">
-                          {Number(s.balance_due || 0) > 0 && (
+                          {!isTeacher && Number(s.balance_due || 0) > 0 && (
                             <button
                               type="button"
                               onClick={() => handleSendStudentReminder(s.student_id)}
@@ -764,7 +805,7 @@ export default function SubjectDetailPage() {
                             </button>
                           )}
 
-                          {Number(s.balance_due || 0) > 0 && (
+                          {!isTeacher && Number(s.balance_due || 0) > 0 && (
                             <button
                               onClick={() => setPayAdmissionId(s.admission_id)}
                               className="h-8 min-h-[32px] px-2.5 py-1 text-xs bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 text-emerald-900 font-bold rounded-md border border-emerald-300 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shadow-2xs transition-colors"

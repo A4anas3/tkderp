@@ -40,7 +40,7 @@ from app.modules.reports.ledger_queries import (
 )
 from app.common.active_student import active_student_subject_filter, today_kolkata
 from app.common.active_lines import compute_days_remaining
-from app.core.dependencies import require_staff, require_admin
+from app.core.dependencies import require_cashier_or_admin, require_admin
 from app.common.pagination import PageResponse
 
 router = APIRouter(prefix="/api/teachers", tags=["Teachers"])
@@ -53,7 +53,7 @@ async def list_teachers(
     status: Optional[str] = None,
     status_filter: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    user = Depends(require_staff)
+    user = Depends(require_cashier_or_admin)
 ):
     query = select(Teacher)
     count_query = select(func.count(Teacher.id))
@@ -90,7 +90,7 @@ async def list_teachers(
 @router.get("/all", response_model=List[TeacherResponse])
 async def get_all_active_teachers(
     db: AsyncSession = Depends(get_db),
-    user = Depends(require_staff)
+    user = Depends(require_cashier_or_admin)
 ):
     result = await db.execute(select(Teacher).where(Teacher.status == "ACTIVE").order_by(Teacher.name.asc()))
     return [TeacherResponse.model_validate(t) for t in result.scalars().all()]
@@ -99,7 +99,7 @@ async def get_all_active_teachers(
 async def get_teacher_by_mobile(
     mobile: str,
     db: AsyncSession = Depends(get_db),
-    user = Depends(require_staff)
+    user = Depends(require_cashier_or_admin)
 ):
     clean = mobile.strip()
     if len(clean) > 10:
@@ -135,7 +135,7 @@ async def list_teacher_attendance_monthly(
     page: Optional[int] = Query(None, ge=1, description="Page number"),
     page_size: Optional[int] = Query(None, ge=1, le=100, description="Page size"),
     db: AsyncSession = Depends(get_db),
-    user = Depends(require_staff)
+    user = Depends(require_cashier_or_admin)
 ):
     """
     Returns monthly attendance summary (total absent days / holidays) for all teachers or a specific teacher.
@@ -198,7 +198,7 @@ async def list_teacher_attendance_monthly(
     return summary_list
 
 @router.get("/{teacher_id}", response_model=TeacherResponse)
-async def get_teacher(teacher_id: uuid.UUID, db: AsyncSession = Depends(get_db), user = Depends(require_staff)):
+async def get_teacher(teacher_id: uuid.UUID, db: AsyncSession = Depends(get_db), user = Depends(require_cashier_or_admin)):
     teacher = (await db.execute(select(Teacher).where(Teacher.id == teacher_id))).scalar_one_or_none()
     if not teacher:
         raise HTTPException(status_code=404, detail="Teacher not found")
@@ -460,7 +460,7 @@ async def get_teacher_roster(
     status_filter: Optional[str] = Query("ALL"),
     subject_id: Optional[uuid.UUID] = Query(None),
     db: AsyncSession = Depends(get_db),
-    user = Depends(require_staff)
+    user = Depends(require_cashier_or_admin)
 ):
     """
     Returns complete assigned course enrollment cohort roster for a teacher with
@@ -667,7 +667,7 @@ async def get_teacher_earnings(
     start_date: Optional[date] = Query(None, alias="from_date"),
     end_date: Optional[date] = Query(None, alias="to_date"),
     db: AsyncSession = Depends(get_db),
-    user = Depends(require_staff)
+    user = Depends(require_cashier_or_admin)
 ):
     """
     Returns breakdown of earnings (earned, reversed, paid, payable) for a teacher,
@@ -874,7 +874,7 @@ async def create_teacher_payout(
 async def get_teacher_breakup(
     teacher_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    user = Depends(require_staff)
+    user = Depends(require_cashier_or_admin)
 ):
     """
     Teacher-wise financial breakup mirroring Subject module (G3):
@@ -1088,7 +1088,7 @@ async def get_teacher_history(
     page: Optional[int] = Query(None, ge=1, description="Page number"),
     page_size: Optional[int] = Query(None, ge=1, le=100, description="Page size"),
     db: AsyncSession = Depends(get_db),
-    user = Depends(require_staff)
+    user = Depends(require_cashier_or_admin)
 ):
     """
     Chronological history of every admission, renewal, expiry, change and cancellation
@@ -1337,7 +1337,7 @@ async def get_teacher_history(
 async def get_teacher_collections(
     teacher_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    user = Depends(require_staff)
+    user = Depends(require_cashier_or_admin)
 ):
     """
     Fee collections handled by this teacher where the ledger records it.
@@ -1417,7 +1417,7 @@ async def get_teacher_collections(
 async def get_teacher_demo_conversion_endpoint(
     teacher_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    user = Depends(require_staff)
+    user = Depends(require_cashier_or_admin)
 ):
     """
     Demo conversion metrics credited to this teacher as the demo giver,
@@ -1444,7 +1444,7 @@ async def get_teacher_attendance_detail(
     teacher_id: uuid.UUID,
     month_year: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
-    user = Depends(require_staff)
+    user = Depends(require_cashier_or_admin)
 ):
     teacher = (await db.execute(select(Teacher).where(Teacher.id == teacher_id))).scalar_one_or_none()
     if not teacher:
@@ -1490,7 +1490,7 @@ async def toggle_teacher_absent_day(
     teacher_id: uuid.UUID,
     payload: TeacherAttendanceToggle,
     db: AsyncSession = Depends(get_db),
-    user = Depends(require_staff)
+    user = Depends(require_cashier_or_admin)
 ):
     teacher = (await db.execute(select(Teacher).where(Teacher.id == teacher_id))).scalar_one_or_none()
     if not teacher:
@@ -1524,7 +1524,7 @@ async def bulk_set_teacher_attendance(
     teacher_id: uuid.UUID,
     payload: TeacherAttendanceBulkUpdate,
     db: AsyncSession = Depends(get_db),
-    user = Depends(require_staff)
+    user = Depends(require_cashier_or_admin)
 ):
     teacher = (await db.execute(select(Teacher).where(Teacher.id == teacher_id))).scalar_one_or_none()
     if not teacher:
@@ -1561,7 +1561,7 @@ async def bulk_set_teacher_attendance(
 async def get_teacher_salary_history(
     teacher_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    user = Depends(require_staff)
+    user = Depends(require_cashier_or_admin)
 ):
     teacher = (await db.execute(select(Teacher).where(Teacher.id == teacher_id))).scalar_one_or_none()
     if not teacher:

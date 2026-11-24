@@ -291,8 +291,10 @@ export default function SubjectsPage() {
 
   useEffect(() => {
     loadSubjects();
-    loadTeachers();
-  }, [loadSubjects, loadTeachers]);
+    if (isAdmin) {
+      loadTeachers();
+    }
+  }, [loadSubjects, loadTeachers, isAdmin]);
 
   const handleOpenAdd = () => {
     setEditingSubject(null);

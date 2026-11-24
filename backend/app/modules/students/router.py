@@ -34,6 +34,16 @@ from app.modules.enquiries.router import create_enquiry_with_demos
 from app.modules.admissions.schemas import AdmissionResponse, RenewalsDueItemResponse
 from app.modules.payments.schemas import FinancialTransactionResponse
 from app.common.active_lines import today_kolkata, is_active_line, derive_student_status, compute_days_remaining
+from app.common.teacher_scope import (
+    is_teacher_user,
+    resolve_teacher_for_user,
+    get_teacher_subject_ids,
+    active_teacher_student_item_filter,
+    is_active_teacher_item,
+    is_active_student_of_teacher,
+    teacher_demo_ownership_filter,
+    active_demo_filter,
+)
 from app.core.dependencies import require_cashier_or_admin, require_staff, require_admin
 from app.common.pagination import PageResponse
 from app.modules.verification.router import _get_active_demos_for_student
@@ -205,27 +215,29 @@ async def list_students(
             query = query.where(Student.status == status)
             count_query = count_query.where(Student.status == status)
 
-    if user.role == "TEACHER":
-        t_stmt = select(Teacher).where(Teacher.user_id == user.id)
-        t_rec = (await db.execute(t_stmt)).scalar_one_or_none()
-        if not t_rec:
-            t_stmt2 = select(Teacher).where(or_(Teacher.email == user.email, Teacher.name == user.full_name))
-            t_rec = (await db.execute(t_stmt2)).scalar_one_or_none()
-        teacher_id = t_rec.id if t_rec else None
-        if teacher_id:
-            sub_ids_stmt = select(Subject.id).where(Subject.teacher_id == teacher_id)
-            teacher_sub_ids = (await db.execute(sub_ids_stmt)).scalars().all()
-            if teacher_sub_ids:
-                teacher_students_stmt = (
-                    select(Admission.student_id)
-                    .join(AdmissionItem, AdmissionItem.admission_id == Admission.id)
-                    .where(
-                        AdmissionItem.subject_id.in_(teacher_sub_ids),
-                        Admission.status.not_in(["REVOKED", "CANCELLED"])
-                    )
-                )
-                query = query.where(Student.id.in_(teacher_students_stmt))
-                count_query = count_query.where(Student.id.in_(teacher_students_stmt))
+    if is_teacher_user(user):
+        teacher = await resolve_teacher_for_user(db, user)
+        teacher_sub_ids = await get_teacher_subject_ids(db, teacher.id) if teacher else []
+        if not teacher or not teacher_sub_ids:
+            return PageResponse(
+                items=[],
+                total=0,
+                page=page,
+                page_size=page_size,
+                total_pages=0,
+            )
+        today = today_kolkata()
+        teacher_students_stmt = (
+            select(Admission.student_id)
+            .join(AdmissionItem, AdmissionItem.admission_id == Admission.id)
+            .where(
+                AdmissionItem.subject_id.in_(teacher_sub_ids),
+                active_teacher_student_item_filter(today),
+            )
+        )
+        teacher_cond = and_(Student.status == "ACTIVE", Student.id.in_(teacher_students_stmt))
+        query = query.where(teacher_cond)
+        count_query = count_query.where(teacher_cond)
 
     total = (await db.execute(count_query)).scalar() or 0
     total_pages = (total + page_size - 1) // page_size if total > 0 else 0
@@ -283,7 +295,7 @@ async def list_students(
 async def check_student_by_mobile(
     mobile: str,
     db: AsyncSession = Depends(get_db),
-    user = Depends(require_staff)
+    user = Depends(require_cashier_or_admin)
 ):
     clean_mob = mobile.strip()
     norm = normalize_mobile(clean_mob)
@@ -331,6 +343,19 @@ async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db),
         raise HTTPException(status_code=404, detail="Student not found")
 
     today = today_kolkata()
+    teacher_mode = is_teacher_user(user)
+    teacher = None
+    teacher_sub_ids: List[uuid.UUID] = []
+    if teacher_mode:
+        teacher = await resolve_teacher_for_user(db, user)
+        allowed, teacher_sub_ids = await is_active_student_of_teacher(
+            db, student.id, teacher.id if teacher else None, today
+        )
+        if not allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: student is not an active student in your assigned subjects",
+            )
 
     # Load all admissions with their items and payment history
     adms_stmt = (
@@ -349,44 +374,59 @@ async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db),
     for adm in admissions:
         for itm in adm.items:
             itm.admission = adm
-            all_items.append(itm)
+            if teacher_mode:
+                if itm.subject_id in teacher_sub_ids and is_active_teacher_item(itm, adm, today):
+                    all_items.append(itm)
+            else:
+                all_items.append(itm)
 
     # Derive student status dynamically from lines
     if all_items and student.status != "REVOKED":
         student.status = derive_student_status(all_items, today)
 
-    # Financial totals for student
-    total_adm_count = len(admissions)
-    active_adm_count = sum(1 for a in admissions if a.status == "ACTIVE" and getattr(a, "access_status", "ACTIVE") == "ACTIVE")
-    revoked_adm_count = sum(
-        1 for a in admissions
-        if a.status in ["REVOKED", "CANCELLED", "DISCONTINUED"]
-        or getattr(a, "access_status", "ACTIVE") in ["REVOKED", "CANCELLED", "DISCONTINUED"]
-    )
+    if teacher_mode:
+        total_adm_count = len({itm.admission_id for itm in all_items})
+        active_adm_count = total_adm_count
+        revoked_adm_count = 0
+        total_billed = Decimal("0.00")
+        total_due = Decimal("0.00")
+        expired_due = Decimal("0.00")
+        total_paid = Decimal("0.00")
+        total_refunded = Decimal("0.00")
+        net_paid = Decimal("0.00")
+    else:
+        # Financial totals for student
+        total_adm_count = len(admissions)
+        active_adm_count = sum(1 for a in admissions if a.status == "ACTIVE" and getattr(a, "access_status", "ACTIVE") == "ACTIVE")
+        revoked_adm_count = sum(
+            1 for a in admissions
+            if a.status in ["REVOKED", "CANCELLED", "DISCONTINUED"]
+            or getattr(a, "access_status", "ACTIVE") in ["REVOKED", "CANCELLED", "DISCONTINUED"]
+        )
 
-    valid_adms = [
-        a for a in admissions
-        if a.status not in ["REVOKED", "CANCELLED"]
-        and getattr(a, "document_status", "VALID") != "VOID"
-    ]
-    total_billed = sum((a.total_payable for a in valid_adms), Decimal("0.00"))
-    total_due = sum((a.balance_due for a in valid_adms), Decimal("0.00"))
-    expired_due = sum(
-        (a.balance_due for a in valid_adms if a.status == "EXPIRED" or (a.valid_to is not None and a.valid_to < today)),
-        Decimal("0.00")
-    )
+        valid_adms = [
+            a for a in admissions
+            if a.status not in ["REVOKED", "CANCELLED"]
+            and getattr(a, "document_status", "VALID") != "VOID"
+        ]
+        total_billed = sum((a.total_payable for a in valid_adms), Decimal("0.00"))
+        total_due = sum((a.balance_due for a in valid_adms), Decimal("0.00"))
+        expired_due = sum(
+            (a.balance_due for a in valid_adms if a.status == "EXPIRED" or (a.valid_to is not None and a.valid_to < today)),
+            Decimal("0.00")
+        )
 
-    total_paid = (await db.execute(
-        select(func.coalesce(func.sum(Payment.amount), Decimal("0.00")))
-        .where(Payment.student_id == student_id)
-    )).scalar() or Decimal("0.00")
+        total_paid = (await db.execute(
+            select(func.coalesce(func.sum(Payment.amount), Decimal("0.00")))
+            .where(Payment.student_id == student_id)
+        )).scalar() or Decimal("0.00")
 
-    total_refunded = (await db.execute(
-        select(func.coalesce(func.sum(Refund.amount), Decimal("0.00")))
-        .where(Refund.student_id == student_id)
-    )).scalar() or Decimal("0.00")
+        total_refunded = (await db.execute(
+            select(func.coalesce(func.sum(Refund.amount), Decimal("0.00")))
+            .where(Refund.student_id == student_id)
+        )).scalar() or Decimal("0.00")
 
-    net_paid = total_paid - total_refunded
+        net_paid = total_paid - total_refunded
 
     # Fetch last payment per item in one query
     item_ids = [itm.id for itm in all_items]
@@ -511,17 +551,23 @@ async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db),
             active_lines.append(line_resp)
 
     # Fetch financial transactions history
-    tx_stmt = (
-        select(FinancialTransaction)
-        .where(FinancialTransaction.student_id == student_id)
-        .order_by(FinancialTransaction.txn_at.desc(), FinancialTransaction.created_at.desc())
-    )
-    txns = list((await db.execute(tx_stmt)).scalars().all())
+    if teacher_mode:
+        txns = []
+    else:
+        tx_stmt = (
+            select(FinancialTransaction)
+            .where(FinancialTransaction.student_id == student_id)
+            .order_by(FinancialTransaction.txn_at.desc(), FinancialTransaction.created_at.desc())
+        )
+        txns = list((await db.execute(tx_stmt)).scalars().all())
 
     res = StudentDetailResponse.model_validate(student)
     if admissions:
         active_adms_list = [a for a in admissions if a.status == "ACTIVE" and getattr(a, "document_status", "VALID") != "VOID"]
-        res.latest_admission_number = active_adms_list[0].admission_number if active_adms_list else admissions[0].admission_number
+        if teacher_mode:
+            allowed_adm_ids = {itm.admission_id for itm in all_items}
+            active_adms_list = [a for a in active_adms_list if a.id in allowed_adm_ids]
+        res.latest_admission_number = active_adms_list[0].admission_number if active_adms_list else (admissions[0].admission_number if not teacher_mode else None)
     res.admissions_count = total_adm_count
     res.active_admissions_count = active_adm_count
     res.revoked_admissions_count = revoked_adm_count
@@ -536,12 +582,29 @@ async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db),
     res.expiring = expiring_lines
     res.expired = expired_lines
     res.revoked = revoked_lines
-    res.slips = [AdmissionResponse.model_validate(adm) for adm in admissions]
-    res.transactions = [FinancialTransactionResponse.model_validate(tx) for tx in txns]
-    res.demos = await _get_demos_for_student(db, student)
+    res.slips = [] if teacher_mode else [AdmissionResponse.model_validate(adm) for adm in admissions]
+    res.transactions = [] if teacher_mode else [FinancialTransactionResponse.model_validate(tx) for tx in txns]
+    if teacher_mode:
+        res.demos = await _get_demos_for_student(
+            db,
+            student,
+            teacher_id=teacher.id if teacher else None,
+            teacher_sub_ids=teacher_sub_ids,
+            active_only=True,
+            today=today,
+        )
+    else:
+        res.demos = await _get_demos_for_student(db, student)
     return res
 
-async def _get_demos_for_student(db: AsyncSession, student: Student) -> List[StudentDemoItemResponse]:
+async def _get_demos_for_student(
+    db: AsyncSession,
+    student: Student,
+    teacher_id: Optional[uuid.UUID] = None,
+    teacher_sub_ids: Optional[List[uuid.UUID]] = None,
+    active_only: bool = False,
+    today: Optional[date] = None,
+) -> List[StudentDemoItemResponse]:
     cond = (Enquiry.converted_student_id == student.id)
     norm_mob = normalize_mobile(student.mobile) if student.mobile else None
     if norm_mob and len(norm_mob) >= 10:
@@ -560,6 +623,10 @@ async def _get_demos_for_student(db: AsyncSession, student: Student) -> List[Stu
         .where(cond)
         .order_by(desc(EnquiryDemoItem.demo_start_date), desc(EnquiryDemoItem.created_at))
     )
+    if teacher_id is not None:
+        q = q.where(teacher_demo_ownership_filter(teacher_id, teacher_sub_ids or []))
+    if active_only:
+        q = q.where(active_demo_filter(today or today_kolkata()))
     rows = (await db.execute(q)).all()
 
     demos = []
@@ -603,6 +670,23 @@ async def get_student_demos(
     student = (await db.execute(select(Student).where(Student.id == student_id))).scalar_one_or_none()
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
+    if is_teacher_user(user):
+        teacher = await resolve_teacher_for_user(db, user)
+        allowed, teacher_sub_ids = await is_active_student_of_teacher(
+            db, student.id, teacher.id if teacher else None
+        )
+        if not allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: student is not an active student in your assigned subjects",
+            )
+        return await _get_demos_for_student(
+            db,
+            student,
+            teacher_id=teacher.id if teacher else None,
+            teacher_sub_ids=teacher_sub_ids,
+            active_only=True,
+        )
     return await _get_demos_for_student(db, student)
 
 
@@ -681,7 +765,7 @@ async def get_student_audit_alias(
     to_date: Optional[date] = Query(None),
     search: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_staff)
+    user: User = Depends(require_cashier_or_admin)
 ):
     from app.modules.audit.router import get_student_audit_logs
     return await get_student_audit_logs(
@@ -1270,6 +1354,21 @@ async def get_student_active_enrollment(
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
 
+    today = today_kolkata()
+    teacher_mode = is_teacher_user(user)
+    teacher = None
+    teacher_sub_ids: List[uuid.UUID] = []
+    if teacher_mode:
+        teacher = await resolve_teacher_for_user(db, user)
+        allowed, teacher_sub_ids = await is_active_student_of_teacher(
+            db, student.id, teacher.id if teacher else None, today
+        )
+        if not allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: student is not an active student in your assigned subjects",
+            )
+
     # Fetch all admission items with parent admissions
     stmt = (
         select(AdmissionItem, Admission)
@@ -1279,8 +1378,13 @@ async def get_student_active_enrollment(
         .order_by(desc(func.coalesce(AdmissionItem.valid_to, Admission.valid_to)), desc(Admission.admission_date))
     )
     rows = (await db.execute(stmt)).all()
+    if teacher_mode:
+        rows = [
+            (item, adm)
+            for item, adm in rows
+            if item.subject_id in teacher_sub_ids and is_active_teacher_item(item, adm, today)
+        ]
 
-    today = today_kolkata()
     active_green_card = None
     active_subjects_dict = {}  # subj_key -> list of (item, adm, item_dict)
     historical_subjects = []
@@ -1516,15 +1620,24 @@ async def get_student_active_enrollment(
     # Permanent enrollment code (stable)
     enrollment_number = f"ENR-{student.student_code}" if student.student_code else f"ENR-{student.id.hex[:8]}"
 
-    active_demos = await _get_active_demos_for_student(db, student, today)
+    if teacher_mode:
+        active_demos = await _get_active_demos_for_student(
+            db,
+            student,
+            today,
+            teacher_id=teacher.id if teacher else None,
+            teacher_sub_ids=teacher_sub_ids,
+        )
+    else:
+        active_demos = await _get_active_demos_for_student(db, student, today)
 
     return {
         "student_id": str(student.id),
         "student_code": student.student_code,
         "enrollment_number": enrollment_number,
         "student_name": student.name,
-        "has_active_green_card": active_green_card is not None or student.has_green_card,
-        "active_green_card": active_green_card,
+        "has_active_green_card": False if teacher_mode else (active_green_card is not None or student.has_green_card),
+        "active_green_card": None if teacher_mode else active_green_card,
         "is_student_active": len(active_subjects) > 0 or active_green_card is not None or len(active_demos) > 0,
         "active_subjects": active_subjects,
         "historical_subjects": historical_subjects,

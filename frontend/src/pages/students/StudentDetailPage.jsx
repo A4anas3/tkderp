@@ -178,12 +178,13 @@ export default function StudentDetailPage() {
   const [admissions, setAdmissions] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [accessDenied, setAccessDenied] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [demos, setDemos] = useState([]);
   const [demosLoading, setDemosLoading] = useState(false);
 
   // Tab State: 'HISTORY' | 'INVOICES' | 'LEDGER'
-  const [activeMainTab, setActiveMainTab] = useState('HISTORY');
+  const [activeMainTab, setActiveMainTab] = useState(() => (isTeacher ? 'DEMOS' : 'HISTORY'));
 
   // Active Enrollment State
   const [enrollmentData, setEnrollmentData] = useState(null);
@@ -291,6 +292,7 @@ export default function StudentDetailPage() {
 
   const fetchStudentProfile = async () => {
     setLoading(true);
+    setAccessDenied(false);
     try {
       const stRes = await studentApi.get(id);
       setStudent(stRes);
@@ -301,7 +303,10 @@ export default function StudentDetailPage() {
       }
       return stRes;
     } catch (err) {
-      error(err.message || 'Failed to load student profile');
+      if (err?.response?.status === 403) {
+        setAccessDenied(true);
+      }
+      error(err?.response?.data?.detail || err.message || 'Failed to load student profile');
       return null;
     } finally {
       setLoading(false);
@@ -443,14 +448,19 @@ export default function StudentDetailPage() {
   const fetchStudentData = async () => {
     setLoading(true);
     try {
-      await Promise.all([
+      const tasks = [
         fetchStudentProfile(),
         fetchEnrollmentData(),
         fetchDemosData(),
-        fetchAdmissionsData(admPage, admPageSize, admSearch, admStatusFilter),
-        fetchTransactionsData(txnPage, txnPageSize, txnSearch, txnModeFilter, txnTypeFilter),
-        fetchStudentAuditLogs(auditPage, auditPageSize, auditSearch, auditActionFilter),
-      ]);
+      ];
+      if (!isTeacher) {
+        tasks.push(
+          fetchAdmissionsData(admPage, admPageSize, admSearch, admStatusFilter),
+          fetchTransactionsData(txnPage, txnPageSize, txnSearch, txnModeFilter, txnTypeFilter),
+          fetchStudentAuditLogs(auditPage, auditPageSize, auditSearch, auditActionFilter),
+        );
+      }
+      await Promise.all(tasks);
     } finally {
       setLoading(false);
     }
@@ -463,16 +473,22 @@ export default function StudentDetailPage() {
   }, [id]);
 
   useEffect(() => {
-    fetchAdmissionsData(admPage, admPageSize, admSearch, admStatusFilter);
-  }, [id, admPage, admPageSize, admStatusFilter]);
+    if (!isTeacher) {
+      fetchAdmissionsData(admPage, admPageSize, admSearch, admStatusFilter);
+    }
+  }, [id, admPage, admPageSize, admStatusFilter, isTeacher]);
 
   useEffect(() => {
-    fetchTransactionsData(txnPage, txnPageSize, txnSearch, txnModeFilter, txnTypeFilter);
-  }, [id, txnPage, txnPageSize, txnModeFilter, txnTypeFilter]);
+    if (!isTeacher) {
+      fetchTransactionsData(txnPage, txnPageSize, txnSearch, txnModeFilter, txnTypeFilter);
+    }
+  }, [id, txnPage, txnPageSize, txnModeFilter, txnTypeFilter, isTeacher]);
 
   useEffect(() => {
-    fetchStudentAuditLogs(auditPage, auditPageSize, auditSearch, auditActionFilter);
-  }, [id, auditPage, auditPageSize, auditActionFilter]);
+    if (!isTeacher) {
+      fetchStudentAuditLogs(auditPage, auditPageSize, auditSearch, auditActionFilter);
+    }
+  }, [id, auditPage, auditPageSize, auditActionFilter, isTeacher]);
 
   const handleViewReceipt = async (txn) => {
     if (txn.type === 'PAYMENT') {
@@ -563,7 +579,11 @@ export default function StudentDetailPage() {
   if (!student) {
     return (
       <div className="p-8 text-center space-y-3">
-        <p className="text-sm text-slate-600">Student record not found.</p>
+        <p className="text-sm text-slate-600 font-medium">
+          {accessDenied
+            ? 'Access Denied: You can only view active students enrolled in your assigned subjects.'
+            : 'Student record not found.'}
+        </p>
         <Button variant="secondary" onClick={() => navigate('/students')}>
           Back to Students
         </Button>
@@ -823,19 +843,21 @@ export default function StudentDetailPage() {
                 size="lg"
                 status={student.status}
               />
-              <label
-                className="absolute -bottom-1 -right-1 p-1 bg-white border border-slate-300 rounded-full shadow-xs cursor-pointer hover:bg-purple-50 hover:border-odoo-400 transition"
-                title="Change Profile Photo (auto-compressed to <= 20 KB)"
-              >
-                <Camera className="w-3.5 h-3.5 text-odoo-700" />
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handlePhotoUpload}
-                  disabled={uploadingPhoto}
-                  className="hidden"
-                />
-              </label>
+              {!isTeacher && (
+                <label
+                  className="absolute -bottom-1 -right-1 p-1 bg-white border border-slate-300 rounded-full shadow-xs cursor-pointer hover:bg-purple-50 hover:border-odoo-400 transition"
+                  title="Change Profile Photo (auto-compressed to <= 20 KB)"
+                >
+                  <Camera className="w-3.5 h-3.5 text-odoo-700" />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePhotoUpload}
+                    disabled={uploadingPhoto}
+                    className="hidden"
+                  />
+                </label>
+              )}
             </div>
 
             <div className="min-w-0 flex-1">
@@ -856,28 +878,32 @@ export default function StudentDetailPage() {
 
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             {/* Edit Student Profile Button */}
-            <Button
-              size="xs"
-              variant="amber"
-              icon={Edit2}
-              onClick={() => setEditModalOpen(true)}
-              title="Edit Student Information"
-              className="flex-1 sm:flex-initial justify-center"
-            >
-              Edit Profile
-            </Button>
+            {!isTeacher && (
+              <Button
+                size="xs"
+                variant="amber"
+                icon={Edit2}
+                onClick={() => setEditModalOpen(true)}
+                title="Edit Student Information"
+                className="flex-1 sm:flex-initial justify-center"
+              >
+                Edit Profile
+              </Button>
+            )}
 
             {/* Student ID Card Button */}
-            <Button
-              size="xs"
-              variant="indigo"
-              icon={IdCard}
-              onClick={() => setIdCardModalOpen(true)}
-              title="View, Print & WhatsApp Student ID Card"
-              className="flex-1 sm:flex-initial justify-center"
-            >
-              ID Card
-            </Button>
+            {!isTeacher && (
+              <Button
+                size="xs"
+                variant="indigo"
+                icon={IdCard}
+                onClick={() => setIdCardModalOpen(true)}
+                title="View, Print & WhatsApp Student ID Card"
+                className="flex-1 sm:flex-initial justify-center"
+              >
+                ID Card
+              </Button>
+            )}
 
             {/* Revoke / Restore Button (Admin Only) */}
             {isAdmin && (
@@ -905,7 +931,7 @@ export default function StudentDetailPage() {
             )}
 
             {/* Collect Due Fee Button */}
-            {!isRevoked && Number(student.total_balance_due) > 0 && (
+            {!isRevoked && !isTeacher && Number(student.total_balance_due) > 0 && (
               <Button
                 size="xs"
                 variant="success"
@@ -922,7 +948,7 @@ export default function StudentDetailPage() {
             )}
 
             {/* One-Click Send Due Reminder Button */}
-            {!isRevoked && Number(student.total_balance_due) > 0 && (
+            {!isRevoked && !isTeacher && Number(student.total_balance_due) > 0 && (
               <button
                 type="button"
                 onClick={handleSendStudentReminder}
@@ -968,7 +994,7 @@ export default function StudentDetailPage() {
             )}
 
             {/* Purchase Another Course / Subject Shortcut */}
-            {!isRevoked && (
+            {!isRevoked && !isTeacher && (
               <Button
                 size="xs"
                 variant="primary"
@@ -991,6 +1017,7 @@ export default function StudentDetailPage() {
       </div>
 
       {/* Financial Overview Cards */}
+      {!isTeacher && (
       <div className={`grid grid-cols-2 ${Number(student.total_refunded) > 0 ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-2.5 sm:gap-3`}>
         <div className="bg-white rounded-xl border border-slate-200 p-3 sm:p-3.5 shadow-xs">
           <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">
@@ -1069,6 +1096,7 @@ export default function StudentDetailPage() {
           </span>
         </div>
       </div>
+      )}
 
       {/* Two Column Section: Profile Details + Green Card Pass info */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
@@ -1127,7 +1155,7 @@ export default function StudentDetailPage() {
             ) : (
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 space-y-2">
                 <p className="font-medium">No active Green Card membership.</p>
-                {!isRevoked && (
+                {!isRevoked && !isTeacher && (
                   <Button
                     size="xs"
                     variant="teal-soft"
@@ -1232,7 +1260,7 @@ export default function StudentDetailPage() {
             </div>
           </div>
 
-          {!isRevoked && (
+          {!isRevoked && !isTeacher && (
             <div className="flex items-center gap-2">
               <Button
                 size="xs"
@@ -1406,6 +1434,7 @@ export default function StudentDetailPage() {
                   </div>
 
                   {/* Financials Strip */}
+                  {!isTeacher && (
                   <div className="flex items-center justify-between bg-white px-2 py-1 rounded-md border border-slate-200 text-xs font-mono leading-tight">
                     <div>
                       <span className="text-[10px] text-slate-700 block font-sans font-semibold">Fee</span>
@@ -1422,8 +1451,10 @@ export default function StudentDetailPage() {
                       </span>
                     </div>
                   </div>
+                  )}
 
                   {/* Actions Grid */}
+                  {!isTeacher && (
                   <div className="flex flex-wrap items-center gap-1 pt-0.5">
                     {Number(item.balance_due) > 0 && !isRevoked && (
                       <Button
@@ -1476,6 +1507,7 @@ export default function StudentDetailPage() {
                       </Button>
                     )}
                   </div>
+                  )}
                 </div>
                 );
               })}
@@ -1489,10 +1521,10 @@ export default function StudentDetailPage() {
                     <th className="py-2.5 px-3">Subject / Course</th>
                     <th className="py-2.5 px-3">Assigned Faculty</th>
                     <th className="py-2.5 px-3">Validity Coverage</th>
-                    <th className="py-2.5 px-3 text-right">Fee</th>
-                    <th className="py-2.5 px-3 text-right">Paid</th>
-                    <th className="py-2.5 px-3 text-right">Balance Due</th>
-                    <th className="py-2.5 px-3 text-center">Lifecycle Actions</th>
+                    {!isTeacher && <th className="py-2.5 px-3 text-right">Fee</th>}
+                    {!isTeacher && <th className="py-2.5 px-3 text-right">Paid</th>}
+                    {!isTeacher && <th className="py-2.5 px-3 text-right">Balance Due</th>}
+                    {!isTeacher && <th className="py-2.5 px-3 text-center">Lifecycle Actions</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
@@ -1549,17 +1581,24 @@ export default function StudentDetailPage() {
                           ) : null}
                         </div>
                       </td>
+                      {!isTeacher && (
                       <td className="py-2.5 px-3 text-right font-mono font-bold text-black">
                         ₹{Number(item.net_price).toFixed(2)}
                       </td>
+                      )}
+                      {!isTeacher && (
                       <td className="py-2.5 px-3 text-right font-mono text-emerald-800 font-bold">
                         ₹{Number(item.amount_collected).toFixed(2)}
                       </td>
+                      )}
+                      {!isTeacher && (
                       <td className="py-2.5 px-3 text-right font-mono font-bold">
                         <span className={Number(item.balance_due) > 0 ? 'text-rose-700' : 'text-slate-500'}>
                           ₹{Number(item.balance_due).toFixed(2)}
                         </span>
                       </td>
+                      )}
+                      {!isTeacher && (
                       <td className="py-2.5 px-3 text-center">
                         <div className="flex items-center justify-center gap-1">
                           {Number(item.balance_due) > 0 && !isRevoked && (
@@ -1613,6 +1652,7 @@ export default function StudentDetailPage() {
                           )}
                         </div>
                       </td>
+                      )}
                     </tr>
                     );
                   })}
@@ -1621,6 +1661,7 @@ export default function StudentDetailPage() {
             </div>
 
             {/* Active Totals Footer */}
+            {!isTeacher && (
             <div className="bg-purple-50/70 border border-purple-200 p-3 sm:p-3.5 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
               <span className="font-bold text-odoo-900">
                 Active Subjects Summary ({activeSubjects.length} active)
@@ -1642,11 +1683,32 @@ export default function StudentDetailPage() {
                 )}
               </div>
             </div>
+            )}
           </div>
         )}
       </div>
 
       {/* 2. Main Navigation Tabs */}
+      {isTeacher ? (
+        <div className="grid grid-cols-1 gap-1 p-1 bg-slate-100 rounded-xl sm:bg-transparent sm:p-0 sm:border-b sm:border-slate-200 sm:flex sm:items-center sm:gap-2 sm:rounded-none">
+          <button
+            onClick={() => setActiveMainTab('DEMOS')}
+            className={`flex items-center justify-center gap-1.5 px-2.5 sm:px-4 py-2 text-xs font-bold rounded-lg sm:rounded-none sm:border-b-2 transition ${
+              activeMainTab === 'DEMOS'
+                ? 'bg-white shadow-xs text-odoo-800 sm:bg-transparent sm:shadow-none sm:border-odoo-600 sm:text-odoo-700'
+                : 'text-slate-700 hover:text-black sm:border-transparent'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 shrink-0 text-odoo-600" />
+            <span>Active Demos</span>
+            {demos.length > 0 && (
+              <span className="px-1.5 py-0.2 text-[10px] rounded-full bg-purple-100 text-purple-900 font-mono font-bold">
+                {demos.length}
+              </span>
+            )}
+          </button>
+        </div>
+      ) : (
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-1 p-1 bg-slate-100 rounded-xl sm:bg-transparent sm:p-0 sm:border-b sm:border-slate-200 sm:flex sm:items-center sm:gap-2 sm:rounded-none">
         <button
           onClick={() => setActiveMainTab('HISTORY')}
@@ -1737,9 +1799,10 @@ export default function StudentDetailPage() {
           )}
         </button>
       </div>
+      )}
 
       {/* TAB 1: Subject & Enrollment History */}
-      {activeMainTab === 'HISTORY' && (
+      {!isTeacher && activeMainTab === 'HISTORY' && (
         <div className="bg-white border border-slate-200 rounded-xl p-3.5 sm:p-4 shadow-xs space-y-3">
           <div className="pb-3 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
@@ -2022,7 +2085,7 @@ export default function StudentDetailPage() {
       )}
 
       {/* TAB 2: Invoices & Billing History */}
-      {activeMainTab === 'INVOICES' && (
+      {!isTeacher && activeMainTab === 'INVOICES' && (
       <div className="bg-white border border-slate-200 rounded-xl p-3.5 sm:p-4 shadow-xs space-y-3">
         <div className="pb-3 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
@@ -2691,7 +2754,7 @@ export default function StudentDetailPage() {
       )}
 
       {/* TAB 3: Financial Transactions & Receipts Ledger */}
-      {activeMainTab === 'LEDGER' && (
+      {!isTeacher && activeMainTab === 'LEDGER' && (
       <div className="bg-white border border-slate-200 rounded-xl p-3.5 sm:p-4 shadow-xs space-y-3">
         <div className="pb-3 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
@@ -3106,7 +3169,7 @@ export default function StudentDetailPage() {
       )}
 
       {/* TAB 4: Student Audit Trail */}
-      {activeMainTab === 'AUDIT' && (
+      {!isTeacher && activeMainTab === 'AUDIT' && (
         <div className="bg-white border border-slate-200 rounded-xl p-3.5 sm:p-4 shadow-xs space-y-3">
           <div className="pb-3 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>

@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, desc
 
 from app.database.session import get_db
-from app.core.dependencies import require_staff, require_admin
+from app.core.dependencies import require_cashier_or_admin, require_admin
 from app.database.models import User, Teacher, Subject, Batch, Student
 from app.modules.assessments.models import Assessment, StudentMark
 from app.modules.assessments.schemas import (
@@ -46,7 +46,7 @@ async def list_assessments(
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     query = select(Assessment)
     count_query = select(func.count(Assessment.id))
@@ -122,7 +122,7 @@ async def list_assessments(
 async def create_assessment(
     payload: AssessmentCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     # Verify subject exists
     sub = await db.get(Subject, payload.subject_id)
@@ -171,7 +171,7 @@ async def create_assessment(
 async def get_assessment(
     id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     a = await db.get(Assessment, id)
     if not a:
@@ -222,7 +222,7 @@ async def record_student_marks(
     id: uuid.UUID,
     payload: StudentMarkBulkUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     a = await db.get(Assessment, id)
     if not a:
@@ -288,7 +288,7 @@ async def record_student_marks(
 async def get_student_assessment_history(
     student_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     stmt = (
         select(StudentMark, Assessment, Subject)

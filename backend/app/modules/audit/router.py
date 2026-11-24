@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, and_, desc
 
 from app.database.session import get_db
-from app.core.dependencies import require_staff, require_admin
+from app.core.dependencies import require_cashier_or_admin, require_admin
 from app.database.models import AuditLog, User, Student, Admission, Payment, Refund, AdmissionItem
 from app.modules.audit.schemas import AuditLogResponse, AuditUserSummary, AuditStatsResponse
 from app.common.pagination import PaginationParams, PageResponse
@@ -135,7 +135,7 @@ async def get_student_audit_logs(
     to_date: Optional[date] = Query(None, description="Filter logs up to date"),
     search: Optional[str] = Query(None, description="Search keyword"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     """
     Get all audit log events associated with a specific student across their lifecycle
@@ -213,7 +213,7 @@ async def get_student_audit_logs(
 @router.get("/actions", response_model=List[str])
 async def list_distinct_actions(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     """
     Get distinct action names recorded in audit logs for filter dropdowns.
@@ -227,7 +227,7 @@ async def list_distinct_actions(
 @router.get("/entity-types", response_model=List[str])
 async def list_distinct_entity_types(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     """
     Get distinct entity types recorded in audit logs for filter dropdowns.

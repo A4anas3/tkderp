@@ -12,6 +12,14 @@ from sqlalchemy.orm import selectinload
 
 from app.database.session import get_db
 from app.core.dependencies import require_staff, require_cashier_or_admin
+from app.common.active_student import today_kolkata
+from app.common.teacher_scope import (
+    is_teacher_user,
+    resolve_teacher_for_user,
+    get_teacher_subject_ids,
+    teacher_demo_ownership_filter,
+    active_demo_filter,
+)
 from app.database.models import Enquiry, EnquiryDemoItem, Student, User, Teacher, Subject, Batch, Admission, AdmissionItem, AuditLog
 from app.modules.enquiries.schemas import (
     EnquiryCreate, EnquiryUpdate, EnquiryResponse, ConvertEnquiryRequest,
@@ -313,7 +321,7 @@ async def list_enquiries(
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     """
     Returns list of enquiries with database-level search, status filtering,
@@ -532,6 +540,19 @@ async def list_individual_demo_items(
         query = query.where(EnquiryDemoItem.subject_id == subject_id)
         count_query = count_query.where(EnquiryDemoItem.subject_id == subject_id)
 
+    # Teacher role: strictly restricted to his own currently active demos
+    if is_teacher_user(current_user):
+        teacher = await resolve_teacher_for_user(db, current_user)
+        if not teacher:
+            return PageResponse.create(items=[], total=0, params=PaginationParams(page=page, page_size=page_size))
+        teacher_sub_ids = await get_teacher_subject_ids(db, teacher.id)
+        teacher_demo_cond = and_(
+            teacher_demo_ownership_filter(teacher.id, teacher_sub_ids),
+            active_demo_filter(today_kolkata()),
+        )
+        query = query.where(teacher_demo_cond)
+        count_query = count_query.where(teacher_demo_cond)
+
     # Month / Date range filtering
     f_date, t_date = _resolve_month_date_range(from_date, to_date, month, year)
     if f_date:
@@ -625,7 +646,7 @@ async def get_demo_analytics(
     teacher_id: Optional[uuid.UUID] = None,
     subject_id: Optional[uuid.UUID] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     """
     Returns pre-computed database-level demo analytics:
@@ -755,7 +776,7 @@ async def get_demo_analytics(
 @router.get("/summary")
 async def get_enquiry_summary(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     stmt = select(Enquiry.status, func.count(Enquiry.id)).group_by(Enquiry.status)
     res = await db.execute(stmt)
@@ -777,7 +798,7 @@ async def get_enquiry_summary(
 async def get_upcoming_demo_deadlines(
     days_ahead: int = Query(7, ge=1, le=30),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     today = date.today()
     max_date = today + timedelta(days=days_ahead)
@@ -826,7 +847,7 @@ async def get_upcoming_demo_deadlines(
 async def check_student_by_mobile_for_demo(
     mobile: str = Query(..., description="Mobile number to normalize (last 10 digits) and match against registered students"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     """
     Phone-only lookup (last 10 digits) before giving a demo.
@@ -1309,14 +1330,30 @@ async def get_enquiry(
     if not enquiry:
         raise HTTPException(status_code=404, detail="Enquiry not found")
 
-    today = date.today()
-    d_res = await db.execute(
+    today = today_kolkata()
+    d_stmt = (
         select(EnquiryDemoItem)
+        .join(Enquiry, EnquiryDemoItem.enquiry_id == Enquiry.id)
         .options(selectinload(EnquiryDemoItem.admission_item).selectinload(AdmissionItem.admission))
         .where(EnquiryDemoItem.enquiry_id == enquiry.id)
         .order_by(EnquiryDemoItem.demo_start_date.asc())
     )
+    if is_teacher_user(current_user):
+        teacher = await resolve_teacher_for_user(db, current_user)
+        if not teacher:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        teacher_sub_ids = await get_teacher_subject_ids(db, teacher.id)
+        d_stmt = d_stmt.where(
+            teacher_demo_ownership_filter(teacher.id, teacher_sub_ids),
+            active_demo_filter(today),
+        )
+    d_res = await db.execute(d_stmt)
     d_items = d_res.scalars().all()
+    if is_teacher_user(current_user) and not d_items:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: you can only view your own active demos",
+        )
     formatted_demo_items = [_format_demo_item_response(d, today) for d in d_items]
 
     return await _resolve_single_enquiry_response(db, enquiry, formatted_demo_items, today)

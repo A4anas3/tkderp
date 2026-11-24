@@ -78,13 +78,13 @@ export default function DemosPage() {
     else setLoading(true);
 
     try {
-      // 1. Fetch active demos across all subjects & teachers (institute-wide)
+      // 1. Fetch active demos (teachers receive only their own active demos from backend)
       const [demosRes, subjectsRes] = await Promise.allSettled([
         enquiryApi.listDemos({
           status_filter: 'ACTIVE',
           page_size: 100,
         }),
-        subjectApi.getAll({ all_institute: true }),
+        subjectApi.getAll(isTeacher ? {} : { all_institute: true }),
       ]);
 
       let loadedDemos = [];
@@ -198,7 +198,9 @@ export default function DemosPage() {
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                Institute-wide live trial classes across all subjects and faculty members
+                {isTeacher
+                  ? 'Your active trial demo classes for your assigned subjects'
+                  : 'Institute-wide live trial classes across all subjects and faculty members'}
               </p>
             </div>
           </div>

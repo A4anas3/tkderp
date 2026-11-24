@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpen, Users, Calendar, MapPin, Phone, GraduationCap, CheckCircle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { BookOpen, Users, Calendar, MapPin, Phone, GraduationCap, CheckCircle, ClipboardList } from 'lucide-react';
 import StatCard from '../../components/common/StatCard';
 import Badge from '../../components/common/Badge';
 import { dashboardApi } from '../../services/allApis';
 
 export default function TeacherDashboard() {
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeSubjectId, setActiveSubjectId] = useState(null);
@@ -16,7 +18,7 @@ export default function TeacherDashboard() {
         setData(res);
         const list = res?.subjects || [];
         if (list.length > 0) {
-          setActiveSubjectId(list[0].id);
+          setActiveSubjectId(list[0].id || list[0].batch_id);
         }
       } catch (err) {
         console.error('Failed to load teacher dashboard:', err);
@@ -40,7 +42,7 @@ export default function TeacherDashboard() {
   }
 
   const subjectsList = data?.subjects || [];
-  const activeSubject = subjectsList.find((b) => b.id === activeSubjectId);
+  const activeSubject = subjectsList.find((b) => (b.id || b.batch_id) === activeSubjectId);
 
   return (
     <div className="space-y-5 sm:space-y-6">
@@ -94,7 +96,7 @@ export default function TeacherDashboard() {
             </div>
           ) : (
             subjectsList.map((b) => {
-              const itemId = b.id;
+              const itemId = b.id || b.batch_id;
               const isSelected = itemId === activeSubjectId;
               const studentCount = b.students?.length ?? b.student_count ?? 0;
               return (
@@ -179,7 +181,13 @@ export default function TeacherDashboard() {
                           {st.student_code || st.registration_no || '—'}
                         </td>
                         <td className="p-3 font-semibold text-black">
-                          {st.name || st.student_name || '—'}
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/students/${st.student_id}`)}
+                            className="font-bold text-black hover:text-odoo-700 hover:underline text-left cursor-pointer"
+                          >
+                            {st.name || st.student_name || '—'}
+                          </button>
                         </td>
                         <td className="p-3 font-mono text-slate-800 font-medium">
                           {st.mobile ? (

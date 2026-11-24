@@ -385,7 +385,13 @@ async def verify_student_credential(
         verified_at=datetime.now(timezone.utc)
     )
 
-async def _get_active_demos_for_student(db: AsyncSession, student: Student, today: date) -> List[IDCardDemoItem]:
+async def _get_active_demos_for_student(
+    db: AsyncSession,
+    student: Student,
+    today: date,
+    teacher_id: Optional[uuid.UUID] = None,
+    teacher_sub_ids: Optional[List[uuid.UUID]] = None,
+) -> List[IDCardDemoItem]:
     """
     Returns active demo items for a student.
     Active demo means a demo item with status SCHEDULED or ATTENDED
@@ -407,6 +413,16 @@ async def _get_active_demos_for_student(db: AsyncSession, student: Student, toda
         .where(cond)
         .order_by(EnquiryDemoItem.demo_start_date.asc(), EnquiryDemoItem.created_at.asc())
     )
+    if teacher_id is not None:
+        if teacher_sub_ids:
+            q = q.where(
+                or_(
+                    EnquiryDemoItem.teacher_id == teacher_id,
+                    and_(EnquiryDemoItem.teacher_id.is_(None), EnquiryDemoItem.subject_id.in_(teacher_sub_ids)),
+                )
+            )
+        else:
+            q = q.where(EnquiryDemoItem.teacher_id == teacher_id)
     rows = (await db.execute(q)).all()
 
     active_demos: List[IDCardDemoItem] = []
