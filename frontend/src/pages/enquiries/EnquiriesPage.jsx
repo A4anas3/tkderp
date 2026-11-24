@@ -515,12 +515,12 @@ export default function EnquiriesPage() {
     try {
       const updatedNotes = enq.notes
         ? `${enq.notes} • [Post-Demo: Student is Interested]`
-        : '[Post-Demo: Student is Interested in Admission]';
+        : '[Post-Demo: Student is Interested in Enrollment]';
       await enquiryApi.update(enq.id, {
         status: 'INTERESTED',
         notes: updatedNotes,
       });
-      success(`${enq.student_name} marked as INTERESTED! Ready for admission.`);
+      success(`${enq.student_name} marked as INTERESTED! Ready for enrollment.`);
       loadEnquiries();
       loadDeadlines();
       loadSummary();
@@ -733,7 +733,7 @@ export default function EnquiriesPage() {
             return (
               <div>
                 <Badge size="xs" variant="primary">
-                  Admitted (No Course)
+                  Enrolled (No Course)
                 </Badge>
                 {e.converted_student_id ? (
                   <button
@@ -867,7 +867,7 @@ export default function EnquiriesPage() {
                   onClick={(ev) => handleConvertToAdmission(e, ev)}
                   title="Convert to Enrollment & Collect Fees"
                 >
-                  Admit
+                  Enroll
                 </Button>
 
                 {/* More actions menu */}
@@ -1082,6 +1082,7 @@ export default function EnquiriesPage() {
       render: (d) => {
         const variants = {
           ACTIVE: 'primary',
+          SCHEDULED: 'primary',
           ATTENDED: 'warning',
           CONVERTED: 'success',
           DROPPED: 'neutral',
@@ -1136,7 +1137,7 @@ export default function EnquiriesPage() {
             Slip
           </Button>
 
-          {d.status === 'ACTIVE' && (
+          {(d.status === 'ACTIVE' || d.status === 'SCHEDULED') && (
             <>
               <Button
                 size="xs"
@@ -1175,7 +1176,7 @@ export default function EnquiriesPage() {
                 }
                 title="Convert to full enrollment"
               >
-                Admit
+                Enroll
               </Button>
               <Button
                 size="xs"
@@ -1454,7 +1455,7 @@ export default function EnquiriesPage() {
             >
               <div className="flex items-center justify-between">
                 <span className={`text-[10px] font-bold uppercase tracking-wider ${enquiryStatusFilter === 'CONVERTED' ? 'text-emerald-100' : 'text-emerald-800'}`}>
-                  Admitted
+                  Enrolled
                 </span>
                 <CheckCircle2 className={`w-3.5 h-3.5 ${enquiryStatusFilter === 'CONVERTED' ? 'text-white' : 'text-emerald-600'}`} />
               </div>
@@ -1602,7 +1603,7 @@ export default function EnquiriesPage() {
                             onClick={() => handleConvertToAdmission(d)}
                             title="Convert to full student enrollment"
                           >
-                            Admit ↗
+                            Enroll ↗
                           </Button>
                         </div>
                       </div>
@@ -1620,7 +1621,7 @@ export default function EnquiriesPage() {
               { label: 'Active Demo', value: 'ACTIVE_DEMO', count: summary.ACTIVE_DEMO },
               { label: 'Interested', value: 'INTERESTED', count: summary.INTERESTED },
               { label: 'Pending Demo', value: 'PENDING', count: summary.PENDING },
-              { label: 'Converted to Admission', value: 'CONVERTED', count: summary.CONVERTED },
+              { label: 'Converted to Enrollment', value: 'CONVERTED', count: summary.CONVERTED },
               { label: 'Expired Demo', value: 'EXPIRED', count: summary.EXPIRED },
               { label: 'Not Interested', value: 'NOT_INTERESTED', count: summary.NOT_INTERESTED },
             ].map((tab) => {
@@ -1693,7 +1694,7 @@ export default function EnquiriesPage() {
                 { label: 'All', value: '' },
                 { label: 'Active', value: 'ACTIVE' },
                 { label: 'Attended', value: 'ATTENDED' },
-                { label: 'Admitted', value: 'CONVERTED' },
+                { label: 'Enrolled', value: 'CONVERTED' },
                 { label: 'Dropped', value: 'DROPPED' },
                 { label: 'Expired', value: 'EXPIRED' },
               ].map((s) => (
@@ -1821,7 +1822,7 @@ export default function EnquiriesPage() {
 
                 <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
                   <div className="flex items-center justify-between text-emerald-700 text-[10px] font-bold uppercase tracking-wider">
-                    <span>Admitted</span>
+                    <span>Enrolled</span>
                     <CheckCircle2 className="w-3.5 h-3.5" />
                   </div>
                   <div className="text-xl font-black text-emerald-950 mt-1">
@@ -1875,7 +1876,7 @@ export default function EnquiriesPage() {
                         <th className="py-2.5 px-3 text-center">Total Demos</th>
                         <th className="py-2.5 px-3 text-center">Active</th>
                         <th className="py-2.5 px-3 text-center">Attended</th>
-                        <th className="py-2.5 px-3 text-center text-emerald-800">Admitted</th>
+                        <th className="py-2.5 px-3 text-center text-emerald-800">Enrolled</th>
                         <th className="py-2.5 px-3 text-center text-rose-800">Dropped</th>
                         <th className="py-2.5 px-4 text-right">Conversion Rate</th>
                       </tr>
@@ -1963,7 +1964,7 @@ export default function EnquiriesPage() {
                   <div>
                     <h3 className="font-bold text-black text-sm flex items-center gap-2">
                       <BookOpen className="w-4 h-4 text-odoo-600" />
-                      <span>Subject-Wise Trial Volume & Admission Conversion</span>
+                      <span>Subject-Wise Trial Volume & Enrollment Conversion</span>
                     </h3>
                     <p className="text-[11px] text-slate-500 mt-0.5">
                       Conversion rate per subject course domain
@@ -1979,7 +1980,7 @@ export default function EnquiriesPage() {
                         <th className="py-2.5 px-3 text-center">Total Demos</th>
                         <th className="py-2.5 px-3 text-center">Active</th>
                         <th className="py-2.5 px-3 text-center">Attended</th>
-                        <th className="py-2.5 px-3 text-center text-emerald-800">Admitted</th>
+                        <th className="py-2.5 px-3 text-center text-emerald-800">Enrolled</th>
                         <th className="py-2.5 px-3 text-center text-rose-800">Dropped</th>
                         <th className="py-2.5 px-4 text-right">Conversion Rate</th>
                       </tr>
@@ -2491,9 +2492,9 @@ export default function EnquiriesPage() {
             }
             options={[
               { value: 'ACTIVE_DEMO', label: 'Active Demo (Attending trial)' },
-              { value: 'INTERESTED', label: 'Interested in Admission (Post-Demo)' },
+              { value: 'INTERESTED', label: 'Interested in Enrollment (Post-Demo)' },
               { value: 'PENDING', label: 'Pending Demo (Walk-in only)' },
-              { value: 'CONVERTED', label: 'Converted to Admission' },
+              { value: 'CONVERTED', label: 'Converted to Enrollment' },
               { value: 'EXPIRED', label: 'Expired / Lapsed Demo' },
               { value: 'NOT_INTERESTED', label: 'Not Interested (Dropped)' },
             ]}
@@ -2523,9 +2524,9 @@ export default function EnquiriesPage() {
                 setCourseUpdateModalOpen(false);
                 handleConvertToAdmission(selectedCourseEnquiry);
               }}
-              title="Proceed to register student and bill admission"
+              title="Proceed to register student and bill enrollment"
             >
-              Admit Student ↗
+              Enroll Student ↗
             </Button>
 
             <div className="flex items-center gap-2">

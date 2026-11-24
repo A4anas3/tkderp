@@ -125,8 +125,8 @@ export default function EnquiryDetailPage() {
   const handleMarkInterested = async () => {
     try {
       const noteEntry = enquiry.notes
-        ? `${enquiry.notes} • [Post-Demo: Student is Interested in Admission]`
-        : '[Post-Demo: Student is Interested in Admission]';
+        ? `${enquiry.notes} • [Post-Demo: Student is Interested in Enrollment]`
+        : '[Post-Demo: Student is Interested in Enrollment]';
       await enquiryApi.update(id, {
         status: 'INTERESTED',
         notes: noteEntry,
@@ -465,11 +465,11 @@ export default function EnquiryDetailPage() {
             <div className="text-xs font-black uppercase tracking-wider">
               Enquiry Status:{' '}
               {enquiry.has_course_purchase
-                ? `COURSE ENROLLED & PAID (${enquiry.course_admission_number || 'ADMISSION COMPLETED'})`
+                ? `COURSE ENROLLED & PAID (${enquiry.course_admission_number || 'ENROLLMENT COMPLETED'})`
                 : isConverted || enquiry.has_student_admission || enquiry.converted_student_id
                 ? `STUDENT REGISTERED (NO COURSE PURCHASED YET) ${enquiry.converted_student_code ? `• ${enquiry.converted_student_code}` : ''}`
                 : isInterested
-                ? '👍 INTERESTED IN ADMISSION (POST-DEMO)'
+                ? '👍 INTERESTED IN ENROLLMENT (POST-DEMO)'
                 : isActiveDemo && !isExpired
                 ? 'ACTIVE TRIAL DEMO'
                 : isPending
@@ -480,11 +480,11 @@ export default function EnquiryDetailPage() {
             </div>
             <div className="text-xs text-slate-700 font-medium mt-0.5">
               {enquiry.has_course_purchase
-                ? `Student has purchased courses and is actively enrolled. Admission #${enquiry.course_admission_number || ''}`
+                ? `Student has purchased courses and is actively enrolled. Enrollment #${enquiry.course_admission_number || ''}`
                 : isConverted || enquiry.has_student_admission || enquiry.converted_student_id
                 ? (
                   <span>
-                    Student admission profile is created in system, but NO course or subject has been purchased yet.{' '}
+                    Student registration profile is created in system, but NO course or subject has been purchased yet.{' '}
                     {enquiry.converted_student_id && (
                       <Link
                         to={`/students/${enquiry.converted_student_id}`}
@@ -496,7 +496,7 @@ export default function EnquiryDetailPage() {
                   </span>
                 )
                 : isInterested
-                ? 'Student completed trial classes and confirmed interest in admission. Ready for formal enrollment!'
+                ? 'Student completed trial classes and confirmed interest in enrollment. Ready for formal enrollment!'
                 : isActiveDemo && !isExpired
                 ? `Student is currently attending trial demo classes. ${daysRemainingText || ''}`
                 : isPending
@@ -521,7 +521,7 @@ export default function EnquiryDetailPage() {
           {enquiry.has_course_purchase
             ? 'COURSE PAID ✓'
             : isConverted || enquiry.has_student_admission
-            ? 'ADMITTED (NO COURSE)'
+            ? 'ENROLLED (NO COURSE)'
             : isInterested
             ? '👍 INTERESTED'
             : enquiry.status.replace('_', ' ')}
@@ -578,7 +578,7 @@ export default function EnquiryDetailPage() {
           <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
             <span className="text-[11px] text-slate-500 block font-medium">Enquiry Purpose / Subject</span>
             <span className="font-bold text-black text-sm">
-              {enquiry.purpose || 'Coaching Admission'}
+              {enquiry.purpose || 'Coaching Enrollment'}
             </span>
           </div>
         </div>
@@ -754,8 +754,8 @@ export default function EnquiryDetailPage() {
             options={[
               { value: 'PENDING', label: 'Pending Demo (Walk-in)' },
               { value: 'ACTIVE_DEMO', label: 'Active Trial Demo' },
-              { value: 'INTERESTED', label: 'Interested in Admission (Post-Demo)' },
-              { value: 'CONVERTED', label: 'Converted to Admission' },
+              { value: 'INTERESTED', label: 'Interested in Enrollment (Post-Demo)' },
+              { value: 'CONVERTED', label: 'Converted to Enrollment' },
               { value: 'EXPIRED', label: 'Expired / Lapsed' },
               { value: 'NOT_INTERESTED', label: 'Not Interested (Dropped)' },
             ]}

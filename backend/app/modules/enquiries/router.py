@@ -188,7 +188,7 @@ async def _create_student_from_enquiry(
 def _format_demo_item_response(itm: EnquiryDemoItem, today: date) -> EnquiryDemoItemResponse:
     rem = (itm.demo_end_date - today).days
     if itm.status == "CONVERTED":
-        lbl, var = "Admitted", "success"
+        lbl, var = "Enrolled", "success"
     elif itm.status == "ATTENDED":
         lbl, var = "Attended", "info"
     elif itm.status == "DROPPED":
@@ -486,7 +486,7 @@ async def list_individual_demo_items(
     for ditm, enq in rows:
         rem = (ditm.demo_end_date - today).days
         if ditm.status == "CONVERTED":
-            lbl, var = "Admitted", "success"
+            lbl, var = "Enrolled", "success"
         elif ditm.status == "ATTENDED":
             lbl, var = "Attended", "info"
         elif ditm.status == "DROPPED":

@@ -104,7 +104,7 @@ export default function EnquiryDetailModal({
                   {hasCourse
                     ? 'COURSE ENROLLED (PURCHASED SUBJECTS)'
                     : isConverted || hasStudent
-                    ? 'STUDENT ADMITTED (NO COURSE PURCHASED YET)'
+                    ? 'STUDENT ENROLLED (NO COURSE PURCHASED YET)'
                     : isInterested
                     ? '👍 INTERESTED (POST-DEMO)'
                     : isActiveDemo && !isExpired
@@ -121,7 +121,7 @@ export default function EnquiryDetailModal({
                     : isConverted || hasStudent
                     ? `Student registration profile ${enquiry.converted_student_code ? `(${enquiry.converted_student_code})` : ''} created, but no course has been purchased or billed yet.`
                     : isInterested
-                    ? 'Student completed trial classes and wants admission'
+                    ? 'Student completed trial classes and wants enrollment'
                     : isActiveDemo && !isExpired
                     ? 'Student is actively attending free trial classes'
                     : isPending
@@ -136,7 +136,7 @@ export default function EnquiryDetailModal({
               {hasCourse
                 ? 'Course Enrolled ✓'
                 : isConverted || hasStudent
-                ? 'Admitted (No Course)'
+                ? 'Enrolled (No Course)'
                 : isInterested
                 ? '👍 INTERESTED'
                 : enquiry.status.replace('_', ' ')}
@@ -175,7 +175,7 @@ export default function EnquiryDetailModal({
               <div>
                 <span className="text-[11px] text-slate-500 block">Purpose / Target</span>
                 <span className="font-medium text-slate-800">
-                  {enquiry.purpose || 'Coaching Admission'}
+                  {enquiry.purpose || 'Coaching Enrollment'}
                 </span>
               </div>
             </div>
@@ -314,7 +314,7 @@ export default function EnquiryDetailModal({
                     onConvertToAdmission(enquiry);
                   }}
                 >
-                  {hasStudent || isConverted ? 'Buy Course / Collect Fees ↗' : 'Admit Student'}
+                  {hasStudent || isConverted ? 'Buy Course / Collect Fees ↗' : 'Enroll Student'}
                 </Button>
               )}
             </div>
