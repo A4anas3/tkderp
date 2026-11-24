@@ -50,6 +50,10 @@ import { useToast } from '../../context/ToastContext';
 import { cleanMobileInput } from '../../utils/phoneUtils';
 import { formatIndianDate } from '../../utils/dateCycleUtils';
 
+// Compact mobile sizing for demo deadline card action buttons (desktop sm+ stays identical to Button size="xs")
+const DEMO_CARD_ACTION_BTN_CLASS =
+  '!h-6 !min-h-0 !px-1 !py-0.5 !text-[10px] !gap-0.5 sm:!h-8 sm:!min-h-[32px] sm:!px-2.5 sm:!py-1 sm:!text-[13px] sm:!gap-1.5';
+
 export default function EnquiriesPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -1718,27 +1722,29 @@ export default function EnquiriesPage() {
                         </p>
                       </div>
 
-                      <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between gap-1">
-                        <span className="text-[11px] font-mono text-slate-600 shrink-0">
+                      <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between gap-1 min-w-0">
+                        <span className="text-[10px] sm:text-[11px] font-mono text-slate-600 truncate min-w-0 sm:shrink-0">
                           {d.mobile || 'No Phone'}
                         </span>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
                           <Button
                             size="xs"
                             variant="indigo"
-                            icon={Printer}
+                            className={DEMO_CARD_ACTION_BTN_CLASS}
                             onClick={() => {
                               setPassModalEnquiry(d);
                               setPassModalDemoItem(null);
                             }}
                             title="Print trial pass slip"
                           >
+                            <Printer className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 shrink-0" />
                             Slip
                           </Button>
                           {!isInterested && (
                             <Button
                               size="xs"
                               variant="success-soft"
+                              className={DEMO_CARD_ACTION_BTN_CLASS}
                               onClick={(ev) => handleMarkInterested(d, ev)}
                               title="Student completed demo and liked it"
                             >
@@ -1748,6 +1754,7 @@ export default function EnquiriesPage() {
                           <Button
                             size="xs"
                             variant="danger-soft"
+                            className={DEMO_CARD_ACTION_BTN_CLASS}
                             onClick={(ev) => handleOpenNotInterestedModal(d, ev)}
                             title="Student not interested / drop"
                           >
@@ -1756,6 +1763,7 @@ export default function EnquiriesPage() {
                           <Button
                             size="xs"
                             variant="primary"
+                            className={DEMO_CARD_ACTION_BTN_CLASS}
                             onClick={() => handleConvertToAdmission(d)}
                             title="Convert to full student enrollment"
                           >
