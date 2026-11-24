@@ -302,6 +302,7 @@ export default function EnquiriesPage() {
         page: demoPage,
         page_size: 15,
         search: demoSearch.trim() || undefined,
+        status_filter: demoStatusFilter || undefined,
         status: demoStatusFilter || undefined,
         teacher_id: demoTeacherFilter || undefined,
         subject_id: demoSubjectFilter || undefined,
@@ -2045,7 +2046,7 @@ export default function EnquiriesPage() {
         isOpen={addModalOpen}
         onClose={() => setAddModalOpen(false)}
         title="Record New Student Enquiry & Demo Trial Pass"
-        subtitle="Enrol candidate into one or multiple subject demo classes with individual tracking codes"
+        subtitle="Enroll candidate into one or multiple subject demo classes with individual tracking codes"
         maxWidth="max-w-2xl"
       >
         <form onSubmit={handleCreateEnquiry} className="space-y-4 text-xs">
