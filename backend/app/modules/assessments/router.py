@@ -186,6 +186,24 @@ async def create_assessment(
     )
 
 
+async def _ensure_teacher_assessment_access(
+    db: AsyncSession,
+    current_user: User,
+    assessment: Assessment,
+) -> Optional[Teacher]:
+    """Verify a TEACHER user is assigned to the assessment or its subject."""
+    if not is_teacher_user(current_user):
+        return None
+    teacher = await resolve_teacher_for_user(db, current_user)
+    teacher_sub_ids = await get_teacher_subject_ids(db, teacher.id) if teacher else []
+    if not teacher or (assessment.teacher_id != teacher.id and assessment.subject_id not in teacher_sub_ids):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: you are not assigned to this assessment",
+        )
+    return teacher
+
+
 @router.get("/{id}", response_model=AssessmentDetailResponse)
 async def get_assessment(
     id: uuid.UUID,
@@ -195,14 +213,7 @@ async def get_assessment(
     a = await db.get(Assessment, id)
     if not a:
         raise HTTPException(status_code=404, detail="Assessment not found")
-    if is_teacher_user(current_user):
-        teacher = await resolve_teacher_for_user(db, current_user)
-        teacher_sub_ids = await get_teacher_subject_ids(db, teacher.id) if teacher else []
-        if not teacher or (a.teacher_id != teacher.id and a.subject_id not in teacher_sub_ids):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied: you are not assigned to this assessment",
-            )
+    await _ensure_teacher_assessment_access(db, current_user, a)
 
     marks_rows = []
     for m in a.marks:
@@ -254,14 +265,15 @@ async def record_student_marks(
     a = await db.get(Assessment, id)
     if not a:
         raise HTTPException(status_code=404, detail="Assessment not found")
-    if is_teacher_user(current_user):
-        teacher = await resolve_teacher_for_user(db, current_user)
-        teacher_sub_ids = await get_teacher_subject_ids(db, teacher.id) if teacher else []
-        if not teacher or (a.teacher_id != teacher.id and a.subject_id not in teacher_sub_ids):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied: you are not assigned to this assessment",
-            )
+    teacher = await _ensure_teacher_assessment_access(db, current_user, a)
+    if teacher is not None:
+        for item in payload.marks:
+            allowed, _ = await is_active_student_of_teacher(db, item.student_id, teacher.id)
+            if not allowed:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied: student is not an active student in your assigned subjects",
+                )
 
     # Load existing marks for assessment
     existing_marks_res = await db.execute(select(StudentMark).where(StudentMark.assessment_id == id))

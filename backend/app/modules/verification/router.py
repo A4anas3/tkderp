@@ -319,6 +319,12 @@ async def verify_student_credential(
             detail=f"No matching student or admission record found for identifier '{target_ident}'."
         )
 
+    if student.status != "ACTIVE":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active enrolment or ID card is available for this student."
+        )
+
     today = today_kolkata()
     active_demos_list = await _get_active_demos_for_student(db, student, today)
 
@@ -470,6 +476,12 @@ async def get_public_id_card(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"No matching student or admission record found for '{target_ident}'."
+        )
+
+    if student.status != "ACTIVE":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active enrolment or ID card is available for this student."
         )
 
     today = today_kolkata()

@@ -215,7 +215,9 @@ async def list_students(
             query = query.where(Student.status == status)
             count_query = count_query.where(Student.status == status)
 
-    if is_teacher_user(user):
+    teacher_mode = is_teacher_user(user)
+    teacher_sub_ids: List[uuid.UUID] = []
+    if teacher_mode:
         teacher = await resolve_teacher_for_user(db, user)
         teacher_sub_ids = await get_teacher_subject_ids(db, teacher.id) if teacher else []
         if not teacher or not teacher_sub_ids:
@@ -249,37 +251,56 @@ async def list_students(
     student_ids = [s.id for s in items]
     adm_map = {}
     if student_ids:
-        # Prioritize active, non-void admissions (consistent with get_student)
-        adm_stmt_active = (
-            select(Admission.student_id, Admission.admission_number)
-            .where(
-                Admission.student_id.in_(student_ids),
-                Admission.status == "ACTIVE",
-                Admission.document_status != "VOID"
-            )
-            .order_by(Admission.admission_date.desc(), Admission.created_at.desc())
-        )
-        adm_res_active = await db.execute(adm_stmt_active)
-        for s_id, adm_no in adm_res_active.all():
-            if s_id not in adm_map:
-                adm_map[s_id] = adm_no
-
-        # For students without an active valid admission, fallback to latest admission
-        remaining_ids = [s_id for s_id in student_ids if s_id not in adm_map]
-        if remaining_ids:
-            adm_stmt_fallback = (
+        if teacher_mode:
+            today = today_kolkata()
+            adm_stmt_teacher = (
                 select(Admission.student_id, Admission.admission_number)
-                .where(Admission.student_id.in_(remaining_ids))
+                .join(AdmissionItem, AdmissionItem.admission_id == Admission.id)
+                .where(
+                    Admission.student_id.in_(student_ids),
+                    AdmissionItem.subject_id.in_(teacher_sub_ids),
+                    active_teacher_student_item_filter(today),
+                )
                 .order_by(Admission.admission_date.desc(), Admission.created_at.desc())
             )
-            adm_res_fallback = await db.execute(adm_stmt_fallback)
-            for s_id, adm_no in adm_res_fallback.all():
+            for s_id, adm_no in (await db.execute(adm_stmt_teacher)).all():
                 if s_id not in adm_map:
                     adm_map[s_id] = adm_no
+        else:
+            # Prioritize active, non-void admissions (consistent with get_student)
+            adm_stmt_active = (
+                select(Admission.student_id, Admission.admission_number)
+                .where(
+                    Admission.student_id.in_(student_ids),
+                    Admission.status == "ACTIVE",
+                    Admission.document_status != "VOID"
+                )
+                .order_by(Admission.admission_date.desc(), Admission.created_at.desc())
+            )
+            adm_res_active = await db.execute(adm_stmt_active)
+            for s_id, adm_no in adm_res_active.all():
+                if s_id not in adm_map:
+                    adm_map[s_id] = adm_no
+
+            # For students without an active valid admission, fallback to latest admission
+            remaining_ids = [s_id for s_id in student_ids if s_id not in adm_map]
+            if remaining_ids:
+                adm_stmt_fallback = (
+                    select(Admission.student_id, Admission.admission_number)
+                    .where(Admission.student_id.in_(remaining_ids))
+                    .order_by(Admission.admission_date.desc(), Admission.created_at.desc())
+                )
+                adm_res_fallback = await db.execute(adm_stmt_fallback)
+                for s_id, adm_no in adm_res_fallback.all():
+                    if s_id not in adm_map:
+                        adm_map[s_id] = adm_no
 
     response_items = []
     for s in items:
         resp = StudentResponse.model_validate(s)
+        if teacher_mode:
+            resp.has_green_card = False
+            resp.green_card_expiry = None
         resp.latest_admission_number = adm_map.get(s.id)
         response_items.append(resp)
 
@@ -907,7 +928,14 @@ async def update_student(
     if req.address is not None: student.address = req.address
     if req.dob is not None: student.dob = req.dob
     if req.registration_date is not None: student.registration_date = req.registration_date
-    if req.status is not None: student.status = req.status
+    if req.status is not None:
+        if req.status != student.status and (req.status == "REVOKED" or student.status == "REVOKED"):
+            if (user.role or "").strip().upper() != "ADMIN":
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Only administrators can revoke or restore a student"
+                )
+        student.status = req.status
     if req.notes is not None: student.notes = req.notes
 
     updated_fields = {k: str(v) if v is not None else None for k, v in req.model_dump(exclude_unset=True).items()}
