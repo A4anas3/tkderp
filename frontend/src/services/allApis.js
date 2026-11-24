@@ -146,6 +146,10 @@ export const studentApi = {
     const res = await api.get(`/students/${id}/demos`);
     return res.data;
   },
+  giveDemo: async (id, data) => {
+    const res = await api.post(`/students/${id}/demos`, data);
+    return res.data;
+  },
   uploadPhoto: async (id, file) => {
     const formData = new FormData();
     formData.append('file', file);

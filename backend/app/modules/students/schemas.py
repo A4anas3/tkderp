@@ -4,6 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 import uuid
 from app.common.validators import validate_mobile_10_digits
+from app.modules.enquiries.schemas import EnquiryDemoItemCreate
 
 class StudentBase(BaseModel):
     name: str = Field(..., min_length=2, max_length=150)
@@ -98,6 +99,24 @@ class StudentDemoLinkedCourse(BaseModel):
     admission_number: str
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class StudentDemoCreate(BaseModel):
+    purpose: Optional[str] = Field(default="Trial Demo", max_length=150)
+    notes: Optional[str] = None
+    demo_items: Optional[List[EnquiryDemoItemCreate]] = None
+    # Single-demo convenience fields (used when demo_items is omitted)
+    subject_id: Optional[uuid.UUID] = None
+    batch_id: Optional[uuid.UUID] = None
+    teacher_id: Optional[uuid.UUID] = None
+    subject_name: Optional[str] = None
+    subject_name_snapshot: Optional[str] = None
+    teacher_name_snapshot: Optional[str] = None
+    hall: Optional[str] = None
+    hall_number_snapshot: Optional[str] = None
+    demo_start_date: Optional[date] = None
+    demo_end_date: Optional[date] = None
+    demo_duration_days: int = Field(default=3, ge=1, le=30)
 
 class StudentDemoItemResponse(BaseModel):
     id: uuid.UUID

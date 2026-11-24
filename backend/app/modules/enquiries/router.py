@@ -931,6 +931,200 @@ async def register_student_before_demo(
     )
 
 
+async def create_enquiry_with_demos(
+    db: AsyncSession,
+    current_user: User,
+    linked_student: Optional[Student],
+    student_name: str,
+    mobile: Optional[str],
+    father_name: Optional[str] = None,
+    school_college: Optional[str] = None,
+    purpose: Optional[str] = "Admission Enquiry",
+    source: Optional[str] = "Direct Walk-in",
+    interested_subject: Optional[str] = None,
+    demo_start_date: Optional[date] = None,
+    demo_duration_days: int = 3,
+    notes: Optional[str] = None,
+    enquiry_status: str = "PENDING",
+    demo_items: Optional[List] = None,
+    is_demo_request: bool = True,
+    audit_action: Optional[str] = None,
+) -> EnquiryResponse:
+    """
+    Shared helper to create an Enquiry and its individual EnquiryDemoItem records
+    with sequential DEM-YYYY-NNNN reference numbers.
+    """
+    year_str = date.today().strftime("%Y")
+    cnt_res = await db.execute(select(func.count(Enquiry.id)))
+    seq = (cnt_res.scalar_one() or 0) + 1
+    while True:
+        candidate_enq_code = f"ENQ{year_str}{seq:04d}"
+        exists = (await db.execute(select(Enquiry.id).where(Enquiry.enquiry_code == candidate_enq_code).limit(1))).scalar_one_or_none()
+        if not exists:
+            enquiry_code = candidate_enq_code
+            break
+        seq += 1
+
+    demo_start = (demo_start_date or date.today()) if is_demo_request else None
+    demo_duration = demo_duration_days or 3
+    deadline = (demo_start + timedelta(days=demo_duration)) if demo_start else None
+
+    if demo_items and len(demo_items) > 0:
+        first_itm = demo_items[0]
+        if first_itm.demo_start_date:
+            demo_start = first_itm.demo_start_date
+        if first_itm.demo_end_date and demo_start:
+            if first_itm.demo_end_date < demo_start:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Demo end date cannot be before demo start date"
+                )
+            deadline = first_itm.demo_end_date
+            demo_duration = max(1, (deadline - demo_start).days)
+        elif demo_start:
+            demo_duration = first_itm.demo_duration_days or demo_duration
+            deadline = demo_start + timedelta(days=demo_duration)
+
+    # Determine summary interested subject string
+    summary_subject = interested_subject or ""
+    if demo_items and len(demo_items) > 0:
+        names = []
+        for ditm in demo_items:
+            if ditm.subject_name:
+                names.append(ditm.subject_name)
+            elif ditm.subject_name_snapshot:
+                names.append(ditm.subject_name_snapshot)
+            elif ditm.subject_id:
+                sub = (await db.execute(select(Subject).where(Subject.id == ditm.subject_id))).scalar_one_or_none()
+                if sub:
+                    names.append(sub.name)
+        if names:
+            summary_subject = ", ".join(names)
+
+    enquiry = Enquiry(
+        enquiry_code=enquiry_code,
+        student_name=student_name,
+        mobile=mobile,
+        father_name=father_name,
+        school_college=school_college,
+        purpose=purpose or "Admission Enquiry",
+        source=source or "Direct Walk-in",
+        interested_subject=summary_subject or "General Course Demo",
+        demo_start_date=demo_start,
+        demo_duration_days=demo_duration,
+        demo_deadline=deadline,
+        notes=notes,
+        status="ACTIVE_DEMO" if (demo_items or demo_start_date or is_demo_request) else enquiry_status,
+        converted_student_id=linked_student.id if linked_student else None,
+        created_by=current_user.id
+    )
+    db.add(enquiry)
+    await db.flush()
+
+    # Create child EnquiryDemoItem records (only when creating a demo)
+    child_items = []
+    if is_demo_request:
+        if demo_items and len(demo_items) > 0:
+            for idx, itm in enumerate(demo_items):
+                sub = None
+                if itm.subject_id:
+                    sub = (await db.execute(select(Subject).where(Subject.id == itm.subject_id))).scalar_one_or_none()
+
+                bch = None
+                if itm.batch_id:
+                    bch = (await db.execute(select(Batch).where(Batch.id == itm.batch_id))).scalar_one_or_none()
+
+                tch = None
+                if itm.teacher_id:
+                    tch = (await db.execute(select(Teacher).where(Teacher.id == itm.teacher_id))).scalar_one_or_none()
+                elif sub and sub.teacher_id:
+                    tch = (await db.execute(select(Teacher).where(Teacher.id == sub.teacher_id))).scalar_one_or_none()
+                elif bch and bch.teacher_id:
+                    tch = (await db.execute(select(Teacher).where(Teacher.id == bch.teacher_id))).scalar_one_or_none()
+
+                s_name = itm.subject_name or itm.subject_name_snapshot or (sub.name if sub else (bch.name if bch else "General Demo"))
+                t_name = itm.teacher_name_snapshot or (tch.name if tch else (sub.teacher_name_snapshot if sub else (bch.teacher_name_snapshot if bch else None)))
+                h_no = itm.hall_number_snapshot or (bch.hall_number if bch else (sub.hall_number if sub else "Main Hall"))
+
+                itm_start = itm.demo_start_date or demo_start or date.today()
+                if itm.demo_end_date is not None:
+                    if itm.demo_end_date < itm_start:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="Demo end date cannot be before demo start date"
+                        )
+                    itm_end = itm.demo_end_date
+                    itm_duration = max(1, (itm_end - itm_start).days)
+                else:
+                    itm_duration = itm.demo_duration_days or demo_duration
+                    itm_end = itm_start + timedelta(days=itm_duration)
+
+                ref_no = await _generate_demo_reference_number(db, offset=idx)
+
+                demo_item = EnquiryDemoItem(
+                    enquiry_id=enquiry.id,
+                    demo_reference_number=ref_no,
+                    subject_id=itm.subject_id,
+                    batch_id=itm.batch_id,
+                    teacher_id=tch.id if tch else None,
+                    subject_name_snapshot=s_name,
+                    teacher_name_snapshot=t_name,
+                    hall_number_snapshot=h_no,
+                    demo_start_date=itm_start,
+                    demo_end_date=itm_end,
+                    demo_duration_days=itm_duration,
+                    status="SCHEDULED",
+                    notes=itm.notes
+                )
+                db.add(demo_item)
+                child_items.append(demo_item)
+        else:
+            # Create 1 default demo item so that every demo receives a verifiable demo slip
+            ref_no = await _generate_demo_reference_number(db)
+            demo_item = EnquiryDemoItem(
+                enquiry_id=enquiry.id,
+                demo_reference_number=ref_no,
+                subject_id=None,
+                batch_id=None,
+                teacher_id=None,
+                subject_name_snapshot=enquiry.interested_subject or "General Course Demo",
+                teacher_name_snapshot=None,
+                hall_number_snapshot="Main Campus",
+                demo_start_date=demo_start,
+                demo_end_date=deadline,
+                demo_duration_days=demo_duration,
+                status="SCHEDULED",
+                notes=notes
+            )
+            db.add(demo_item)
+            child_items.append(demo_item)
+
+    if audit_action and linked_student:
+        audit = AuditLog(
+            user_id=current_user.id,
+            action=audit_action,
+            entity_type="STUDENT",
+            entity_id=linked_student.id,
+            details=json.dumps({
+                "student_id": str(linked_student.id),
+                "student_code": linked_student.student_code,
+                "name": linked_student.name,
+                "enquiry_id": str(enquiry.id),
+                "enquiry_code": enquiry.enquiry_code,
+                "demo_reference_numbers": [d.demo_reference_number for d in child_items],
+                "subjects": [d.subject_name_snapshot for d in child_items],
+            })
+        )
+        db.add(audit)
+
+    await db.commit()
+    await db.refresh(enquiry)
+
+    today = date.today()
+    formatted_children = [_format_demo_item_response(d, today) for d in child_items]
+    return await _resolve_single_enquiry_response(db, enquiry, formatted_children, today)
+
+
 @router.post("", response_model=EnquiryResponse, status_code=status.HTTP_201_CREATED)
 async def create_enquiry(
     payload: EnquiryCreate,
@@ -985,128 +1179,24 @@ async def create_enquiry(
     resolved_mobile = payload.mobile or (linked_student.mobile if linked_student else None)
     resolved_father_name = payload.father_name or (linked_student.father_name if linked_student else None)
 
-    year_str = date.today().strftime("%Y")
-    cnt_res = await db.execute(select(func.count(Enquiry.id)))
-    seq = (cnt_res.scalar_one() or 0) + 1
-    while True:
-        candidate_enq_code = f"ENQ{year_str}{seq:04d}"
-        exists = (await db.execute(select(Enquiry.id).where(Enquiry.enquiry_code == candidate_enq_code).limit(1))).scalar_one_or_none()
-        if not exists:
-            enquiry_code = candidate_enq_code
-            break
-        seq += 1
-
-    demo_start = (payload.demo_start_date or date.today()) if is_demo_request else None
-    demo_duration = payload.demo_duration_days or 3
-    deadline = (demo_start + timedelta(days=demo_duration)) if demo_start else None
-
-    # Determine summary interested subject string
-    summary_subject = payload.interested_subject or ""
-    if payload.demo_items and len(payload.demo_items) > 0:
-        names = []
-        for ditm in payload.demo_items:
-            if ditm.subject_name:
-                names.append(ditm.subject_name)
-            elif ditm.subject_id:
-                sub = (await db.execute(select(Subject).where(Subject.id == ditm.subject_id))).scalar_one_or_none()
-                if sub: names.append(sub.name)
-        if names:
-            summary_subject = ", ".join(names)
-
-    enquiry = Enquiry(
-        enquiry_code=enquiry_code,
+    return await create_enquiry_with_demos(
+        db=db,
+        current_user=current_user,
+        linked_student=linked_student,
         student_name=resolved_student_name,
         mobile=resolved_mobile,
         father_name=resolved_father_name,
         school_college=payload.school_college,
-        purpose=payload.purpose or "Admission Enquiry",
-        source=payload.source or "Direct Walk-in",
-        interested_subject=summary_subject or "General Course Demo",
-        demo_start_date=demo_start,
-        demo_duration_days=demo_duration,
-        demo_deadline=deadline,
+        purpose=payload.purpose,
+        source=payload.source,
+        interested_subject=payload.interested_subject,
+        demo_start_date=payload.demo_start_date,
+        demo_duration_days=payload.demo_duration_days,
         notes=payload.notes,
-        status="ACTIVE_DEMO" if (payload.demo_items or payload.demo_start_date) else payload.status,
-        converted_student_id=linked_student.id if linked_student else None,
-        created_by=current_user.id
+        enquiry_status=payload.status,
+        demo_items=payload.demo_items,
+        is_demo_request=is_demo_request,
     )
-    db.add(enquiry)
-    await db.flush()
-
-    # Create child EnquiryDemoItem records (only when creating a demo)
-    child_items = []
-    if is_demo_request:
-        if payload.demo_items and len(payload.demo_items) > 0:
-            for idx, itm in enumerate(payload.demo_items):
-                sub = None
-                if itm.subject_id:
-                    sub = (await db.execute(select(Subject).where(Subject.id == itm.subject_id))).scalar_one_or_none()
-                
-                bch = None
-                if itm.batch_id:
-                    bch = (await db.execute(select(Batch).where(Batch.id == itm.batch_id))).scalar_one_or_none()
-
-                tch = None
-                if itm.teacher_id:
-                    tch = (await db.execute(select(Teacher).where(Teacher.id == itm.teacher_id))).scalar_one_or_none()
-                elif sub and sub.teacher_id:
-                    tch = (await db.execute(select(Teacher).where(Teacher.id == sub.teacher_id))).scalar_one_or_none()
-                elif bch and bch.teacher_id:
-                    tch = (await db.execute(select(Teacher).where(Teacher.id == bch.teacher_id))).scalar_one_or_none()
-
-                s_name = itm.subject_name or itm.subject_name_snapshot or (sub.name if sub else (bch.name if bch else "General Demo"))
-                t_name = itm.teacher_name_snapshot or (tch.name if tch else (sub.teacher_name_snapshot if sub else (bch.teacher_name_snapshot if bch else None)))
-                h_no = itm.hall_number_snapshot or (bch.hall_number if bch else (sub.hall_number if sub else "Main Hall"))
-                
-                itm_start = itm.demo_start_date or demo_start
-                itm_duration = itm.demo_duration_days or demo_duration
-                itm_end = itm_start + timedelta(days=itm_duration)
-                ref_no = await _generate_demo_reference_number(db, offset=idx)
-
-                demo_item = EnquiryDemoItem(
-                    enquiry_id=enquiry.id,
-                    demo_reference_number=ref_no,
-                    subject_id=itm.subject_id,
-                    batch_id=itm.batch_id,
-                    teacher_id=tch.id if tch else None,
-                    subject_name_snapshot=s_name,
-                    teacher_name_snapshot=t_name,
-                    hall_number_snapshot=h_no,
-                    demo_start_date=itm_start,
-                    demo_end_date=itm_end,
-                    demo_duration_days=itm_duration,
-                    status="SCHEDULED",
-                    notes=itm.notes
-                )
-                db.add(demo_item)
-                child_items.append(demo_item)
-        else:
-            # Create 1 default demo item so that every demo receives a verifiable demo slip
-            ref_no = await _generate_demo_reference_number(db)
-            demo_item = EnquiryDemoItem(
-                enquiry_id=enquiry.id,
-                demo_reference_number=ref_no,
-                subject_id=None,
-                batch_id=None,
-                teacher_id=None,
-                subject_name_snapshot=enquiry.interested_subject or "General Course Demo",
-                teacher_name_snapshot=None,
-                hall_number_snapshot="Main Campus",
-                demo_start_date=demo_start,
-                demo_end_date=deadline,
-                demo_duration_days=demo_duration,
-                status="SCHEDULED",
-                notes=payload.notes
-            )
-            db.add(demo_item)
-            child_items.append(demo_item)
-
-    await db.commit()
-    await db.refresh(enquiry)
-
-    today = date.today()
-    formatted_children = [_format_demo_item_response(d, today) for d in child_items]
-    return await _resolve_single_enquiry_response(db, enquiry, formatted_children, today)
 
 
 async def _resolve_single_enquiry_response(db: AsyncSession, enquiry: Enquiry, formatted_demo_items: list, today: date) -> EnquiryResponse:

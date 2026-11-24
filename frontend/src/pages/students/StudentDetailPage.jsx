@@ -69,6 +69,8 @@ import RenewSubjectModal from '../../components/modals/RenewSubjectModal';
 import ChangeSubjectModal from '../../components/modals/ChangeSubjectModal';
 import WaiveDueModal from '../../components/modals/WaiveDueModal';
 import StudentIDCardModal from '../../components/modals/StudentIDCardModal';
+import GiveDemoModal from '../../components/modals/GiveDemoModal';
+import DemoPassModal from '../../components/modals/DemoPassModal';
 import { getCleanCancelReason, formatIndianDate } from '../../utils/dateCycleUtils';
 
 function getValidityStatus(adm) {
@@ -169,7 +171,7 @@ export default function StudentDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { success, error } = useToast();
-  const { isAdmin } = useAuth();
+  const { isAdmin, isTeacher, canManageAdmissions } = useAuth();
   const [student, setStudent] = useState(null);
   const [admissions, setAdmissions] = useState([]);
   const [transactions, setTransactions] = useState([]);
@@ -206,6 +208,8 @@ export default function StudentDetailPage() {
   const [receiptToShow, setReceiptToShow] = useState(null);
   const [admissionSlipToShow, setAdmissionSlipToShow] = useState(null);
   const [idCardModalOpen, setIdCardModalOpen] = useState(false);
+  const [giveDemoModalOpen, setGiveDemoModalOpen] = useState(false);
+  const [demoPassToShow, setDemoPassToShow] = useState(null);
 
   // Lifecycle Modals (Edit Validity, Suspend, Discontinue)
   const [selectedAdmissionForValidity, setSelectedAdmissionForValidity] = useState(null);
@@ -589,15 +593,28 @@ export default function StudentDetailPage() {
               Trial classes attended by candidate, with linkage to enrolled course admissions
             </p>
           </div>
-          <Button
-            size="xs"
-            variant="secondary"
-            icon={RefreshCw}
-            loading={demosLoading}
-            onClick={fetchDemosData}
-          >
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            {!isRevoked && !isTeacher && canManageAdmissions && (
+              <Button
+                size="xs"
+                variant="primary"
+                icon={Sparkles}
+                onClick={() => setGiveDemoModalOpen(true)}
+                title="Give a trial demo class for this student"
+              >
+                Give Demo
+              </Button>
+            )}
+            <Button
+              size="xs"
+              variant="secondary"
+              icon={RefreshCw}
+              loading={demosLoading}
+              onClick={fetchDemosData}
+            >
+              Refresh
+            </Button>
+          </div>
         </div>
 
         {demosLoading && demos.length === 0 ? (
@@ -612,6 +629,17 @@ export default function StudentDetailPage() {
             <p className="text-[11px] text-slate-500 mt-0.5">
               This student has not taken any trial classes through the enquiry system.
             </p>
+            {!isRevoked && !isTeacher && canManageAdmissions && (
+              <Button
+                size="xs"
+                variant="primary"
+                icon={Sparkles}
+                className="mt-3"
+                onClick={() => setGiveDemoModalOpen(true)}
+              >
+                Give Demo
+              </Button>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto border border-slate-200 rounded-lg">
@@ -883,6 +911,20 @@ export default function StudentDetailPage() {
                 title="Admin only: Waive / forgive pending fee due"
               >
                 Waive Due
+              </Button>
+            )}
+
+            {/* Give Demo Action (Admin & Cashier only; teachers stay read-only) */}
+            {!isRevoked && !isTeacher && canManageAdmissions && (
+              <Button
+                size="xs"
+                variant="purple"
+                icon={Sparkles}
+                onClick={() => setGiveDemoModalOpen(true)}
+                title="Give a trial demo class for this student"
+                className="flex-1 sm:flex-initial justify-center"
+              >
+                Give Demo
               </Button>
             )}
 
@@ -3566,6 +3608,28 @@ export default function StudentDetailPage() {
         student={student}
         enrollmentData={enrollmentData}
         demos={demos}
+      />
+
+      {/* Give Demo Modal */}
+      <GiveDemoModal
+        isOpen={giveDemoModalOpen}
+        onClose={() => setGiveDemoModalOpen(false)}
+        student={student}
+        onSuccess={(createdEnquiry) => {
+          fetchDemosData();
+          fetchStudentProfile();
+          fetchStudentAuditLogs(auditPage, auditPageSize, auditSearch, auditActionFilter);
+          if (createdEnquiry) {
+            setDemoPassToShow(createdEnquiry);
+          }
+        }}
+      />
+
+      {/* Printable Demo Pass Modal */}
+      <DemoPassModal
+        isOpen={Boolean(demoPassToShow)}
+        onClose={() => setDemoPassToShow(null)}
+        enquiry={demoPassToShow}
       />
     </div>
   );

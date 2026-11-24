@@ -26,8 +26,10 @@ from app.modules.audit.schemas import AuditLogResponse
 from app.modules.students.schemas import (
     StudentCreate, StudentUpdate, StudentRevokeRequest,
     StudentResponse, StudentDetailResponse, StudentLineResponse,
-    StudentDemoItemResponse, StudentDemoLinkedCourse
+    StudentDemoItemResponse, StudentDemoLinkedCourse, StudentDemoCreate
 )
+from app.modules.enquiries.schemas import EnquiryResponse, EnquiryDemoItemCreate
+from app.modules.enquiries.router import create_enquiry_with_demos
 from app.modules.admissions.schemas import AdmissionResponse, RenewalsDueItemResponse
 from app.modules.payments.schemas import FinancialTransactionResponse
 from app.common.active_lines import today_kolkata, is_active_line, derive_student_status
@@ -570,6 +572,72 @@ async def get_student_demos(
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
     return await _get_demos_for_student(db, student)
+
+
+@router.post("/{student_id}/demos", response_model=EnquiryResponse, status_code=status.HTTP_201_CREATED)
+async def create_student_demo(
+    student_id: uuid.UUID,
+    payload: StudentDemoCreate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_cashier_or_admin)
+):
+    """
+    Give a trial demo directly from an already-registered student profile.
+    Enforces Admin/Cashier role (teachers remain read-only).
+    Creates a linked Enquiry + EnquiryDemoItem(s) with DEM-YYYY-NNNN reference numbers
+    so they appear in both the student profile demos list and the Demo Register.
+    """
+    student = (await db.execute(select(Student).where(Student.id == student_id))).scalar_one_or_none()
+    if not student:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student not found")
+
+    if student.status == "REVOKED":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot give a demo to a revoked student"
+        )
+
+    demo_items = list(payload.demo_items or [])
+    if not demo_items:
+        if not (payload.subject_id or payload.subject_name or payload.subject_name_snapshot):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Subject is required to give a demo"
+            )
+        demo_items = [
+            EnquiryDemoItemCreate(
+                subject_id=payload.subject_id,
+                batch_id=payload.batch_id,
+                teacher_id=payload.teacher_id,
+                subject_name=payload.subject_name,
+                subject_name_snapshot=payload.subject_name_snapshot,
+                teacher_name_snapshot=payload.teacher_name_snapshot,
+                hall_number_snapshot=payload.hall_number_snapshot or payload.hall,
+                demo_start_date=payload.demo_start_date,
+                demo_end_date=payload.demo_end_date,
+                demo_duration_days=payload.demo_duration_days,
+                notes=payload.notes,
+            )
+        ]
+
+    first_item = demo_items[0]
+    return await create_enquiry_with_demos(
+        db=db,
+        current_user=user,
+        linked_student=student,
+        student_name=student.name,
+        mobile=student.mobile,
+        father_name=student.father_name,
+        purpose=payload.purpose or "Trial Demo",
+        source="Student Profile",
+        demo_start_date=first_item.demo_start_date or payload.demo_start_date or date.today(),
+        demo_duration_days=first_item.demo_duration_days or payload.demo_duration_days or 3,
+        notes=payload.notes,
+        enquiry_status="ACTIVE_DEMO",
+        demo_items=demo_items,
+        is_demo_request=True,
+        audit_action="STUDENT_DEMO_CREATED",
+    )
 
 @router.get("/{student_id}/audit", response_model=PageResponse[AuditLogResponse])
 async def get_student_audit_alias(
