@@ -489,7 +489,7 @@ export default function StudentsPage() {
                           icon={Plus}
                           onClick={() =>
                             navigate(
-                              `/admissions/new?student_id=${s.id}&name=${encodeURIComponent(s.name)}`
+                              `/enrollments/new?student_id=${s.id}&name=${encodeURIComponent(s.name)}`
                             )
                           }
                           title="Purchase / Renew Subject Fee"

@@ -65,7 +65,7 @@ export default function CashierDashboard() {
             Cashier Front Desk & Fee Portal
           </h1>
           <p className="text-xs text-slate-700 mt-0.5 font-medium">
-            Admissions, manual fee collection, receipt generation, and demo follow-ups
+            Enrollments, manual fee collection, receipt generation, and demo follow-ups
           </p>
         </div>
 
@@ -75,7 +75,7 @@ export default function CashierDashboard() {
             size="sm"
             variant="primary"
             icon={Plus}
-            onClick={() => navigate('/admissions/new')}
+            onClick={() => navigate('/enrollments/new')}
             className="min-h-[42px] sm:min-h-[34px] px-3.5 py-2 text-xs font-semibold rounded-lg shadow-2xs active:scale-[0.98] transition-all justify-center"
             title="Purchase & Pay for Courses"
           >
@@ -103,7 +103,7 @@ export default function CashierDashboard() {
           color="emerald"
         />
         <StatCard
-          title="Today's Admissions"
+          title="Today's Enrollments"
           value={m.today_admissions_count ?? 0}
           subtext="Enrolled today"
           icon={CheckCircle}
@@ -197,14 +197,14 @@ export default function CashierDashboard() {
                     variant="primary"
                     onClick={() =>
                       navigate(
-                        `/admissions/new?enquiry_id=${d.id}&name=${encodeURIComponent(
+                        `/enrollments/new?enquiry_id=${d.id}&name=${encodeURIComponent(
                           d.student_name
                         )}&mobile=${encodeURIComponent(d.mobile || '')}`
                       )
                     }
                     className="min-h-[36px] sm:min-h-[30px] px-3 py-1.5 text-xs font-semibold rounded-md shadow-2xs"
                   >
-                    Complete Admission
+                    Complete Enrollment
                   </Button>
                 </div>
               </div>
@@ -221,7 +221,7 @@ export default function CashierDashboard() {
             <p className="text-[11px] text-slate-700 font-medium">Follow up with students and record partial or full fee collections</p>
           </div>
           <button
-            onClick={() => navigate('/admissions')}
+            onClick={() => navigate('/enrollments')}
             className="text-xs font-bold text-odoo-700 hover:text-odoo-900 flex items-center gap-1 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2.5 py-1 rounded-md transition-colors self-start sm:self-auto"
           >
             All Purchases <ArrowRight className="w-3.5 h-3.5" />

@@ -124,11 +124,11 @@ export default function AdmissionDetailPage() {
   if (!admission) {
     return (
       <div className="p-6 max-w-5xl mx-auto space-y-4">
-        <Button variant="secondary" icon={ArrowLeft} onClick={() => navigate('/admissions')}>
-          Back to Course Purchases
+        <Button variant="secondary" icon={ArrowLeft} onClick={() => navigate('/enrollments')}>
+          Back to Enrollment (Courses)
         </Button>
         <div className="bg-white p-8 rounded-xl border border-slate-200 text-center">
-          <p className="text-sm font-semibold text-rose-700">Admission / Purchase record not found.</p>
+          <p className="text-sm font-semibold text-rose-700">Enrollment / Purchase record not found.</p>
         </div>
       </div>
     );
@@ -149,16 +149,16 @@ export default function AdmissionDetailPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-start sm:items-center gap-2.5 min-w-0">
           <button
-            onClick={() => navigate('/admissions')}
+            onClick={() => navigate('/enrollments')}
             className="p-2 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 transition-colors shadow-2xs cursor-pointer shrink-0 min-h-[38px] min-w-[38px] flex items-center justify-center"
-            title="Back to Course Purchases"
+            title="Back to Enrollment (Courses)"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-lg sm:text-xl font-black text-black break-words leading-tight">
-                Course Purchase & Enrollment
+                Enrollment (Courses)
               </h1>
               <span className="font-mono text-xs px-2 py-0.5 bg-slate-100 text-slate-800 rounded font-bold border border-slate-200 shrink-0">
                 {admission.admission_number}

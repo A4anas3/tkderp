@@ -30,14 +30,14 @@ export default function BottomNav({ onOpenAppMenu }) {
       return [
         { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { to: '/students', label: 'Students', icon: Users },
-        { to: '/admissions', label: 'Admissions', icon: GraduationCap },
+        { to: '/enrollments', label: 'Enrollment (Courses)', icon: GraduationCap },
         { to: '/payments', label: 'Payments', icon: CreditCard },
       ];
     }
     return [
       { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { to: '/students', label: 'Students', icon: Users },
-      { to: '/admissions', label: 'Admissions', icon: GraduationCap },
+      { to: '/enrollments', label: 'Enrollment (Courses)', icon: GraduationCap },
       { to: '/payments', label: 'Payments', icon: CreditCard },
     ];
   };

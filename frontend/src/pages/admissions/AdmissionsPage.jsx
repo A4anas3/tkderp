@@ -199,7 +199,7 @@ export default function AdmissionsPage() {
             size="xs"
             variant="info"
             icon={ExternalLink}
-            onClick={() => navigate(`/admissions/${a.id}`)}
+            onClick={() => navigate(`/enrollments/${a.id}`)}
             title="Open Full Course Purchase Page"
           >
             Detail
@@ -262,7 +262,7 @@ export default function AdmissionsPage() {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
-          <h1 className="text-xl font-bold text-black tracking-tight">Course Purchases & Invoices</h1>
+          <h1 className="text-xl font-bold text-black tracking-tight">Enrollment (Courses)</h1>
           <p className="text-xs text-slate-700 mt-0.5 font-medium">
             Multi-subject course purchases, itemized discounts, inclusive GST, and fee settlement
           </p>
@@ -314,7 +314,7 @@ export default function AdmissionsPage() {
         {loading ? (
           <div className="p-8 text-center bg-white rounded-lg border border-slate-200">
             <Loader2 className="w-6 h-6 animate-spin text-odoo-600 mx-auto" />
-            <span className="text-xs text-slate-500 mt-2 block">Loading admissions...</span>
+            <span className="text-xs text-slate-500 mt-2 block">Loading enrollments...</span>
           </div>
         ) : admissions.length === 0 ? (
           <div className="p-8 text-center bg-white rounded-lg border border-slate-200 text-xs text-slate-500">
@@ -450,7 +450,7 @@ export default function AdmissionsPage() {
                       size="xs"
                       variant="info"
                       icon={ExternalLink}
-                      onClick={() => navigate(`/admissions/${a.id}`)}
+                      onClick={() => navigate(`/enrollments/${a.id}`)}
                       className="flex-1 justify-center text-xs font-semibold"
                     >
                       Detail
@@ -519,7 +519,7 @@ export default function AdmissionsPage() {
           }}
           onRefresh={loadAdmissions}
           loading={loading}
-          onRowClick={(row) => navigate(`/admissions/${row.id}`)}
+          onRowClick={(row) => navigate(`/enrollments/${row.id}`)}
           searchPlaceholder="Search by purchase transaction ID or student name..."
           emptyMessage="No course purchases found."
         />

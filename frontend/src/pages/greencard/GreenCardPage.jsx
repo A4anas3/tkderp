@@ -261,7 +261,7 @@ export default function GreenCardPage() {
               onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
               className="rounded border-slate-300 text-odoo-600 focus:ring-odoo-500 focus:border-odoo-600"
             />
-            <span>Active Product (Available for purchase in Admissions)</span>
+            <span>Active Product (Available for purchase in Enrollment (Courses))</span>
           </label>
 
           <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">

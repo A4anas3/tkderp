@@ -257,7 +257,7 @@ export default function NewAdmissionPage() {
             name: paramName,
             mobile: cleanParamMob || '',
             father_name: paramFather || '',
-            notes: `Admitted from Enquiry #${paramEnquiryId} (${paramPurpose || 'Student Admission'})`,
+            notes: `Enrolled from Enquiry #${paramEnquiryId} (${paramPurpose || 'Student Admission'})`,
           });
           setIsQuickStudentOpen(true);
         }
@@ -932,15 +932,15 @@ export default function NewAdmissionPage() {
         <div className="flex items-center gap-2.5">
           <button
             type="button"
-            onClick={() => navigate('/admissions')}
+            onClick={() => navigate('/enrollments')}
             className="p-2 rounded-md border border-slate-300 text-slate-700 hover:text-black hover:bg-slate-100 transition min-w-[38px] min-h-[38px] flex items-center justify-center"
-            title="Back to Admissions"
+            title="Back to Enrollment (Courses)"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
           <div>
             <h1 className="text-lg sm:text-xl font-bold text-black tracking-tight flex items-center gap-2">
-              <span>New Admission / Enrolment</span>
+              <span>New Enrollment</span>
               <span className="text-[11px] font-mono font-bold bg-odoo-100 text-odoo-800 px-2 py-0.5 rounded-full">
                 Step {currentStep} of 4
               </span>
@@ -984,7 +984,7 @@ export default function NewAdmissionPage() {
                   name: paramName || '',
                   mobile: cleanMobileInput(paramMobile) || '',
                   father_name: paramFather || '',
-                  notes: `Admitted from Enquiry #${paramEnquiryId} (${paramPurpose || 'Student Admission'})`,
+                  notes: `Enrolled from Enquiry #${paramEnquiryId} (${paramPurpose || 'Student Admission'})`,
                 });
                 setIsQuickStudentOpen(true);
               }}
@@ -2106,7 +2106,7 @@ export default function NewAdmissionPage() {
         isOpen={!!completedAdmission}
         onClose={() => {
           setCompletedAdmission(null);
-          navigate('/admissions');
+          navigate('/enrollments');
         }}
         admission={completedAdmission}
       />

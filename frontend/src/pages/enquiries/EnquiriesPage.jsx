@@ -466,13 +466,13 @@ export default function EnquiriesPage() {
     }
   };
 
-  // Convert to Admission / Course Purchase
+  // Convert to Enrollment / Course Purchase
   const handleConvertToAdmission = (enq, ev, specificSubject = null) => {
     if (ev) ev.stopPropagation();
     const subParam = specificSubject || enq.interested_subject || '';
     const stuParam = enq.converted_student_id ? `&student_id=${enq.converted_student_id}` : '';
     navigate(
-      `/admissions/new?enquiry_id=${enq.id}${stuParam}&name=${encodeURIComponent(
+      `/enrollments/new?enquiry_id=${enq.id}${stuParam}&name=${encodeURIComponent(
         enq.student_name
       )}&mobile=${encodeURIComponent(enq.mobile || '')}&subject=${encodeURIComponent(
         subParam
@@ -815,7 +815,7 @@ export default function EnquiriesPage() {
                   onClick={(ev) => {
                     ev.stopPropagation();
                     if (e.course_admission_id) {
-                      navigate(`/admissions/${e.course_admission_id}`);
+                      navigate(`/enrollments/${e.course_admission_id}`);
                     } else {
                       navigate(`/enquiries/${e.id}`);
                     }
@@ -865,7 +865,7 @@ export default function EnquiriesPage() {
                   size="xs"
                   variant="primary"
                   onClick={(ev) => handleConvertToAdmission(e, ev)}
-                  title="Convert to Admission & Collect Fees"
+                  title="Convert to Enrollment & Collect Fees"
                 >
                   Admit
                 </Button>
@@ -1173,7 +1173,7 @@ export default function EnquiriesPage() {
                     d.subject_name_snapshot
                   )
                 }
-                title="Convert to full admission"
+                title="Convert to full enrollment"
               >
                 Admit
               </Button>
@@ -1600,7 +1600,7 @@ export default function EnquiriesPage() {
                             size="xs"
                             variant="primary"
                             onClick={() => handleConvertToAdmission(d)}
-                            title="Convert to full student admission"
+                            title="Convert to full student enrollment"
                           >
                             Admit ↗
                           </Button>

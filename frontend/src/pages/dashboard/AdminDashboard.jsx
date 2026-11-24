@@ -73,7 +73,7 @@ export default function AdminDashboard() {
             size="sm"
             variant="primary"
             icon={Plus}
-            onClick={() => navigate('/admissions/new')}
+            onClick={() => navigate('/enrollments/new')}
             className="min-h-[42px] sm:min-h-[34px] px-3.5 py-2 text-xs font-semibold rounded-lg shadow-2xs active:scale-[0.98] transition-all justify-center"
             title="Purchase & Pay for Courses"
           >
@@ -94,9 +94,9 @@ export default function AdminDashboard() {
             icon={UserPlus}
             onClick={() => navigate('/students')}
             className="col-span-2 sm:col-span-1 min-h-[42px] sm:min-h-[34px] px-3.5 py-2 text-xs font-semibold rounded-lg shadow-2xs active:scale-[0.98] transition-all justify-center"
-            title="Admit / Register New Student"
+            title="Enroll / Register New Student"
           >
-            New Admission
+            New Enrollment
           </Button>
         </div>
       </div>
@@ -252,12 +252,12 @@ export default function AdminDashboard() {
                 <GraduationCap className="w-4 h-4" />
               </div>
               <div>
-                <h2 className="text-sm sm:text-base font-bold text-black">Recent Admissions</h2>
+                <h2 className="text-sm sm:text-base font-bold text-black">Recent Enrollments</h2>
                 <p className="text-[11px] text-slate-700 font-medium">Latest enrolled students & fee validity</p>
               </div>
             </div>
             <button
-              onClick={() => navigate('/admissions')}
+              onClick={() => navigate('/enrollments')}
               className="text-xs font-bold text-odoo-700 hover:text-odoo-900 flex items-center gap-1 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2.5 py-1 rounded-md transition-colors shrink-0"
             >
               View All <ArrowRight className="w-3.5 h-3.5" />
@@ -271,7 +271,7 @@ export default function AdminDashboard() {
               data.recent_admissions.map((adm) => (
                 <div
                   key={adm.id}
-                  onClick={() => navigate(`/admissions/${adm.id}`)}
+                  onClick={() => navigate(`/enrollments/${adm.id}`)}
                   className="py-3 flex items-center justify-between gap-3 text-xs hover:bg-slate-50/90 px-1.5 rounded-lg transition-colors cursor-pointer"
                 >
                   <div className="min-w-0 flex-1">

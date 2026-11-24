@@ -491,7 +491,7 @@ export default function ChangeSubjectModal({
             onClick={() => {
               onClose();
               navigate(
-                `/admissions/new?student_id=${student?.id}&change_from_item_id=${item?.id}&change_from_subject=${item?.subject_id}`
+                `/enrollments/new?student_id=${student?.id}&change_from_item_id=${item?.id}&change_from_subject=${item?.subject_id}`
               );
             }}
             className="text-[11px] text-odoo-700 hover:text-odoo-900 font-semibold inline-flex items-center gap-1 hover:underline"

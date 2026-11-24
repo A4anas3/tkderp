@@ -82,8 +82,8 @@ export default function Sidebar({ isOpen, onClose }) {
               show: true,
             },
             {
-              to: '/admissions',
-              label: 'Admissions',
+              to: '/enrollments',
+              label: 'Enrollment (Courses)',
               icon: CreditCard,
               show: true,
             },
@@ -136,11 +136,11 @@ export default function Sidebar({ isOpen, onClose }) {
         ],
       },
       {
-        title: 'ADMISSIONS & STUDENTS',
+        title: 'ENROLLMENTS & STUDENTS',
         items: [
           {
-            to: '/admissions',
-            label: 'Course Purchases',
+            to: '/enrollments',
+            label: 'Enrollment (Courses)',
             icon: CreditCard,
             show: true,
           },

@@ -189,7 +189,7 @@ export default function EnquiryDetailPage() {
     if (enquiry.converted_student_id) {
       params.set('student_id', enquiry.converted_student_id);
     }
-    navigate(`/admissions/new?${params.toString()}`);
+    navigate(`/enrollments/new?${params.toString()}`);
   };
 
   const handleRegisterStudent = async (selectedStudentId = null, forceCreate = false) => {
@@ -374,7 +374,7 @@ export default function EnquiryDetailPage() {
             <Button
               variant="info"
               size="sm"
-              onClick={() => navigate(`/admissions/${enquiry.course_admission_id || ''}`)}
+              onClick={() => navigate(`/enrollments/${enquiry.course_admission_id || ''}`)}
               className="font-bold"
             >
               View Course Bill ({enquiry.course_admission_number || 'Enrolled ✓'}) ↗
@@ -407,7 +407,7 @@ export default function EnquiryDetailPage() {
                 onClick={handleConvertToAdmission}
                 size="sm"
               >
-                Convert to Admission ↗
+                Convert to Enrollment ↗
               </Button>
             </div>
           )}

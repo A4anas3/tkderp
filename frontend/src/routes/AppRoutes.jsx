@@ -1,5 +1,5 @@
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import AppLayout from '../components/layout/AppLayout';
 
@@ -55,6 +55,17 @@ function ProtectedRoute({ children, allowedRoles }) {
   return children;
 }
 
+function NavigateWithSearch({ to }) {
+  const location = useLocation();
+  return <Navigate to={`${to}${location.search}`} replace />;
+}
+
+function AdmissionsIdRedirect() {
+  const { id } = useParams();
+  const location = useLocation();
+  return <Navigate to={`/enrollments/${id}${location.search}`} replace />;
+}
+
 export default function AppRoutes() {
   return (
     <Routes>
@@ -85,9 +96,9 @@ export default function AppRoutes() {
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardSwitcher />} />
 
-        {/* Admissions & Course Purchases (Admin & Cashier) */}
+        {/* Enrollment (Courses) (Admin & Cashier) */}
         <Route
-          path="admissions"
+          path="enrollments"
           element={
             <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER']}>
               <AdmissionsPage />
@@ -95,7 +106,7 @@ export default function AppRoutes() {
           }
         />
         <Route
-          path="admissions/new"
+          path="enrollments/new"
           element={
             <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER']}>
               <NewAdmissionPage />
@@ -103,13 +114,18 @@ export default function AppRoutes() {
           }
         />
         <Route
-          path="admissions/:id"
+          path="enrollments/:id"
           element={
             <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER']}>
               <AdmissionDetailPage />
             </ProtectedRoute>
           }
         />
+
+        {/* Redirects from old /admissions routes to keep links & bookmarks working */}
+        <Route path="admissions" element={<NavigateWithSearch to="/enrollments" />} />
+        <Route path="admissions/new" element={<NavigateWithSearch to="/enrollments/new" />} />
+        <Route path="admissions/:id" element={<AdmissionsIdRedirect />} />
 
         {/* Payments Ledger (Admin & Cashier) */}
         <Route

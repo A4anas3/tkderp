@@ -354,11 +354,11 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
                   icon={ArrowRight}
                   onClick={() => {
                     onClose();
-                    navigate(`/admissions/new?student_id=${existingStudent.id}`);
+                    navigate(`/enrollments/new?student_id=${existingStudent.id}`);
                   }}
-                  title="Create new admission for this registered student"
+                  title="Create new enrollment for this registered student"
                 >
-                  New Admission
+                  New Enrollment
                 </Button>
               )}
             </div>

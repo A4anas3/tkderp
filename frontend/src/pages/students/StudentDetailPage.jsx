@@ -894,7 +894,7 @@ export default function StudentDetailPage() {
                 icon={Plus}
                 onClick={() =>
                   navigate(
-                    `/admissions/new?student_id=${student.id}&name=${encodeURIComponent(
+                    `/enrollments/new?student_id=${student.id}&name=${encodeURIComponent(
                       student.name
                     )}`
                   )
@@ -1052,7 +1052,7 @@ export default function StudentDetailPage() {
                     variant="teal-soft"
                     onClick={() =>
                       navigate(
-                        `/admissions/new?student_id=${student.id}&item_type=GREEN_CARD`
+                        `/enrollments/new?student_id=${student.id}&item_type=GREEN_CARD`
                       )
                     }
                     className="w-full justify-center"
@@ -1159,7 +1159,7 @@ export default function StudentDetailPage() {
                 icon={Plus}
                 onClick={() =>
                   navigate(
-                    `/admissions/new?student_id=${student.id}&name=${encodeURIComponent(
+                    `/enrollments/new?student_id=${student.id}&name=${encodeURIComponent(
                       student.name
                     )}`
                   )
@@ -1249,7 +1249,7 @@ export default function StudentDetailPage() {
                 icon={Plus}
                 className="mt-2"
                 onClick={() =>
-                  navigate(`/admissions/new?student_id=${student.id}&name=${encodeURIComponent(student.name)}`)
+                  navigate(`/enrollments/new?student_id=${student.id}&name=${encodeURIComponent(student.name)}`)
                 }
               >
                 Enroll in a Subject
@@ -1717,7 +1717,7 @@ export default function StudentDetailPage() {
                 icon={Plus}
                 onClick={() =>
                   navigate(
-                    `/admissions/new?student_id=${student.id}&name=${encodeURIComponent(
+                    `/enrollments/new?student_id=${student.id}&name=${encodeURIComponent(
                       student.name
                     )}`
                   )
@@ -1987,14 +1987,14 @@ export default function StudentDetailPage() {
               icon={Plus}
               onClick={() =>
                 navigate(
-                  `/admissions/new?student_id=${student.id}&name=${encodeURIComponent(
+                  `/enrollments/new?student_id=${student.id}&name=${encodeURIComponent(
                     student.name
                   )}`
                 )
               }
               className="w-full sm:w-auto justify-center"
             >
-              New Admission / Invoice
+              New Enrollment / Invoice
             </Button>
           )}
         </div>

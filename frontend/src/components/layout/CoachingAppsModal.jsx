@@ -55,10 +55,10 @@ export default function CoachingAppsModal({ isOpen, onClose }) {
     },
     {
       id: 'admissions',
-      name: 'Admissions',
+      name: 'Enrollment (Courses)',
       desc: 'Course Enrolments',
       icon: GraduationCap,
-      route: '/admissions',
+      route: '/enrollments',
       color: 'bg-purple-600',
       roles: ['ADMIN', 'CASHIER'],
     },

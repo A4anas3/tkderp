@@ -200,7 +200,7 @@ export default function RegisterStudentModal({
                   onClick={() => {
                     onClose();
                     navigate(
-                      `/admissions/new?enquiry_id=${enquiry.id}&student_id=${resultData.student_id}&name=${encodeURIComponent(
+                      `/enrollments/new?enquiry_id=${enquiry.id}&student_id=${resultData.student_id}&name=${encodeURIComponent(
                         resultData.student_name || enquiry.student_name
                       )}&mobile=${encodeURIComponent(resultData.mobile || enquiry.mobile || '')}&auto_register=1`
                     );
@@ -281,7 +281,7 @@ export default function RegisterStudentModal({
                   onClick={() => {
                     onClose();
                     navigate(
-                      `/admissions/new?enquiry_id=${enquiry.id}&student_id=${resultData.student_id}&name=${encodeURIComponent(
+                      `/enrollments/new?enquiry_id=${enquiry.id}&student_id=${resultData.student_id}&name=${encodeURIComponent(
                         resultData.student_name || enquiry.student_name
                       )}&mobile=${encodeURIComponent(resultData.mobile || enquiry.mobile || '')}&auto_register=1`
                     );

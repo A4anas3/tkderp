@@ -201,7 +201,7 @@ export default function PaymentDetailPage() {
           </div>
           {payment.admission_id && (
             <Link
-              to={`/admissions/${payment.admission_id}`}
+              to={`/enrollments/${payment.admission_id}`}
               className="mt-2 text-xs font-bold text-odoo-700 hover:text-odoo-900 inline-flex items-center gap-1"
             >
               <span>View Course Purchase</span>
