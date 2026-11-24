@@ -14,6 +14,15 @@ import re
 from PIL import Image
 
 from app.common.validators import normalize_mobile, validate_mobile_10_digits
+from app.core.cache import (
+    TTL_MEDIUM,
+    cache_get,
+    cache_set,
+    invalidate_enrollment_and_admission_cache,
+    invalidate_student_cache,
+    make_cache_key,
+    user_scope,
+)
 from app.core.config import settings
 from app.database.session import get_db
 from app.modules.users.models import User
@@ -117,6 +126,13 @@ async def list_students(
     db: AsyncSession = Depends(get_db),
     user = Depends(require_staff)
 ):
+    cache_key = make_cache_key(
+        "students", "list", user_scope(user),
+        page=page, page_size=page_size, search=search, status=status,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     query = select(Student)
     count_query = select(func.count(Student.id))
 
@@ -221,13 +237,15 @@ async def list_students(
         teacher = await resolve_teacher_for_user(db, user)
         teacher_sub_ids = await get_teacher_subject_ids(db, teacher.id) if teacher else []
         if not teacher or not teacher_sub_ids:
-            return PageResponse(
+            resp = PageResponse(
                 items=[],
                 total=0,
                 page=page,
                 page_size=page_size,
                 total_pages=0,
             )
+            await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=PageResponse[StudentResponse])
+            return resp
         today = today_kolkata()
         teacher_students_stmt = (
             select(Admission.student_id)
@@ -304,13 +322,15 @@ async def list_students(
         resp.latest_admission_number = adm_map.get(s.id)
         response_items.append(resp)
 
-    return PageResponse(
+    resp = PageResponse(
         items=response_items,
         total=total,
         page=page,
         page_size=page_size,
         total_pages=total_pages
     )
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=PageResponse[StudentResponse])
+    return resp
 
 @router.get("/check-mobile/{mobile}")
 async def check_student_by_mobile(
@@ -323,10 +343,17 @@ async def check_student_by_mobile(
     if not norm or len(norm) != 10:
         return {"exists": False, "valid": False, "message": "Mobile number must be exactly 10 numeric digits", "student": None}
 
+    cache_key = make_cache_key("students", "mobile", norm)
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
+
     student = await _find_student_by_mobile(db, norm)
 
     if not student:
-        return {"exists": False, "valid": True, "student": None}
+        resp = {"exists": False, "valid": True, "student": None}
+        await cache_set(cache_key, resp, ttl=TTL_MEDIUM)
+        return resp
 
     # Fetch admissions for this student
     adm_stmt = (
@@ -338,7 +365,7 @@ async def check_student_by_mobile(
     latest_adm = adms[0].admission_number if adms else None
     has_active_adm = any(a.status == "ACTIVE" for a in adms)
 
-    return {
+    resp = {
         "exists": True,
         "valid": True,
         "student": {
@@ -356,9 +383,15 @@ async def check_student_by_mobile(
             "admissions_count": len(adms),
         }
     }
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM)
+    return resp
 
 @router.get("/{student_id}", response_model=StudentDetailResponse)
 async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db), user = Depends(require_staff)):
+    cache_key = make_cache_key("students", "profile", student_id, user_scope(user))
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     student = (await db.execute(select(Student).where(Student.id == student_id))).scalar_one_or_none()
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
@@ -619,6 +652,7 @@ async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db),
         )
     else:
         res.demos = await _get_demos_for_student(db, student)
+    await cache_set(cache_key, res, ttl=TTL_MEDIUM, model=StudentDetailResponse)
     return res
 
 async def _get_demos_for_student(
@@ -691,6 +725,10 @@ async def get_student_demos(
     db: AsyncSession = Depends(get_db),
     user = Depends(require_staff)
 ):
+    cache_key = make_cache_key("students", "demos", student_id, user_scope(user))
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     student = (await db.execute(select(Student).where(Student.id == student_id))).scalar_one_or_none()
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
@@ -704,14 +742,18 @@ async def get_student_demos(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access denied: student is not an active student in your assigned subjects",
             )
-        return await _get_demos_for_student(
+        demos = await _get_demos_for_student(
             db,
             student,
             teacher_id=teacher.id if teacher else None,
             teacher_sub_ids=teacher_sub_ids,
             active_only=True,
         )
-    return await _get_demos_for_student(db, student)
+        await cache_set(cache_key, demos, ttl=TTL_MEDIUM, model=List[StudentDemoItemResponse])
+        return demos
+    demos = await _get_demos_for_student(db, student)
+    await cache_set(cache_key, demos, ttl=TTL_MEDIUM, model=List[StudentDemoItemResponse])
+    return demos
 
 
 @router.post("/{student_id}/demos", response_model=EnquiryResponse, status_code=status.HTTP_201_CREATED)
@@ -891,6 +933,7 @@ async def create_student(
             detail="This phone number is already registered"
         )
     await db.refresh(new_student)
+    await invalidate_student_cache(new_student.id)
     return StudentResponse.model_validate(new_student)
 
 @router.put("/{student_id}", response_model=StudentResponse)
@@ -963,6 +1006,7 @@ async def update_student(
             detail="This phone number is already registered"
         )
     await db.refresh(student)
+    await invalidate_student_cache(student.id)
     return StudentResponse.model_validate(student)
 
 @router.post("/{student_id}/revoke", response_model=StudentResponse)
@@ -1040,6 +1084,7 @@ async def revoke_student(
     db.add(audit)
     await db.commit()
     await db.refresh(student)
+    await invalidate_enrollment_and_admission_cache(student_id=student.id)
     return StudentResponse.model_validate(student)
 
 @router.post("/{student_id}/restore", response_model=StudentResponse)
@@ -1144,6 +1189,7 @@ async def restore_student(
     db.add(audit)
     await db.commit()
     await db.refresh(student)
+    await invalidate_enrollment_and_admission_cache(student_id=student.id)
     return StudentResponse.model_validate(student)
 
 @router.post("/upload-photo")
@@ -1212,6 +1258,7 @@ async def upload_student_photo(
     student.photo_url = f"/uploads/students/{filename}"
     await db.commit()
     await db.refresh(student)
+    await invalidate_student_cache(student.id)
     return StudentResponse.model_validate(student)
 
 @router.get("/{student_id}/last-fee-period")
@@ -1228,6 +1275,13 @@ async def get_student_last_fee_period(
     Provides smart suggested next start date (next day after previous end) and end date (+30 days).
     Admin can override the start date for the next cycle.
     """
+    cache_key = make_cache_key(
+        "students", "fee_period", student_id,
+        subject_id=subject_id, batch_id=batch_id,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     student = (await db.execute(select(Student).where(Student.id == student_id))).scalar_one_or_none()
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
@@ -1263,7 +1317,7 @@ async def get_student_last_fee_period(
         last_end = item.valid_to or adm.valid_to or adm.admission_date
         suggested_start = last_end + timedelta(days=1)
         suggested_end = compute_rolling_cycle_end(suggested_start, 1)[0]
-        return {
+        resp = {
             "student_id": str(student_id),
             "batch_id": str(batch_id) if batch_id else None,
             "has_previous": True,
@@ -1272,10 +1326,12 @@ async def get_student_last_fee_period(
             "suggested_end_date": suggested_end.isoformat(),
             "item_name": item.item_name_snapshot
         }
+        await cache_set(cache_key, resp, ttl=TTL_MEDIUM)
+        return resp
     else:
         suggested_start = today
         suggested_end = compute_rolling_cycle_end(suggested_start, 1)[0]
-        return {
+        resp = {
             "student_id": str(student_id),
             "batch_id": str(batch_id) if batch_id else None,
             "has_previous": False,
@@ -1284,6 +1340,8 @@ async def get_student_last_fee_period(
             "suggested_end_date": suggested_end.isoformat(),
             "item_name": None
         }
+        await cache_set(cache_key, resp, ttl=TTL_MEDIUM)
+        return resp
 
 
 @router.get("/{student_id}/renewals-due", response_model=List[RenewalsDueItemResponse])
@@ -1294,6 +1352,13 @@ async def get_student_renewals_due(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
+    cache_key = make_cache_key(
+        "students", "renewals_due", student_id,
+        days=days, include_overdue=include_overdue,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     student = (await db.execute(select(Student).where(Student.id == student_id))).scalar_one_or_none()
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
@@ -1372,6 +1437,7 @@ async def get_student_renewals_due(
                 renewed=(itm.id in renewed_ids)
             )
         )
+    await cache_set(cache_key, results, ttl=TTL_MEDIUM, model=List[RenewalsDueItemResponse])
     return results
 
 
@@ -1381,6 +1447,10 @@ async def get_student_active_enrollment(
     db: AsyncSession = Depends(get_db),
     user = Depends(require_staff)
 ):
+    cache_key = make_cache_key("students", "active_enr", student_id, user_scope(user))
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     student = (await db.execute(select(Student).where(Student.id == student_id))).scalar_one_or_none()
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
@@ -1662,7 +1732,7 @@ async def get_student_active_enrollment(
     else:
         active_demos = await _get_active_demos_for_student(db, student, today)
 
-    return {
+    resp = {
         "student_id": str(student.id),
         "student_code": student.student_code,
         "enrollment_number": enrollment_number,
@@ -1685,4 +1755,6 @@ async def get_student_active_enrollment(
             "total_outstanding_due": 0.0 if teacher_mode else float(total_due_all)
         }
     }
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM)
+    return resp
 

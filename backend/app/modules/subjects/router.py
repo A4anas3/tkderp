@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, and_, desc, case
 
+from app.core.cache import TTL_LONG, TTL_MEDIUM, cache_get, cache_set, invalidate_subject_cache, make_cache_key, user_scope
 from app.database.session import get_db
 from app.core.dependencies import require_staff, require_admin, require_teacher_or_admin
 from app.database.models import Subject, User, Teacher, Batch
@@ -35,6 +36,14 @@ async def list_subjects(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_staff)
 ):
+    cache_key = make_cache_key(
+        "subjects", "list", user_scope(current_user),
+        page=page, page_size=page_size, search=search, status_filter=status_filter,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
+
     query = select(Subject)
     count_query = select(func.count(Subject.id))
 
@@ -57,7 +66,9 @@ async def list_subjects(
     if is_teacher_user(current_user):
         teacher = await resolve_teacher_for_user(db, current_user)
         if not teacher:
-            return PageResponse.create(items=[], total=0, params=PaginationParams(page=page, page_size=page_size))
+            resp = PageResponse.create(items=[], total=0, params=PaginationParams(page=page, page_size=page_size))
+            await cache_set(cache_key, resp, ttl=TTL_LONG, model=PageResponse[SubjectResponse])
+            return resp
         query = query.where(Subject.teacher_id == teacher.id)
         count_query = count_query.where(Subject.teacher_id == teacher.id)
 
@@ -69,7 +80,9 @@ async def list_subjects(
     items_result = await db.execute(query)
     items = items_result.scalars().all()
 
-    return PageResponse.create(items=items, total=total, params=PaginationParams(page=page, page_size=page_size))
+    resp = PageResponse.create(items=items, total=total, params=PaginationParams(page=page, page_size=page_size))
+    await cache_set(cache_key, resp, ttl=TTL_LONG, model=PageResponse[SubjectResponse])
+    return resp
 
 @router.get("/all", response_model=list[SubjectResponse])
 async def get_all_active_subjects(
@@ -77,15 +90,22 @@ async def get_all_active_subjects(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_staff)
 ):
+    cache_key = make_cache_key("subjects", "all", user_scope(current_user), all_institute=all_institute)
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     query = select(Subject).where(Subject.status == "ACTIVE")
     if is_teacher_user(current_user):
         teacher = await resolve_teacher_for_user(db, current_user)
         if not teacher:
+            await cache_set(cache_key, [], ttl=TTL_LONG, model=list[SubjectResponse])
             return []
         query = query.where(Subject.teacher_id == teacher.id)
 
     result = await db.execute(query.order_by(Subject.name.asc()))
-    return result.scalars().all()
+    items = result.scalars().all()
+    await cache_set(cache_key, items, ttl=TTL_LONG, model=list[SubjectResponse])
+    return items
 
 async def generate_unique_subject_code(name: str, db: AsyncSession) -> str:
     """
@@ -162,6 +182,7 @@ async def create_subject(
     db.add(subject)
     await db.commit()
     await db.refresh(subject)
+    await invalidate_subject_cache()
     return subject
 
 @router.get("/{subject_id}/roster")
@@ -174,6 +195,13 @@ async def get_subject_roster(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_teacher_or_admin)
 ):
+    cache_key = make_cache_key(
+        "subjects", "roster", subject_id, user_scope(current_user),
+        page=page, page_size=page_size, search=search, status_filter=status_filter,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     today = today_kolkata()
     is_green_card = subject_id.upper() in ("GREEN-CARD", "GREEN-CARD-ALL-ACCESS", "GREEN_CARD")
     teacher_mode = is_teacher_user(current_user)
@@ -314,7 +342,7 @@ async def get_subject_roster(
             **c_info
         })
 
-    return {
+    resp = {
         "items": items,
         "total": total_filtered,
         "page": page,
@@ -328,6 +356,8 @@ async def get_subject_roster(
             "unique_students_count": uniq_stu or 0
         }
     }
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM)
+    return resp
 
 @router.get("/{subject_id}", response_model=SubjectResponse)
 async def get_subject(
@@ -335,6 +365,10 @@ async def get_subject(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_teacher_or_admin)
 ):
+    cache_key = make_cache_key("subjects", "detail", subject_id, user_scope(current_user))
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     res = await db.execute(select(Subject).where(Subject.id == subject_id))
     subject = res.scalar_one_or_none()
     if not subject:
@@ -346,6 +380,7 @@ async def get_subject(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access denied: you are not assigned to this subject",
             )
+    await cache_set(cache_key, subject, ttl=TTL_LONG, model=SubjectResponse)
     return subject
 
 @router.put("/{subject_id}", response_model=SubjectResponse)
@@ -398,4 +433,5 @@ async def update_subject(
 
     await db.commit()
     await db.refresh(subject)
+    await invalidate_subject_cache()
     return subject

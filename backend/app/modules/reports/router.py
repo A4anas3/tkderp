@@ -11,6 +11,7 @@ from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_, case
 
+from app.core.cache import TTL_MEDIUM, cache_get, cache_set, make_cache_key
 from app.database.session import get_db
 from app.common.calculations import evaluate_student_rolling_cycle, compute_rolling_cycle_end
 from app.common.active_student import active_student_subject_filter, today_kolkata
@@ -116,6 +117,19 @@ async def get_subject_revenue_report(
     Supports CSV export via ?format=csv.
     """
     f_date, t_date = _resolve_date_range(from_date, to_date, month, year)
+    search_str = search if isinstance(search, str) else None
+    page_int = page if isinstance(page, int) else None
+    page_size_int = page_size if isinstance(page_size, int) else None
+    format_str = format if isinstance(format, str) else None
+
+    cache_key = make_cache_key(
+        "reports", "subject_revenue",
+        from_date=f_date, to_date=t_date, month=month, year=year,
+        search=search_str, page=page_int, page_size=page_size_int, format=format_str,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
 
     start_col = func.coalesce(AdmissionItem.valid_from, Admission.valid_from, Admission.admission_date)
     end_col = func.coalesce(AdmissionItem.valid_to, Admission.valid_to, Admission.admission_date + 30)
@@ -337,7 +351,9 @@ async def get_subject_revenue_report(
             [item["subject_code"], item["subject_name"], item["enrolled_count"], item["total_booked"], item["total_collected"], item["balance_due"]]
             for item in report
         ]
-        return generate_csv_response("subject_revenue_report.csv", headers, rows)
+        csv_resp = generate_csv_response("subject_revenue_report.csv", headers, rows)
+        await cache_set(cache_key, csv_resp, ttl=TTL_MEDIUM)
+        return csv_resp
 
     total = len(report)
     if page_int is not None:
@@ -345,7 +361,7 @@ async def get_subject_revenue_report(
         total_pages = max(1, (total + effective_page_size - 1) // effective_page_size) if total > 0 else 1
         start = (page_int - 1) * effective_page_size
         paged_items = report[start:start + effective_page_size]
-        return {
+        resp = {
             "filters": {
                 "from_date": str(f_date) if f_date else None,
                 "to_date": str(t_date) if t_date else None,
@@ -363,8 +379,10 @@ async def get_subject_revenue_report(
             "page_size": effective_page_size,
             "items": paged_items
         }
+        await cache_set(cache_key, resp, ttl=TTL_MEDIUM)
+        return resp
 
-    return {
+    resp = {
         "filters": {
             "from_date": str(f_date) if f_date else None,
             "to_date": str(t_date) if t_date else None,
@@ -382,6 +400,8 @@ async def get_subject_revenue_report(
         "page_size": total or 15,
         "items": report
     }
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM)
+    return resp
 
 
 @router.get("/subject-revenue/csv")
@@ -415,6 +435,15 @@ async def get_batch_revenue_report(
     Collections are derived strictly from PaymentAllocation ledger.
     """
     f_date, t_date = _resolve_date_range(from_date, to_date, month, year)
+    format_str = format if isinstance(format, str) else None
+
+    cache_key = make_cache_key(
+        "reports", "batch_revenue",
+        from_date=f_date, to_date=t_date, month=month, year=year, format=format_str,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
 
     start_col = func.coalesce(AdmissionItem.valid_from, Admission.valid_from, Admission.admission_date)
     end_col = func.coalesce(AdmissionItem.valid_to, Admission.valid_to, Admission.admission_date + 30)
@@ -532,8 +561,11 @@ async def get_batch_revenue_report(
             [b["batch_code"], b["batch_name"], b["teacher_name"], b["hall_number"], b["enrolled_count"], b["total_booked"], b["total_collected"], b["balance_due"]]
             for b in report
         ]
-        return generate_csv_response("batch_revenue_report.csv", headers, rows)
+        csv_resp = generate_csv_response("batch_revenue_report.csv", headers, rows)
+        await cache_set(cache_key, csv_resp, ttl=TTL_MEDIUM)
+        return csv_resp
 
+    await cache_set(cache_key, report, ttl=TTL_MEDIUM)
     return report
 
 
@@ -570,6 +602,19 @@ async def get_teacher_revenue_report(
     and complete student roster. Collections derived strictly from PaymentAllocation ledger.
     """
     f_date, t_date = _resolve_date_range(from_date, to_date, month, year)
+    search_str = search if isinstance(search, str) else None
+    page_int = page if isinstance(page, int) else None
+    page_size_int = page_size if isinstance(page_size, int) else None
+    format_str = format if isinstance(format, str) else None
+
+    cache_key = make_cache_key(
+        "reports", "teacher_revenue",
+        from_date=f_date, to_date=t_date, month=month, year=year,
+        search=search_str, page=page_int, page_size=page_size_int, format=format_str,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
 
     start_col = func.coalesce(AdmissionItem.valid_from, Admission.valid_from, Admission.admission_date)
     end_col = func.coalesce(AdmissionItem.valid_to, Admission.valid_to, Admission.admission_date + 30)
@@ -708,7 +753,9 @@ async def get_teacher_revenue_report(
             [t["teacher_code"], t["teacher_name"], t["specialization"], t["batches_count"], t["enrolled_count"], t["total_booked"], t["total_collected"], t["balance_due"]]
             for t in report
         ]
-        return generate_csv_response("teacher_revenue_report.csv", headers, rows)
+        csv_resp = generate_csv_response("teacher_revenue_report.csv", headers, rows)
+        await cache_set(cache_key, csv_resp, ttl=TTL_MEDIUM)
+        return csv_resp
 
     total = len(report)
     summary = {
@@ -723,7 +770,7 @@ async def get_teacher_revenue_report(
         total_pages = max(1, (total + effective_page_size - 1) // effective_page_size) if total > 0 else 1
         start = (page_int - 1) * effective_page_size
         paged_items = report[start:start + effective_page_size]
-        return {
+        resp = {
             "summary": summary,
             "items": paged_items,
             "total": total,
@@ -731,7 +778,10 @@ async def get_teacher_revenue_report(
             "page": page_int,
             "page_size": effective_page_size
         }
+        await cache_set(cache_key, resp, ttl=TTL_MEDIUM)
+        return resp
 
+    await cache_set(cache_key, report, ttl=TTL_MEDIUM)
     return report
 
 
@@ -771,6 +821,13 @@ async def get_teacher_payable_report(
     Supports CSV export via ?format=csv.
     """
     f_date, t_date = _resolve_date_range(from_date, to_date, month, year)
+    cache_key = make_cache_key(
+        "reports", "teacher_payable",
+        from_date=f_date, to_date=t_date, month=month, year=year, format=format,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     report = await get_teacher_payable_summary(db, f_date, t_date)
 
     if format == "csv":
@@ -782,9 +839,11 @@ async def get_teacher_payable_report(
             ]
             for r in report
         ]
-        return generate_csv_response("teacher_payable_report.csv", headers, rows)
+        csv_resp = generate_csv_response("teacher_payable_report.csv", headers, rows)
+        await cache_set(cache_key, csv_resp, ttl=TTL_MEDIUM)
+        return csv_resp
 
-    return {
+    resp = {
         "filters": {
             "from_date": str(f_date) if f_date else None,
             "to_date": str(t_date) if t_date else None
@@ -798,6 +857,8 @@ async def get_teacher_payable_report(
         },
         "items": report
     }
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM)
+    return resp
 
 
 @router.get("/teacher-payable/csv")
@@ -831,6 +892,13 @@ async def get_dues_by_subject_report(
     Supports CSV export via ?format=csv.
     """
     f_date, t_date = _resolve_date_range(from_date, to_date, month, year)
+    cache_key = make_cache_key(
+        "reports", "dues_by_subject",
+        from_date=f_date, to_date=t_date, month=month, year=year, format=format,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     report = await get_dues_by_subject(db, f_date, t_date)
 
     if format == "csv":
@@ -842,9 +910,11 @@ async def get_dues_by_subject_report(
             ]
             for r in report
         ]
-        return generate_csv_response("dues_by_subject_report.csv", headers, rows)
+        csv_resp = generate_csv_response("dues_by_subject_report.csv", headers, rows)
+        await cache_set(cache_key, csv_resp, ttl=TTL_MEDIUM)
+        return csv_resp
 
-    return {
+    resp = {
         "filters": {
             "from_date": str(f_date) if f_date else None,
             "to_date": str(t_date) if t_date else None
@@ -857,6 +927,8 @@ async def get_dues_by_subject_report(
         },
         "items": report
     }
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM)
+    return resp
 
 
 @router.get("/dues-by-subject/csv")
@@ -890,6 +962,13 @@ async def get_collection_by_cashier_report(
     Supports CSV export via ?format=csv.
     """
     f_date, t_date = _resolve_date_range(from_date, to_date, month, year)
+    cache_key = make_cache_key(
+        "reports", "collection_by_cashier",
+        from_date=f_date, to_date=t_date, month=month, year=year, format=format,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     report = await get_collections_by_cashier(db, f_date, t_date)
 
     if format == "csv":
@@ -901,9 +980,11 @@ async def get_collection_by_cashier_report(
             ]
             for r in report
         ]
-        return generate_csv_response("collection_by_cashier_report.csv", headers, rows)
+        csv_resp = generate_csv_response("collection_by_cashier_report.csv", headers, rows)
+        await cache_set(cache_key, csv_resp, ttl=TTL_MEDIUM)
+        return csv_resp
 
-    return {
+    resp = {
         "filters": {
             "from_date": str(f_date) if f_date else None,
             "to_date": str(t_date) if t_date else None
@@ -915,6 +996,8 @@ async def get_collection_by_cashier_report(
         },
         "items": report
     }
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM)
+    return resp
 
 
 @router.get("/collection-by-cashier/csv")
@@ -948,6 +1031,13 @@ async def get_collection_by_mode_report(
     Supports CSV export via ?format=csv.
     """
     f_date, t_date = _resolve_date_range(from_date, to_date, month, year)
+    cache_key = make_cache_key(
+        "reports", "collection_by_mode",
+        from_date=f_date, to_date=t_date, month=month, year=year, format=format,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     report = await get_collections_by_mode(db, f_date, t_date)
 
     if format == "csv":
@@ -959,9 +1049,11 @@ async def get_collection_by_mode_report(
             ]
             for r in report
         ]
-        return generate_csv_response("collection_by_mode_report.csv", headers, rows)
+        csv_resp = generate_csv_response("collection_by_mode_report.csv", headers, rows)
+        await cache_set(cache_key, csv_resp, ttl=TTL_MEDIUM)
+        return csv_resp
 
-    return {
+    resp = {
         "filters": {
             "from_date": str(f_date) if f_date else None,
             "to_date": str(t_date) if t_date else None
@@ -973,6 +1065,8 @@ async def get_collection_by_mode_report(
         },
         "items": report
     }
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM)
+    return resp
 
 
 @router.get("/collection-by-mode/csv")
@@ -1006,6 +1100,13 @@ async def get_cash_movement_report(
         year = date.today().year
 
     f_date, t_date = _resolve_date_range(from_date, to_date, month, year)
+    cache_key = make_cache_key(
+        "reports", "cash_movement",
+        from_date=f_date, to_date=t_date, month=month, year=year,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
 
     # 1. Custom Date Range View or Single Month View
     if f_date and t_date:
@@ -1144,7 +1245,7 @@ async def get_cash_movement_report(
                 else:
                     cur_month += 1
 
-        return {
+        resp = {
             "filters": {
                 "from_date": str(f_date),
                 "to_date": str(t_date),
@@ -1160,6 +1261,8 @@ async def get_cash_movement_report(
             "breakdown": breakdown,
             "monthly_breakdown": breakdown
         }
+        await cache_set(cache_key, resp, ttl=TTL_MEDIUM)
+        return resp
 
     # 2. Standard 12-month Annual View
     target_year = year or 2026
@@ -1221,7 +1324,7 @@ async def get_cash_movement_report(
     total_refunds = sum(m["fee_refunds"] for m in months_data)
     total_outflows = sum(m["total_outflows"] for m in months_data)
 
-    return {
+    resp = {
         "filters": {
             "from_date": None,
             "to_date": None,
@@ -1238,6 +1341,8 @@ async def get_cash_movement_report(
         "breakdown": months_data,
         "monthly_breakdown": months_data
     }
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM)
+    return resp
 
 
 @router.get("/renewal-rate")
@@ -1263,6 +1368,15 @@ async def get_renewal_rate_report(
         t_date = date(today.year, today.month, last_d)
     elif not t_date:
         t_date = date.today()
+
+    cache_key = make_cache_key(
+        "reports", "renewal_rate",
+        from_date=f_date, to_date=t_date, month=month, year=year,
+        teacher_id=teacher_id, subject_id=subject_id,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
 
     conds = [
         AdmissionItem.item_type == "BATCH_SUBJECT",
@@ -1343,7 +1457,7 @@ async def get_renewal_rate_report(
     total_renewed = len([i for i in expired_items if i.id in renewed_ids])
     overall_rate = round((total_renewed / total_expired) * 100, 2) if total_expired > 0 else 0.0
 
-    return {
+    resp = {
         "summary": {
             "from_date": str(f_date),
             "to_date": str(t_date),
@@ -1354,6 +1468,8 @@ async def get_renewal_rate_report(
         "by_subject": by_subject,
         "by_teacher": by_teacher
     }
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM)
+    return resp
 
 
 # =========================================================================
@@ -1376,6 +1492,14 @@ async def get_collections_report(
     """
     (a) Collections report: Total collected by date range, broken down by payment mode and cashier.
     """
+    cache_key = make_cache_key(
+        "reports", "collections",
+        from_date=from_date, to_date=to_date, payment_mode=payment_mode,
+        cashier_id=cashier_id, search=search, page=page, page_size=page_size, format=format,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     lim = None if (format == "csv" or page is not None) else 500
     report = await get_collections_detailed(
         db, from_date=from_date, to_date=to_date,
@@ -1395,7 +1519,10 @@ async def get_collections_report(
             ]
             for t in report["transactions"]
         ]
-        return generate_csv_response("collections_report.csv", headers, rows)
+        csv_resp = generate_csv_response("collections_report.csv", headers, rows)
+        await cache_set(cache_key, csv_resp, ttl=TTL_MEDIUM)
+        return csv_resp
+    await cache_set(cache_key, report, ttl=TTL_MEDIUM)
     return report
 
 
@@ -1432,6 +1559,15 @@ async def get_dues_ageing_report(
     """
     (b) Dues & ageing report: Outstanding dues by student, subject and batch, with ageing buckets.
     """
+    cache_key = make_cache_key(
+        "reports", "dues_ageing",
+        from_date=from_date, to_date=to_date, subject_id=subject_id,
+        batch_id=batch_id, ageing_bucket=ageing_bucket, search=search,
+        page=page, page_size=page_size, format=format,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     lim = None if (format == "csv" or page is not None) else 500
     report = await get_dues_and_ageing(
         db, from_date=from_date, to_date=to_date,
@@ -1451,7 +1587,10 @@ async def get_dues_ageing_report(
             ]
             for i in report["items"]
         ]
-        return generate_csv_response("dues_ageing_report.csv", headers, rows)
+        csv_resp = generate_csv_response("dues_ageing_report.csv", headers, rows)
+        await cache_set(cache_key, csv_resp, ttl=TTL_MEDIUM)
+        return csv_resp
+    await cache_set(cache_key, report, ttl=TTL_MEDIUM)
     return report
 
 
@@ -1609,6 +1748,14 @@ async def get_admissions_conversion_api(
     """
     (f) Admissions & conversion report: enquiries received, converted to admissions, conversion rate, by subject and by source.
     """
+    cache_key = make_cache_key(
+        "reports", "admissions_conversion",
+        from_date=from_date, to_date=to_date, subject_id=subject_id,
+        source=source, search=search, page=page, page_size=page_size, format=format,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     report = await get_admissions_conversion_detailed(
         db, from_date=from_date, to_date=to_date,
         subject_id=subject_id, source=source, search=search,
@@ -1626,7 +1773,10 @@ async def get_admissions_conversion_api(
             ]
             for i in report["items"]
         ]
-        return generate_csv_response("admissions_conversion_report.csv", headers, rows)
+        csv_resp = generate_csv_response("admissions_conversion_report.csv", headers, rows)
+        await cache_set(cache_key, csv_resp, ttl=TTL_MEDIUM)
+        return csv_resp
+    await cache_set(cache_key, report, ttl=TTL_MEDIUM)
     return report
 
 
@@ -1661,6 +1811,14 @@ async def get_waivers_report_api(
     """
     (g) Waivers report: all waived dues with admin, reason and audit reference.
     """
+    cache_key = make_cache_key(
+        "reports", "waivers",
+        from_date=from_date, to_date=to_date, admin_id=admin_id,
+        search=search, page=page, page_size=page_size, format=format,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     report = await get_waivers_detailed(
         db, from_date=from_date, to_date=to_date, admin_id=admin_id, search=search,
         page=page if format != "csv" else None,
@@ -1676,7 +1834,10 @@ async def get_waivers_report_api(
             ]
             for w in report["items"]
         ]
-        return generate_csv_response("waivers_report.csv", headers, rows)
+        csv_resp = generate_csv_response("waivers_report.csv", headers, rows)
+        await cache_set(cache_key, csv_resp, ttl=TTL_MEDIUM)
+        return csv_resp
+    await cache_set(cache_key, report, ttl=TTL_MEDIUM)
     return report
 
 
@@ -1710,6 +1871,14 @@ async def get_refunds_report_api(
     """
     (h) Refunds report: fee refunds with original payment, amount, deductions, mode, cashier, reason.
     """
+    cache_key = make_cache_key(
+        "reports", "refunds",
+        from_date=from_date, to_date=to_date, refund_mode=refund_mode,
+        search=search, page=page, page_size=page_size, format=format,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     report = await get_refunds_detailed(
         db, from_date=from_date, to_date=to_date, refund_mode=refund_mode, search=search,
         page=page if format != "csv" else None,
@@ -1727,7 +1896,10 @@ async def get_refunds_report_api(
             ]
             for r in report["items"]
         ]
-        return generate_csv_response("refunds_report.csv", headers, rows)
+        csv_resp = generate_csv_response("refunds_report.csv", headers, rows)
+        await cache_set(cache_key, csv_resp, ttl=TTL_MEDIUM)
+        return csv_resp
+    await cache_set(cache_key, report, ttl=TTL_MEDIUM)
     return report
 
 
@@ -1762,6 +1934,14 @@ async def get_expenses_report_api(
     """
     (i) Expenses report: operating expenses and staff/teacher salaries disbursed.
     """
+    cache_key = make_cache_key(
+        "reports", "expenses",
+        from_date=from_date, to_date=to_date, category_id=category_id,
+        payment_mode=payment_mode, search=search, page=page, page_size=page_size, format=format,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     report = await get_expenses_detailed(
         db, from_date=from_date, to_date=to_date,
         category_id=category_id, payment_mode=payment_mode, search=search,
@@ -1778,7 +1958,10 @@ async def get_expenses_report_api(
             ]
             for i in report["items"]
         ]
-        return generate_csv_response("expenses_report.csv", headers, rows)
+        csv_resp = generate_csv_response("expenses_report.csv", headers, rows)
+        await cache_set(cache_key, csv_resp, ttl=TTL_MEDIUM)
+        return csv_resp
+    await cache_set(cache_key, report, ttl=TTL_MEDIUM)
     return report
 
 
@@ -1812,6 +1995,14 @@ async def get_summary_dashboard_api(
     """
     (j) Daily / monthly summary dashboard (billed, collected, due, expenses, net cash).
     """
+    cache_key = make_cache_key(
+        "reports", "summary_dashboard",
+        period=period, from_date=from_date, to_date=to_date,
+        month=month, year=year, format=format,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     report = await get_summary_dashboard_detailed(
         db, period=period, from_date=from_date, to_date=to_date, month=month, year=year
     )
@@ -1824,7 +2015,10 @@ async def get_summary_dashboard_api(
             ]
             for i in report["intervals"]
         ]
-        return generate_csv_response("summary_dashboard.csv", headers, rows)
+        csv_resp = generate_csv_response("summary_dashboard.csv", headers, rows)
+        await cache_set(cache_key, csv_resp, ttl=TTL_MEDIUM)
+        return csv_resp
+    await cache_set(cache_key, report, ttl=TTL_MEDIUM)
     return report
 
 

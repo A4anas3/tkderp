@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, and_, desc, asc
 
+from app.core.cache import TTL_MEDIUM, cache_get, cache_set, make_cache_key
 from app.database.session import get_db
 from app.core.dependencies import require_cashier_or_admin
 from app.modules.users.models import User
@@ -87,6 +88,14 @@ async def get_renewals_summary(
     expiry date has moved out or they are superseded by the new cycle.
     Only CASHIER and ADMIN roles are permitted.
     """
+    cache_key = make_cache_key(
+        "renewals", "summary",
+        search=search, subject_id=subject_id, window_days=window_days,
+        category=category, page=page, page_size=page_size,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     today = today_kolkata()
     start_expired = today - timedelta(days=window_days)
     end_expiring = today + timedelta(days=window_days)
@@ -137,12 +146,14 @@ async def get_renewals_summary(
     rows = res.all()
 
     if not rows:
-        return RenewalsSummaryResponse(
+        resp = RenewalsSummaryResponse(
             as_of_date=today,
             expiring=[],
             recently_expired=[],
             counts=RenewalCounts(expiring_count=0, recently_expired_count=0, total_count=0),
         )
+        await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=RenewalsSummaryResponse)
+        return resp
 
     candidate_item_ids = [itm.id for itm, adm, stu, b_name in rows]
     candidate_student_ids = {stu.id for itm, adm, stu, b_name in rows}
@@ -315,7 +326,7 @@ async def get_renewals_summary(
             paged_expiring = [x for x in paged if x.category == "EXPIRING"]
             paged_expired = [x for x in paged if x.category == "EXPIRED"]
 
-        return RenewalsSummaryResponse(
+        resp = RenewalsSummaryResponse(
             as_of_date=today,
             expiring=paged_expiring,
             recently_expired=paged_expired,
@@ -325,9 +336,11 @@ async def get_renewals_summary(
             page=page,
             page_size=effective_page_size,
         )
+        await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=RenewalsSummaryResponse)
+        return resp
 
     total = len(expiring_items) + len(recently_expired_items)
-    return RenewalsSummaryResponse(
+    resp = RenewalsSummaryResponse(
         as_of_date=today,
         expiring=expiring_items,
         recently_expired=recently_expired_items,
@@ -337,3 +350,5 @@ async def get_renewals_summary(
         page=1,
         page_size=total or 20,
     )
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=RenewalsSummaryResponse)
+    return resp

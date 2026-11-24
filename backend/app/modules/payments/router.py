@@ -8,6 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, desc, delete
 from sqlalchemy.orm import selectinload, joinedload
 
+from app.core.cache import (
+    TTL_MEDIUM,
+    cache_get,
+    cache_set,
+    invalidate_enrollment_and_admission_cache,
+    invalidate_payment_and_refund_cache,
+    make_cache_key,
+)
 from app.database.session import get_db
 from app.core.dependencies import require_staff, require_cashier_or_admin, require_admin
 from app.database.models import (
@@ -40,6 +48,14 @@ async def list_payments(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
+    cache_key = make_cache_key(
+        "payments", "list",
+        page=page, page_size=page_size, search=search,
+        student_id=student_id, admission_id=admission_id, payment_mode=payment_mode,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     query = (
         select(Payment)
         .options(
@@ -117,7 +133,9 @@ async def list_payments(
             )
         )
 
-    return PageResponse.create(items=response_items, total=total, params=PaginationParams(page=page, page_size=page_size))
+    resp = PageResponse.create(items=response_items, total=total, params=PaginationParams(page=page, page_size=page_size))
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=PageResponse[PaymentResponse])
+    return resp
 
 @router.get("/transactions", response_model=PageResponse[TransactionResponse])
 async def list_transactions(
@@ -134,6 +152,15 @@ async def list_transactions(
     """
     Append-only Financial Transactions Ledger paginated directly in SQL on financial_transactions.
     """
+    cache_key = make_cache_key(
+        "payments", "txns",
+        page=page, page_size=page_size, search=search,
+        student_id=student_id, admission_id=admission_id,
+        payment_mode=payment_mode, txn_type=txn_type,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     query = (
         select(FinancialTransaction)
         .options(
@@ -202,7 +229,9 @@ async def list_transactions(
             )
         )
 
-    return PageResponse.create(items=response_items, total=total, params=PaginationParams(page=page, page_size=page_size))
+    resp = PageResponse.create(items=response_items, total=total, params=PaginationParams(page=page, page_size=page_size))
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=PageResponse[TransactionResponse])
+    return resp
 
 @router.post("", response_model=PaymentResponse, status_code=status.HTTP_201_CREATED)
 async def record_payment(
@@ -289,6 +318,11 @@ async def record_payment(
         )
 
     await db.commit()
+    await invalidate_payment_and_refund_cache(
+        student_id=payment.student_id,
+        admission_id=payment.admission_id,
+        payment_id=payment.id,
+    )
     return resp_obj
 
 @router.get("/{payment_id}/receipt", response_model=PaymentReceiptResponse)
@@ -297,6 +331,10 @@ async def get_payment_receipt(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
+    cache_key = make_cache_key("payments", "receipt", payment_id)
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     query = (
         select(Payment)
         .options(
@@ -330,7 +368,7 @@ async def get_payment_receipt(
         for a in p.allocations
     ]
 
-    return PaymentReceiptResponse(
+    resp = PaymentReceiptResponse(
         payment_number=p.payment_number,
         payment_date=p.payment_date,
         amount=p.amount,
@@ -350,6 +388,8 @@ async def get_payment_receipt(
         fee_period=p.fee_period,
         allocations=alloc_data
     )
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=PaymentReceiptResponse)
+    return resp
 
 @router.put("/{payment_id}", response_model=PaymentResponse)
 async def update_payment(
@@ -397,6 +437,11 @@ async def update_payment(
     )
 
     await db.commit()
+    await invalidate_payment_and_refund_cache(
+        student_id=admission.student_id,
+        admission_id=admission.id,
+        payment_id=payment_id,
+    )
 
     # Re-fetch payment and allocations fresh from DB
     res = await db.execute(
@@ -489,6 +534,17 @@ async def process_refund(
 
     await db.commit()
     await db.refresh(refund)
+    await invalidate_payment_and_refund_cache(
+        student_id=admission.student_id,
+        admission_id=admission.id,
+        payment_id=refund.payment_id,
+        refund_id=refund.id,
+    )
+    if is_revoked:
+        await invalidate_enrollment_and_admission_cache(
+            student_id=admission.student_id,
+            admission_id=admission.id,
+        )
 
     return RefundResponse(
         id=refund.id,
@@ -524,6 +580,15 @@ async def list_refunds(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
+    cache_key = make_cache_key(
+        "payments", "refunds",
+        page=page, page_size=page_size, search=search,
+        student_id=student_id, admission_id=admission_id,
+        from_date=from_date, to_date=to_date,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     query = (
         select(Refund)
         .options(
@@ -588,7 +653,9 @@ async def list_refunds(
                 notes=r.notes
             )
         )
-    return PageResponse.create(items=items, total=total, params=PaginationParams(page=page, page_size=page_size))
+    resp = PageResponse.create(items=items, total=total, params=PaginationParams(page=page, page_size=page_size))
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=PageResponse[RefundResponse])
+    return resp
 
 @router.get("/refunds/{refund_id}/receipt", response_model=RefundReceiptResponse)
 async def get_refund_receipt(
@@ -596,6 +663,10 @@ async def get_refund_receipt(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
+    cache_key = make_cache_key("payments", "refund_receipt", refund_id)
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     query = (
         select(Refund)
         .options(
@@ -613,7 +684,7 @@ async def get_refund_receipt(
     if r.admission and r.admission.items:
         c_str = ", ".join(i.item_name_snapshot for i in r.admission.items)
 
-    return RefundReceiptResponse(
+    resp = RefundReceiptResponse(
         refund_number=r.refund_number,
         refund_date=r.refund_date,
         amount=r.amount,
@@ -631,3 +702,5 @@ async def get_refund_receipt(
         remaining_balance_due=r.admission.balance_due,
         notes=r.notes
     )
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=RefundReceiptResponse)
+    return resp

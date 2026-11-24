@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, and_, desc, asc
 from sqlalchemy.orm import lazyload
 
+from app.core.cache import TTL_MEDIUM, cache_get, cache_set, make_cache_key
 from app.database.session import get_db
 from app.core.dependencies import require_cashier_or_admin
 from app.database.models import Admission, AdmissionItem, Student, Batch, Payment, PaymentAllocation
@@ -34,6 +35,16 @@ async def list_enrollments(
     db: AsyncSession = Depends(get_db),
     user = Depends(require_cashier_or_admin)
 ):
+    cache_key = make_cache_key(
+        "enrollments", "list",
+        student_id=student_id, subject_id=subject_id, teacher_id=teacher_id,
+        batch_id=batch_id, access_status=access_status, expiring_in_days=expiring_in_days,
+        expired_since_days=expired_since_days, payment_status=payment_status,
+        has_balance=has_balance, search=search, sort=sort, page=page, page_size=page_size,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     today = today_kolkata()
 
     # Base query joined with Admission and Student
@@ -248,10 +259,12 @@ async def list_enrollments(
             )
         )
 
-    return EnrollmentListResponse(
+    resp = EnrollmentListResponse(
         items=items,
         total=total,
         page=page,
         page_size=page_size,
         total_pages=total_pages
     )
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=EnrollmentListResponse)
+    return resp

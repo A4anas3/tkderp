@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc, or_, and_
 from sqlalchemy.orm import selectinload, joinedload
 
+from app.core.cache import TTL_MEDIUM, cache_get, cache_set, make_cache_key
 from app.database.session import get_db
 from app.modules.students.models import Student
 from app.modules.admissions.models import Admission, AdmissionItem
@@ -311,6 +312,11 @@ async def verify_student_credential(
         raise HTTPException(status_code=400, detail="Identifier cannot be empty")
 
     target_ident = target_ident.strip()
+    cache_key = make_cache_key("verify", target_ident.lower())
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
+
     student, matched_adm_number, active_courses_list, is_overall_valid = await get_student_and_active_courses(target_ident, db)
 
     if not student:
@@ -344,7 +350,7 @@ async def verify_student_credential(
 
     inst = await _get_institute_profile(db)
 
-    return PublicVerificationResponse(
+    resp = PublicVerificationResponse(
         verified=True,
         is_valid=True,
         student=student_data,
@@ -358,6 +364,14 @@ async def verify_student_credential(
         institute_logo_url=inst["institute_logo_url"],
         verified_at=datetime.now(timezone.utc)
     )
+    await cache_set(
+        cache_key,
+        resp,
+        ttl=TTL_MEDIUM,
+        model=PublicVerificationResponse,
+        student_id=student.id,
+    )
+    return resp
 
 async def _get_active_demos_for_student(
     db: AsyncSession,
@@ -470,6 +484,11 @@ async def get_public_id_card(
             detail="Identifier (admission number or student ID) cannot be empty."
         )
 
+    cache_key = make_cache_key("idcard", target_ident.lower())
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
+
     student, matched_adm_number, active_courses_list, is_overall_valid = await get_student_and_active_courses(target_ident, db)
 
     if not student:
@@ -522,7 +541,7 @@ async def get_public_id_card(
 
     inst = await _get_institute_profile(db)
 
-    return PublicIDCardResponse(
+    resp = PublicIDCardResponse(
         verified=True,
         is_valid=True,
         student=student_data,
@@ -537,3 +556,11 @@ async def get_public_id_card(
         institute_logo_url=inst["institute_logo_url"],
         issued_at=datetime.now(timezone.utc)
     )
+    await cache_set(
+        cache_key,
+        resp,
+        ttl=TTL_MEDIUM,
+        model=PublicIDCardResponse,
+        student_id=student.id,
+    )
+    return resp

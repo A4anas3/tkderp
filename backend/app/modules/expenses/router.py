@@ -8,6 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, desc
 from sqlalchemy.orm import selectinload
 
+from app.core.cache import (
+    TTL_LONG,
+    TTL_MEDIUM,
+    cache_get,
+    cache_set,
+    invalidate_expense_and_salary_cache,
+    make_cache_key,
+)
 from app.database.session import get_db
 from app.core.dependencies import require_staff, require_cashier_or_admin, require_admin
 from app.database.models import ExpenseCategory, Expense, SalaryRecord, User, AuditLog, Teacher, TeacherAttendance
@@ -27,8 +35,14 @@ async def list_expense_categories(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
+    cache_key = "erp:expenses:categories"
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     result = await db.execute(select(ExpenseCategory).order_by(ExpenseCategory.name.asc()))
-    return result.scalars().all()
+    items = result.scalars().all()
+    await cache_set(cache_key, items, ttl=TTL_LONG, model=list[ExpenseCategoryResponse])
+    return items
 
 @router.post("/categories", response_model=ExpenseCategoryResponse, status_code=status.HTTP_201_CREATED)
 async def create_expense_category(
@@ -48,6 +62,7 @@ async def create_expense_category(
     db.add(cat)
     await db.commit()
     await db.refresh(cat)
+    await invalidate_expense_and_salary_cache()
     return cat
 
 # --- Daily Expenses ---
@@ -63,6 +78,15 @@ async def list_expenses(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
+    cache_key = make_cache_key(
+        "expenses", "list",
+        page=page, page_size=page_size, search=search,
+        category_id=category_id, payment_mode=payment_mode,
+        from_date=from_date, to_date=to_date,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     conditions = []
 
     if search and search.strip():
@@ -124,7 +148,7 @@ async def list_expenses(
     ]
 
     total_pages = (total + page_size - 1) // page_size if total > 0 else 0
-    return ExpensePageResponse(
+    resp = ExpensePageResponse(
         items=response_items,
         total=total,
         page=page,
@@ -132,6 +156,8 @@ async def list_expenses(
         total_pages=total_pages,
         total_amount=total_amount,
     )
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=ExpensePageResponse)
+    return resp
 
 @router.post("", response_model=ExpenseResponse, status_code=status.HTTP_201_CREATED)
 async def create_expense(
@@ -176,6 +202,7 @@ async def create_expense(
     db.add(audit)
     await db.commit()
     await db.refresh(expense)
+    await invalidate_expense_and_salary_cache()
 
     return ExpenseResponse(
         id=expense.id,
@@ -196,6 +223,10 @@ async def get_salary_filter_options(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
+    cache_key = "erp:expenses:salary_filters"
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     teachers_res = await db.execute(select(Teacher).order_by(Teacher.name.asc()))
     all_teachers = teachers_res.scalars().all()
 
@@ -253,7 +284,9 @@ async def get_salary_filter_options(
     )
     months = [m for m in months_res.scalars().all() if m]
 
-    return SalaryFilterOptionsResponse(staff=staff_options, months=months)
+    resp = SalaryFilterOptionsResponse(staff=staff_options, months=months)
+    await cache_set(cache_key, resp, ttl=TTL_LONG, model=SalaryFilterOptionsResponse)
+    return resp
 
 @router.get("/salaries", response_model=SalaryPageResponse)
 async def list_salary_records(
@@ -268,6 +301,15 @@ async def list_salary_records(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
+    cache_key = make_cache_key(
+        "expenses", "salaries",
+        page=page, page_size=page_size, month_year=month_year,
+        status_filter=status_filter, status=status,
+        employee_id=employee_id, employee_name=employee_name, search=search,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     conditions = []
 
     if search and search.strip():
@@ -362,7 +404,7 @@ async def list_salary_records(
         )
 
     total_pages = (total + page_size - 1) // page_size if total > 0 else 0
-    return SalaryPageResponse(
+    resp = SalaryPageResponse(
         items=response_items,
         total=total,
         page=page,
@@ -372,6 +414,8 @@ async def list_salary_records(
         total_paid_amount=total_paid_amount,
         total_salary_amount=total_salary_amount,
     )
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=SalaryPageResponse)
+    return resp
 
 @router.post("/salaries", response_model=SalaryRecordResponse, status_code=status.HTTP_201_CREATED)
 async def create_salary_record(
@@ -400,6 +444,7 @@ async def create_salary_record(
     db.add(record)
     await db.commit()
     await db.refresh(record)
+    await invalidate_expense_and_salary_cache()
 
     abs_count = None
     tid = record.employee_id
@@ -476,6 +521,7 @@ async def pay_salary(
 
     await db.commit()
     await db.refresh(record)
+    await invalidate_expense_and_salary_cache()
 
     abs_count = None
     tid = record.employee_id

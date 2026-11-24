@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     # Redis Cache
     REDIS_URL: str = "redis://localhost:6379/0"
     REDIS_ENABLED: bool = True
-    CACHE_DEFAULT_TTL: int = 60 # seconds
+    CACHE_DEFAULT_TTL: int = 180 # seconds (3 minutes safety-net TTL)
 
     # JWT & Auth
     SECRET_KEY: str = "ThakurdwaraErpSuperSecretKeyMustBeVeryStrongAndSecure2026"

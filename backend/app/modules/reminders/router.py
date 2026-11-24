@@ -3,6 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import TTL_SHORT, cache_get, cache_set, invalidate_reminder_cache, make_cache_key
 from app.database.session import get_db
 from app.core.dependencies import require_cashier_or_admin
 from app.database.models import User
@@ -43,7 +44,15 @@ async def get_reminder_queue(
     Filters by subject, batch, due-age, and status.
     Reminders are only listed for real outstanding dues (never expired/waived/cancelled items).
     """
-    return await list_reminder_queue(
+    cache_key = make_cache_key(
+        "reminders", "queue",
+        status=status, subject_id=subject_id, batch_id=batch_id,
+        due_age=due_age, search=search, page=page, page_size=page_size,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
+    res = await list_reminder_queue(
         db=db,
         status_filter=status,
         subject_id=subject_id,
@@ -53,6 +62,8 @@ async def get_reminder_queue(
         page=page,
         page_size=page_size,
     )
+    await cache_set(cache_key, res, ttl=TTL_SHORT, model=ReminderListResponse)
+    return res
 
 
 @router.post("/generate", response_model=ReminderGenerateResponse, status_code=status.HTTP_200_OK)
@@ -62,6 +73,7 @@ async def generate_reminders(
 ):
     """Scan and queue reminders for students with real outstanding dues."""
     count = await build_due_reminders(db)
+    await invalidate_reminder_cache()
     return ReminderGenerateResponse(
         message=f"Queued {count} active due reminder(s)",
         count=count,
@@ -75,7 +87,9 @@ async def mark_sent(
     current_user: User = Depends(require_cashier_or_admin),
 ):
     """Mark reminder as sent by staff member."""
-    return await mark_reminder_sent(db, reminder_id, current_user.id)
+    res = await mark_reminder_sent(db, reminder_id, current_user.id)
+    await invalidate_reminder_cache()
+    return res
 
 
 @router.post("/{reminder_id}/mark-failed", response_model=ReminderItemResponse)
@@ -87,7 +101,9 @@ async def mark_failed(
 ):
     """Mark reminder as failed (e.g. invalid phone number, unreachable)."""
     reason = payload.reason if payload else None
-    return await mark_reminder_failed(db, reminder_id, current_user.id, reason)
+    res = await mark_reminder_failed(db, reminder_id, current_user.id, reason)
+    await invalidate_reminder_cache()
+    return res
 
 
 @router.post("/{reminder_id}/reset-pending", response_model=ReminderItemResponse)
@@ -97,7 +113,9 @@ async def reset_pending(
     current_user: User = Depends(require_cashier_or_admin),
 ):
     """Reset a sent or failed reminder back to pending status."""
-    return await reset_reminder_pending(db, reminder_id, current_user.id)
+    res = await reset_reminder_pending(db, reminder_id, current_user.id)
+    await invalidate_reminder_cache()
+    return res
 
 
 @router.post("/student/{student_id}/send-due-reminder", response_model=ReminderSendStudentResponse)
@@ -107,7 +125,9 @@ async def one_click_send_student_reminder(
     current_user: User = Depends(require_cashier_or_admin),
 ):
     """One-click 'send due reminder' from a student profile."""
-    return await send_student_due_reminder(db, student_id, current_user.id)
+    res = await send_student_due_reminder(db, student_id, current_user.id)
+    await invalidate_reminder_cache()
+    return res
 
 
 @router.post("/subject/{subject_id}/send-due-reminders", response_model=ReminderGenerateResponse)
@@ -118,6 +138,7 @@ async def one_click_send_subject_reminders(
 ):
     """One-click 'send due reminder' for all students with dues in a subject."""
     count = await send_subject_due_reminders(db, subject_id, current_user.id)
+    await invalidate_reminder_cache()
     return ReminderGenerateResponse(
         message=f"Queued {count} due reminder(s) for subject",
         count=count,

@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc, or_
 from sqlalchemy.orm import selectinload
 
+from app.core.cache import TTL_SHORT, cache_get, cache_set, make_cache_key, user_scope
 from app.database.session import get_db
 from app.core.dependencies import require_admin, require_cashier_or_admin, require_teacher_or_admin
 from app.database.models import (
@@ -28,6 +29,10 @@ async def get_admin_dashboard(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin)
 ):
+    cache_key = "erp:dashboard:admin"
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     today = date.today()
 
     # Counts
@@ -111,7 +116,7 @@ async def get_admin_dashboard(
         for p in recent_pay_res.scalars().all()
     ]
 
-    return {
+    resp = {
         "metrics": {
             "total_students": total_students,
             "total_teachers": total_teachers,
@@ -127,12 +132,18 @@ async def get_admin_dashboard(
         "recent_admissions": recent_admissions,
         "recent_payments": recent_payments
     }
+    await cache_set(cache_key, resp, ttl=TTL_SHORT)
+    return resp
 
 @router.get("/cashier")
 async def get_cashier_dashboard(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
+    cache_key = "erp:dashboard:cashier"
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     today = date.today()
 
     # Today's net collections
@@ -225,7 +236,7 @@ async def get_cashier_dashboard(
         for a in unpaid_res.scalars().all()
     ]
 
-    return {
+    resp = {
         "metrics": {
             "today_collections": float(today_coll),
             "today_expenses": float(today_exp),
@@ -236,18 +247,24 @@ async def get_cashier_dashboard(
         "upcoming_demos": demos,
         "due_admissions": due_admissions
     }
+    await cache_set(cache_key, resp, ttl=TTL_SHORT)
+    return resp
 
 @router.get("/teacher")
 async def get_teacher_dashboard(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_teacher_or_admin)
 ):
+    cache_key = make_cache_key("dashboard", "teacher", user_scope(current_user))
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     teacher_mode = is_teacher_user(current_user)
     teacher = await resolve_teacher_for_user(db, current_user)
     teacher_id = teacher.id if teacher else None
 
     if teacher_mode and not teacher_id:
-        return {
+        resp = {
             "teacher_name": current_user.full_name,
             "specialization": "Faculty",
             "batches_count": 0,
@@ -258,6 +275,8 @@ async def get_teacher_dashboard(
             "subjects": [],
             "active_demos": [],
         }
+        await cache_set(cache_key, resp, ttl=TTL_SHORT)
+        return resp
 
     today = today_kolkata()
 
@@ -385,7 +404,7 @@ async def get_teacher_dashboard(
         for ditm, enq in demo_rows
     ]
 
-    return {
+    resp = {
         "teacher_name": teacher.name if teacher else current_user.full_name,
         "specialization": teacher.specialization if teacher else "Faculty",
         "batches_count": len(batch_list),
@@ -396,3 +415,5 @@ async def get_teacher_dashboard(
         "subjects": batch_list,
         "active_demos": active_demos,
     }
+    await cache_set(cache_key, resp, ttl=TTL_SHORT)
+    return resp

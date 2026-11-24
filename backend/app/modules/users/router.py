@@ -4,6 +4,7 @@ from sqlalchemy import select, func, or_
 from typing import List
 import uuid
 
+from app.core.cache import TTL_LONG, cache_get, cache_set, invalidate_user_cache, make_cache_key
 from app.database.session import get_db
 from app.modules.users.models import User
 from app.modules.auth.schemas import UserResponse
@@ -22,6 +23,11 @@ async def list_users(
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(require_admin)
 ):
+    cache_key = make_cache_key("users", "list", page=page, page_size=page_size, search=search)
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
+
     query = select(User)
     count_query = select(func.count(User.id))
 
@@ -40,13 +46,15 @@ async def list_users(
     query = query.order_by(User.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
     items = (await db.execute(query)).scalars().all()
 
-    return PageResponse(
+    resp = PageResponse(
         items=[UserResponse.model_validate(u) for u in items],
         total=total,
         page=page,
         page_size=page_size,
         total_pages=total_pages
     )
+    await cache_set(cache_key, resp, ttl=TTL_LONG, model=PageResponse[UserResponse])
+    return resp
 
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def create_user(
@@ -71,6 +79,7 @@ async def create_user(
     db.add(new_user)
     await db.commit()
     await db.refresh(new_user)
+    await invalidate_user_cache()
     return UserResponse.model_validate(new_user)
 
 @router.put("/{user_id}", response_model=UserResponse)
@@ -93,6 +102,7 @@ async def update_user(
 
     await db.commit()
     await db.refresh(user)
+    await invalidate_user_cache()
     return UserResponse.model_validate(user)
 
 @router.post("/{user_id}/reset-password")
@@ -108,4 +118,5 @@ async def reset_password(
 
     user.password_hash = get_password_hash(req.new_password)
     await db.commit()
+    await invalidate_user_cache()
     return {"success": True, "message": f"Password reset successfully for {user.employee_id}"}

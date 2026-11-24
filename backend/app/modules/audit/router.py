@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, and_, desc
 
+from app.core.cache import TTL_SHORT, cache_get, cache_set, make_cache_key
 from app.database.session import get_db
 from app.core.dependencies import require_cashier_or_admin, require_admin
 from app.database.models import AuditLog, User, Student, Admission, Payment, Refund, AdmissionItem
@@ -73,6 +74,14 @@ async def list_audit_logs(
     """
     List full system audit logs with filters. Restricted to Admin users.
     """
+    cache_key = make_cache_key(
+        "audit", "list",
+        page=page, page_size=page_size, user_id=user_id, action=action,
+        entity_type=entity_type, from_date=from_date, to_date=to_date, search=search,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     query = (
         select(AuditLog, User)
         .outerjoin(User, AuditLog.user_id == User.id)
@@ -122,7 +131,9 @@ async def list_audit_logs(
     rows = (await db.execute(query)).all()
     items = [_build_audit_response(audit, user) for audit, user in rows]
 
-    return PageResponse.create(items=items, total=total, params=PaginationParams(page=page, page_size=page_size))
+    resp = PageResponse.create(items=items, total=total, params=PaginationParams(page=page, page_size=page_size))
+    await cache_set(cache_key, resp, ttl=TTL_SHORT, model=PageResponse[AuditLogResponse])
+    return resp
 
 
 @router.get("/student/{student_id}", response_model=PageResponse[AuditLogResponse])
@@ -142,6 +153,14 @@ async def get_student_audit_logs(
     (student record, admissions, payments, refunds, subject renewals, suspensions, revokes).
     Accessible to Cashiers and Admins.
     """
+    cache_key = make_cache_key(
+        "audit", "student", student_id,
+        page=page, page_size=page_size, action=action,
+        from_date=from_date, to_date=to_date, search=search,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     stu_res = await db.execute(select(Student).where(Student.id == student_id))
     student = stu_res.scalar_one_or_none()
     if not student:
@@ -207,7 +226,9 @@ async def get_student_audit_logs(
     rows = (await db.execute(query)).all()
     items = [_build_audit_response(audit, user) for audit, user in rows]
 
-    return PageResponse.create(items=items, total=total, params=PaginationParams(page=page, page_size=page_size))
+    resp = PageResponse.create(items=items, total=total, params=PaginationParams(page=page, page_size=page_size))
+    await cache_set(cache_key, resp, ttl=TTL_SHORT, model=PageResponse[AuditLogResponse])
+    return resp
 
 
 @router.get("/actions", response_model=List[str])
@@ -218,10 +239,16 @@ async def list_distinct_actions(
     """
     Get distinct action names recorded in audit logs for filter dropdowns.
     """
+    cache_key = "erp:audit:actions"
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     res = await db.execute(
         select(AuditLog.action).distinct().order_by(AuditLog.action.asc())
     )
-    return [r[0] for r in res.all()]
+    data = [r[0] for r in res.all()]
+    await cache_set(cache_key, data, ttl=TTL_SHORT, model=List[str])
+    return data
 
 
 @router.get("/entity-types", response_model=List[str])
@@ -232,10 +259,16 @@ async def list_distinct_entity_types(
     """
     Get distinct entity types recorded in audit logs for filter dropdowns.
     """
+    cache_key = "erp:audit:entity_types"
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     res = await db.execute(
         select(AuditLog.entity_type).distinct().order_by(AuditLog.entity_type.asc())
     )
-    return [r[0] for r in res.all()]
+    data = [r[0] for r in res.all()]
+    await cache_set(cache_key, data, ttl=TTL_SHORT, model=List[str])
+    return data
 
 
 @router.get("/users", response_model=List[AuditUserSummary])
@@ -246,11 +279,15 @@ async def list_audit_users(
     """
     Get list of staff users who have performed audited actions.
     """
+    cache_key = "erp:audit:users"
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     res = await db.execute(
         select(User).order_by(User.full_name.asc())
     )
     users = res.scalars().all()
-    return [
+    data = [
         AuditUserSummary(
             id=u.id,
             full_name=u.full_name,
@@ -259,6 +296,8 @@ async def list_audit_users(
         )
         for u in users
     ]
+    await cache_set(cache_key, data, ttl=TTL_SHORT, model=List[AuditUserSummary])
+    return data
 
 
 @router.get("/stats", response_model=AuditStatsResponse)
@@ -269,6 +308,10 @@ async def get_audit_stats(
     """
     Get summary stats for the audit dashboard header.
     """
+    cache_key = "erp:audit:stats"
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     total_q = await db.execute(select(func.count(AuditLog.id)))
     total_events = total_q.scalar_one()
 
@@ -292,9 +335,11 @@ async def get_audit_stats(
     )
     today_events = today_q.scalar_one()
 
-    return AuditStatsResponse(
+    resp = AuditStatsResponse(
         total_events=total_events,
         financial_events=financial_events,
         student_events=student_events,
         today_events=today_events
     )
+    await cache_set(cache_key, resp, ttl=TTL_SHORT, model=AuditStatsResponse)
+    return resp

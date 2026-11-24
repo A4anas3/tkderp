@@ -8,6 +8,7 @@ from app.database.session import get_db
 from app.core.dependencies import require_cashier_or_admin
 
 from app.core.config import settings
+from app.core.redis import close_redis
 from app.modules.auth.router import router as auth_router
 from app.modules.users.router import router as users_router
 from app.modules.teachers.router import router as teachers_router
@@ -116,6 +117,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         scheduler.shutdown(wait=False)
+        await close_redis()
 
 app = FastAPI(
     title="Thakurdwara Coaching ERP API",

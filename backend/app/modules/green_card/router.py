@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
+from app.core.cache import TTL_LONG, cache_get, cache_set, invalidate_green_card_cache
 from app.database.session import get_db
 from app.core.dependencies import require_cashier_or_admin, require_admin
 from app.database.models import GreenCardProduct, User
@@ -16,16 +17,28 @@ async def list_green_cards(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
+    cache_key = "erp:green_card:list"
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     result = await db.execute(select(GreenCardProduct).order_by(GreenCardProduct.created_at.desc()))
-    return result.scalars().all()
+    items = result.scalars().all()
+    await cache_set(cache_key, items, ttl=TTL_LONG, model=list[GreenCardResponse])
+    return items
 
 @router.get("/active", response_model=Optional[GreenCardResponse])
 async def get_active_green_card(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
+    cache_key = "erp:green_card:active"
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     result = await db.execute(select(GreenCardProduct).where(GreenCardProduct.is_active == True).limit(1))
-    return result.scalar_one_or_none()
+    card = result.scalar_one_or_none()
+    await cache_set(cache_key, card, ttl=TTL_LONG, model=Optional[GreenCardResponse])
+    return card
 
 @router.post("", response_model=GreenCardResponse, status_code=status.HTTP_201_CREATED)
 async def create_green_card(
@@ -43,6 +56,7 @@ async def create_green_card(
     db.add(product)
     await db.commit()
     await db.refresh(product)
+    await invalidate_green_card_cache()
     return product
 
 @router.put("/{card_id}", response_model=GreenCardResponse)
@@ -63,4 +77,5 @@ async def update_green_card(
 
     await db.commit()
     await db.refresh(product)
+    await invalidate_green_card_cache()
     return product

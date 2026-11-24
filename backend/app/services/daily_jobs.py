@@ -11,6 +11,7 @@ from app.database.session import AsyncSessionLocal
 from app.database.models import AdmissionItem, Admission, Batch, AuditLog
 from app.common.active_student import today_kolkata
 from app.core.config import settings
+from app.core.cache import invalidate_all_caches
 
 logger = logging.getLogger(__name__)
 
@@ -38,10 +39,12 @@ async def refresh_statuses(
         async with AsyncSessionLocal() as session:
             res = await _execute_refresh_statuses(session, t)
             await session.commit()
+            await invalidate_all_caches()
             return res
     else:
         res = await _execute_refresh_statuses(db, t)
         await db.commit()
+        await invalidate_all_caches()
         return res
 
 async def _execute_refresh_statuses(db: AsyncSession, today: date) -> Dict[str, Any]:
@@ -178,4 +181,5 @@ async def run_daily_expiration_job(db: AsyncSession, run_date: Optional[date] = 
     """
     res = await _execute_refresh_statuses(db, run_date or today_kolkata())
     await db.commit()
+    await invalidate_all_caches()
     return res

@@ -8,6 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, desc, and_
 from sqlalchemy.orm import selectinload
 
+from app.core.cache import (
+    TTL_MEDIUM,
+    cache_get,
+    cache_set,
+    invalidate_enrollment_and_admission_cache,
+    invalidate_payment_and_refund_cache,
+    make_cache_key,
+)
 from app.database.session import get_db
 from app.core.config import settings
 from app.core.dependencies import require_staff, require_cashier_or_admin, require_admin
@@ -108,6 +116,14 @@ async def list_admissions(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
+    cache_key = make_cache_key(
+        "admissions", "list",
+        page=page, page_size=page_size, search=search,
+        student_id=student_id, payment_status=payment_status, active_only=active_only,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     query = select(Admission).options(
         selectinload(Admission.items).selectinload(AdmissionItem.demo_item),
         selectinload(Admission.payments),
@@ -166,7 +182,9 @@ async def list_admissions(
     items_result = await db.execute(query)
     admissions = items_result.scalars().all()
 
-    return PageResponse.create(items=admissions, total=total, params=PaginationParams(page=page, page_size=page_size))
+    resp = PageResponse.create(items=admissions, total=total, params=PaginationParams(page=page, page_size=page_size))
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=PageResponse[AdmissionResponse])
+    return resp
 
 @router.post("", response_model=AdmissionResponse, status_code=status.HTTP_201_CREATED)
 async def create_admission(
@@ -510,6 +528,10 @@ async def create_admission(
     db.add(adm_audit)
 
     await db.commit()
+    await invalidate_enrollment_and_admission_cache(
+        student_id=admission.student_id,
+        admission_id=admission.id,
+    )
 
     full_adm = await get_admission(admission.id, db, current_user)
 
@@ -536,6 +558,14 @@ async def get_renewals_due(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
+    cache_key = make_cache_key(
+        "admissions", "renewals_due",
+        days=days, teacher_id=teacher_id, subject_id=subject_id,
+        include_overdue=include_overdue,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     today = today_kolkata()
     window_end = today + timedelta(days=days)
     gap_limit = getattr(settings, "RENEWAL_GAP_RESET_DAYS", 30)
@@ -615,6 +645,7 @@ async def get_renewals_due(
                 renewed=(itm.id in renewed_ids)
             )
         )
+    await cache_set(cache_key, results, ttl=TTL_MEDIUM, model=List[RenewalsDueItemResponse])
     return results
 
 
@@ -624,6 +655,10 @@ async def get_admission(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
+    cache_key = make_cache_key("admissions", "detail", admission_id)
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     query = select(Admission).options(
         selectinload(Admission.items).selectinload(AdmissionItem.demo_item),
         selectinload(Admission.payments),
@@ -641,6 +676,7 @@ async def get_admission(
             await db.commit()
             await db.refresh(admission)
 
+    await cache_set(cache_key, admission, ttl=TTL_MEDIUM, model=AdmissionResponse)
     return admission
 
 @router.get("/{admission_id}/slips", response_model=AdmissionSlipsResponse)
@@ -653,6 +689,10 @@ async def get_admission_slips(
     Returns all generated slips, payment receipts (1st, 2nd, installments),
     and refund vouchers for a given course purchase / admission.
     """
+    cache_key = make_cache_key("admissions", "slips", admission_id)
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     query = (
         select(Admission)
         .options(
@@ -926,7 +966,7 @@ async def get_admission_slips(
             )
         )
 
-    return AdmissionSlipsResponse(
+    resp = AdmissionSlipsResponse(
         admission_id=admission.id,
         admission_number=admission.admission_number,
         admission_date=admission.admission_date,
@@ -951,6 +991,8 @@ async def get_admission_slips(
         items=admission.items,
         slips=slips
     )
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=AdmissionSlipsResponse)
+    return resp
 
 @router.patch("/{admission_id}/gst", response_model=AdmissionResponse)
 async def update_admission_gst(
@@ -1013,6 +1055,10 @@ async def update_admission_gst(
     db.add(admission)
     await db.commit()
     await db.refresh(admission)
+    await invalidate_payment_and_refund_cache(
+        student_id=admission.student_id,
+        admission_id=admission.id,
+    )
     return admission
 
 @router.post("/{admission_id}/cancel", response_model=AdmissionResponse)
@@ -1035,6 +1081,10 @@ async def cancel_admission(
     admission = await cancel_admission_service(admission, db, current_user)
     await db.commit()
     await db.refresh(admission)
+    await invalidate_enrollment_and_admission_cache(
+        student_id=admission.student_id,
+        admission_id=admission.id,
+    )
     return admission
 
 @router.post("/{admission_id}/revoke", response_model=AdmissionResponse)
@@ -1072,6 +1122,14 @@ async def revoke_batch_purchase(
     )
     await db.commit()
     await db.refresh(admission)
+    await invalidate_enrollment_and_admission_cache(
+        student_id=admission.student_id,
+        admission_id=admission.id,
+    )
+    await invalidate_payment_and_refund_cache(
+        student_id=admission.student_id,
+        admission_id=admission.id,
+    )
     return admission
 
 @router.post("/{admission_id}/restore", response_model=AdmissionResponse)
@@ -1094,6 +1152,14 @@ async def restore_batch_purchase(
     admission = await restore_admission_service(admission, db, current_user)
     await db.commit()
     await db.refresh(admission)
+    await invalidate_enrollment_and_admission_cache(
+        student_id=admission.student_id,
+        admission_id=admission.id,
+    )
+    await invalidate_payment_and_refund_cache(
+        student_id=admission.student_id,
+        admission_id=admission.id,
+    )
     return admission
 
 
@@ -1131,6 +1197,10 @@ async def waive_admission_due(
 
     await db.commit()
     await db.refresh(admission)
+    await invalidate_payment_and_refund_cache(
+        student_id=admission.student_id,
+        admission_id=admission.id,
+    )
     return admission
 
 
@@ -1213,6 +1283,10 @@ async def update_admission_validity(
 
     await db.commit()
     await db.refresh(admission)
+    await invalidate_enrollment_and_admission_cache(
+        student_id=admission.student_id,
+        admission_id=admission.id,
+    )
     return admission
 
 
@@ -1250,6 +1324,10 @@ async def resume_admission(
     db.add(audit)
     await db.commit()
     await db.refresh(admission)
+    await invalidate_enrollment_and_admission_cache(
+        student_id=admission.student_id,
+        admission_id=admission.id,
+    )
     return admission
 
 
@@ -1311,6 +1389,10 @@ async def update_item_validity(
     db.add(audit)
     await db.commit()
     await db.refresh(item)
+    await invalidate_enrollment_and_admission_cache(
+        student_id=item.student_id,
+        admission_id=item.admission_id,
+    )
     return item
 
 
@@ -1342,6 +1424,10 @@ async def resume_admission_item(
     db.add(audit)
     await db.commit()
     await db.refresh(item)
+    await invalidate_enrollment_and_admission_cache(
+        student_id=item.student_id,
+        admission_id=item.admission_id,
+    )
     return item
 
 
@@ -1383,6 +1469,14 @@ async def renew_admission_item_endpoint(
         default_params=default_params,
         initial_payment=payload.initial_payment,
         notes=payload.notes
+    )
+    await invalidate_enrollment_and_admission_cache(
+        student_id=adm.student_id,
+        admission_id=adm.id,
+    )
+    await invalidate_payment_and_refund_cache(
+        student_id=adm.student_id,
+        admission_id=adm.id,
     )
     return adm
 
@@ -1519,7 +1613,7 @@ async def renew_subject(
     }
 
     if target_item:
-        return await renew_admission_items_service(
+        adm = await renew_admission_items_service(
             db=db,
             current_user=current_user,
             target_item_ids=[target_item.id],
@@ -1528,6 +1622,15 @@ async def renew_subject(
             initial_payment=payload.initial_payment,
             notes=payload.notes
         )
+        await invalidate_enrollment_and_admission_cache(
+            student_id=adm.student_id,
+            admission_id=adm.id,
+        )
+        await invalidate_payment_and_refund_cache(
+            student_id=adm.student_id,
+            admission_id=adm.id,
+        )
+        return adm
     else:
         # Check if discontinued item exists to raise proper error
         disc_stmt = (

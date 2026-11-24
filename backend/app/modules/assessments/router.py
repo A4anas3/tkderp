@@ -6,6 +6,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_, desc
 
+from app.core.cache import (
+    TTL_MEDIUM,
+    cache_get,
+    cache_set,
+    invalidate_assessment_cache,
+    make_cache_key,
+    user_scope,
+)
 from app.database.session import get_db
 from app.core.dependencies import require_teacher_or_admin
 from app.common.teacher_scope import (
@@ -54,6 +62,15 @@ async def list_assessments(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_teacher_or_admin)
 ):
+    cache_key = make_cache_key(
+        "assessments", "list", user_scope(current_user),
+        page=page, page_size=page_size, subject_id=subject_id,
+        batch_id=batch_id, teacher_id=teacher_id, from_date=from_date, to_date=to_date,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
+
     query = select(Assessment)
     count_query = select(func.count(Assessment.id))
 
@@ -61,7 +78,9 @@ async def list_assessments(
     if is_teacher_user(current_user):
         teacher = await resolve_teacher_for_user(db, current_user)
         if not teacher:
-            return PageResponse(items=[], total=0, page=page, page_size=page_size, total_pages=0)
+            resp = PageResponse(items=[], total=0, page=page, page_size=page_size, total_pages=0)
+            await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=PageResponse[AssessmentResponse])
+            return resp
         teacher_sub_ids = await get_teacher_subject_ids(db, teacher.id)
         if teacher_sub_ids:
             scope_clause = or_(Assessment.teacher_id == teacher.id, Assessment.subject_id.in_(teacher_sub_ids))
@@ -120,13 +139,15 @@ async def list_assessments(
             )
         )
 
-    return PageResponse(
+    resp = PageResponse(
         items=items,
         total=total,
         page=page,
         page_size=page_size,
         total_pages=(total + page_size - 1) // page_size if total > 0 else 0
     )
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=PageResponse[AssessmentResponse])
+    return resp
 
 
 @router.post("", response_model=AssessmentResponse, status_code=status.HTTP_201_CREATED)
@@ -166,6 +187,7 @@ async def create_assessment(
     db.add(assessment)
     await db.commit()
     await db.refresh(assessment)
+    await invalidate_assessment_cache()
 
     return AssessmentResponse(
         id=assessment.id,
@@ -210,6 +232,10 @@ async def get_assessment(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_teacher_or_admin)
 ):
+    cache_key = make_cache_key("assessments", "detail", id, user_scope(current_user))
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     a = await db.get(Assessment, id)
     if not a:
         raise HTTPException(status_code=404, detail="Assessment not found")
@@ -235,7 +261,7 @@ async def get_assessment(
     marks_cnt = len(marks_rows)
     avg_pct = round(sum(m.percentage for m in marks_rows) / marks_cnt, 2) if marks_cnt > 0 else None
 
-    return AssessmentDetailResponse(
+    resp = AssessmentDetailResponse(
         id=a.id,
         name=a.name,
         description=a.description,
@@ -253,6 +279,8 @@ async def get_assessment(
         created_at=a.created_at,
         marks=marks_rows
     )
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=AssessmentDetailResponse)
+    return resp
 
 
 @router.post("/{id}/marks", response_model=List[StudentMarkResponse])
@@ -308,6 +336,7 @@ async def record_student_marks(
             saved_marks.append(sm)
 
     await db.commit()
+    await invalidate_assessment_cache()
 
     # Re-fetch with relationships
     res_list = []
@@ -337,6 +366,10 @@ async def get_student_assessment_history(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_teacher_or_admin)
 ):
+    cache_key = make_cache_key("assessments", "student_history", student_id, user_scope(current_user))
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     stmt = (
         select(StudentMark, Assessment, Subject)
         .join(Assessment, StudentMark.assessment_id == Assessment.id)
@@ -375,4 +408,5 @@ async def get_student_assessment_history(
             "remarks": sm.remarks,
             "created_at": sm.created_at.isoformat()
         })
+    await cache_set(cache_key, history, ttl=TTL_MEDIUM, model=List[dict])
     return history

@@ -10,6 +10,14 @@ import os
 import json
 import calendar
 
+from app.core.cache import (
+    TTL_MEDIUM,
+    cache_get,
+    cache_set,
+    invalidate_expense_and_salary_cache,
+    invalidate_teacher_cache,
+    make_cache_key,
+)
 from app.database.session import get_db
 from app.core.config import settings
 from app.modules.students.router import compress_avatar_image
@@ -55,6 +63,14 @@ async def list_teachers(
     db: AsyncSession = Depends(get_db),
     user = Depends(require_cashier_or_admin)
 ):
+    cache_key = make_cache_key(
+        "teachers", "list",
+        page=page, page_size=page_size, search=search,
+        status=status, status_filter=status_filter,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     query = select(Teacher)
     count_query = select(func.count(Teacher.id))
 
@@ -79,21 +95,29 @@ async def list_teachers(
     query = query.order_by(Teacher.name.asc()).offset((page - 1) * page_size).limit(page_size)
     items = (await db.execute(query)).scalars().all()
 
-    return PageResponse(
+    resp = PageResponse(
         items=[TeacherResponse.model_validate(t) for t in items],
         total=total,
         page=page,
         page_size=page_size,
         total_pages=total_pages
     )
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=PageResponse[TeacherResponse])
+    return resp
 
 @router.get("/all", response_model=List[TeacherResponse])
 async def get_all_active_teachers(
     db: AsyncSession = Depends(get_db),
     user = Depends(require_cashier_or_admin)
 ):
+    cache_key = "erp:teachers:all"
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     result = await db.execute(select(Teacher).where(Teacher.status == "ACTIVE").order_by(Teacher.name.asc()))
-    return [TeacherResponse.model_validate(t) for t in result.scalars().all()]
+    items = [TeacherResponse.model_validate(t) for t in result.scalars().all()]
+    await cache_set(cache_key, items, ttl=TTL_MEDIUM, model=List[TeacherResponse])
+    return items
 
 @router.get("/by-mobile/{mobile}", response_model=Optional[TeacherResponse])
 async def get_teacher_by_mobile(
@@ -109,10 +133,17 @@ async def get_teacher_by_mobile(
             clean = clean[2:]
         elif clean.startswith("0") and len(clean) == 11:
             clean = clean[1:]
+    cache_key = make_cache_key("teachers", "mobile", clean)
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     teacher = (await db.execute(select(Teacher).where(Teacher.mobile == clean))).scalar_one_or_none()
     if not teacher:
+        await cache_set(cache_key, None, ttl=TTL_MEDIUM, model=Optional[TeacherResponse])
         return None
-    return TeacherResponse.model_validate(teacher)
+    resp = TeacherResponse.model_validate(teacher)
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=Optional[TeacherResponse])
+    return resp
 
 # --- Teacher Attendance Endpoints ---
 
@@ -143,6 +174,13 @@ async def list_teacher_attendance_monthly(
     Days in month and present days are calculated from the real calendar for the given month and year.
     """
     m_year = (month_year or date.today().strftime("%Y-%m")).strip()
+    cache_key = make_cache_key(
+        "teachers", "attendance_list",
+        month_year=m_year, teacher_id=teacher_id, page=page, page_size=page_size,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     days_in_m = get_days_in_month(m_year)
     
     t_query = select(Teacher).order_by(Teacher.name.asc())
@@ -187,18 +225,31 @@ async def list_teacher_attendance_monthly(
         total_pages = max(1, (total + effective_page_size - 1) // effective_page_size) if total > 0 else 1
         start = (page - 1) * effective_page_size
         paged_items = summary_list[start:start + effective_page_size]
-        return PageResponse(
+        resp = PageResponse(
             items=paged_items,
             total=total,
             total_pages=total_pages,
             page=page,
             page_size=effective_page_size
         )
+        await cache_set(
+            cache_key, resp, ttl=TTL_MEDIUM,
+            model=Union[PageResponse[TeacherAttendanceMonthlySummary], List[TeacherAttendanceMonthlySummary]],
+        )
+        return resp
 
+    await cache_set(
+        cache_key, summary_list, ttl=TTL_MEDIUM,
+        model=Union[PageResponse[TeacherAttendanceMonthlySummary], List[TeacherAttendanceMonthlySummary]],
+    )
     return summary_list
 
 @router.get("/{teacher_id}", response_model=TeacherResponse)
 async def get_teacher(teacher_id: uuid.UUID, db: AsyncSession = Depends(get_db), user = Depends(require_admin)):
+    cache_key = make_cache_key("teachers", "detail", teacher_id)
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     teacher = (await db.execute(select(Teacher).where(Teacher.id == teacher_id))).scalar_one_or_none()
     if not teacher:
         raise HTTPException(status_code=404, detail="Teacher not found")
@@ -240,6 +291,7 @@ async def get_teacher(teacher_id: uuid.UUID, db: AsyncSession = Depends(get_db),
 
     resp = TeacherResponse.model_validate(teacher)
     resp.subjects_taught = subjects_detail
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=TeacherResponse)
     return resp
 
 @router.post("", response_model=TeacherResponse, status_code=status.HTTP_201_CREATED)
@@ -283,6 +335,7 @@ async def create_teacher(
     db.add(new_teacher)
     await db.commit()
     await db.refresh(new_teacher)
+    await invalidate_teacher_cache()
     return TeacherResponse.model_validate(new_teacher)
 
 @router.put("/{teacher_id}", response_model=TeacherResponse)
@@ -346,6 +399,7 @@ async def update_teacher(
 
     await db.commit()
     await db.refresh(teacher)
+    await invalidate_teacher_cache()
     return TeacherResponse.model_validate(teacher)
 
 @router.patch("/{teacher_id}/status", response_model=TeacherResponse)
@@ -380,6 +434,7 @@ async def update_teacher_status(
         db.add(audit)
         await db.commit()
         await db.refresh(teacher)
+        await invalidate_teacher_cache()
 
     return TeacherResponse.model_validate(teacher)
 
@@ -449,6 +504,7 @@ async def upload_teacher_photo(
     teacher.photo_url = f"/uploads/teachers/{filename}"
     await db.commit()
     await db.refresh(teacher)
+    await invalidate_teacher_cache()
     return TeacherResponse.model_validate(teacher)
 
 @router.get("/{teacher_id}/roster", response_model=TeacherRosterResponse)
@@ -467,6 +523,14 @@ async def get_teacher_roster(
     database-level search, status filtering (Active vs Inactive/Expired vs Cancelled),
     subject filtering, and pre-computed DB metrics.
     """
+    cache_key = make_cache_key(
+        "teachers", "roster", teacher_id,
+        page=page, page_size=page_size, search=search,
+        status_filter=status_filter, subject_id=subject_id,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     teacher = (await db.execute(select(Teacher).where(Teacher.id == teacher_id))).scalar_one_or_none()
     if not teacher:
         raise HTTPException(status_code=404, detail="Teacher not found")
@@ -648,7 +712,7 @@ async def get_teacher_roster(
     sub_rows = (await db.execute(subs_stmt)).all()
     subjects_list = [TeacherSubjectOption(id=r[0], name=r[1]) for r in sub_rows]
 
-    return TeacherRosterResponse(
+    resp = TeacherRosterResponse(
         items=items,
         total=total_filtered,
         page=page,
@@ -657,6 +721,8 @@ async def get_teacher_roster(
         metrics=metrics,
         subjects=subjects_list
     )
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=TeacherRosterResponse)
+    return resp
 
 
 @router.get("/{teacher_id}/earnings", response_model=TeacherEarningsResponse)
@@ -675,6 +741,13 @@ async def get_teacher_earnings(
     """
     f_date = from_date or start_date
     t_date = to_date or end_date
+    cache_key = make_cache_key(
+        "teachers", "earnings", teacher_id,
+        from_date=f_date, to_date=t_date,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
 
     t_res = await db.execute(select(Teacher).where(Teacher.id == teacher_id))
     teacher = t_res.scalar_one_or_none()
@@ -764,7 +837,7 @@ async def get_teacher_earnings(
 
     basis = getattr(settings, "TEACHER_EARNING_BASIS", "CASH")
 
-    return TeacherEarningsResponse(
+    resp = TeacherEarningsResponse(
         teacher_id=teacher.id,
         teacher_name=teacher.name,
         teacher_code=teacher.teacher_code,
@@ -781,6 +854,8 @@ async def get_teacher_earnings(
         by_subject=by_subject,
         payouts=payouts_list
     )
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=TeacherEarningsResponse)
+    return resp
 
 
 @router.post("/{teacher_id}/payouts", response_model=TeacherPayoutResponse, status_code=status.HTTP_201_CREATED)
@@ -858,6 +933,7 @@ async def create_teacher_payout(
     db.add(audit)
     await db.commit()
     await db.refresh(earning)
+    await invalidate_expense_and_salary_cache()
 
     return TeacherPayoutResponse(
         id=earning.id,
@@ -882,6 +958,10 @@ async def get_teacher_breakup(
     plus per-subject breakup and enrolled scholar ledger.
     All figures derived strictly from the backend ledger as single source of truth.
     """
+    cache_key = make_cache_key("teachers", "breakup", teacher_id)
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     teacher = (await db.execute(select(Teacher).where(Teacher.id == teacher_id))).scalar_one_or_none()
     if not teacher:
         raise HTTPException(status_code=404, detail="Teacher not found")
@@ -1060,7 +1140,7 @@ async def get_teacher_breakup(
             payment_status=adm.payment_status
         ))
 
-    return TeacherBreakupResponse(
+    resp = TeacherBreakupResponse(
         teacher_id=teacher.id,
         teacher_name=teacher.name,
         teacher_code=teacher.teacher_code,
@@ -1078,6 +1158,8 @@ async def get_teacher_breakup(
         subjects=subjects_list,
         students=students_list
     )
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=TeacherBreakupResponse)
+    return resp
 
 
 @router.get("/{teacher_id}/history", response_model=TeacherHistoryResponse)
@@ -1094,6 +1176,13 @@ async def get_teacher_history(
     Chronological history of every admission, renewal, expiry, change and cancellation
     for that teacher's subjects.
     """
+    cache_key = make_cache_key(
+        "teachers", "history", teacher_id,
+        event_type=event_type, search=search, page=page, page_size=page_size,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     teacher = (await db.execute(select(Teacher).where(Teacher.id == teacher_id))).scalar_one_or_none()
     if not teacher:
         raise HTTPException(status_code=404, detail="Teacher not found")
@@ -1315,7 +1404,7 @@ async def get_teacher_history(
         paged_events = filtered_events
         cur_page = 1
 
-    return TeacherHistoryResponse(
+    resp = TeacherHistoryResponse(
         teacher_id=teacher.id,
         teacher_name=teacher.name,
         teacher_code=teacher.teacher_code,
@@ -1331,6 +1420,8 @@ async def get_teacher_history(
         page_size=effective_page_size,
         events=paged_events
     )
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=TeacherHistoryResponse)
+    return resp
 
 
 @router.get("/{teacher_id}/collections", response_model=TeacherCollectionsResponse)
@@ -1343,6 +1434,10 @@ async def get_teacher_collections(
     Fee collections handled by this teacher where the ledger records it.
     Matches Payment records where collected_by user or collector_name matches this teacher.
     """
+    cache_key = make_cache_key("teachers", "collections", teacher_id)
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     teacher = (await db.execute(select(Teacher).where(Teacher.id == teacher_id))).scalar_one_or_none()
     if not teacher:
         raise HTTPException(status_code=404, detail="Teacher not found")
@@ -1402,7 +1497,7 @@ async def get_teacher_collections(
             subject_names=p_subj_map.get(p.id, [])
         ))
 
-    return TeacherCollectionsResponse(
+    resp = TeacherCollectionsResponse(
         teacher_id=teacher.id,
         teacher_name=teacher.name,
         teacher_code=teacher.teacher_code,
@@ -1411,6 +1506,8 @@ async def get_teacher_collections(
         by_mode=dict(by_mode),
         items=items
     )
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=TeacherCollectionsResponse)
+    return resp
 
 
 @router.get("/{teacher_id}/demo-conversion", response_model=TeacherDemoConversionResponse)
@@ -1423,12 +1520,16 @@ async def get_teacher_demo_conversion_endpoint(
     Demo conversion metrics credited to this teacher as the demo giver,
     verified by source_demo_number, matching the Reports teacher-wise demo conversion table.
     """
+    cache_key = make_cache_key("teachers", "demo_conversion", teacher_id)
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     teacher = (await db.execute(select(Teacher).where(Teacher.id == teacher_id))).scalar_one_or_none()
     if not teacher:
         raise HTTPException(status_code=404, detail="Teacher not found")
 
     stats = await get_teacher_demo_conversion(db, teacher_id)
-    return TeacherDemoConversionResponse(
+    resp = TeacherDemoConversionResponse(
         teacher_id=teacher.id,
         teacher_name=teacher.name,
         teacher_code=teacher.teacher_code,
@@ -1438,6 +1539,8 @@ async def get_teacher_demo_conversion_endpoint(
         enrolled_subjects=stats["enrolled_subjects"],
         converted_demos=stats["converted_demos"],
     )
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=TeacherDemoConversionResponse)
+    return resp
 
 @router.get("/{teacher_id}/attendance", response_model=TeacherMonthlyAttendanceResponse)
 async def get_teacher_attendance_detail(
@@ -1446,12 +1549,15 @@ async def get_teacher_attendance_detail(
     db: AsyncSession = Depends(get_db),
     user = Depends(require_cashier_or_admin)
 ):
+    m_year = (month_year or date.today().strftime("%Y-%m")).strip()
+    cache_key = make_cache_key("teachers", "attendance_detail", teacher_id, month_year=m_year)
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     teacher = (await db.execute(select(Teacher).where(Teacher.id == teacher_id))).scalar_one_or_none()
     if not teacher:
         raise HTTPException(status_code=404, detail="Teacher not found")
         
-    m_year = (month_year or date.today().strftime("%Y-%m")).strip()
-    
     records = (await db.execute(
         select(TeacherAttendance)
         .where(TeacherAttendance.teacher_id == teacher_id, TeacherAttendance.month_year == m_year)
@@ -1464,7 +1570,7 @@ async def get_teacher_attendance_detail(
     abs_cnt = len(abs_dates)
     pres_cnt = max(0, days_in_m - abs_cnt)
     
-    return TeacherMonthlyAttendanceResponse(
+    resp = TeacherMonthlyAttendanceResponse(
         teacher_id=teacher.id,
         teacher_name=teacher.name,
         teacher_code=teacher.teacher_code,
@@ -1484,6 +1590,8 @@ async def get_teacher_attendance_detail(
             ) for r in records
         ]
     )
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=TeacherMonthlyAttendanceResponse)
+    return resp
 
 @router.post("/{teacher_id}/attendance/toggle", response_model=TeacherMonthlyAttendanceResponse)
 async def toggle_teacher_absent_day(
@@ -1517,6 +1625,7 @@ async def toggle_teacher_absent_day(
         db.add(new_rec)
         
     await db.commit()
+    await invalidate_expense_and_salary_cache()
     return await get_teacher_attendance_detail(teacher_id=teacher_id, month_year=m_year, db=db, user=user)
 
 @router.post("/{teacher_id}/attendance", response_model=TeacherMonthlyAttendanceResponse)
@@ -1555,6 +1664,7 @@ async def bulk_set_teacher_attendance(
         db.add(new_rec)
         
     await db.commit()
+    await invalidate_expense_and_salary_cache()
     return await get_teacher_attendance_detail(teacher_id=teacher_id, month_year=m_year, db=db, user=user)
 
 @router.get("/{teacher_id}/salaries", response_model=List[SalaryRecordResponse])
@@ -1563,6 +1673,10 @@ async def get_teacher_salary_history(
     db: AsyncSession = Depends(get_db),
     user = Depends(require_admin)
 ):
+    cache_key = make_cache_key("teachers", "salaries", teacher_id)
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     teacher = (await db.execute(select(Teacher).where(Teacher.id == teacher_id))).scalar_one_or_none()
     if not teacher:
         raise HTTPException(status_code=404, detail="Teacher not found")
@@ -1597,5 +1711,6 @@ async def get_teacher_salary_history(
                 holidays_count=r.holidays_count or 0
             )
         )
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=List[SalaryRecordResponse])
     return resp
 

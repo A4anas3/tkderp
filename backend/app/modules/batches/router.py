@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, and_, delete, case
 from sqlalchemy.orm import selectinload
 
+from app.core.cache import TTL_LONG, TTL_MEDIUM, cache_get, cache_set, invalidate_batch_cache, make_cache_key
 from app.database.session import get_db
 from app.core.dependencies import require_cashier_or_admin, require_admin
 from app.database.models import Batch, BatchSubject, Teacher, Subject, AdmissionItem, Admission, User
@@ -30,6 +31,10 @@ async def get_batches_active_summary(
     active students, expiring in 7 days, unpaid / partial count, capacity, seats left, teacher, and hall.
     Uses the canonical active student definition strictly at database level.
     """
+    cache_key = "erp:batches:active_summary"
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     today = today_kolkata()
     in_7_days = today + timedelta(days=7)
 
@@ -43,6 +48,7 @@ async def get_batches_active_summary(
     batches = res.scalars().all()
 
     if not batches:
+        await cache_set(cache_key, [], ttl=TTL_MEDIUM, model=List[BatchActiveSummaryResponse])
         return []
 
     batch_ids = [b.id for b in batches]
@@ -149,6 +155,7 @@ async def get_batches_active_summary(
             )
         )
 
+    await cache_set(cache_key, summary_list, ttl=TTL_MEDIUM, model=List[BatchActiveSummaryResponse])
     return summary_list
 
 @router.get("", response_model=PageResponse[BatchResponse])
@@ -161,6 +168,14 @@ async def list_batches(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
+    cache_key = make_cache_key(
+        "batches", "list",
+        page=page, page_size=page_size, search=search,
+        teacher_id=teacher_id, status_filter=status_filter,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     query = select(Batch).options(selectinload(Batch.subjects).joinedload(BatchSubject.subject))
     count_query = select(func.count(Batch.id))
 
@@ -250,13 +265,19 @@ async def list_batches(
             )
         )
 
-    return PageResponse.create(items=response_items, total=total, params=PaginationParams(page=page, page_size=page_size))
+    resp = PageResponse.create(items=response_items, total=total, params=PaginationParams(page=page, page_size=page_size))
+    await cache_set(cache_key, resp, ttl=TTL_LONG, model=PageResponse[BatchResponse])
+    return resp
 
 @router.get("/all", response_model=list[BatchResponse])
 async def get_all_active_batches(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
+    cache_key = "erp:batches:all"
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     query = (
         select(Batch)
         .options(selectinload(Batch.subjects).joinedload(BatchSubject.subject))
@@ -321,6 +342,7 @@ async def get_all_active_batches(
                 enrolled_count=enrolled_counts.get(b.id, 0)
             )
         )
+    await cache_set(cache_key, response_items, ttl=TTL_LONG, model=list[BatchResponse])
     return response_items
 
 @router.post("", response_model=BatchResponse, status_code=status.HTTP_201_CREATED)
@@ -436,6 +458,7 @@ async def create_batch(
         db.add(bs)
 
     await db.commit()
+    await invalidate_batch_cache()
     return await get_batch(batch.id, db, current_user)
 
 @router.get("/{batch_id}", response_model=BatchResponse)
@@ -444,6 +467,10 @@ async def get_batch(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
+    cache_key = make_cache_key("batches", "detail", batch_id)
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     query = (
         select(Batch)
         .options(selectinload(Batch.subjects).joinedload(BatchSubject.subject))
@@ -485,7 +512,7 @@ async def get_batch(
         for bs in batch.subjects
     ]
 
-    return BatchResponse(
+    resp = BatchResponse(
         id=batch.id,
         batch_code=batch.batch_code,
         name=batch.name,
@@ -502,6 +529,8 @@ async def get_batch(
         subjects=subj_responses,
         enrolled_count=enrolled
     )
+    await cache_set(cache_key, resp, ttl=TTL_LONG, model=BatchResponse)
+    return resp
 
 @router.put("/{batch_id}", response_model=BatchResponse)
 async def update_batch(
@@ -615,4 +644,5 @@ async def update_batch(
             db.add(bs)
 
     await db.commit()
+    await invalidate_batch_cache()
     return await get_batch(batch.id, db, current_user)

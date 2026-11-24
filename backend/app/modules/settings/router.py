@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core.config import settings as app_settings
+from app.core.cache import TTL_LONG, cache_get, cache_set, invalidate_settings_cache
 from app.database.session import get_db
 from app.modules.users.models import User
 from app.core.dependencies import require_cashier_or_admin, require_admin
@@ -79,7 +80,13 @@ async def get_public_institute_profile(db: AsyncSession = Depends(get_db)):
     Publicly accessible non-sensitive institute branding profile (name, logo, address, contact).
     Used on login, public verification, and public ID card pages.
     """
-    return await _get_or_create_settings(db)
+    cache_key = "erp:settings:public"
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
+    setting = await _get_or_create_settings(db)
+    await cache_set(cache_key, setting, ttl=TTL_LONG, model=PublicInstituteProfileResponse)
+    return setting
 
 
 @router.get("/institute", response_model=InstituteSettingsResponse)
@@ -91,7 +98,12 @@ async def get_institute_settings(
     Get institute's saved profile and GST configuration (GSTIN, default GST rate, logo).
     Restricted to Cashier and Admin.
     """
+    cache_key = "erp:settings:institute"
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     setting = await _get_or_create_settings(db)
+    await cache_set(cache_key, setting, ttl=TTL_LONG, model=InstituteSettingsResponse)
     return setting
 
 
@@ -131,6 +143,7 @@ async def update_institute_settings(
     db.add(setting)
     await db.commit()
     await db.refresh(setting)
+    await invalidate_settings_cache()
     return setting
 
 
@@ -176,6 +189,7 @@ async def upload_institute_logo(
     db.add(setting)
     await db.commit()
     await db.refresh(setting)
+    await invalidate_settings_cache()
     return setting
 
 
@@ -193,4 +207,5 @@ async def delete_institute_logo(
     db.add(setting)
     await db.commit()
     await db.refresh(setting)
+    await invalidate_settings_cache()
     return setting

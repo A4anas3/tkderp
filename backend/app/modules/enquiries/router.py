@@ -10,6 +10,15 @@ from sqlalchemy import select, func, or_, and_, desc, case
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
+from app.core.cache import (
+    TTL_MEDIUM,
+    cache_get,
+    cache_set,
+    invalidate_demo_and_enquiry_cache,
+    invalidate_student_cache,
+    make_cache_key,
+    user_scope,
+)
 from app.database.session import get_db
 from app.core.dependencies import require_staff, require_cashier_or_admin, require_admin
 from app.common.active_student import today_kolkata
@@ -327,6 +336,15 @@ async def list_enquiries(
     Returns list of enquiries with database-level search, status filtering,
     month-wise filtering, and populated child demo items.
     """
+    cache_key = make_cache_key(
+        "enquiries", "list",
+        page=page, page_size=page_size, search=search,
+        status_filter=status_filter, status=status,
+        month=month, year=year, from_date=from_date, to_date=to_date,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     query = select(Enquiry)
     count_query = select(func.count(Enquiry.id))
 
@@ -458,7 +476,9 @@ async def list_enquiries(
         )
         response_items.append(resp)
 
-    return PageResponse.create(items=response_items, total=total, params=PaginationParams(page=page, page_size=page_size))
+    resp = PageResponse.create(items=response_items, total=total, params=PaginationParams(page=page, page_size=page_size))
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=PageResponse[EnquiryResponse])
+    return resp
 
 
 @router.get("/demos", response_model=PageResponse[EnquiryDemoRegisterItem])
@@ -480,6 +500,15 @@ async def list_individual_demo_items(
     Returns individual demo ticket records (passes) with database-level search,
     status filtering, teacher filtering, subject filtering, and month-wise date filtering.
     """
+    cache_key = make_cache_key(
+        "demos", "list", user_scope(current_user),
+        page=page, page_size=page_size, search=search, status_filter=status_filter,
+        teacher_id=teacher_id, subject_id=subject_id,
+        month=month, year=year, from_date=from_date, to_date=to_date,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     query = (
         select(EnquiryDemoItem, Enquiry)
         .join(Enquiry, EnquiryDemoItem.enquiry_id == Enquiry.id)
@@ -544,7 +573,9 @@ async def list_individual_demo_items(
     if is_teacher_user(current_user):
         teacher = await resolve_teacher_for_user(db, current_user)
         if not teacher:
-            return PageResponse.create(items=[], total=0, params=PaginationParams(page=page, page_size=page_size))
+            resp = PageResponse.create(items=[], total=0, params=PaginationParams(page=page, page_size=page_size))
+            await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=PageResponse[EnquiryDemoRegisterItem])
+            return resp
         teacher_sub_ids = await get_teacher_subject_ids(db, teacher.id)
         teacher_demo_cond = and_(
             teacher_demo_ownership_filter(teacher.id, teacher_sub_ids),
@@ -634,7 +665,9 @@ async def list_individual_demo_items(
             converted_admission_number=c_adm_no
         ))
 
-    return PageResponse.create(items=items, total=total, params=PaginationParams(page=page, page_size=page_size))
+    resp = PageResponse.create(items=items, total=total, params=PaginationParams(page=page, page_size=page_size))
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=PageResponse[EnquiryDemoRegisterItem])
+    return resp
 
 
 @router.get("/analytics", response_model=DemoAnalyticsResponse)
@@ -654,6 +687,14 @@ async def get_demo_analytics(
     """
     today = date.today()
     f_date, t_date = _resolve_month_date_range(from_date, to_date, month, year)
+    cache_key = make_cache_key(
+        "demos", "analytics",
+        month=month, year=year, from_date=f_date, to_date=t_date,
+        teacher_id=teacher_id, subject_id=subject_id,
+    )
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
 
     where_filter = []
     if f_date:
@@ -760,7 +801,7 @@ async def get_demo_analytics(
             conversion_rate_percentage=rate
         ))
 
-    return DemoAnalyticsResponse(
+    resp = DemoAnalyticsResponse(
         summary=summary,
         by_teacher=by_teacher,
         by_subject=by_subject,
@@ -771,6 +812,8 @@ async def get_demo_analytics(
             "to_date": str(t_date) if t_date else None,
         }
     )
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=DemoAnalyticsResponse)
+    return resp
 
 
 @router.get("/summary")
@@ -778,12 +821,16 @@ async def get_enquiry_summary(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
+    cache_key = "erp:enquiries:summary"
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     stmt = select(Enquiry.status, func.count(Enquiry.id)).group_by(Enquiry.status)
     res = await db.execute(stmt)
     status_counts = dict(res.all())
     
     total = sum(status_counts.values())
-    return {
+    resp = {
         "total": total,
         "ACTIVE_DEMO": status_counts.get("ACTIVE_DEMO", 0),
         "INTERESTED": status_counts.get("INTERESTED", 0),
@@ -792,6 +839,8 @@ async def get_enquiry_summary(
         "EXPIRED": status_counts.get("EXPIRED", 0),
         "NOT_INTERESTED": status_counts.get("NOT_INTERESTED", 0),
     }
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM)
+    return resp
 
 
 @router.get("/upcoming-deadlines", response_model=list[EnquiryResponse])
@@ -800,6 +849,10 @@ async def get_upcoming_demo_deadlines(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
+    cache_key = make_cache_key("enquiries", "upcoming", days_ahead=days_ahead)
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     today = date.today()
     max_date = today + timedelta(days=days_ahead)
     
@@ -840,6 +893,7 @@ async def get_upcoming_demo_deadlines(
                 demo_items=formatted_demo_items
             )
         )
+    await cache_set(cache_key, response_items, ttl=TTL_MEDIUM, model=list[EnquiryResponse])
     return response_items
 
 
@@ -865,11 +919,16 @@ async def check_student_by_mobile_for_demo(
             message="Mobile number must contain at least 10 numeric digits"
         )
 
+    cache_key = make_cache_key("enquiries", "check_student", norm_mob)
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
+
     matches = await _find_matching_students_by_mobile(db, norm_mob)
     match_items = [StudentMatchItem.model_validate(m) for m in matches]
 
     if len(match_items) > 1:
-        return StudentMobileCheckResponse(
+        resp = StudentMobileCheckResponse(
             valid=True,
             exists=True,
             multiple_matches=True,
@@ -878,8 +937,10 @@ async def check_student_by_mobile_for_demo(
             matches=match_items,
             message=f"Multiple students ({len(match_items)}) found with mobile number ending in {norm_mob}."
         )
+        await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=StudentMobileCheckResponse)
+        return resp
     if len(match_items) == 1:
-        return StudentMobileCheckResponse(
+        resp = StudentMobileCheckResponse(
             valid=True,
             exists=True,
             multiple_matches=False,
@@ -888,7 +949,9 @@ async def check_student_by_mobile_for_demo(
             matches=match_items,
             message=f"Already registered with student code {match_items[0].student_code}"
         )
-    return StudentMobileCheckResponse(
+        await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=StudentMobileCheckResponse)
+        return resp
+    resp = StudentMobileCheckResponse(
         valid=True,
         exists=False,
         multiple_matches=False,
@@ -897,6 +960,8 @@ async def check_student_by_mobile_for_demo(
         matches=[],
         message="No registered student found for this mobile number"
     )
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=StudentMobileCheckResponse)
+    return resp
 
 
 @router.post("/register-student", response_model=RegisterStudentResponse, status_code=status.HTTP_200_OK)
@@ -972,6 +1037,7 @@ async def register_student_before_demo(
         audit_action="STUDENT_CREATED_BEFORE_DEMO",
         commit=True
     )
+    await invalidate_student_cache(student.id)
 
     return RegisterStudentResponse(
         success=True,
@@ -1183,6 +1249,9 @@ async def create_enquiry_with_demos(
 
     await db.commit()
     await db.refresh(enquiry)
+    await invalidate_demo_and_enquiry_cache(
+        student_id=linked_student.id if linked_student else None
+    )
 
     today = date.today()
     formatted_children = [_format_demo_item_response(d, today) for d in child_items]
@@ -1331,6 +1400,10 @@ async def get_enquiry(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_staff)
 ):
+    cache_key = make_cache_key("enquiries", "detail", enquiry_id, user_scope(current_user))
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
     res = await db.execute(select(Enquiry).where(Enquiry.id == enquiry_id))
     enquiry = res.scalar_one_or_none()
     if not enquiry:
@@ -1362,10 +1435,12 @@ async def get_enquiry(
         )
     formatted_demo_items = [_format_demo_item_response(d, today) for d in d_items]
 
-    return await _resolve_single_enquiry_response(
+    resp = await _resolve_single_enquiry_response(
         db, enquiry, formatted_demo_items, today,
         include_billing_info=not is_teacher_user(current_user),
     )
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=EnquiryResponse)
+    return resp
 
 
 @router.put("/demos/{demo_item_id}/status", response_model=EnquiryDemoItemResponse)
@@ -1402,6 +1477,9 @@ async def update_demo_item_status(
 
     await db.commit()
     await db.refresh(item)
+    await invalidate_demo_and_enquiry_cache(
+        student_id=parent_enq.converted_student_id if parent_enq else None
+    )
     return _format_demo_item_response(item, date.today())
 
 
@@ -1429,6 +1507,7 @@ async def update_enquiry(
 
     await db.commit()
     await db.refresh(enquiry)
+    await invalidate_demo_and_enquiry_cache(student_id=enquiry.converted_student_id)
 
     today = date.today()
     d_res = await db.execute(
@@ -1510,6 +1589,7 @@ async def register_student_from_enquiry(
         db.add(audit)
         await db.commit()
         await db.refresh(enquiry)
+        await invalidate_demo_and_enquiry_cache(student_id=selected_student.id)
 
         return RegisterStudentResponse(
             success=True,
@@ -1559,6 +1639,7 @@ async def register_student_from_enquiry(
         db.add(audit)
         await db.commit()
         await db.refresh(enquiry)
+        await invalidate_demo_and_enquiry_cache(student_id=matched.id)
 
         return RegisterStudentResponse(
             success=True,
@@ -1583,6 +1664,7 @@ async def register_student_from_enquiry(
     await db.commit()
     await db.refresh(enquiry)
     await db.refresh(student)
+    await invalidate_demo_and_enquiry_cache(student_id=student.id)
 
     return RegisterStudentResponse(
         success=True,
@@ -1715,6 +1797,7 @@ async def convert_enquiry_to_student(
     db.add(audit)
 
     await db.commit()
+    await invalidate_demo_and_enquiry_cache(student_id=student.id)
 
     return {
         "message": f"Successfully converted enquiry to student {student.student_code}",
