@@ -12,6 +12,7 @@ import StudentsPage from '../pages/students/StudentsPage';
 import StudentDetailPage from '../pages/students/StudentDetailPage';
 import EnquiriesPage from '../pages/enquiries/EnquiriesPage';
 import EnquiryDetailPage from '../pages/enquiries/EnquiryDetailPage';
+import DemosPage from '../pages/demos/DemosPage';
 import SubjectsPage from '../pages/subjects/SubjectsPage';
 import SubjectDetailPage from '../pages/subjects/SubjectDetailPage';
 import GreenCardPage from '../pages/greencard/GreenCardPage';
@@ -199,7 +200,25 @@ export default function AppRoutes() {
           }
         />
 
-        {/* Enquiries & Demos (Admin only) */}
+        {/* Demos (Admin & Teacher) */}
+        <Route
+          path="demos"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'TEACHER']}>
+              <DemosPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="demos/:id"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'TEACHER']}>
+              <EnquiryDetailPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Enquiries & Demos (Admin only for register list, Teacher read-only detail) */}
         <Route
           path="enquiries"
           element={
@@ -211,7 +230,7 @@ export default function AppRoutes() {
         <Route
           path="enquiries/:id"
           element={
-            <ProtectedRoute allowedRoles={['ADMIN']}>
+            <ProtectedRoute allowedRoles={['ADMIN', 'TEACHER']}>
               <EnquiryDetailPage />
             </ProtectedRoute>
           }

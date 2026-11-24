@@ -72,11 +72,12 @@ async def list_subjects(
 
 @router.get("/all", response_model=list[SubjectResponse])
 async def get_all_active_subjects(
+    all_institute: bool = Query(False),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_staff)
 ):
     query = select(Subject).where(Subject.status == "ACTIVE")
-    if current_user.role == "TEACHER":
+    if current_user.role == "TEACHER" and not all_institute:
         t_stmt = select(Teacher).where(Teacher.user_id == current_user.id)
         t_rec = (await db.execute(t_stmt)).scalar_one_or_none()
         if not t_rec:

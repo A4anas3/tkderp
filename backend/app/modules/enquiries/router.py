@@ -426,9 +426,22 @@ async def list_individual_demo_items(
     if status_filter and status_filter != "ALL":
         today = date.today()
         if status_filter == "ACTIVE":
-            cond = and_(EnquiryDemoItem.status == "SCHEDULED", EnquiryDemoItem.demo_end_date >= today)
+            cond = and_(
+                EnquiryDemoItem.demo_end_date >= today,
+                EnquiryDemoItem.status.notin_(["CONVERTED", "DROPPED", "EXPIRED"]),
+                or_(
+                    EnquiryDemoItem.status.in_(["SCHEDULED", "ATTENDED"]),
+                    Enquiry.status == "ACTIVE_DEMO"
+                )
+            )
         elif status_filter == "EXPIRED":
-            cond = or_(EnquiryDemoItem.status == "EXPIRED", and_(EnquiryDemoItem.status == "SCHEDULED", EnquiryDemoItem.demo_end_date < today))
+            cond = or_(
+                EnquiryDemoItem.status == "EXPIRED",
+                and_(
+                    EnquiryDemoItem.status.in_(["SCHEDULED", "ATTENDED"]),
+                    EnquiryDemoItem.demo_end_date < today
+                )
+            )
         else:
             cond = (EnquiryDemoItem.status == status_filter)
         query = query.where(cond)
@@ -940,7 +953,7 @@ async def update_demo_item_status(
     demo_item_id: uuid.UUID,
     payload: EnquiryDemoItemStatusUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     """Update status of individual subject demo item (e.g. ATTENDED, DROPPED with reason)."""
     d_res = await db.execute(select(EnquiryDemoItem).where(EnquiryDemoItem.id == demo_item_id))

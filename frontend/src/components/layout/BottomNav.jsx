@@ -6,6 +6,7 @@ import {
   GraduationCap,
   CreditCard,
   BookOpen,
+  ClipboardList,
   Grid,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -22,6 +23,7 @@ export default function BottomNav({ onOpenAppMenu }) {
     if (roleUpper === 'TEACHER') {
       return [
         { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+        { to: '/demos', label: 'Demos', icon: ClipboardList },
         { to: '/subjects', label: 'Subjects', icon: BookOpen },
         { to: '/students', label: 'Students', icon: Users },
       ];

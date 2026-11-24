@@ -153,6 +153,15 @@ export default function CoachingAppsModal({ isOpen, onClose }) {
       roles: ['ADMIN'],
     },
     {
+      id: 'demos',
+      name: 'Active Demos',
+      desc: 'Trial Classes & Schedule',
+      icon: LifeBuoy,
+      route: '/demos',
+      color: 'bg-amber-600',
+      roles: ['TEACHER'],
+    },
+    {
       id: 'audit',
       name: 'Audit Log',
       desc: 'Security & Changes',

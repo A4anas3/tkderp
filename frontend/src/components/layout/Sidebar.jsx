@@ -43,6 +43,12 @@ export default function Sidebar({ isOpen, onClose }) {
               show: true,
             },
             {
+              to: '/demos',
+              label: 'Demos',
+              icon: ClipboardList,
+              show: true,
+            },
+            {
               to: '/subjects',
               label: 'Subjects',
               icon: BookOpen,

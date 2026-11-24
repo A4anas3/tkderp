@@ -31,6 +31,7 @@ import DemoPassModal from '../../components/modals/DemoPassModal';
 import RegisterStudentModal from '../../components/modals/RegisterStudentModal';
 import { enquiryApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 import { formatIndianDate } from '../../utils/dateCycleUtils';
 import { cleanMobileInput } from '../../utils/phoneUtils';
 
@@ -38,6 +39,8 @@ export default function EnquiryDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { success, error } = useToast();
+  const { user, role, isAdmin, isCashier, isTeacher } = useAuth();
+  const canEdit = !isTeacher && (isAdmin || isCashier);
 
   const [enquiry, setEnquiry] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -237,8 +240,8 @@ export default function EnquiryDetailPage() {
   if (!enquiry) {
     return (
       <div className="p-6 max-w-4xl mx-auto space-y-4">
-        <Button variant="secondary" icon={ArrowLeft} onClick={() => navigate('/enquiries')}>
-          Back to Enquiries
+        <Button variant="secondary" icon={ArrowLeft} onClick={() => navigate(isTeacher ? '/demos' : '/enquiries')}>
+          Back to {isTeacher ? 'Demos' : 'Enquiries'}
         </Button>
         <div className="bg-white p-8 rounded-xl border border-slate-200 text-center">
           <p className="text-sm font-semibold text-rose-700">Enquiry record not found.</p>
@@ -288,9 +291,9 @@ export default function EnquiryDetailPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-start sm:items-center gap-2.5 min-w-0">
           <button
-            onClick={() => navigate('/enquiries')}
+            onClick={() => navigate(isTeacher ? '/demos' : '/enquiries')}
             className="p-2 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 transition-colors shadow-2xs cursor-pointer shrink-0 min-h-[38px] min-w-[38px] flex items-center justify-center"
-            title="Back to Enquiries"
+            title={isTeacher ? "Back to Demos" : "Back to Enquiries"}
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
@@ -321,95 +324,105 @@ export default function EnquiryDetailPage() {
             Print Trial Pass
           </Button>
 
-          <Button
-            variant="amber"
-            icon={Edit2}
-            onClick={() => setEditModalOpen(true)}
-            size="sm"
-          >
-            Edit Enquiry
-          </Button>
-
-          {isNotInterested && (
-            <Button
-              variant="teal-soft"
-              icon={RotateCcw}
-              onClick={handleReactivate}
-              size="sm"
-              title="Re-open demo class"
-            >
-              Re-activate
-            </Button>
+          {!canEdit && (
+            <span className="px-2.5 py-1 text-xs font-semibold bg-slate-100 text-slate-600 rounded-md border border-slate-200">
+              View Only
+            </span>
           )}
 
-          {!isConverted && !isInterested && !isNotInterested && (
-            <Button
-              variant="success"
-              icon={ThumbsUp}
-              onClick={handleMarkInterested}
-              size="sm"
-              title="Student completed demo and liked it"
-            >
-              Mark Interested
-            </Button>
-          )}
-
-          {!isConverted && !isNotInterested && (
-            <Button
-              variant="danger-soft"
-              icon={ThumbsDown}
-              onClick={() => {
-                setDropReason('Fee too high / Budget issue');
-                setCustomDropNotes('');
-                setDropModalOpen(true);
-              }}
-              size="sm"
-              title="Student is not interested"
-            >
-              Not Interested
-            </Button>
-          )}
-
-          {enquiry.has_course_purchase ? (
-            <Button
-              variant="info"
-              size="sm"
-              onClick={() => navigate(`/enrollments/${enquiry.course_admission_id || ''}`)}
-              className="font-bold"
-            >
-              View Course Bill ({enquiry.course_admission_number || 'Enrolled ✓'}) ↗
-            </Button>
-          ) : enquiry.has_student_admission || isConverted || enquiry.converted_student_id ? (
-            <Button
-              variant="primary"
-              icon={UserPlus}
-              onClick={handleConvertToAdmission}
-              size="sm"
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
-            >
-              Buy Course / Collect Fees ↗
-            </Button>
-          ) : (
-            <div className="flex items-center gap-2">
+          {canEdit && (
+            <>
               <Button
-                variant="teal-soft"
-                icon={UserCheck}
-                onClick={() => handleRegisterStudent()}
-                size="sm"
-                disabled={registeringStudent}
-                title="Register student before course purchase"
-              >
-                Register Student
-              </Button>
-              <Button
-                variant="primary"
-                icon={UserPlus}
-                onClick={handleConvertToAdmission}
+                variant="amber"
+                icon={Edit2}
+                onClick={() => setEditModalOpen(true)}
                 size="sm"
               >
-                Convert to Enrollment ↗
+                Edit Enquiry
               </Button>
-            </div>
+
+              {isNotInterested && (
+                <Button
+                  variant="teal-soft"
+                  icon={RotateCcw}
+                  onClick={handleReactivate}
+                  size="sm"
+                  title="Re-open demo class"
+                >
+                  Re-activate
+                </Button>
+              )}
+
+              {!isConverted && !isInterested && !isNotInterested && (
+                <Button
+                  variant="success"
+                  icon={ThumbsUp}
+                  onClick={handleMarkInterested}
+                  size="sm"
+                  title="Student completed demo and liked it"
+                >
+                  Mark Interested
+                </Button>
+              )}
+
+              {!isConverted && !isNotInterested && (
+                <Button
+                  variant="danger-soft"
+                  icon={ThumbsDown}
+                  onClick={() => {
+                    setDropReason('Fee too high / Budget issue');
+                    setCustomDropNotes('');
+                    setDropModalOpen(true);
+                  }}
+                  size="sm"
+                  title="Student is not interested"
+                >
+                  Not Interested
+                </Button>
+              )}
+
+              {enquiry.has_course_purchase ? (
+                <Button
+                  variant="info"
+                  size="sm"
+                  onClick={() => navigate(`/enrollments/${enquiry.course_admission_id || ''}`)}
+                  className="font-bold"
+                >
+                  View Course Bill ({enquiry.course_admission_number || 'Enrolled ✓'}) ↗
+                </Button>
+              ) : enquiry.has_student_admission || isConverted || enquiry.converted_student_id ? (
+                <Button
+                  variant="primary"
+                  icon={UserPlus}
+                  onClick={handleConvertToAdmission}
+                  size="sm"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                >
+                  Buy Course / Collect Fees ↗
+                </Button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="teal-soft"
+                    icon={UserCheck}
+                    onClick={() => handleRegisterStudent()}
+                    size="sm"
+                    disabled={registeringStudent}
+                    title="Register student before course purchase"
+                  >
+                    Register Student
+                  </Button>
+                  <Button
+                    variant="primary"
+                    icon={UserPlus}
+                    onClick={handleConvertToAdmission}
+                    size="sm"
+                  >
+                    Convert to Enrollment ↗
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -547,13 +560,15 @@ export default function EnquiryDetailPage() {
           <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
             <div className="flex items-center justify-between">
               <span className="text-[11px] text-slate-500 block font-medium">Interested Subject / Domain</span>
-              <button
-                onClick={() => setEditModalOpen(true)}
-                className="text-[10px] font-bold text-odoo-700 hover:text-odoo-900 bg-purple-50 hover:bg-purple-100 px-1.5 py-0.5 rounded border border-purple-200 inline-flex items-center gap-0.5 cursor-pointer"
-              >
-                <Edit2 className="w-2.5 h-2.5" />
-                <span>Change</span>
-              </button>
+              {canEdit && (
+                <button
+                  onClick={() => setEditModalOpen(true)}
+                  className="text-[10px] font-bold text-odoo-700 hover:text-odoo-900 bg-purple-50 hover:bg-purple-100 px-1.5 py-0.5 rounded border border-purple-200 inline-flex items-center gap-0.5 cursor-pointer"
+                >
+                  <Edit2 className="w-2.5 h-2.5" />
+                  <span>Change</span>
+                </button>
+              )}
             </div>
             <span className="font-bold text-black text-sm mt-0.5 block">
               {enquiry.interested_subject || 'All Academic Subjects'}

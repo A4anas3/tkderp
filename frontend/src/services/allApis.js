@@ -226,8 +226,8 @@ export const subjectApi = {
     const res = await api.get('/subjects', { params });
     return res.data;
   },
-  getAll: async () => {
-    const res = await api.get('/subjects/all');
+  getAll: async (params) => {
+    const res = await api.get('/subjects/all', { params });
     return res.data;
   },
   get: async (id) => {
