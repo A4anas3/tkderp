@@ -1,8 +1,6 @@
 from datetime import date, datetime, timezone
-import re
 import uuid
 from typing import Optional, List, Tuple
-from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc, or_, and_
@@ -68,7 +66,7 @@ async def get_student_and_active_courses(
     db: AsyncSession
 ) -> Tuple[Optional[Student], Optional[str], List[VerificationCourseItem], bool]:
     """
-    Look up student by admission number, student code/ID, UUID, or registered phone number,
+    Look up student by admission number, student code/ID (QR verify), or UUID,
     and resolve active enrolled course items.
     Returns: (student, matched_adm_number, active_courses_list, is_overall_valid)
     """
@@ -127,38 +125,6 @@ async def get_student_and_active_courses(
                     matched_adm_number = adm_by_id.admission_number
         except ValueError:
             pass
-
-    # 4. Lookup by Registered Phone Number (mobile on student's record)
-    if not student:
-        norm_phone = normalize_mobile(ident)
-        clean_digits = re.sub(r"\D", "", ident)
-        phone_matches = set()
-        phone_matches.add(ident)
-        if norm_phone:
-            phone_matches.add(norm_phone)
-            phone_matches.add(f"+91{norm_phone}")
-            phone_matches.add(f"91{norm_phone}")
-            phone_matches.add(f"0{norm_phone}")
-        if clean_digits:
-            phone_matches.add(clean_digits)
-
-        # Build conditions for Student.mobile
-        mobile_conds = [
-            func.lower(Student.mobile) == m.lower() for m in phone_matches if m
-        ]
-        if norm_phone and len(norm_phone) >= 7:
-            mobile_conds.append(Student.mobile.ilike(f"%{norm_phone}%"))
-
-        stu_phone_stmt = (
-            select(Student)
-            .where(or_(*mobile_conds))
-            .order_by(
-                desc(Student.status == "ACTIVE"),
-                desc(Student.created_at)
-            )
-        )
-        stu_phone_res = await db.execute(stu_phone_stmt)
-        student = stu_phone_res.scalars().first()
 
     if not student:
         return None, None, [], False
@@ -326,9 +292,6 @@ async def verify_student_credential(
     identifier: Optional[str] = None,
     admission_no: Optional[str] = Query(None),
     student_id: Optional[str] = Query(None),
-    phone: Optional[str] = Query(None),
-    mobile: Optional[str] = Query(None),
-    phone_number: Optional[str] = Query(None),
     ident_param: Optional[str] = Query(None, alias="identifier"),
     request: Request = None,
     db: AsyncSession = Depends(get_db)
@@ -336,14 +299,14 @@ async def verify_student_credential(
     """
     Public verification endpoint (no authentication required).
     Verifies a student identity card and returns active course validity.
-    Supports lookup by admission number, student ID code, UUID, or registered phone number.
+    Supports lookup by admission number, student ID code (QR), or UUID.
     Protected with sliding-window rate limiting.
-    Only returns verification data when student has active enrolment.
+    Only returns verification data when student has active enrolment or active demo.
     """
     if request:
         await id_card_rate_limiter(request)
 
-    target_ident = identifier or admission_no or student_id or phone or mobile or phone_number or ident_param
+    target_ident = identifier or admission_no or student_id or ident_param
     if not target_ident or not target_ident.strip():
         raise HTTPException(status_code=400, detail="Identifier cannot be empty")
 
@@ -356,6 +319,15 @@ async def verify_student_credential(
             detail=f"No matching student or admission record found for identifier '{target_ident}'."
         )
 
+    today = today_kolkata()
+    active_demos_list = await _get_active_demos_for_student(db, student, today)
+
+    if (not is_overall_valid or len(active_courses_list) == 0) and len(active_demos_list) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active enrolment or ID card is available for this student."
+        )
+
     student_data = StudentVerificationData(
         name=student.name,
         student_code=student.student_code,
@@ -363,16 +335,13 @@ async def verify_student_credential(
         photo_url=student.photo_url,
         father_name=student.father_name,
         status=student.status,
-        registration_date=student.registration_date
     )
 
-    today = today_kolkata()
-    active_demos_list = await _get_active_demos_for_student(db, student, today)
     inst = await _get_institute_profile(db)
 
     return PublicVerificationResponse(
         verified=True,
-        is_valid=is_overall_valid or len(active_demos_list) > 0,
+        is_valid=True,
         student=student_data,
         active_courses=active_courses_list,
         total_active_courses=len(active_courses_list),
@@ -478,9 +447,6 @@ async def get_public_id_card(
     identifier: Optional[str] = None,
     admission_no: Optional[str] = Query(None),
     student_id: Optional[str] = Query(None),
-    phone: Optional[str] = Query(None),
-    mobile: Optional[str] = Query(None),
-    phone_number: Optional[str] = Query(None),
     ident_param: Optional[str] = Query(None, alias="identifier"),
     db: AsyncSession = Depends(get_db),
     _limiter: None = Depends(id_card_rate_limiter),
@@ -488,15 +454,15 @@ async def get_public_id_card(
     """
     Public student ID card endpoint (no authentication required).
     Returns the student ID card data ONLY if that student has an active subject/enrolment.
-    Accepts student ID (code or UUID), registered phone number, or admission number.
+    Accepts admission number or student ID (code or UUID for QR verify).
     If the student has no active subject, returns 404 with a clear message and leaks no student data.
-    Equipped with rate limiting and returns only non-sensitive card-visible attributes.
+    Equipped with rate limiting and returns only non-sensitive card-visible attributes (no phone numbers or fee/payment data).
     """
-    target_ident = (identifier or admission_no or student_id or phone or mobile or phone_number or ident_param or "").strip()
+    target_ident = (identifier or admission_no or student_id or ident_param or "").strip()
     if not target_ident:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Identifier (student ID, phone number, or admission number) cannot be empty."
+            detail="Identifier (admission number or student ID) cannot be empty."
         )
 
     student, matched_adm_number, active_courses_list, is_overall_valid = await get_student_and_active_courses(target_ident, db)
@@ -517,17 +483,6 @@ async def get_public_id_card(
             detail="No active enrolment or ID card is available for this student."
         )
 
-    # Calculate live due balance from backend (total booked minus collected minus waived)
-    adm_rows = (await db.execute(
-        select(Admission)
-        .where(
-            Admission.student_id == student.id,
-            Admission.status.notin_(["REVOKED", "CANCELLED"]),
-            func.coalesce(Admission.document_status, "VALID") != "VOID"
-        )
-    )).scalars().all()
-    live_due_balance = sum((adm.balance_due for adm in adm_rows), Decimal("0.00"))
-
     student_data = IDCardStudentData(
         name=student.name,
         student_code=student.student_code,
@@ -535,7 +490,6 @@ async def get_public_id_card(
         photo_url=student.photo_url,
         father_name=student.father_name,
         status=student.status,
-        due_balance=live_due_balance,
     )
 
     course_items = [
@@ -566,7 +520,6 @@ async def get_public_id_card(
         total_active_courses=len(course_items),
         active_demos=active_demos_list,
         total_active_demos=len(active_demos_list),
-        due_balance=live_due_balance,
         institute_name=inst["institute_name"],
         institute_tagline=inst["institute_tagline"],
         institute_address=inst["institute_address"],

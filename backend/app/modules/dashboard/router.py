@@ -7,7 +7,7 @@ from sqlalchemy import select, func, desc, or_
 from sqlalchemy.orm import selectinload
 
 from app.database.session import get_db
-from app.core.dependencies import require_staff, require_admin, require_cashier_or_admin
+from app.core.dependencies import require_admin, require_cashier_or_admin, require_teacher_or_admin
 from app.database.models import (
     Student, Batch, Teacher, Enquiry, EnquiryDemoItem, Admission, Payment, Expense, SalaryRecord,
     AdmissionItem, User, Subject, Refund
@@ -240,7 +240,7 @@ async def get_cashier_dashboard(
 @router.get("/teacher")
 async def get_teacher_dashboard(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_teacher_or_admin)
 ):
     teacher_mode = is_teacher_user(current_user)
     teacher = await resolve_teacher_for_user(db, current_user)

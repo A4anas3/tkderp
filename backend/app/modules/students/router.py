@@ -431,7 +431,7 @@ async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db),
     # Fetch last payment per item in one query
     item_ids = [itm.id for itm in all_items]
     last_payment_info = {}
-    if item_ids:
+    if item_ids and not teacher_mode:
         pa_stmt = (
             select(PaymentAllocation.admission_item_id, Payment.payment_date, PaymentAllocation.allocated_amount)
             .join(Payment, PaymentAllocation.payment_id == Payment.id)
@@ -527,16 +527,16 @@ async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db),
             valid_from=itm.valid_from,
             valid_to=itm.valid_to,
             days_left=days_left,
-            net_price=itm.net_price,
-            amount_collected=itm.amount_collected,
-            balance_due=itm.balance_due,
-            last_paid_date=last_p_date,
-            last_paid_amount=last_p_amt,
-            payment_status=pay_st,
+            net_price=Decimal("0.00") if teacher_mode else itm.net_price,
+            amount_collected=Decimal("0.00") if teacher_mode else itm.amount_collected,
+            balance_due=Decimal("0.00") if teacher_mode else itm.balance_due,
+            last_paid_date=None if teacher_mode else last_p_date,
+            last_paid_amount=None if teacher_mode else last_p_amt,
+            payment_status="HIDDEN" if teacher_mode else pay_st,
             access_status=itm.access_status,
             item_type=itm.item_type,
             is_expired=is_line_expired,
-            is_overdue=is_line_overdue,
+            is_overdue=False if teacher_mode else is_line_overdue,
             source_demo_number=itm.source_demo_number
         )
 
@@ -562,6 +562,9 @@ async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db),
         txns = list((await db.execute(tx_stmt)).scalars().all())
 
     res = StudentDetailResponse.model_validate(student)
+    if teacher_mode:
+        res.has_green_card = False
+        res.green_card_expiry = None
     if admissions:
         active_adms_list = [a for a in admissions if a.status == "ACTIVE" and getattr(a, "document_status", "VALID") != "VOID"]
         if teacher_mode:
@@ -1495,15 +1498,15 @@ async def get_student_active_enrollment(
             "timing": class_sched,
             "valid_from": item.valid_from.isoformat() if item.valid_from else (adm.valid_from.isoformat() if adm.valid_from else None),
             "valid_to": item.valid_to.isoformat() if item.valid_to else (adm.valid_to.isoformat() if adm.valid_to else None),
-            "original_price": float(item.original_price),
-            "net_price": float(item.net_price),
-            "amount_collected": float(item.amount_collected),
-            "balance_due": float(item.balance_due),
+            "original_price": 0.0 if teacher_mode else float(item.original_price),
+            "net_price": 0.0 if teacher_mode else float(item.net_price),
+            "amount_collected": 0.0 if teacher_mode else float(item.amount_collected),
+            "balance_due": 0.0 if teacher_mode else float(item.balance_due),
             "status": item_status,
             "days_remaining": days_remaining,
             "is_expiring_soon": days_remaining is not None and 0 <= days_remaining <= 7,
             "is_expired": is_item_expired,
-            "is_overdue": is_item_overdue,
+            "is_overdue": False if teacher_mode else is_item_overdue,
             "lifecycle_reason": item.lifecycle_reason or adm.revocation_reason,
             "can_cancel": can_cancel,
             "source_demo_number": item.source_demo_number
@@ -1584,10 +1587,10 @@ async def get_student_active_enrollment(
             "timing": latest_dict.get("timing"),
             "valid_from": earliest_start.isoformat() if earliest_start else latest_dict["valid_from"],
             "valid_to": latest_end.isoformat() if latest_end else latest_dict["valid_to"],
-            "original_price": float(total_original),
-            "net_price": float(total_net),
-            "amount_collected": float(total_paid),
-            "balance_due": float(total_due),
+            "original_price": 0.0 if teacher_mode else float(total_original),
+            "net_price": 0.0 if teacher_mode else float(total_net),
+            "amount_collected": 0.0 if teacher_mode else float(total_paid),
+            "balance_due": 0.0 if teacher_mode else float(total_due),
             "status": "ACTIVE",
             "days_remaining": days_remaining,
             "is_expiring_soon": days_remaining is not None and 0 <= days_remaining <= 7,
@@ -1644,15 +1647,14 @@ async def get_student_active_enrollment(
         "historical_memberships": historical_memberships,
         "active_demos": [d.model_dump() for d in active_demos],
         "total_active_demos": len(active_demos),
-        "expired_due_total": float(expired_due_total),
-        "total_due": float(total_due_all),
+        "expired_due_total": 0.0 if teacher_mode else float(expired_due_total),
+        "total_due": 0.0 if teacher_mode else float(total_due_all),
         "active_totals": {
-            "total_fee": float(active_fee_total),
-            "total_paid": float(active_paid_total),
-            "total_due": float(active_due_total),
-            "expired_due": float(expired_due_total),
-            "total_due": float(total_due_all),
-            "total_outstanding_due": float(total_due_all)
+            "total_fee": 0.0 if teacher_mode else float(active_fee_total),
+            "total_paid": 0.0 if teacher_mode else float(active_paid_total),
+            "total_due": 0.0 if teacher_mode else float(active_due_total),
+            "expired_due": 0.0 if teacher_mode else float(expired_due_total),
+            "total_outstanding_due": 0.0 if teacher_mode else float(total_due_all)
         }
     }
 

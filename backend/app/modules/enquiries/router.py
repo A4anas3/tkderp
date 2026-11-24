@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from app.database.session import get_db
-from app.core.dependencies import require_staff, require_cashier_or_admin
+from app.core.dependencies import require_staff, require_cashier_or_admin, require_admin
 from app.common.active_student import today_kolkata
 from app.common.teacher_scope import (
     is_teacher_user,
@@ -646,7 +646,7 @@ async def get_demo_analytics(
     teacher_id: Optional[uuid.UUID] = None,
     subject_id: Optional[uuid.UUID] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_cashier_or_admin)
+    current_user: User = Depends(require_admin)
 ):
     """
     Returns pre-computed database-level demo analytics:
@@ -1264,7 +1264,13 @@ async def create_enquiry(
     )
 
 
-async def _resolve_single_enquiry_response(db: AsyncSession, enquiry: Enquiry, formatted_demo_items: list, today: date) -> EnquiryResponse:
+async def _resolve_single_enquiry_response(
+    db: AsyncSession,
+    enquiry: Enquiry,
+    formatted_demo_items: list,
+    today: date,
+    include_billing_info: bool = True,
+) -> EnquiryResponse:
     matched_student = None
     if enquiry.converted_student_id:
         s_res = await db.execute(select(Student).where(Student.id == enquiry.converted_student_id))
@@ -1280,7 +1286,7 @@ async def _resolve_single_enquiry_response(db: AsyncSession, enquiry: Enquiry, f
     has_student = matched_student is not None or bool(enquiry.converted_student_id)
 
     student_admissions = []
-    if effective_student_id:
+    if include_billing_info and effective_student_id:
         adm_res = await db.execute(
             select(Admission)
             .where(Admission.student_id == effective_student_id, Admission.status != "CANCELLED")
@@ -1288,8 +1294,8 @@ async def _resolve_single_enquiry_response(db: AsyncSession, enquiry: Enquiry, f
         )
         student_admissions = adm_res.scalars().all()
 
-    has_course = len(student_admissions) > 0
-    latest_adm = student_admissions[0] if student_admissions else None
+    has_course = len(student_admissions) > 0 if include_billing_info else False
+    latest_adm = student_admissions[0] if (include_billing_info and student_admissions) else None
     rem_days = (enquiry.demo_deadline - today).days if enquiry.demo_deadline else None
 
     return EnquiryResponse(
@@ -1313,7 +1319,7 @@ async def _resolve_single_enquiry_response(db: AsyncSession, enquiry: Enquiry, f
         has_course_purchase=has_course,
         course_admission_id=latest_adm.id if latest_adm else None,
         course_admission_number=latest_adm.admission_number if latest_adm else None,
-        course_items_count=len(student_admissions),
+        course_items_count=len(student_admissions) if include_billing_info else 0,
         created_by=enquiry.created_by,
         demo_items=formatted_demo_items
     )
@@ -1356,7 +1362,10 @@ async def get_enquiry(
         )
     formatted_demo_items = [_format_demo_item_response(d, today) for d in d_items]
 
-    return await _resolve_single_enquiry_response(db, enquiry, formatted_demo_items, today)
+    return await _resolve_single_enquiry_response(
+        db, enquiry, formatted_demo_items, today,
+        include_billing_info=not is_teacher_user(current_user),
+    )
 
 
 @router.put("/demos/{demo_item_id}/status", response_model=EnquiryDemoItemResponse)
@@ -1431,7 +1440,10 @@ async def update_enquiry(
     d_items = d_res.scalars().all()
     formatted_demo_items = [_format_demo_item_response(d, today) for d in d_items]
 
-    return await _resolve_single_enquiry_response(db, enquiry, formatted_demo_items, today)
+    return await _resolve_single_enquiry_response(
+        db, enquiry, formatted_demo_items, today,
+        include_billing_info=not is_teacher_user(current_user),
+    )
 
 
 @router.post("/{enquiry_id}/register-student", response_model=RegisterStudentResponse, status_code=status.HTTP_200_OK)

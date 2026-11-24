@@ -273,7 +273,7 @@ async def get_subject_roster(
     rows = (await db.execute(q_items)).all()
 
     item_ids = [itm.id for itm, adm, stu, bch in rows]
-    collected_map = await get_item_allocated_collected_map(db, item_ids)
+    collected_map = {} if teacher_mode else await get_item_allocated_collected_map(db, item_ids)
 
     items = []
     for itm, adm, stu, bch in rows:
@@ -288,11 +288,13 @@ async def get_subject_roster(
             valid_from=itm.valid_from,
             valid_to=itm.valid_to,
             admission_date=adm.admission_date,
-            balance_due=itm.balance_due,
-            net_price=itm.net_price,
-            amount_collected=itm_coll,
+            balance_due=Decimal("0.00") if teacher_mode else itm.balance_due,
+            net_price=Decimal("0.00") if teacher_mode else itm.net_price,
+            amount_collected=Decimal("0.00") if teacher_mode else itm_coll,
             is_cancelled=is_line_cancelled,
         )
+        if teacher_mode:
+            c_info["payment_status"] = "HIDDEN"
         items.append({
             "item_id": str(itm.id),
             "admission_id": str(adm.id),

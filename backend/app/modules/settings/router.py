@@ -10,7 +10,7 @@ from sqlalchemy import select
 from app.core.config import settings as app_settings
 from app.database.session import get_db
 from app.modules.users.models import User
-from app.core.dependencies import require_staff, require_cashier_or_admin, require_admin
+from app.core.dependencies import require_cashier_or_admin, require_admin
 from app.modules.settings.models import InstituteSetting
 from app.modules.settings.schemas import (
     InstituteSettingsResponse,
@@ -85,10 +85,11 @@ async def get_public_institute_profile(db: AsyncSession = Depends(get_db)):
 @router.get("/institute", response_model=InstituteSettingsResponse)
 async def get_institute_settings(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     """
     Get institute's saved profile and GST configuration (GSTIN, default GST rate, logo).
+    Restricted to Cashier and Admin.
     """
     setting = await _get_or_create_settings(db)
     return setting
@@ -99,7 +100,7 @@ async def get_institute_settings(
 async def update_institute_settings(
     payload: InstituteSettingsUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_cashier_or_admin)
+    current_user: User = Depends(require_admin)
 ):
     """
     Save or update institute's GST number, GST rate, and profile details.

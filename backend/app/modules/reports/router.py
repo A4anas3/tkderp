@@ -14,7 +14,7 @@ from sqlalchemy import select, func, and_, or_, case
 from app.database.session import get_db
 from app.common.calculations import evaluate_student_rolling_cycle, compute_rolling_cycle_end
 from app.common.active_student import active_student_subject_filter, today_kolkata
-from app.core.dependencies import require_staff, require_admin, require_cashier_or_admin
+from app.core.dependencies import require_admin
 from app.database.models import (
     Admission, AdmissionItem, Subject, Batch, Teacher, PaymentAllocation, Payment,
     Expense, SalaryRecord, Refund, User, Student
@@ -1249,7 +1249,7 @@ async def get_renewal_rate_report(
     teacher_id: Optional[uuid.UUID] = Query(None, description="Filter by teacher"),
     subject_id: Optional[uuid.UUID] = Query(None, description="Filter by subject"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_cashier_or_admin)
+    current_user: User = Depends(require_admin)
 ):
     """
     Renewal rate report:
@@ -1371,7 +1371,7 @@ async def get_collections_report(
     page_size: Optional[int] = Query(None, ge=1, le=100, description="Items per page"),
     format: Optional[str] = Query(None, description="Set to 'csv' for CSV export"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_cashier_or_admin)
+    current_user: User = Depends(require_admin)
 ):
     """
     (a) Collections report: Total collected by date range, broken down by payment mode and cashier.
@@ -1407,7 +1407,7 @@ async def get_collections_csv(
     cashier_id: Optional[uuid.UUID] = Query(None),
     search: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_cashier_or_admin)
+    current_user: User = Depends(require_admin)
 ):
     return await get_collections_report(
         from_date=from_date, to_date=to_date, payment_mode=payment_mode,
@@ -1427,7 +1427,7 @@ async def get_dues_ageing_report(
     page_size: Optional[int] = Query(None, ge=1, le=100, description="Items per page"),
     format: Optional[str] = Query(None, description="Set to 'csv' for CSV export"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_cashier_or_admin)
+    current_user: User = Depends(require_admin)
 ):
     """
     (b) Dues & ageing report: Outstanding dues by student, subject and batch, with ageing buckets.
@@ -1464,7 +1464,7 @@ async def get_dues_ageing_csv(
     ageing_bucket: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_cashier_or_admin)
+    current_user: User = Depends(require_admin)
 ):
     return await get_dues_ageing_report(
         from_date=from_date, to_date=to_date, subject_id=subject_id,
@@ -1484,7 +1484,7 @@ async def get_subject_breakup_report(
     page_size: Optional[int] = Query(None, ge=1, le=100),
     format: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_cashier_or_admin)
+    current_user: User = Depends(require_admin)
 ):
     """
     (c) Subject-wise breakup: per subject: students enrolled, fees billed, collected, due, waived, refunded and net revenue.
@@ -1507,7 +1507,7 @@ async def get_subject_breakup_csv(
     year: Optional[int] = Query(None),
     search: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_cashier_or_admin)
+    current_user: User = Depends(require_admin)
 ):
     return await get_subject_breakup_report(
         from_date=from_date, to_date=to_date, month=month, year=year,
@@ -1527,7 +1527,7 @@ async def get_teacher_breakup_report(
     page_size: Optional[int] = Query(None, ge=1, le=100),
     format: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_cashier_or_admin)
+    current_user: User = Depends(require_admin)
 ):
     """
     (d) Teacher-wise breakup: per teacher: subjects, students, collections.
@@ -1550,7 +1550,7 @@ async def get_teacher_breakup_csv(
     year: Optional[int] = Query(None),
     search: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_cashier_or_admin)
+    current_user: User = Depends(require_admin)
 ):
     return await get_teacher_breakup_report(
         from_date=from_date, to_date=to_date, month=month, year=year,
@@ -1567,7 +1567,7 @@ async def get_batch_breakup_report(
     year: Optional[int] = Query(None),
     format: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_cashier_or_admin)
+    current_user: User = Depends(require_admin)
 ):
     """
     (e) Batch-wise report: per batch: enrolments, collections, dues.
@@ -1585,7 +1585,7 @@ async def get_batch_breakup_csv(
     month: Optional[int] = Query(None, ge=1, le=12),
     year: Optional[int] = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_cashier_or_admin)
+    current_user: User = Depends(require_admin)
 ):
     return await get_batch_breakup_report(
         from_date=from_date, to_date=to_date, month=month, year=year,
@@ -1604,7 +1604,7 @@ async def get_admissions_conversion_api(
     page_size: Optional[int] = Query(None, ge=1, le=100, description="Items per page"),
     format: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_cashier_or_admin)
+    current_user: User = Depends(require_admin)
 ):
     """
     (f) Admissions & conversion report: enquiries received, converted to admissions, conversion rate, by subject and by source.
@@ -1638,7 +1638,7 @@ async def get_admissions_conversion_csv(
     source: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_cashier_or_admin)
+    current_user: User = Depends(require_admin)
 ):
     return await get_admissions_conversion_api(
         from_date=from_date, to_date=to_date, subject_id=subject_id,
@@ -1656,7 +1656,7 @@ async def get_waivers_report_api(
     page_size: Optional[int] = Query(None, ge=1, le=100, description="Items per page"),
     format: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_cashier_or_admin)
+    current_user: User = Depends(require_admin)
 ):
     """
     (g) Waivers report: all waived dues with admin, reason and audit reference.
@@ -1687,7 +1687,7 @@ async def get_waivers_csv(
     admin_id: Optional[uuid.UUID] = Query(None),
     search: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_cashier_or_admin)
+    current_user: User = Depends(require_admin)
 ):
     return await get_waivers_report_api(
         from_date=from_date, to_date=to_date, admin_id=admin_id,
@@ -1705,7 +1705,7 @@ async def get_refunds_report_api(
     page_size: Optional[int] = Query(None, ge=1, le=100, description="Items per page"),
     format: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_cashier_or_admin)
+    current_user: User = Depends(require_admin)
 ):
     """
     (h) Refunds report: fee refunds with original payment, amount, deductions, mode, cashier, reason.
@@ -1738,7 +1738,7 @@ async def get_refunds_csv(
     refund_mode: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_cashier_or_admin)
+    current_user: User = Depends(require_admin)
 ):
     return await get_refunds_report_api(
         from_date=from_date, to_date=to_date, refund_mode=refund_mode,
@@ -1757,7 +1757,7 @@ async def get_expenses_report_api(
     page_size: Optional[int] = Query(None, ge=1, le=100, description="Items per page"),
     format: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_cashier_or_admin)
+    current_user: User = Depends(require_admin)
 ):
     """
     (i) Expenses report: operating expenses and staff/teacher salaries disbursed.
@@ -1790,7 +1790,7 @@ async def get_expenses_csv(
     payment_mode: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_cashier_or_admin)
+    current_user: User = Depends(require_admin)
 ):
     return await get_expenses_report_api(
         from_date=from_date, to_date=to_date, category_id=category_id,
@@ -1807,7 +1807,7 @@ async def get_summary_dashboard_api(
     year: Optional[int] = Query(None),
     format: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_cashier_or_admin)
+    current_user: User = Depends(require_admin)
 ):
     """
     (j) Daily / monthly summary dashboard (billed, collected, due, expenses, net cash).
@@ -1836,7 +1836,7 @@ async def get_summary_dashboard_csv(
     month: Optional[int] = Query(None, ge=1, le=12),
     year: Optional[int] = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_cashier_or_admin)
+    current_user: User = Depends(require_admin)
 ):
     return await get_summary_dashboard_api(
         period=period, from_date=from_date, to_date=to_date,
