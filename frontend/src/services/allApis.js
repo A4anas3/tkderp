@@ -422,6 +422,10 @@ export const expenseApi = {
     const res = await api.get('/expenses/salaries', { params });
     return res.data;
   },
+  getSalaryFilterOptions: async () => {
+    const res = await api.get('/expenses/salaries/filters');
+    return res.data;
+  },
   createSalary: async (data) => {
     const res = await api.post('/expenses/salaries', data);
     return res.data;

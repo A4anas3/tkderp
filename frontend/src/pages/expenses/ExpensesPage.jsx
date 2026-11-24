@@ -11,6 +11,8 @@ import {
   DollarSign,
   Calculator,
   Sparkles,
+  Filter,
+  RotateCcw,
 } from 'lucide-react';
 import DataTable from '../../components/common/DataTable';
 import Modal from '../../components/common/Modal';
@@ -32,6 +34,14 @@ const getMonthStrings = () => {
   return { currentMonth, lastMonth };
 };
 
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+const formatMonthLabel = (monthYearStr) => {
+  const { yearNum, monthNum } = parseMonthYear(monthYearStr);
+  const mName = MONTH_NAMES[monthNum - 1] || '';
+  return mName ? `${mName} ${yearNum} (${monthYearStr})` : monthYearStr;
+};
+
 export default function ExpensesPage() {
   const { success, error } = useToast();
   const [activeTab, setActiveTab] = useState('daily'); // 'daily' | 'salaries' | 'categories'
@@ -48,6 +58,10 @@ export default function ExpensesPage() {
   const [expTotal, setExpTotal] = useState(0);
   const [expPage, setExpPage] = useState(1);
   const [expSearch, setExpSearch] = useState('');
+  const [expFromDate, setExpFromDate] = useState('');
+  const [expToDate, setExpToDate] = useState('');
+  const [expCategoryFilter, setExpCategoryFilter] = useState('ALL');
+  const [expPaymentModeFilter, setExpPaymentModeFilter] = useState('ALL');
   const [expLoading, setExpLoading] = useState(true);
   const [expModalOpen, setExpModalOpen] = useState(false);
   const [expForm, setExpForm] = useState({
@@ -66,8 +80,12 @@ export default function ExpensesPage() {
   const [salPage, setSalPage] = useState(1);
   const [salLoading, setSalLoading] = useState(true);
   const [salModalOpen, setSalModalOpen] = useState(false);
-  const [salMonthFilter, setSalMonthFilter] = useState('ALL'); // 'ALL' | curMonthStr | prevMonthStr
+  const [salMonthFilter, setSalMonthFilter] = useState('ALL'); // 'ALL' | 'YYYY-MM'
+  const [salStaffFilter, setSalStaffFilter] = useState('ALL'); // 'ALL' | 'id:<uuid>' | 'name:<name>'
+  const [salStatusFilter, setSalStatusFilter] = useState('ALL'); // 'ALL' | 'PAID' | 'PENDING' | 'PARTIALLY_PAID'
   const [salSearch, setSalSearch] = useState('');
+  const [salStaffOptions, setSalStaffOptions] = useState([]);
+  const [salMonthOptions, setSalMonthOptions] = useState([]);
   const [teachers, setTeachers] = useState([]);
   const [salForm, setSalForm] = useState({
     employee_id: '',
@@ -113,15 +131,41 @@ export default function ExpensesPage() {
     }
   };
 
+  // Load Salary Filter Options (staff & months)
+  const loadSalaryFilterOptions = useCallback(async () => {
+    try {
+      const res = await expenseApi.getSalaryFilterOptions();
+      setSalStaffOptions(res?.staff || []);
+      setSalMonthOptions(res?.months || []);
+    } catch (err) {
+      console.error('Failed to load salary filter options:', err);
+    }
+  }, []);
+
   // Load Expenses
   const loadExpenses = useCallback(async () => {
     setExpLoading(true);
     try {
-      const res = await expenseApi.listExpenses({
+      const params = {
         page: expPage,
         page_size: 15,
-        search: expSearch.trim() || undefined,
-      });
+      };
+      if (expSearch && expSearch.trim()) {
+        params.search = expSearch.trim();
+      }
+      if (expFromDate) {
+        params.from_date = expFromDate;
+      }
+      if (expToDate) {
+        params.to_date = expToDate;
+      }
+      if (expCategoryFilter && expCategoryFilter !== 'ALL') {
+        params.category_id = expCategoryFilter;
+      }
+      if (expPaymentModeFilter && expPaymentModeFilter !== 'ALL') {
+        params.payment_mode = expPaymentModeFilter;
+      }
+      const res = await expenseApi.listExpenses(params);
       setExpenses(res.items || []);
       setExpTotal(res.total || 0);
     } catch (err) {
@@ -129,7 +173,7 @@ export default function ExpensesPage() {
     } finally {
       setExpLoading(false);
     }
-  }, [expPage, expSearch]);
+  }, [expPage, expSearch, expFromDate, expToDate, expCategoryFilter, expPaymentModeFilter]);
 
   // Load Salaries (covers current month, last month, and all months)
   const loadSalaries = useCallback(async () => {
@@ -142,6 +186,16 @@ export default function ExpensesPage() {
       if (salMonthFilter && salMonthFilter !== 'ALL') {
         params.month_year = salMonthFilter;
       }
+      if (salStatusFilter && salStatusFilter !== 'ALL') {
+        params.status_filter = salStatusFilter;
+      }
+      if (salStaffFilter && salStaffFilter !== 'ALL') {
+        if (salStaffFilter.startsWith('id:')) {
+          params.employee_id = salStaffFilter.slice(3);
+        } else if (salStaffFilter.startsWith('name:')) {
+          params.employee_name = salStaffFilter.slice(5);
+        }
+      }
       if (salSearch && salSearch.trim()) {
         params.search = salSearch.trim();
       }
@@ -153,14 +207,63 @@ export default function ExpensesPage() {
     } finally {
       setSalLoading(false);
     }
-  }, [salPage, salMonthFilter, salSearch]);
+  }, [salPage, salMonthFilter, salStatusFilter, salStaffFilter, salSearch]);
 
   useEffect(() => {
     loadCategories();
+    loadSalaryFilterOptions();
     teacherApi.list({ page: 1, page_size: 100 }).then((res) => {
       setTeachers(res.items || []);
     });
-  }, []);
+  }, [loadSalaryFilterOptions]);
+
+  const mergedSalaryMonths = useMemo(() => {
+    const set = new Set([curMonthStr, prevMonthStr, ...salMonthOptions]);
+    return Array.from(set).filter(Boolean).sort((a, b) => b.localeCompare(a));
+  }, [curMonthStr, prevMonthStr, salMonthOptions]);
+
+  const mergedStaffOptions = useMemo(() => {
+    if (salStaffOptions.length > 0) return salStaffOptions;
+    return teachers.map((t) => ({
+      key: `id:${t.id}`,
+      label: `${t.name} (Faculty)`,
+      employee_id: t.id,
+      employee_name: t.name,
+      employee_type: 'TEACHER',
+    }));
+  }, [salStaffOptions, teachers]);
+
+  const hasActiveExpFilters = Boolean(
+    expFromDate ||
+      expToDate ||
+      expCategoryFilter !== 'ALL' ||
+      expPaymentModeFilter !== 'ALL' ||
+      expSearch.trim()
+  );
+
+  const handleResetExpFilters = () => {
+    setExpFromDate('');
+    setExpToDate('');
+    setExpCategoryFilter('ALL');
+    setExpPaymentModeFilter('ALL');
+    setExpSearch('');
+    setExpPage(1);
+  };
+
+  const hasActiveSalFilters = Boolean(
+    salStaffFilter !== 'ALL' ||
+      salMonthFilter !== 'ALL' ||
+      salStatusFilter !== 'ALL' ||
+      salSearch.trim()
+  );
+
+  const handleResetSalFilters = () => {
+    setSalStaffFilter('ALL');
+    setSalMonthFilter('ALL');
+    setSalStatusFilter('ALL');
+    setSalSearch('');
+    setSalPage(1);
+  };
 
   useEffect(() => {
     if (activeTab === 'daily') loadExpenses();
@@ -405,10 +508,12 @@ export default function ExpensesPage() {
         notes: '',
       });
       loadSalaries();
+      loadSalaryFilterOptions();
     } catch (payErr) {
       error(`Salary record created, but payment failed: ${payErr.message || 'Payment recording failed'}. Record remains PENDING.`);
       setSalModalOpen(false);
       loadSalaries();
+      loadSalaryFilterOptions();
     } finally {
       setSubmitting(false);
     }
@@ -685,76 +790,264 @@ export default function ExpensesPage() {
 
       {/* Tab 1: Daily Expenses */}
       {activeTab === 'daily' && (
-        <DataTable
-          columns={expenseColumns}
-          data={expenses}
-          total={expTotal}
-          page={expPage}
-          pageSize={15}
-          onPageChange={(p) => setExpPage(p)}
-          searchValue={expSearch}
-          onSearchChange={(val) => {
-            setExpSearch(val);
-            setExpPage(1);
-          }}
-          onRefresh={loadExpenses}
-          loading={expLoading}
-          searchPlaceholder="Search expense by title or reference..."
-          emptyMessage="No daily expenses recorded."
-        />
+        <div className="space-y-3">
+          <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
+                <Filter className="w-3.5 h-3.5 text-odoo-600" />
+                <span>Filter Daily Expenses</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-slate-500 font-medium">
+                  Showing {expenses.length} of {expTotal} expenses
+                </span>
+                {hasActiveExpFilters && (
+                  <button
+                    type="button"
+                    onClick={handleResetExpFilters}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-rose-600 hover:text-rose-800 transition cursor-pointer"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    Clear Filters
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  From Date
+                </label>
+                <input
+                  type="date"
+                  aria-label="From Date"
+                  value={expFromDate}
+                  onChange={(e) => {
+                    setExpFromDate(e.target.value);
+                    setExpPage(1);
+                  }}
+                  className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 min-h-[36px] text-xs font-medium text-black focus:outline-none focus:border-odoo-600 focus:ring-1 focus:ring-odoo-600 shadow-2xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  To Date
+                </label>
+                <input
+                  type="date"
+                  aria-label="To Date"
+                  value={expToDate}
+                  onChange={(e) => {
+                    setExpToDate(e.target.value);
+                    setExpPage(1);
+                  }}
+                  className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 min-h-[36px] text-xs font-medium text-black focus:outline-none focus:border-odoo-600 focus:ring-1 focus:ring-odoo-600 shadow-2xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Expense Category
+                </label>
+                <select
+                  aria-label="Expense Category"
+                  value={expCategoryFilter}
+                  onChange={(e) => {
+                    setExpCategoryFilter(e.target.value);
+                    setExpPage(1);
+                  }}
+                  className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 min-h-[36px] text-xs font-medium text-black focus:outline-none focus:border-odoo-600 focus:ring-1 focus:ring-odoo-600 shadow-2xs"
+                >
+                  <option value="ALL">All Categories</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Payment Mode
+                </label>
+                <select
+                  aria-label="Payment Mode"
+                  value={expPaymentModeFilter}
+                  onChange={(e) => {
+                    setExpPaymentModeFilter(e.target.value);
+                    setExpPage(1);
+                  }}
+                  className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 min-h-[36px] text-xs font-medium text-black focus:outline-none focus:border-odoo-600 focus:ring-1 focus:ring-odoo-600 shadow-2xs"
+                >
+                  <option value="ALL">All Modes</option>
+                  <option value="CASH">Cash</option>
+                  <option value="UPI">UPI</option>
+                  <option value="BANK_TRANSFER">Bank Transfer</option>
+                  <option value="CARD">Card</option>
+                  <option value="OTHER">Other</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <DataTable
+            columns={expenseColumns}
+            data={expenses}
+            total={expTotal}
+            page={expPage}
+            pageSize={15}
+            onPageChange={(p) => setExpPage(p)}
+            searchValue={expSearch}
+            onSearchChange={(val) => {
+              setExpSearch(val);
+              setExpPage(1);
+            }}
+            onRefresh={loadExpenses}
+            loading={expLoading}
+            searchPlaceholder="Search expense by title or reference..."
+            emptyMessage={
+              hasActiveExpFilters
+                ? 'No daily expenses match the selected filters.'
+                : 'No daily expenses recorded.'
+            }
+          />
+        </div>
       )}
 
       {/* Tab 2: Monthly Salaries (Covers Last Month, Current Month, and All Months) */}
       {activeTab === 'salaries' && (
         <div className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-xs font-bold text-slate-700 mr-1">Period Filter:</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setSalMonthFilter('ALL');
-                  setSalPage(1);
-                }}
-                className={`px-2.5 py-1 text-xs rounded-md font-semibold transition cursor-pointer ${
-                  salMonthFilter === 'ALL'
-                    ? 'bg-odoo-700 text-white shadow-2xs'
-                    : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
-                }`}
-              >
-                All Months (Current & Last Month)
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setSalMonthFilter(curMonthStr);
-                  setSalPage(1);
-                }}
-                className={`px-2.5 py-1 text-xs rounded-md font-semibold transition cursor-pointer ${
-                  salMonthFilter === curMonthStr
-                    ? 'bg-odoo-700 text-white shadow-2xs'
-                    : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
-                }`}
-              >
-                Current Month ({curMonthStr})
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setSalMonthFilter(prevMonthStr);
-                  setSalPage(1);
-                }}
-                className={`px-2.5 py-1 text-xs rounded-md font-semibold transition cursor-pointer ${
-                  salMonthFilter === prevMonthStr
-                    ? 'bg-odoo-700 text-white shadow-2xs'
-                    : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
-                }`}
-              >
-                Last Month ({prevMonthStr})
-              </button>
+          <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs font-bold text-slate-700 mr-1">Period Quick Filter:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSalMonthFilter('ALL');
+                    setSalPage(1);
+                  }}
+                  className={`px-2.5 py-1 text-xs rounded-md font-semibold transition cursor-pointer ${
+                    salMonthFilter === 'ALL'
+                      ? 'bg-odoo-700 text-white shadow-2xs'
+                      : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  All Months
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSalMonthFilter(curMonthStr);
+                    setSalPage(1);
+                  }}
+                  className={`px-2.5 py-1 text-xs rounded-md font-semibold transition cursor-pointer ${
+                    salMonthFilter === curMonthStr
+                      ? 'bg-odoo-700 text-white shadow-2xs'
+                      : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  Current Month ({curMonthStr})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSalMonthFilter(prevMonthStr);
+                    setSalPage(1);
+                  }}
+                  className={`px-2.5 py-1 text-xs rounded-md font-semibold transition cursor-pointer ${
+                    salMonthFilter === prevMonthStr
+                      ? 'bg-odoo-700 text-white shadow-2xs'
+                      : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  Last Month ({prevMonthStr})
+                </button>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-slate-500 font-medium">
+                  Showing {salaries.length} of {salTotal} payroll entries
+                </span>
+                {hasActiveSalFilters && (
+                  <button
+                    type="button"
+                    onClick={handleResetSalFilters}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-rose-600 hover:text-rose-800 transition cursor-pointer"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    Clear Filters
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="text-xs text-slate-500 font-medium">
-              Showing {salaries.length} of {salTotal} payroll entries
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Staff Member
+                </label>
+                <select
+                  aria-label="Staff Member"
+                  value={salStaffFilter}
+                  onChange={(e) => {
+                    setSalStaffFilter(e.target.value);
+                    setSalPage(1);
+                  }}
+                  className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 min-h-[36px] text-xs font-medium text-black focus:outline-none focus:border-odoo-600 focus:ring-1 focus:ring-odoo-600 shadow-2xs"
+                >
+                  <option value="ALL">All Staff & Faculty</option>
+                  {mergedStaffOptions.map((opt) => (
+                    <option key={opt.key} value={opt.key}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Month
+                </label>
+                <select
+                  aria-label="Month"
+                  value={salMonthFilter}
+                  onChange={(e) => {
+                    setSalMonthFilter(e.target.value);
+                    setSalPage(1);
+                  }}
+                  className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 min-h-[36px] text-xs font-medium text-black focus:outline-none focus:border-odoo-600 focus:ring-1 focus:ring-odoo-600 shadow-2xs"
+                >
+                  <option value="ALL">All Months</option>
+                  {mergedSalaryMonths.map((m) => (
+                    <option key={m} value={m}>
+                      {formatMonthLabel(m)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Payment Status
+                </label>
+                <select
+                  aria-label="Payment Status"
+                  value={salStatusFilter}
+                  onChange={(e) => {
+                    setSalStatusFilter(e.target.value);
+                    setSalPage(1);
+                  }}
+                  className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 min-h-[36px] text-xs font-medium text-black focus:outline-none focus:border-odoo-600 focus:ring-1 focus:ring-odoo-600 shadow-2xs"
+                >
+                  <option value="ALL">All Statuses</option>
+                  <option value="PAID">Paid</option>
+                  <option value="PENDING">Pending</option>
+                  <option value="PARTIALLY_PAID">Partially Paid</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -773,7 +1066,11 @@ export default function ExpensesPage() {
             onRefresh={loadSalaries}
             loading={salLoading}
             searchPlaceholder="Search payroll by employee name..."
-            emptyMessage="No salary records found for this period."
+            emptyMessage={
+              hasActiveSalFilters
+                ? 'No salary records match the selected filters.'
+                : 'No salary records found for this period.'
+            }
           />
         </div>
       )}

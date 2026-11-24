@@ -14,7 +14,8 @@ from app.database.models import ExpenseCategory, Expense, SalaryRecord, User, Au
 from app.modules.expenses.schemas import (
     ExpenseCategoryCreate, ExpenseCategoryResponse,
     ExpenseCreate, ExpenseResponse,
-    SalaryRecordCreate, SalaryRecordResponse, PaySalaryRequest
+    SalaryRecordCreate, SalaryRecordResponse, PaySalaryRequest,
+    SalaryFilterStaffOption, SalaryFilterOptionsResponse
 )
 from app.common.pagination import PaginationParams, PageResponse
 
@@ -56,6 +57,7 @@ async def list_expenses(
     page_size: int = Query(15, ge=1, le=100),
     search: Optional[str] = None,
     category_id: Optional[uuid.UUID] = None,
+    payment_mode: Optional[str] = None,
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
     db: AsyncSession = Depends(get_db),
@@ -64,7 +66,7 @@ async def list_expenses(
     query = select(Expense).options(selectinload(Expense.category))
     count_query = select(func.count(Expense.id))
 
-    if search:
+    if search and search.strip():
         search_pattern = f"%{search.strip()}%"
         filter_clause = or_(
             Expense.title.ilike(search_pattern),
@@ -76,6 +78,11 @@ async def list_expenses(
     if category_id:
         query = query.where(Expense.category_id == category_id)
         count_query = count_query.where(Expense.category_id == category_id)
+
+    if payment_mode and payment_mode.strip() and payment_mode.strip().upper() != "ALL":
+        mode_val = payment_mode.strip().upper()
+        query = query.where(func.upper(Expense.payment_mode) == mode_val)
+        count_query = count_query.where(func.upper(Expense.payment_mode) == mode_val)
 
     if from_date:
         query = query.where(Expense.expense_date >= from_date)
@@ -169,13 +176,79 @@ async def create_expense(
     )
 
 # --- Salary Records ---
+@router.get("/salaries/filters", response_model=SalaryFilterOptionsResponse)
+async def get_salary_filter_options(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_cashier_or_admin)
+):
+    teachers_res = await db.execute(select(Teacher).order_by(Teacher.name.asc()))
+    all_teachers = teachers_res.scalars().all()
+
+    staff_map: dict[str, SalaryFilterStaffOption] = {}
+    seen_teacher_ids: set[uuid.UUID] = set()
+    teacher_names_lower: set[str] = set()
+
+    for t in all_teachers:
+        seen_teacher_ids.add(t.id)
+        norm_name = t.name.strip().lower()
+        teacher_names_lower.add(norm_name)
+        key = f"id:{t.id}"
+        staff_map[key] = SalaryFilterStaffOption(
+            key=key,
+            label=f"{t.name} (Faculty)",
+            employee_id=t.id,
+            employee_name=t.name,
+            employee_type="TEACHER",
+        )
+
+    sal_emp_res = await db.execute(
+        select(
+            SalaryRecord.employee_id,
+            SalaryRecord.employee_name_snapshot,
+            SalaryRecord.employee_type,
+        ).distinct()
+    )
+    for emp_id, emp_name, emp_type in sal_emp_res.all():
+        clean_name = (emp_name or "").strip()
+        if not clean_name:
+            continue
+        if emp_id and emp_id in seen_teacher_ids:
+            continue
+        if emp_id is None and clean_name.lower() in teacher_names_lower:
+            continue
+        if emp_id:
+            map_key = f"id:{emp_id}"
+            seen_teacher_ids.add(emp_id)
+        else:
+            map_key = f"name:{clean_name.lower()}"
+        if map_key not in staff_map:
+            role_label = "Faculty" if emp_type == "TEACHER" else "Staff"
+            staff_map[map_key] = SalaryFilterStaffOption(
+                key=f"id:{emp_id}" if emp_id else f"name:{clean_name}",
+                label=f"{clean_name} ({role_label})",
+                employee_id=emp_id,
+                employee_name=clean_name,
+                employee_type=emp_type,
+            )
+
+    staff_options = sorted(staff_map.values(), key=lambda x: x.employee_name.lower())
+
+    months_res = await db.execute(
+        select(SalaryRecord.month_year).distinct().order_by(desc(SalaryRecord.month_year))
+    )
+    months = [m for m in months_res.scalars().all() if m]
+
+    return SalaryFilterOptionsResponse(staff=staff_options, months=months)
+
 @router.get("/salaries", response_model=PageResponse[SalaryRecordResponse])
 async def list_salary_records(
     page: int = Query(1, ge=1),
     page_size: int = Query(15, ge=1, le=100),
     month_year: Optional[str] = None,
     status_filter: Optional[str] = None,
+    status: Optional[str] = None,
     employee_id: Optional[uuid.UUID] = None,
+    employee_name: Optional[str] = None,
     search: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
@@ -188,22 +261,31 @@ async def list_salary_records(
         query = query.where(SalaryRecord.employee_name_snapshot.ilike(search_pattern))
         count_query = count_query.where(SalaryRecord.employee_name_snapshot.ilike(search_pattern))
 
-    if month_year and month_year.strip():
+    if month_year and month_year.strip() and month_year.strip().upper() != "ALL":
         query = query.where(SalaryRecord.month_year == month_year.strip())
         count_query = count_query.where(SalaryRecord.month_year == month_year.strip())
 
-    if status_filter and status_filter.strip():
-        query = query.where(SalaryRecord.status == status_filter.strip())
-        count_query = count_query.where(SalaryRecord.status == status_filter.strip())
+    eff_status = (status_filter or status or "").strip().upper()
+    if eff_status and eff_status != "ALL":
+        query = query.where(func.upper(SalaryRecord.status) == eff_status)
+        count_query = count_query.where(func.upper(SalaryRecord.status) == eff_status)
 
     if employee_id:
         t_name = (await db.execute(select(Teacher.name).where(Teacher.id == employee_id))).scalar_one_or_none()
         if t_name:
-            query = query.where(or_(SalaryRecord.employee_id == employee_id, SalaryRecord.employee_name_snapshot.ilike(t_name.strip())))
-            count_query = count_query.where(or_(SalaryRecord.employee_id == employee_id, SalaryRecord.employee_name_snapshot.ilike(t_name.strip())))
+            emp_clause = or_(
+                SalaryRecord.employee_id == employee_id,
+                SalaryRecord.employee_name_snapshot.ilike(t_name.strip())
+            )
         else:
-            query = query.where(SalaryRecord.employee_id == employee_id)
-            count_query = count_query.where(SalaryRecord.employee_id == employee_id)
+            emp_clause = (SalaryRecord.employee_id == employee_id)
+        query = query.where(emp_clause)
+        count_query = count_query.where(emp_clause)
+
+    if employee_name and employee_name.strip():
+        name_clause = func.lower(func.trim(SalaryRecord.employee_name_snapshot)) == employee_name.strip().lower()
+        query = query.where(name_clause)
+        count_query = count_query.where(name_clause)
 
     total_result = await db.execute(count_query)
     total = total_result.scalar_one()

@@ -67,3 +67,14 @@ class SalaryRecordResponse(SalaryRecordBase):
     base_salary: Optional[Decimal] = None
     holidays_count: Optional[int] = 0
     model_config = ConfigDict(from_attributes=True)
+
+class SalaryFilterStaffOption(BaseModel):
+    key: str
+    label: str
+    employee_id: Optional[uuid.UUID] = None
+    employee_name: str
+    employee_type: Optional[str] = None
+
+class SalaryFilterOptionsResponse(BaseModel):
+    staff: list[SalaryFilterStaffOption]
+    months: list[str]
