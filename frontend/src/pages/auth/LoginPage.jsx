@@ -7,33 +7,64 @@ import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import InstituteLogo from '../../components/common/InstituteLogo';
 
+const DEMO_ACCOUNTS = [
+  {
+    role: 'Admin',
+    username: 'ADM001',
+    password: 'fQ@bzDhrGWOy+IiOI1n$',
+    hoverClass: 'hover:bg-purple-50 hover:border-odoo-400 active:bg-purple-100',
+  },
+  {
+    role: 'Cashier',
+    username: 'CSH001',
+    password: 'Ov2$s27#u7R1x7S_$6wQ',
+    hoverClass: 'hover:bg-amber-50 hover:border-amber-400 active:bg-amber-100',
+  },
+  {
+    role: 'Teacher',
+    username: 'TCH001',
+    password: '8irzM%3-g5-4s8NB2Kt*',
+    hoverClass: 'hover:bg-emerald-50 hover:border-emerald-400 active:bg-emerald-100',
+  },
+];
+
 export default function LoginPage() {
   const { login } = useAuth();
   const { institute } = useInstitute();
   const instituteName = institute?.institute_name || 'THAKURDWARA COACHING INSTITUTE';
   const navigate = useNavigate();
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [username, setUsername] = useState(DEMO_ACCOUNTS[0].username);
+  const [password, setPassword] = useState(DEMO_ACCOUNTS[0].password);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const performLogin = async (u, p) => {
     setErrorMessage('');
-    if (!username.trim() || !password) {
+    if (!u.trim() || !p) {
       setErrorMessage('Please enter both Employee ID and Password.');
       return;
     }
 
     setLoading(true);
     try {
-      await login(username.trim(), password);
+      await login(u.trim(), p);
       navigate('/dashboard');
     } catch (err) {
       setErrorMessage(err.message || 'Login failed. Please check credentials.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    await performLogin(username, password);
+  };
+
+  const handleQuickLogin = async (u, p) => {
+    setUsername(u);
+    setPassword(p);
+    await performLogin(u, p);
   };
 
   return (
@@ -101,6 +132,27 @@ export default function LoginPage() {
               Sign In to ERP
             </Button>
           </form>
+
+          {/* Quick Demo Logins for Fast Evaluation */}
+          <div className="mt-6 pt-5 border-t border-slate-200">
+            <p className="text-[11px] font-black uppercase tracking-wider text-slate-700 mb-2.5">
+              Fast One-Click Demo Access
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {DEMO_ACCOUNTS.map(({ role, username: demoUser, password: demoPassword, hoverClass }) => (
+                <button
+                  key={demoUser}
+                  type="button"
+                  disabled={loading}
+                  onClick={() => handleQuickLogin(demoUser, demoPassword)}
+                  className={`p-2.5 min-h-[44px] text-left rounded-lg border border-slate-200 bg-slate-50 ${hoverClass} transition-all touch-manipulation cursor-pointer shadow-2xs disabled:opacity-60 disabled:cursor-not-allowed`}
+                >
+                  <span className="block text-xs font-bold text-black">{role}</span>
+                  <span className="block text-[10px] text-slate-700 font-mono font-semibold">{demoUser}</span>
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Footer */}
