@@ -89,12 +89,16 @@ async def lifespan(app: FastAPI):
                     phone VARCHAR(50) NOT NULL DEFAULT '+91 98765 43210',
                     email VARCHAR(100) NOT NULL DEFAULT 'accounts@thakurdwara.edu.in',
                     logo_url VARCHAR(500),
+                    govt_regd_no VARCHAR(100),
+                    iso_certification VARCHAR(150),
                     updated_by UUID REFERENCES users(id) ON DELETE SET NULL,
                     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
                     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
                 );
             """))
             await conn.execute(text("ALTER TABLE institute_settings ADD COLUMN IF NOT EXISTS logo_url VARCHAR(500);"))
+            await conn.execute(text("ALTER TABLE institute_settings ADD COLUMN IF NOT EXISTS govt_regd_no VARCHAR(100);"))
+            await conn.execute(text("ALTER TABLE institute_settings ADD COLUMN IF NOT EXISTS iso_certification VARCHAR(150);"))
         except Exception:
             pass
     

@@ -34,6 +34,8 @@ export default function SettingsPage() {
     phone: '+91 98765 43210',
     email: 'accounts@thakurdwara.edu.in',
     logo_url: null,
+    govt_regd_no: '',
+    iso_certification: '',
   });
 
   useEffect(() => {
@@ -48,7 +50,12 @@ export default function SettingsPage() {
       if (cached) {
         try {
           const parsed = JSON.parse(cached);
-          setFormData((prev) => ({ ...prev, ...parsed }));
+          setFormData((prev) => ({
+            ...prev,
+            ...parsed,
+            govt_regd_no: parsed.govt_regd_no || '',
+            iso_certification: parsed.iso_certification || '',
+          }));
         } catch {
           // ignore
         }
@@ -64,6 +71,8 @@ export default function SettingsPage() {
           phone: res.phone || '+91 98765 43210',
           email: res.email || 'accounts@thakurdwara.edu.in',
           logo_url: res.logo_url || null,
+          govt_regd_no: res.govt_regd_no || '',
+          iso_certification: res.iso_certification || '',
         };
         setFormData(nextData);
         setInstituteSettings(res);
@@ -142,6 +151,8 @@ export default function SettingsPage() {
         address: formData.address.trim(),
         phone: formData.phone.trim(),
         email: formData.email.trim(),
+        govt_regd_no: formData.govt_regd_no.trim(),
+        iso_certification: formData.iso_certification.trim(),
       };
 
       const res = await settingsApi.updateInstitute(payload);
@@ -155,6 +166,8 @@ export default function SettingsPage() {
         phone: res.phone || payload.phone,
         email: res.email || payload.email,
         logo_url: res.logo_url !== undefined ? res.logo_url : formData.logo_url,
+        govt_regd_no: res.govt_regd_no || '',
+        iso_certification: res.iso_certification || '',
       });
 
       success('Institute GST & Profile details saved successfully!');
@@ -418,6 +431,42 @@ export default function SettingsPage() {
                   placeholder="accounts@thakurdwara.edu.in"
                   className="w-full h-10 px-3 font-mono text-sm bg-white border border-slate-300 rounded-lg text-black focus:outline-none focus:border-odoo-600 focus:ring-1 focus:ring-odoo-500"
                 />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Govt. Regd. No <span className="text-[11px] font-normal text-slate-500">(Optional)</span>
+                </label>
+                <input
+                  type="text"
+                  maxLength={100}
+                  value={formData.govt_regd_no}
+                  onChange={(e) => handleChange('govt_regd_no', e.target.value)}
+                  placeholder="Optional — leave blank to hide on slips"
+                  className="w-full h-10 px-3 font-mono text-sm bg-white border border-slate-300 rounded-lg text-black focus:outline-none focus:border-odoo-600 focus:ring-1 focus:ring-odoo-500"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Printed in the receipt and invoice header only when set.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  ISO Certification <span className="text-[11px] font-normal text-slate-500">(Optional)</span>
+                </label>
+                <input
+                  type="text"
+                  maxLength={150}
+                  value={formData.iso_certification}
+                  onChange={(e) => handleChange('iso_certification', e.target.value)}
+                  placeholder="Optional — leave blank to hide on slips"
+                  className="w-full h-10 px-3 text-sm bg-white border border-slate-300 rounded-lg text-black focus:outline-none focus:border-odoo-600 focus:ring-1 focus:ring-odoo-500"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Printed in the receipt and invoice header only when set.
+                </p>
               </div>
             </div>
           </div>

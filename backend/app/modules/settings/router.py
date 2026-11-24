@@ -121,6 +121,10 @@ async def update_institute_settings(
         setting.email = payload.email.strip()
     if payload.logo_url is not None:
         setting.logo_url = payload.logo_url.strip() or None
+    if "govt_regd_no" in payload.model_fields_set:
+        setting.govt_regd_no = (payload.govt_regd_no or "").strip() or None
+    if "iso_certification" in payload.model_fields_set:
+        setting.iso_certification = (payload.iso_certification or "").strip() or None
 
     setting.updated_by = current_user.id
     db.add(setting)

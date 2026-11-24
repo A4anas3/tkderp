@@ -17,4 +17,6 @@ class InstituteSetting(BaseModel):
     phone: Mapped[str] = mapped_column(String(50), nullable=False, default="+91 98765 43210")
     email: Mapped[str] = mapped_column(String(100), nullable=False, default="accounts@thakurdwara.edu.in")
     logo_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    govt_regd_no: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    iso_certification: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
     updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)

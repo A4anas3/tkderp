@@ -12,6 +12,8 @@ export default function ReceiptHeader({
   institutePhone: institutePhoneProp = null,
   instituteEmail: instituteEmailProp = null,
   logoUrl: logoUrlProp = null,
+  govtRegdNo: govtRegdNoProp = null,
+  isoCertification: isoCertificationProp = null,
 }) {
   const { institute } = useInstitute();
   const instituteName = instituteNameProp || institute?.institute_name || 'THAKURDWARA COACHING INSTITUTE';
@@ -19,6 +21,8 @@ export default function ReceiptHeader({
   const institutePhone = institutePhoneProp || institute?.phone || '+91 98765 43210';
   const instituteEmail = instituteEmailProp || institute?.email || 'accounts@thakurdwara.edu.in';
   const logoUrl = logoUrlProp || institute?.logo_url;
+  const govtRegdNo = (govtRegdNoProp ?? institute?.govt_regd_no ?? '').trim();
+  const isoCertification = (isoCertificationProp ?? institute?.iso_certification ?? '').trim();
 
   const fallbackSeal = (
     <svg
@@ -67,9 +71,16 @@ export default function ReceiptHeader({
             <p className="text-[11px] sm:text-xs font-bold text-slate-800 tracking-wide mt-0.5">
               Centre for Academic Excellence & Competitive Examinations
             </p>
-            <p className="text-[10px] text-slate-700 font-semibold mt-0.5">
-              Govt. Regd. No: <span className="text-black font-black">UP/TKD/2026/8941</span> • ISO 9001:2015 Certified
-            </p>
+            {govtRegdNo && (
+              <p className="text-[10px] text-slate-700 font-semibold mt-0.5">
+                Govt. Regd. No: <span className="text-black font-black">{govtRegdNo}</span>
+              </p>
+            )}
+            {isoCertification && (
+              <p className="text-[10px] text-slate-700 font-semibold mt-0.5">
+                ISO Certification: <span className="text-black font-black">{isoCertification}</span>
+              </p>
+            )}
             {gstNumber && (
               <p className="text-[10px] font-bold text-black mt-0.5 tracking-wide">
                 GSTIN / Tax ID:{' '}

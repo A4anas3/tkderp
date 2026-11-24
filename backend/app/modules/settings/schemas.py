@@ -13,6 +13,8 @@ class InstituteSettingsResponse(BaseModel):
     phone: str
     email: str
     logo_url: Optional[str] = None
+    govt_regd_no: Optional[str] = None
+    iso_certification: Optional[str] = None
 
 class InstituteSettingsUpdate(BaseModel):
     gstin: Optional[str] = Field(None, min_length=1, max_length=50)
@@ -22,6 +24,8 @@ class InstituteSettingsUpdate(BaseModel):
     phone: Optional[str] = None
     email: Optional[str] = None
     logo_url: Optional[str] = None
+    govt_regd_no: Optional[str] = Field(None, max_length=100)
+    iso_certification: Optional[str] = Field(None, max_length=150)
 
 class PublicInstituteProfileResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -31,3 +35,5 @@ class PublicInstituteProfileResponse(BaseModel):
     phone: str
     email: str
     logo_url: Optional[str] = None
+    govt_regd_no: Optional[str] = None
+    iso_certification: Optional[str] = None

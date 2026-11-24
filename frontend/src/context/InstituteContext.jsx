@@ -12,6 +12,8 @@ const DEFAULT_INSTITUTE = {
   gstin: '09AAACT1234F1Z5',
   gst_rate: '18.00',
   logo_url: null,
+  govt_regd_no: null,
+  iso_certification: null,
 };
 
 const InstituteContext = createContext(null);
@@ -42,6 +44,8 @@ export function InstituteProvider({ children }) {
         phone: data.phone || prev.phone,
         email: data.email || prev.email,
         logo_url: data.logo_url !== undefined ? data.logo_url : prev.logo_url,
+        govt_regd_no: data.govt_regd_no !== undefined ? data.govt_regd_no : prev.govt_regd_no,
+        iso_certification: data.iso_certification !== undefined ? data.iso_certification : prev.iso_certification,
       };
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));

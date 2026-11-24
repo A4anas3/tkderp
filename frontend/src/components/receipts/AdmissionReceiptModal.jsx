@@ -222,7 +222,6 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission, admi
         <ReceiptHeader
           documentTitle="COURSE ENROLLMENT & ACADEMIC INVOICE"
           copyType={copyType}
-          documentSubtitle={`Invoice Voucher: ${invoiceNumber}`}
           gstNumber={includeGst ? gstNumber : null}
         />
 
@@ -287,10 +286,10 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission, admi
           <div className="space-y-1 sm:pl-1 print:pl-1 border-t sm:border-t-0 print:border-t-0 pt-2 sm:pt-0 print:pt-0 border-slate-200">
             <div>
               <span className="text-slate-600 text-[10px] uppercase font-bold tracking-wider block">
-                Purchase Invoice No:
+                Enrollment No:
               </span>
               <span className="font-mono font-black text-black text-sm">
-                {invoiceNumber}
+                {data.admission_number || invoiceNumber}
               </span>
             </div>
             <div>
@@ -320,14 +319,6 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission, admi
                 >
                   {isRevoked ? 'CANCELLED' : data.payment_status || 'RECORDED'}
                 </Badge>
-              </span>
-            </div>
-            <div>
-              <span className="text-slate-600 text-[10px] uppercase font-bold tracking-wider block">
-                Admission Reference:
-              </span>
-              <span className="font-mono font-bold text-black">
-                {data.admission_number || '—'}
               </span>
             </div>
           </div>
