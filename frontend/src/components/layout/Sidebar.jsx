@@ -23,10 +23,14 @@ import {
   Settings,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useInstitute } from '../../context/InstituteContext';
 import Badge from '../common/Badge';
+import InstituteLogo from '../common/InstituteLogo';
 
 export default function Sidebar({ isOpen, onClose }) {
   const { user, role, isAdmin, isCashier, isTeacher, logout } = useAuth();
+  const { institute } = useInstitute();
+  const instituteName = institute?.institute_name || 'THAKURDWARA COACHING INSTITUTE';
 
   const getNavSections = () => {
     const roleUpper = (role || 'ADMIN').toUpperCase();
@@ -281,13 +285,22 @@ export default function Sidebar({ isOpen, onClose }) {
       >
         {/* Brand Header */}
         <div className="h-14 px-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/70 shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-odoo-600 flex items-center justify-center text-white shadow-2xs font-extrabold text-base tracking-wider">
-              T
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-lg bg-white border border-slate-200 flex items-center justify-center overflow-hidden shadow-2xs shrink-0 p-0.5">
+              <InstituteLogo
+                src={institute?.logo_url}
+                alt={instituteName}
+                className="w-full h-full object-contain"
+                fallback={
+                  <div className="w-full h-full rounded bg-odoo-600 flex items-center justify-center text-white font-extrabold text-base tracking-wider">
+                    {instituteName.charAt(0)}
+                  </div>
+                }
+              />
             </div>
-            <div>
-              <h1 className="text-sm font-bold text-black tracking-tight leading-tight">
-                THAKURDWARA
+            <div className="min-w-0">
+              <h1 className="text-xs font-black text-black tracking-tight leading-tight uppercase truncate">
+                {instituteName}
               </h1>
               <p className="text-[10px] uppercase font-bold text-odoo-700 tracking-wider">
                 Coaching ERP

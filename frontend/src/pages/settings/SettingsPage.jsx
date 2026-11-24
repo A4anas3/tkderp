@@ -1,27 +1,30 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Building2,
-  FileText,
-  Percent,
-  CheckCircle2,
   Save,
-  Phone,
-  Mail,
-  MapPin,
-  ShieldCheck,
   Receipt,
-  Sparkles,
+  Upload,
+  Trash2,
+  Image as ImageIcon,
+  Lock,
 } from 'lucide-react';
 import Button from '../../components/common/Button';
-import Input from '../../components/common/Input';
 import Badge from '../../components/common/Badge';
+import InstituteLogo from '../../components/common/InstituteLogo';
 import { settingsApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
+import { useInstitute } from '../../context/InstituteContext';
 
 export default function SettingsPage() {
   const { success, error } = useToast();
+  const { isAdmin } = useAuth();
+  const { setInstituteSettings } = useInstitute();
+  const fileInputRef = useRef(null);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
 
   const [formData, setFormData] = useState({
     gstin: '09AAACT1234F1Z5',
@@ -30,6 +33,7 @@ export default function SettingsPage() {
     address: 'Civil Lines Road, Thakurdwara, UP - 244601',
     phone: '+91 98765 43210',
     email: 'accounts@thakurdwara.edu.in',
+    logo_url: null,
   });
 
   useEffect(() => {
@@ -52,25 +56,17 @@ export default function SettingsPage() {
 
       const res = await settingsApi.getInstitute();
       if (res) {
-        setFormData({
+        const nextData = {
           gstin: res.gstin || '09AAACT1234F1Z5',
           gst_rate: res.gst_rate !== undefined ? String(res.gst_rate) : '18.00',
           institute_name: res.institute_name || 'THAKURDWARA COACHING INSTITUTE',
           address: res.address || 'Civil Lines Road, Thakurdwara, UP - 244601',
           phone: res.phone || '+91 98765 43210',
           email: res.email || 'accounts@thakurdwara.edu.in',
-        });
-        localStorage.setItem(
-          'institute_gst_settings',
-          JSON.stringify({
-            gstin: res.gstin,
-            gst_rate: res.gst_rate,
-            institute_name: res.institute_name,
-            address: res.address,
-            phone: res.phone,
-            email: res.email,
-          })
-        );
+          logo_url: res.logo_url || null,
+        };
+        setFormData(nextData);
+        setInstituteSettings(res);
       }
     } catch (err) {
       console.warn('Failed to load institute settings from server, using local defaults', err);
@@ -81,6 +77,48 @@ export default function SettingsPage() {
 
   const handleChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleLogoFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!isAdmin) {
+      error('Only Administrators can change the institute logo.');
+      return;
+    }
+
+    setUploadingLogo(true);
+    try {
+      const res = await settingsApi.uploadLogo(file);
+      setFormData((prev) => ({ ...prev, logo_url: res.logo_url || null }));
+      setInstituteSettings(res);
+      success('Institute logo uploaded and saved!');
+    } catch (err) {
+      error(err.message || 'Failed to upload institute logo');
+    } finally {
+      setUploadingLogo(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleRemoveLogo = async () => {
+    if (!isAdmin) {
+      error('Only Administrators can remove the institute logo.');
+      return;
+    }
+    setUploadingLogo(true);
+    try {
+      const res = await settingsApi.deleteLogo();
+      setFormData((prev) => ({ ...prev, logo_url: null }));
+      setInstituteSettings(res);
+      success('Institute logo removed.');
+    } catch (err) {
+      error(err.message || 'Failed to remove institute logo');
+    } finally {
+      setUploadingLogo(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -107,8 +145,7 @@ export default function SettingsPage() {
       };
 
       const res = await settingsApi.updateInstitute(payload);
-      // Persist in localStorage cache as well
-      localStorage.setItem('institute_gst_settings', JSON.stringify(payload));
+      setInstituteSettings(res);
 
       setFormData({
         gstin: res.gstin || payload.gstin,
@@ -117,6 +154,7 @@ export default function SettingsPage() {
         address: res.address || payload.address,
         phone: res.phone || payload.phone,
         email: res.email || payload.email,
+        logo_url: res.logo_url !== undefined ? res.logo_url : formData.logo_url,
       });
 
       success('Institute GST & Profile details saved successfully!');
@@ -253,6 +291,78 @@ export default function SettingsPage() {
           </div>
 
           <div className="space-y-4">
+            {/* Institute Logo Upload (Admin Only) */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="w-20 h-20 rounded-xl bg-white border-2 border-slate-300 flex items-center justify-center overflow-hidden shrink-0 shadow-2xs p-1">
+                  <InstituteLogo
+                    src={formData.logo_url}
+                    alt={formData.institute_name || 'Institute Logo'}
+                    className="w-full h-full object-contain"
+                    fallback={<ImageIcon className="w-8 h-8 text-slate-400" />}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-900">
+                      Institute Official Logo
+                    </span>
+                    <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-purple-100 text-odoo-800">
+                      Admin Only
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 max-w-md">
+                    Displayed across the app header, sidebar, fee slips, invoices, student ID cards, and public verification portal.
+                  </p>
+                  {formData.logo_url && (
+                    <p className="text-[10px] font-mono text-slate-500 truncate max-w-xs">
+                      Active: {formData.logo_url}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {isAdmin ? (
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    onChange={handleLogoFileChange}
+                    className="hidden"
+                    id="institute-logo-upload"
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    icon={Upload}
+                    loading={uploadingLogo}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    {formData.logo_url ? 'Change Logo' : 'Upload Logo'}
+                  </Button>
+                  {formData.logo_url && (
+                    <Button
+                      type="button"
+                      variant="danger"
+                      size="sm"
+                      icon={Trash2}
+                      disabled={uploadingLogo}
+                      onClick={handleRemoveLogo}
+                    >
+                      Remove
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shrink-0">
+                  <Lock className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Admin access required to change logo</span>
+                </div>
+              )}
+            </div>
+
             <div>
               <label className="block text-xs font-bold text-slate-800 mb-1">
                 Institute Legal / Official Name

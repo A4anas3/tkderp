@@ -27,7 +27,7 @@ from app.modules.audit.router import router as audit_router
 from app.modules.verification.router import router as verification_router
 from app.modules.reminders.router import router as reminders_router
 from app.modules.renewals.router import router as renewals_router
-from app.modules.settings.router import router as settings_router
+from app.modules.settings.router import router as settings_router, public_router as settings_public_router
 from app.database.session import engine
 from app.database.models import Base
 
@@ -88,11 +88,13 @@ async def lifespan(app: FastAPI):
                     address VARCHAR(300) NOT NULL DEFAULT 'Civil Lines Road, Thakurdwara, UP - 244601',
                     phone VARCHAR(50) NOT NULL DEFAULT '+91 98765 43210',
                     email VARCHAR(100) NOT NULL DEFAULT 'accounts@thakurdwara.edu.in',
+                    logo_url VARCHAR(500),
                     updated_by UUID REFERENCES users(id) ON DELETE SET NULL,
                     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
                     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
                 );
             """))
+            await conn.execute(text("ALTER TABLE institute_settings ADD COLUMN IF NOT EXISTS logo_url VARCHAR(500);"))
         except Exception:
             pass
     
@@ -131,6 +133,7 @@ app.add_middleware(
 uploads_path = os.path.abspath(settings.UPLOAD_DIR)
 os.makedirs(uploads_path, exist_ok=True)
 os.makedirs(os.path.join(uploads_path, "students"), exist_ok=True)
+os.makedirs(os.path.join(uploads_path, "institute"), exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=uploads_path), name="uploads")
 app.mount("/api/v1/uploads", StaticFiles(directory=uploads_path), name="api_uploads")
 
@@ -156,6 +159,7 @@ app.include_router(reminders_router)
 app.include_router(renewals_router)
 app.include_router(renewals_router, prefix="/renewals")
 app.include_router(settings_router)
+app.include_router(settings_public_router)
 
 # Direct root alias for batches active summary
 @app.get("/batches/active-summary", tags=["Batches"])

@@ -17,6 +17,7 @@ import PaymentReceiptModal from './PaymentReceiptModal';
 import RefundReceiptModal from './RefundReceiptModal';
 import ReceiptHeader from './ReceiptHeader';
 import ReceiptFooter from './ReceiptFooter';
+import { useInstitute } from '../../context/InstituteContext';
 import {
   WhatsAppIcon,
   buildWhatsAppLink,
@@ -71,6 +72,7 @@ export default function AdmissionAllSlipsModal({
   admissionId,
   admissionData,
 }) {
+  const { institute } = useInstitute();
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
   const [activeTab, setActiveTab] = useState('ALL');
@@ -206,7 +208,7 @@ export default function AdmissionAllSlipsModal({
     '';
   const whatsAppStatementUrl = buildWhatsAppLink(
     studentMobile,
-    buildAdmissionReceiptWhatsAppMessage(data || admissionData || {})
+    buildAdmissionReceiptWhatsAppMessage(data || admissionData || {}, institute?.institute_name)
   );
 
   const handleWhatsAppStatement = () => {

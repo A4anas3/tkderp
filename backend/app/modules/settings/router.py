@@ -1,16 +1,25 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+import io
+import os
+import uuid
+from decimal import Decimal
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from PIL import Image
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from decimal import Decimal
-import uuid
 
+from app.core.config import settings as app_settings
 from app.database.session import get_db
 from app.modules.users.models import User
-from app.core.dependencies import require_staff, require_cashier_or_admin
+from app.core.dependencies import require_staff, require_cashier_or_admin, require_admin
 from app.modules.settings.models import InstituteSetting
-from app.modules.settings.schemas import InstituteSettingsResponse, InstituteSettingsUpdate
+from app.modules.settings.schemas import (
+    InstituteSettingsResponse,
+    InstituteSettingsUpdate,
+    PublicInstituteProfileResponse,
+)
 
 router = APIRouter(prefix="/api/settings", tags=["Institute Settings"])
+public_router = APIRouter(tags=["Institute Settings"])
 
 DEFAULT_GSTIN = "09AAACT1234F1Z5"
 DEFAULT_GST_RATE = Decimal("18.00")
@@ -18,6 +27,30 @@ DEFAULT_INSTITUTE_NAME = "THAKURDWARA COACHING INSTITUTE"
 DEFAULT_ADDRESS = "Civil Lines Road, Thakurdwara, UP - 244601"
 DEFAULT_PHONE = "+91 98765 43210"
 DEFAULT_EMAIL = "accounts@thakurdwara.edu.in"
+
+
+def _process_institute_logo(file_bytes: bytes) -> tuple[bytes, str]:
+    """
+    Validate and optimize an uploaded institute logo while preserving crisp quality
+    and optional PNG transparency.
+    """
+    img = Image.open(io.BytesIO(file_bytes))
+    img.load()
+    img.thumbnail((800, 800), Image.Resampling.LANCZOS)
+
+    has_alpha = img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info)
+    buf = io.BytesIO()
+    if has_alpha:
+        if img.mode != "RGBA":
+            img = img.convert("RGBA")
+        img.save(buf, format="PNG", optimize=True)
+        return buf.getvalue(), "png"
+
+    if img.mode != "RGB":
+        img = img.convert("RGB")
+    img.save(buf, format="JPEG", quality=90, optimize=True)
+    return buf.getvalue(), "jpg"
+
 
 async def _get_or_create_settings(db: AsyncSession) -> InstituteSetting:
     stmt = select(InstituteSetting).where(InstituteSetting.key == "institute_profile")
@@ -38,16 +71,28 @@ async def _get_or_create_settings(db: AsyncSession) -> InstituteSetting:
         await db.refresh(setting)
     return setting
 
+
+@public_router.get("/api/public/institute", response_model=PublicInstituteProfileResponse)
+@router.get("/institute/public", response_model=PublicInstituteProfileResponse)
+async def get_public_institute_profile(db: AsyncSession = Depends(get_db)):
+    """
+    Publicly accessible non-sensitive institute branding profile (name, logo, address, contact).
+    Used on login, public verification, and public ID card pages.
+    """
+    return await _get_or_create_settings(db)
+
+
 @router.get("/institute", response_model=InstituteSettingsResponse)
 async def get_institute_settings(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_staff)
 ):
     """
-    Get institute's saved profile and GST configuration (GSTIN, default GST rate).
+    Get institute's saved profile and GST configuration (GSTIN, default GST rate, logo).
     """
     setting = await _get_or_create_settings(db)
     return setting
+
 
 @router.put("/institute", response_model=InstituteSettingsResponse)
 @router.post("/institute", response_model=InstituteSettingsResponse)
@@ -74,7 +119,71 @@ async def update_institute_settings(
         setting.phone = payload.phone.strip()
     if payload.email is not None:
         setting.email = payload.email.strip()
-    
+    if payload.logo_url is not None:
+        setting.logo_url = payload.logo_url.strip() or None
+
+    setting.updated_by = current_user.id
+    db.add(setting)
+    await db.commit()
+    await db.refresh(setting)
+    return setting
+
+
+@router.post("/institute/logo", response_model=InstituteSettingsResponse)
+async def upload_institute_logo(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """
+    Upload and save the institute logo (Admin only).
+    """
+    raw_bytes = await file.read()
+    if not raw_bytes:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Empty file uploaded")
+
+    max_bytes = app_settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+    if len(raw_bytes) > max_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File too large. Maximum allowed size is {app_settings.MAX_UPLOAD_SIZE_MB} MB.",
+        )
+
+    try:
+        processed_bytes, ext = _process_institute_logo(raw_bytes)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid image format: {str(exc)}",
+        )
+
+    upload_dir = os.path.join(os.path.abspath(app_settings.UPLOAD_DIR), "institute")
+    os.makedirs(upload_dir, exist_ok=True)
+
+    filename = f"institute_logo_{uuid.uuid4().hex[:12]}.{ext}"
+    filepath = os.path.join(upload_dir, filename)
+    with open(filepath, "wb") as f:
+        f.write(processed_bytes)
+
+    setting = await _get_or_create_settings(db)
+    setting.logo_url = f"/uploads/institute/{filename}"
+    setting.updated_by = current_user.id
+    db.add(setting)
+    await db.commit()
+    await db.refresh(setting)
+    return setting
+
+
+@router.delete("/institute/logo", response_model=InstituteSettingsResponse)
+async def delete_institute_logo(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """
+    Remove the custom institute logo (Admin only).
+    """
+    setting = await _get_or_create_settings(db)
+    setting.logo_url = None
     setting.updated_by = current_user.id
     db.add(setting)
     await db.commit()

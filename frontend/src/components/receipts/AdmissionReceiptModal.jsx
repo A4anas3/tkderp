@@ -6,6 +6,7 @@ import Badge from '../common/Badge';
 import ReceiptHeader from './ReceiptHeader';
 import ReceiptFooter from './ReceiptFooter';
 import { admissionApi, settingsApi } from '../../services/allApis';
+import { useInstitute } from '../../context/InstituteContext';
 import {
   WhatsAppIcon,
   buildWhatsAppLink,
@@ -56,6 +57,7 @@ const formatFeePeriod = (validFrom, validTo) => {
 };
 
 export default function AdmissionReceiptModal({ isOpen, onClose, admission, admissionData }) {
+  const { institute } = useInstitute();
   const [copyMode, setCopyMode] = useState('STUDENT'); // 'STUDENT' | 'OFFICE' | 'BOTH'
   const [includeGst, setIncludeGst] = useState(false);
   const [gstRate, setGstRate] = useState(18.0);
@@ -167,7 +169,7 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission, admi
   const studentMobile = data.student_mobile || data.student?.mobile || '';
   const whatsAppUrl = buildWhatsAppLink(
     studentMobile,
-    buildAdmissionReceiptWhatsAppMessage(data)
+    buildAdmissionReceiptWhatsAppMessage(data, institute?.institute_name)
   );
 
   const handleWhatsAppShare = () => {

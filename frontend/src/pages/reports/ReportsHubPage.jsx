@@ -43,9 +43,11 @@ import {
 } from 'lucide-react';
 import StatCard from '../../components/common/StatCard';
 import Badge from '../../components/common/Badge';
+import InstituteLogo from '../../components/common/InstituteLogo';
 import { reportApi, subjectApi } from '../../services/allApis';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { useInstitute } from '../../context/InstituteContext';
 
 const PIE_COLORS = ['#059669', '#3b82f6', '#8b5cf6', '#f59e0b', '#ec4899', '#06b6d4', '#64748b'];
 
@@ -66,6 +68,8 @@ export default function ReportsHubPage() {
   const { reportTab } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { institute } = useInstitute();
+  const instituteName = institute?.institute_name || 'THAKURDWARA COACHING INSTITUTE';
 
   // Active tab state
   const activeTab = useMemo(() => {
@@ -2053,16 +2057,27 @@ export default function ReportsHubPage() {
         {/* Printable Header */}
         <div className="border-b-2 border-black pb-3 mb-4">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-black uppercase tracking-tight text-black">
-                THAKURDWARA COACHING INSTITUTE
-              </h1>
-              <p className="text-xs font-bold text-black">
-                Station Road, Thakurdwara, Uttar Pradesh — Affiliated Coaching ERP
-              </p>
-              <p className="text-[10px] text-slate-700">
-                GSTIN / Reg: 09AAACT1234F1Z5 · Contact: +91 98765 43210 · info@thakurdwara-erp.in
-              </p>
+            <div className="flex items-center gap-3">
+              {institute?.logo_url && (
+                <div className="w-14 h-14 border border-black rounded bg-white p-0.5 flex items-center justify-center overflow-hidden shrink-0">
+                  <InstituteLogo
+                    src={institute.logo_url}
+                    alt={instituteName}
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+              )}
+              <div>
+                <h1 className="text-xl font-black uppercase tracking-tight text-black">
+                  {instituteName}
+                </h1>
+                <p className="text-xs font-bold text-black">
+                  {institute?.address || 'Civil Lines Road, Thakurdwara, UP'}
+                </p>
+                <p className="text-[10px] text-slate-700">
+                  GSTIN / Reg: {institute?.gstin || '09AAACT1234F1Z5'} · Contact: {institute?.phone || '+91 98765 43210'} · {institute?.email || 'accounts@thakurdwara.edu.in'}
+                </p>
+              </div>
             </div>
             <div className="text-right">
               <span className="inline-block border border-black px-2 py-0.5 text-xs font-black uppercase">
@@ -2344,7 +2359,7 @@ export default function ReportsHubPage() {
         <div className="pt-8 border-t border-black flex items-center justify-between text-xs font-bold">
           <div>
             <p>Prepared by: {user?.full_name || 'Staff Administrator'}</p>
-            <p className="text-[10px] text-slate-600">Thakurdwara Coaching ERP System Verified</p>
+            <p className="text-[10px] text-slate-600">{instituteName} • ERP System Verified</p>
           </div>
           <div className="text-center">
             <p className="w-36 border-b border-black mb-1 mx-auto" />

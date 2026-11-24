@@ -14,6 +14,7 @@ from app.modules.admissions.models import Admission, AdmissionItem
 from app.modules.batches.models import Batch
 from app.modules.subjects.models import Subject
 from app.modules.enquiries.models import Enquiry, EnquiryDemoItem
+from app.modules.settings.models import InstituteSetting
 from app.modules.verification.schemas import (
     PublicVerificationResponse,
     StudentVerificationData,
@@ -31,6 +32,27 @@ router = APIRouter(tags=["Public Verification & ID Card"])
 
 # Rate limiter for public ID card lookup: 60 requests per minute per IP
 id_card_rate_limiter = RateLimiter(times=60, seconds=60, prefix="id_card")
+
+
+async def _get_institute_profile(db: AsyncSession) -> dict:
+    stmt = select(InstituteSetting).where(InstituteSetting.key == "institute_profile")
+    setting = (await db.execute(stmt)).scalar_one_or_none()
+    if setting:
+        tagline = f"{setting.address} • {setting.phone}" if setting.phone else setting.address
+        return {
+            "institute_name": setting.institute_name,
+            "institute_address": setting.address,
+            "institute_phone": setting.phone,
+            "institute_logo_url": setting.logo_url,
+            "institute_tagline": tagline,
+        }
+    return {
+        "institute_name": "THAKURDWARA COACHING INSTITUTE",
+        "institute_address": "Civil Lines, Thakurdwara (U.P.)",
+        "institute_phone": "+91 98765 43210",
+        "institute_logo_url": None,
+        "institute_tagline": "Civil Lines, Thakurdwara (U.P.) • ISO 9001:2015 Certified",
+    }
 
 def format_period(v_from: Optional[date], v_to: Optional[date]) -> str:
     if v_from and v_to:
@@ -346,6 +368,7 @@ async def verify_student_credential(
 
     today = today_kolkata()
     active_demos_list = await _get_active_demos_for_student(db, student, today)
+    inst = await _get_institute_profile(db)
 
     return PublicVerificationResponse(
         verified=True,
@@ -355,6 +378,10 @@ async def verify_student_credential(
         total_active_courses=len(active_courses_list),
         active_demos=active_demos_list,
         total_active_demos=len(active_demos_list),
+        institute_name=inst["institute_name"],
+        institute_address=inst["institute_address"],
+        institute_phone=inst["institute_phone"],
+        institute_logo_url=inst["institute_logo_url"],
         verified_at=datetime.now(timezone.utc)
     )
 
@@ -513,6 +540,8 @@ async def get_public_id_card(
         for c in active_courses_list
     ]
 
+    inst = await _get_institute_profile(db)
+
     return PublicIDCardResponse(
         verified=True,
         is_valid=True,
@@ -522,9 +551,10 @@ async def get_public_id_card(
         active_demos=active_demos_list,
         total_active_demos=len(active_demos_list),
         due_balance=live_due_balance,
-        institute_name="THAKURDWARA COACHING INSTITUTE",
-        institute_tagline="Civil Lines, Thakurdwara (U.P.) • ISO 9001:2015 Certified",
-        institute_address="Civil Lines, Thakurdwara (U.P.)",
-        institute_phone="+91 98765 43210",
+        institute_name=inst["institute_name"],
+        institute_tagline=inst["institute_tagline"],
+        institute_address=inst["institute_address"],
+        institute_phone=inst["institute_phone"],
+        institute_logo_url=inst["institute_logo_url"],
         issued_at=datetime.now(timezone.utc)
     )

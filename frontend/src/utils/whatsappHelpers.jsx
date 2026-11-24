@@ -57,7 +57,7 @@ export function formatSlipDate(val) {
 /**
  * Builds pre-filled WhatsApp receipt message for Payment Receipt.
  */
-export function buildPaymentReceiptWhatsAppMessage(data) {
+export function buildPaymentReceiptWhatsAppMessage(data, instituteName = 'THAKURDWARA COACHING INSTITUTE', instituteAddress = '') {
   const studentName = data.student_name || data.student?.name || 'Student';
   const receiptNo = data.payment_number || '—';
   const paymentDate = formatSlipDate(data.payment_date);
@@ -65,7 +65,7 @@ export function buildPaymentReceiptWhatsAppMessage(data) {
   const balanceDue = Number(data.remaining_balance_due !== undefined ? data.remaining_balance_due : 0);
   const paymentMode = data.payment_mode || 'CASH';
 
-  let msg = `🎓 *THAKURDWARA COACHING INSTITUTE*\n`;
+  let msg = `🎓 *${instituteName}*\n`;
   msg += `*Official Fee Payment Receipt*\n\n`;
   msg += `Dear *${studentName}*,\n`;
   msg += `We have successfully acknowledged your fee payment with the following details:\n\n`;
@@ -81,7 +81,7 @@ export function buildPaymentReceiptWhatsAppMessage(data) {
   }
 
   msg += `_Thank you for learning with us. Please preserve this receipt for your records._\n`;
-  msg += `_Thakurdwara Coaching Institute • Civil Lines, Thakurdwara_`;
+  msg += `_${instituteName}${instituteAddress ? ` • ${instituteAddress}` : ''}_`;
 
   return msg;
 }
@@ -89,7 +89,7 @@ export function buildPaymentReceiptWhatsAppMessage(data) {
 /**
  * Builds pre-filled WhatsApp admission / enrollment voucher message.
  */
-export function buildAdmissionReceiptWhatsAppMessage(data) {
+export function buildAdmissionReceiptWhatsAppMessage(data, instituteName = 'THAKURDWARA COACHING INSTITUTE') {
   const studentName = data.student_name_snapshot || data.student?.name || data.student_name || 'Student';
   const voucherNo = data.purchase_transaction_id || data.admission_number || '—';
   const admissionDate = formatSlipDate(data.admission_date);
@@ -102,10 +102,10 @@ export function buildAdmissionReceiptWhatsAppMessage(data) {
     courses = data.items.map((i) => i.item_name_snapshot).join(', ');
   }
 
-  let msg = `🎓 *THAKURDWARA COACHING INSTITUTE*\n`;
+  let msg = `🎓 *${instituteName}*\n`;
   msg += `*Course Enrollment & Academic Invoice*\n\n`;
   msg += `Dear *${studentName}*,\n`;
-  msg += `Welcome to Thakurdwara Coaching Institute! Your enrollment has been confirmed:\n\n`;
+  msg += `Welcome to ${instituteName}! Your enrollment has been confirmed:\n\n`;
   msg += `📋 *Invoice Voucher:* ${voucherNo}\n`;
   msg += `📅 *Admission Date:* ${admissionDate}\n`;
   msg += `📚 *Enrolled Course(s):* ${courses}\n`;
@@ -118,7 +118,7 @@ export function buildAdmissionReceiptWhatsAppMessage(data) {
     msg += `✅ *Payment Status:* Fully Paid\n\n`;
   }
 
-  msg += `_Thank you for choosing Thakurdwara Coaching Institute._\n`;
+  msg += `_Thank you for choosing ${instituteName}._\n`;
   msg += `_Keep this enrollment confirmation for campus access & attendance._`;
 
   return msg;

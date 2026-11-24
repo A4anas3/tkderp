@@ -1,5 +1,6 @@
 import React from 'react';
 import { numberToIndianWords } from '../../utils/numberToWords';
+import { useInstitute } from '../../context/InstituteContext';
 
 export default function ReceiptFooter({
   amount = null,
@@ -13,6 +14,8 @@ export default function ReceiptFooter({
   ],
   customNote = null,
 }) {
+  const { institute } = useInstitute();
+  const instituteName = institute?.institute_name || 'THAKURDWARA COACHING INSTITUTE';
   const displayWords =
     amountInWords || (amount !== null && !isNaN(Number(amount)) ? numberToIndianWords(Number(amount)) : null);
 
@@ -64,7 +67,7 @@ export default function ReceiptFooter({
             ))}
           </ol>
           <p className="text-[9px] text-slate-500 pt-1 font-mono">
-            Computer-Generated Official Document • Verified by Thakurdwara ERP System
+            Computer-Generated Official Document • Verified by {instituteName}
           </p>
         </div>
 
@@ -84,8 +87,8 @@ export default function ReceiptFooter({
             {/* Stamp Simulation Badge */}
             <div className="w-16 h-16 rounded-full border border-indigo-700/70 p-0.5 flex items-center justify-center -mb-2 rotate-[-6deg] pointer-events-none select-none opacity-90">
               <div className="w-full h-full rounded-full border border-dashed border-indigo-700 flex flex-col items-center justify-center text-center p-0.5">
-                <span className="text-[5.5px] font-black text-indigo-950 uppercase tracking-tighter leading-none">
-                  THAKURDWARA
+                <span className="text-[4.5px] font-black text-indigo-950 uppercase tracking-tighter leading-tight line-clamp-2 px-0.5">
+                  {instituteName}
                 </span>
                 <span className="text-[6.5px] font-extrabold text-indigo-900 uppercase leading-none my-0.5">
                   ★ ACCOUNTS ★

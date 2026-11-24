@@ -2,11 +2,15 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, LogIn, KeyRound, UserCheck, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useInstitute } from '../../context/InstituteContext';
 import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
+import InstituteLogo from '../../components/common/InstituteLogo';
 
 export default function LoginPage() {
   const { login } = useAuth();
+  const { institute } = useInstitute();
+  const instituteName = institute?.institute_name || 'THAKURDWARA COACHING INSTITUTE';
   const navigate = useNavigate();
   const [username, setUsername] = useState('ADM001');
   const [password, setPassword] = useState('Admin@1234');
@@ -43,10 +47,15 @@ export default function LoginPage() {
       <div className="w-full max-w-md bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
         {/* Header - Odoo ERP brand styling */}
         <div className="bg-gradient-to-r from-odoo-700 via-odoo-600 to-odoo-800 p-6 text-white text-center">
-          <div className="w-12 h-12 bg-white text-odoo-700 font-black text-2xl rounded-xl mx-auto flex items-center justify-center shadow-md mb-2">
-            T
+          <div className="w-16 h-16 bg-white text-odoo-700 font-black text-2xl rounded-xl mx-auto flex items-center justify-center shadow-md mb-2.5 overflow-hidden p-1">
+            <InstituteLogo
+              src={institute?.logo_url}
+              alt={instituteName}
+              className="w-full h-full object-contain"
+              fallback={<span>{instituteName.charAt(0)}</span>}
+            />
           </div>
-          <h1 className="text-xl font-bold tracking-tight">THAKURDWARA COACHING</h1>
+          <h1 className="text-xl font-bold tracking-tight uppercase">{instituteName}</h1>
           <p className="text-xs text-purple-200 uppercase tracking-widest font-semibold mt-1">
             Institute Management ERP
           </p>

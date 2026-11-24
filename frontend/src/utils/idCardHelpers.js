@@ -204,7 +204,7 @@ export function extractActiveDemos(student, enrollmentData, demos) {
   return active;
 }
 
-export function buildWhatsAppShareUrl({ student, admissionNo, activeCourses, activeDemos, verifyUrl }) {
+export function buildWhatsAppShareUrl({ student, admissionNo, activeCourses, activeDemos, verifyUrl, instituteName = 'THAKURDWARA COACHING INSTITUTE' }) {
   if (!student?.mobile) return null;
 
   const rawDigits = student.mobile.replace(/\D/g, '');
@@ -214,7 +214,7 @@ export function buildWhatsAppShareUrl({ student, admissionNo, activeCourses, act
 
   const admNumber = admissionNo || student.latest_admission_number || 'N/A';
 
-  let msg = `🎓 *THAKURDWARA COACHING INSTITUTE*\n`;
+  let msg = `🎓 *${instituteName}*\n`;
   msg += `*Official Student Identity Card*\n\n`;
   msg += `*Student Name:* ${student.name}\n`;
   msg += `*Student ID:* ${student.student_code}\n`;

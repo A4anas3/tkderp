@@ -19,8 +19,11 @@ import { QRCodeSVG } from 'qrcode.react';
 import axios from 'axios';
 import { formatDemoDates } from '../../utils/idCardHelpers';
 import { computeDaysRemaining } from '../../utils/dateCycleUtils';
+import { useInstitute } from '../../context/InstituteContext';
+import InstituteLogo from '../../components/common/InstituteLogo';
 
 export default function PublicIDCardPage() {
+  const { institute } = useInstitute();
   const { identifier: pathIdentifier } = useParams();
   const [searchParams] = useSearchParams();
   const location = useLocation();
@@ -146,15 +149,32 @@ export default function PublicIDCardPage() {
     ? `${origin}/id-card/${encodeURIComponent(qrCodeIdent)}`
     : '';
 
+  const instituteName =
+    cardData?.institute_name || institute?.institute_name || 'THAKURDWARA COACHING INSTITUTE';
+  const instituteLogoUrl =
+    cardData?.institute_logo_url || institute?.logo_url || null;
+  const instituteTagline =
+    cardData?.institute_tagline ||
+    (institute?.address
+      ? `${institute.address}${institute?.phone ? ` • ${institute.phone}` : ''}`
+      : 'Civil Lines, Thakurdwara (U.P.)');
+
   return (
     <div className="min-h-screen bg-slate-50 text-black font-sans py-6 px-3 sm:px-6 flex flex-col justify-between">
       <div className="max-w-2xl mx-auto w-full space-y-5">
         {/* Top Institute Header Banner (no-print) */}
         <div className="bg-white border-2 border-black rounded-xl p-4 sm:p-5 shadow-xs text-center relative overflow-hidden no-print">
-          <div className="flex items-center justify-center gap-2 mb-1">
-            <ShieldCheck className="w-6 h-6 text-odoo-800 shrink-0" />
+          <div className="flex items-center justify-center gap-3 mb-1">
+            <div className="w-11 h-11 rounded-lg bg-white border border-slate-300 flex items-center justify-center overflow-hidden shrink-0 p-0.5">
+              <InstituteLogo
+                src={instituteLogoUrl}
+                alt={instituteName}
+                className="w-full h-full object-contain"
+                fallback={<ShieldCheck className="w-6 h-6 text-odoo-800 shrink-0" />}
+              />
+            </div>
             <h1 className="text-base sm:text-xl font-black text-black tracking-wide uppercase">
-              THAKURDWARA COACHING INSTITUTE
+              {instituteName}
             </h1>
           </div>
           <p className="text-xs sm:text-sm text-slate-700 font-semibold">
@@ -342,18 +362,27 @@ export default function PublicIDCardPage() {
                 className="printable-id-card w-full max-w-[440px] bg-white border-2 border-black rounded-xl overflow-hidden shadow-md text-black"
               >
                 {/* Card Header: Institute Emblem & Details */}
-                <div className="bg-slate-900 text-white px-4 py-3.5 text-center relative border-b-2 border-amber-500">
-                  <div className="flex items-center justify-center gap-2">
-                    <ShieldCheck className="w-5 h-5 text-amber-400 shrink-0" />
-                    <h1 className="text-sm sm:text-base font-black tracking-wider uppercase text-white">
-                      THAKURDWARA COACHING INSTITUTE
-                    </h1>
+                <div className="bg-slate-900 text-white px-4 py-3.5 relative border-b-2 border-amber-500">
+                  <div className="flex items-center justify-center gap-3">
+                    <div className="w-11 h-11 rounded-lg bg-white border border-amber-400/80 flex items-center justify-center overflow-hidden shrink-0 p-0.5 shadow-2xs">
+                      <InstituteLogo
+                        src={instituteLogoUrl}
+                        alt={instituteName}
+                        className="w-full h-full object-contain"
+                        fallback={<ShieldCheck className="w-6 h-6 text-slate-900 shrink-0" />}
+                      />
+                    </div>
+                    <div className="text-left min-w-0">
+                      <h1 className="text-sm sm:text-base font-black tracking-wider uppercase text-white leading-tight">
+                        {instituteName}
+                      </h1>
+                      <p className="text-[10px] sm:text-[11px] text-slate-200 font-medium tracking-tight mt-0.5">
+                        {instituteTagline}
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-[10px] sm:text-[11px] text-slate-200 font-medium tracking-tight mt-0.5">
-                    Civil Lines, Thakurdwara (U.P.) • ISO 9001:2015 Certified
-                  </p>
-                  <div className="mt-1.5 inline-block">
-                    <span className="bg-amber-400 text-slate-950 font-black text-[10px] tracking-widest uppercase px-3 py-0.5 rounded-full shadow-2xs">
+                  <div className="mt-2 text-center">
+                    <span className="bg-amber-400 text-slate-950 font-black text-[10px] tracking-widest uppercase px-3 py-0.5 rounded-full shadow-2xs inline-block">
                       STUDENT IDENTITY CARD
                     </span>
                   </div>
@@ -601,14 +630,14 @@ export default function PublicIDCardPage() {
                         Authorized Signatory
                       </p>
                       <p className="text-[8px] text-slate-600 font-medium">
-                        Thakurdwara ERP Verified
+                        {instituteName} Verified
                       </p>
                     </div>
                   </div>
 
                   {/* Bottom Instructions Notice */}
                   <div className="text-[8px] sm:text-[9px] text-center text-slate-600 border-t border-slate-200 pt-1">
-                    Property of Thakurdwara Coaching Institute • Non-Transferable • Carry daily for class entry
+                    Property of {instituteName} • Non-Transferable • Carry daily for class entry
                   </div>
                 </div>
               </div>
@@ -619,7 +648,7 @@ export default function PublicIDCardPage() {
 
       {/* Page Footer */}
       <footer className="text-center text-xs text-slate-500 pt-6 no-print">
-        © {new Date().getFullYear()} Thakurdwara Coaching Institute • Official Student ID Card Portal
+        © {new Date().getFullYear()} {instituteName} • Official Student ID Card Portal
       </footer>
     </div>
   );

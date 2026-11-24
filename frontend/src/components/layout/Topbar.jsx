@@ -15,6 +15,8 @@ import {
   CheckCircle,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useInstitute } from '../../context/InstituteContext';
+import InstituteLogo from '../common/InstituteLogo';
 
 /**
  * Top Navbar restyled in Odoo / Hostel ERP style (#714B67 brand background).
@@ -30,6 +32,8 @@ import { useAuth } from '../../context/AuthContext';
  */
 export default function Topbar({ onOpenAppMenu, onQuickStudent, onQuickPayment }) {
   const { user, role, isAdmin, isCashier, logout } = useAuth();
+  const { institute } = useInstitute();
+  const instituteName = institute?.institute_name || 'THAKURDWARA COACHING INSTITUTE';
   const [profileOpen, setProfileOpen] = useState(false);
   const [roleDropdownOpen, setRoleDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -125,14 +129,19 @@ export default function Topbar({ onOpenAppMenu, onQuickStudent, onQuickPayment }
           {/* Brand Logo & Name */}
           <NavLink
             to="/dashboard"
-            className="flex items-center space-x-1.5 font-bold tracking-tight text-white hover:text-white/90 shrink-0"
-            title="Thakurdwara Coaching Institute"
+            className="flex items-center space-x-2 font-bold tracking-tight text-white hover:text-white/90 shrink-0"
+            title={instituteName}
           >
-            <div className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 flex items-center justify-center text-teal-300 transition-colors">
-              <GraduationCap className="w-4 h-4" />
+            <div className="w-8 h-8 rounded-lg bg-white border border-white/30 flex items-center justify-center overflow-hidden shadow-2xs shrink-0 p-0.5">
+              <InstituteLogo
+                src={institute?.logo_url}
+                alt={instituteName}
+                className="w-full h-full object-contain"
+                fallback={<GraduationCap className="w-4 h-4 text-[#714B67]" />}
+              />
             </div>
-            <span className="text-sm hidden 2xl:inline font-bold">
-              Thakurdwara<span className="text-teal-300">ERP</span>
+            <span className="text-xs xl:text-sm hidden sm:inline-block font-bold tracking-wide uppercase truncate max-w-[145px] xl:max-w-[210px]">
+              {instituteName}
             </span>
           </NavLink>
         </div>

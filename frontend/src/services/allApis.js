@@ -600,12 +600,28 @@ export const renewalsApi = {
 };
 
 export const settingsApi = {
+  getPublicInstitute: async () => {
+    const res = await api.get('/public/institute');
+    return res.data;
+  },
   getInstitute: async () => {
     const res = await api.get('/settings/institute');
     return res.data;
   },
   updateInstitute: async (data) => {
     const res = await api.put('/settings/institute', data);
+    return res.data;
+  },
+  uploadLogo: async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await api.post('/settings/institute/logo', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data;
+  },
+  deleteLogo: async () => {
+    const res = await api.delete('/settings/institute/logo');
     return res.data;
   },
 };

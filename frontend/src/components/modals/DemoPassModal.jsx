@@ -16,6 +16,8 @@ import {
 import Modal from '../common/Modal';
 import Button from '../common/Button';
 import Badge from '../common/Badge';
+import InstituteLogo from '../common/InstituteLogo';
+import { useInstitute } from '../../context/InstituteContext';
 import { formatIndianDate } from '../../utils/dateCycleUtils';
 
 export default function DemoPassModal({
@@ -24,6 +26,8 @@ export default function DemoPassModal({
   enquiry,
   demoItem = null,
 }) {
+  const { institute } = useInstitute();
+  const instituteName = institute?.institute_name || 'THAKURDWARA COACHING INSTITUTE';
   const printRef = useRef(null);
 
   if (!isOpen || !enquiry) return null;
@@ -85,22 +89,33 @@ export default function DemoPassModal({
           className="bg-white border-2 border-slate-900 rounded-xl p-5 shadow-xs print:p-0 print:border-none print:shadow-none space-y-4"
         >
           {/* Header */}
-          <div className="border-b-2 border-slate-900 pb-3 flex items-start justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="bg-slate-950 text-white text-xs font-black px-2 py-0.5 rounded tracking-widest uppercase">
-                  TRIAL PASS
-                </span>
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                  ERP Verified
-                </span>
+          <div className="border-b-2 border-slate-900 pb-3 flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3">
+              {institute?.logo_url && (
+                <div className="w-12 h-12 rounded-lg border border-slate-300 bg-white flex items-center justify-center overflow-hidden shrink-0 p-0.5">
+                  <InstituteLogo
+                    src={institute.logo_url}
+                    alt={instituteName}
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+              )}
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="bg-slate-950 text-white text-xs font-black px-2 py-0.5 rounded tracking-widest uppercase">
+                    TRIAL PASS
+                  </span>
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    ERP Verified
+                  </span>
+                </div>
+                <h2 className="text-lg font-black text-black tracking-tight mt-1 uppercase">
+                  {instituteName}
+                </h2>
+                <p className="text-[11px] text-slate-600 font-medium">
+                  Official Classroom Demo Entry Authorization
+                </p>
               </div>
-              <h2 className="text-lg font-black text-black tracking-tight mt-1">
-                THAKURDWARA COACHING INSTITUTE
-              </h2>
-              <p className="text-[11px] text-slate-600 font-medium">
-                Official Classroom Demo Entry Authorization
-              </p>
             </div>
             <div className="text-right">
               <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
@@ -234,7 +249,7 @@ export default function DemoPassModal({
                 System Generated Verification Slip
               </span>
               <span className="text-black font-semibold">
-                Thakurdwara Institute Administration Desk
+                {instituteName} Administration Desk
               </span>
             </div>
             <div className="text-center">

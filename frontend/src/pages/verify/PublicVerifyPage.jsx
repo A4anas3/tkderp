@@ -19,8 +19,11 @@ import {
 import axios from 'axios';
 import { formatValidityPeriod } from '../../utils/idCardHelpers';
 import { computeDaysRemaining } from '../../utils/dateCycleUtils';
+import { useInstitute } from '../../context/InstituteContext';
+import InstituteLogo from '../../components/common/InstituteLogo';
 
 export default function PublicVerifyPage() {
+  const { institute } = useInstitute();
   const { identifier } = useParams();
   const navigate = useNavigate();
 
@@ -97,6 +100,15 @@ export default function PublicVerifyPage() {
     }
   };
 
+  const instituteName =
+    data?.institute_name || institute?.institute_name || 'THAKURDWARA COACHING INSTITUTE';
+  const instituteLogoUrl =
+    data?.institute_logo_url || institute?.logo_url || null;
+  const instituteAddress =
+    data?.institute_address || institute?.address || 'Civil Lines, Thakurdwara (U.P.)';
+  const institutePhone =
+    data?.institute_phone || institute?.phone || '+91 98765 43210';
+
   return (
     <div className="min-h-screen bg-slate-50 text-black font-sans py-6 px-3 sm:px-6 flex flex-col justify-between">
       <div className="max-w-2xl mx-auto w-full space-y-5">
@@ -118,10 +130,17 @@ export default function PublicVerifyPage() {
 
         {/* Top Institute Header */}
         <div className="bg-white border-2 border-black rounded-xl p-4 sm:p-5 shadow-xs text-center relative overflow-hidden">
-          <div className="flex items-center justify-center gap-2 mb-1">
-            <ShieldCheck className="w-6 h-6 text-odoo-800 shrink-0" />
+          <div className="flex items-center justify-center gap-3 mb-1">
+            <div className="w-12 h-12 rounded-lg bg-white border border-slate-300 flex items-center justify-center overflow-hidden shrink-0 p-0.5">
+              <InstituteLogo
+                src={instituteLogoUrl}
+                alt={instituteName}
+                className="w-full h-full object-contain"
+                fallback={<ShieldCheck className="w-6 h-6 text-odoo-800 shrink-0" />}
+              />
+            </div>
             <h1 className="text-base sm:text-xl font-black text-black tracking-wide uppercase">
-              THAKURDWARA COACHING INSTITUTE
+              {instituteName}
             </h1>
           </div>
           <p className="text-xs sm:text-sm text-slate-700 font-semibold">
@@ -130,11 +149,11 @@ export default function PublicVerifyPage() {
           <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] text-slate-600 mt-2">
             <span className="flex items-center gap-1">
               <MapPin className="w-3.5 h-3.5 text-slate-500" />
-              Civil Lines, Thakurdwara (U.P.)
+              {instituteAddress}
             </span>
             <span className="flex items-center gap-1">
               <Phone className="w-3.5 h-3.5 text-slate-500" />
-              +91 98765 43210
+              {institutePhone}
             </span>
           </div>
         </div>
@@ -203,7 +222,7 @@ export default function PublicVerifyPage() {
                 </span>
               </div>
               <p className="text-xs text-emerald-900 font-semibold">
-                Genuine Student Record Authenticated by Thakurdwara Coaching Institute
+                Genuine Student Record Authenticated by {instituteName}
               </p>
             </div>
 
@@ -391,7 +410,7 @@ export default function PublicVerifyPage() {
 
       {/* Footer */}
       <footer className="text-center text-xs text-slate-500 pt-6 no-print">
-        © {new Date().getFullYear()} Thakurdwara Coaching Institute • Official Student Verification Portal
+        © {new Date().getFullYear()} {instituteName} • Official Student Verification Portal
       </footer>
     </div>
   );

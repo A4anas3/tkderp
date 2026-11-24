@@ -12,6 +12,7 @@ class InstituteSettingsResponse(BaseModel):
     address: str
     phone: str
     email: str
+    logo_url: Optional[str] = None
 
 class InstituteSettingsUpdate(BaseModel):
     gstin: Optional[str] = Field(None, min_length=1, max_length=50)
@@ -20,3 +21,13 @@ class InstituteSettingsUpdate(BaseModel):
     address: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[str] = None
+    logo_url: Optional[str] = None
+
+class PublicInstituteProfileResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    institute_name: str
+    address: str
+    phone: str
+    email: str
+    logo_url: Optional[str] = None

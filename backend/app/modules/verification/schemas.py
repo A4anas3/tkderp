@@ -54,6 +54,7 @@ class PublicVerificationResponse(BaseModel):
     institute_name: str = "Thakurdwara Coaching Institute"
     institute_address: str = "Civil Lines, Thakurdwara (U.P.)"
     institute_phone: str = "+91 98765 43210"
+    institute_logo_url: Optional[str] = None
     verified_at: datetime = Field(default_factory=datetime.now)
 
     model_config = ConfigDict(from_attributes=True)
@@ -99,6 +100,7 @@ class PublicIDCardResponse(BaseModel):
     institute_tagline: str = "Civil Lines, Thakurdwara (U.P.) • ISO 9001:2015 Certified"
     institute_address: str = "Civil Lines, Thakurdwara (U.P.)"
     institute_phone: str = "+91 98765 43210"
+    institute_logo_url: Optional[str] = None
     issued_at: datetime = Field(default_factory=datetime.now)
 
     model_config = ConfigDict(from_attributes=True)

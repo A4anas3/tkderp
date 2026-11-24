@@ -6,6 +6,8 @@ import Modal from '../common/Modal';
 import Button from '../common/Button';
 import Badge from '../common/Badge';
 import Avatar from '../common/Avatar';
+import InstituteLogo from '../common/InstituteLogo';
+import { useInstitute } from '../../context/InstituteContext';
 import {
   extractActiveCourses,
   extractActiveDemos,
@@ -31,7 +33,11 @@ export default function StudentIDCardModal({
   demos = null,
   admissionNumberOverride = null,
 }) {
-  if (!isOpen || !student) return null;
+  const { institute } = useInstitute();
+  const instituteName = institute?.institute_name || 'THAKURDWARA COACHING INSTITUTE';
+  const instituteAddress = institute?.address || 'Civil Lines, Thakurdwara (U.P.)';
+  const institutePhone = institute?.phone || '';
+  const instituteLogoUrl = institute?.logo_url || null;
 
   const [fetchedDemos, setFetchedDemos] = useState([]);
 
@@ -51,6 +57,8 @@ export default function StudentIDCardModal({
         .catch(() => {});
     }
   }, [isOpen, student, demos, enrollmentData]);
+
+  if (!isOpen || !student) return null;
 
   // Extract all active courses and active demos
   const activeCourses = extractActiveCourses(student, enrollmentData);
@@ -76,6 +84,7 @@ export default function StudentIDCardModal({
     activeCourses,
     activeDemos,
     verifyUrl,
+    instituteName,
   });
 
   const handlePrint = () => {
@@ -148,18 +157,27 @@ export default function StudentIDCardModal({
             className="printable-id-card w-full max-w-[440px] bg-white border-2 border-black rounded-xl overflow-hidden shadow-md text-black"
           >
             {/* Card Header: Institute Emblem & Details */}
-            <div className="bg-slate-900 text-white px-4 py-3.5 text-center relative border-b-2 border-amber-500">
-              <div className="flex items-center justify-center gap-2">
-                <ShieldCheck className="w-5 h-5 text-amber-400 shrink-0" />
-                <h1 className="text-sm sm:text-base font-black tracking-wider uppercase text-white">
-                  THAKURDWARA COACHING INSTITUTE
-                </h1>
+            <div className="bg-slate-900 text-white px-4 py-3.5 relative border-b-2 border-amber-500">
+              <div className="flex items-center justify-center gap-3">
+                <div className="w-11 h-11 rounded-lg bg-white border border-amber-400/80 flex items-center justify-center overflow-hidden shrink-0 p-0.5 shadow-2xs">
+                  <InstituteLogo
+                    src={instituteLogoUrl}
+                    alt={instituteName}
+                    className="w-full h-full object-contain"
+                    fallback={<ShieldCheck className="w-6 h-6 text-slate-900 shrink-0" />}
+                  />
+                </div>
+                <div className="text-left min-w-0">
+                  <h1 className="text-sm sm:text-base font-black tracking-wider uppercase text-white leading-tight">
+                    {instituteName}
+                  </h1>
+                  <p className="text-[10px] sm:text-[11px] text-slate-200 font-medium tracking-tight mt-0.5">
+                    {instituteAddress}{institutePhone ? ` • ${institutePhone}` : ''}
+                  </p>
+                </div>
               </div>
-              <p className="text-[10px] sm:text-[11px] text-slate-200 font-medium tracking-tight mt-0.5">
-                Civil Lines, Thakurdwara (U.P.) • ISO 9001:2015 Certified
-              </p>
-              <div className="mt-1.5 inline-block">
-                <span className="bg-amber-400 text-slate-950 font-black text-[10px] tracking-widest uppercase px-3 py-0.5 rounded-full shadow-2xs">
+              <div className="mt-2 text-center">
+                <span className="bg-amber-400 text-slate-950 font-black text-[10px] tracking-widest uppercase px-3 py-0.5 rounded-full shadow-2xs inline-block">
                   STUDENT IDENTITY CARD
                 </span>
               </div>
@@ -409,14 +427,14 @@ export default function StudentIDCardModal({
                     Authorized Signatory
                   </p>
                   <p className="text-[8px] text-slate-600 font-medium">
-                    Thakurdwara ERP Verified
+                    {instituteName} Verified
                   </p>
                 </div>
               </div>
 
               {/* Bottom Instructions Notice */}
               <div className="text-[8px] sm:text-[9px] text-center text-slate-600 border-t border-slate-200 pt-1">
-                Property of Thakurdwara Coaching Institute • Non-Transferable • Carry daily for class entry
+                Property of {instituteName} • Non-Transferable • Carry daily for class entry
               </div>
             </div>
           </div>
