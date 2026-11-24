@@ -12,7 +12,7 @@ import {
   Wallet,
   BarChart3,
   TrendingUp,
-  ShieldCheck,
+  UserCog,
   History,
   Award,
   LogOut,
@@ -146,6 +146,17 @@ export default function Sidebar({ isOpen, onClose }) {
         ],
       },
       {
+        title: 'TEAM & ACCESS',
+        items: [
+          {
+            to: '/users',
+            label: 'Staff & Roles',
+            icon: UserCog,
+            show: true,
+          },
+        ],
+      },
+      {
         title: 'ENROLLMENTS & STUDENTS',
         items: [
           {
@@ -240,12 +251,6 @@ export default function Sidebar({ isOpen, onClose }) {
             to: '/reports/cash-flow',
             label: 'Cash Flow Trends',
             icon: TrendingUp,
-            show: true,
-          },
-          {
-            to: '/users',
-            label: 'Staff & Roles',
-            icon: ShieldCheck,
             show: true,
           },
           {
