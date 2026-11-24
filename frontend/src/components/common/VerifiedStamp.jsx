@@ -1,7 +1,7 @@
 import React, { useId } from 'react';
 
 /**
- * Circular rubber-stamp/seal ("mohr") displaying the institute name and VERIFIED status.
+ * Circular rubber-stamp/seal ("mohr") displaying the institute name and Digitally Verified status.
  * Uses inline SVG with unique path IDs so it renders and prints crisply at small sizes.
  */
 export default function VerifiedStamp({
@@ -25,7 +25,7 @@ export default function VerifiedStamp({
         viewBox="0 0 120 120"
         className="w-full h-full overflow-visible"
         role="img"
-        aria-label={`${cleanName} Verified Stamp`}
+        aria-label={`${cleanName} Digitally Verified Stamp`}
       >
         <defs>
           {/* Clockwise upper arc (r=40, 160deg -> 20deg) for institute name */}
@@ -114,7 +114,7 @@ export default function VerifiedStamp({
           AUTHORIZED
         </text>
 
-        {/* Center VERIFIED stamp banner */}
+        {/* Center Digitally Verified stamp banner */}
         <rect
           x="10"
           y="49"
@@ -138,15 +138,15 @@ export default function VerifiedStamp({
         />
         <text
           x="60"
-          y="64"
+          y="62.8"
           textAnchor="middle"
           fill="#1e3a8a"
-          fontSize="13.5"
-          fontWeight="900"
-          letterSpacing="1.6"
+          fontSize="8.5"
+          fontWeight="800"
+          letterSpacing="0.3"
           fontFamily="ui-sans-serif, system-ui, sans-serif"
         >
-          VERIFIED
+          Digitally Verified
         </text>
       </svg>
     </div>
