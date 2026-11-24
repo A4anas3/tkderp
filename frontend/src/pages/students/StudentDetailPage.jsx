@@ -1343,18 +1343,18 @@ export default function StudentDetailPage() {
         ) : (
           <div className="space-y-3">
             {/* Mobile Cards (Phone View) */}
-            <div className="block sm:hidden space-y-2.5">
+            <div className="block sm:hidden space-y-1.5">
               {activeSubjects.map((item) => {
                 const daysRem = computeDaysRemaining(item.valid_to, item.valid_from) ?? item.days_remaining;
                 return (
-                <div key={item.id} className="bg-slate-50/80 border border-purple-200 rounded-xl p-3 space-y-2.5">
-                  <div className="flex items-start justify-between gap-2">
+                <div key={item.id} className="bg-slate-50/80 border border-purple-200 rounded-lg p-2 space-y-1.5">
+                  <div className="flex items-start justify-between gap-1.5">
                     <div className="min-w-0 flex-1">
-                      <div className="font-bold text-black text-xs leading-snug flex items-center gap-1.5 flex-wrap">
+                      <div className="font-bold text-black text-xs leading-tight flex items-center gap-1.5 flex-wrap">
                         <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
                         <span>{item.subject_name}</span>
                       </div>
-                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                      <div className="flex items-center gap-1 mt-0.5 flex-wrap">
                         <span className="text-[10px] text-odoo-800 bg-purple-100/70 border border-purple-200 px-1.5 py-0.2 rounded font-mono font-bold">
                           #{item.admission_number}
                         </span>
@@ -1372,10 +1372,10 @@ export default function StudentDetailPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 text-xs bg-white p-2.5 rounded-lg border border-slate-200">
+                  <div className="grid grid-cols-2 gap-1.5 text-xs bg-white px-2 py-1.5 rounded-md border border-slate-200 leading-tight">
                     <div>
                       <span className="text-[10px] text-slate-700 font-semibold block uppercase">Faculty / Hall</span>
-                      <div className="text-black font-semibold truncate mt-0.5">
+                      <div className="text-black font-semibold truncate">
                         {item.teacher_name || 'General / Unassigned'}
                       </div>
                       {item.hall_number && (
@@ -1385,7 +1385,7 @@ export default function StudentDetailPage() {
 
                     <div>
                       <span className="text-[10px] text-slate-700 font-semibold block uppercase">Validity</span>
-                      <div className="font-mono text-black font-semibold text-[11px] mt-0.5">
+                      <div className="font-mono text-black font-semibold text-[11px]">
                         {item.valid_from} → {item.valid_to}
                       </div>
                       {daysRem !== null && daysRem !== undefined && !['CANCELLED', 'REVOKED', 'DISCONTINUED'].includes(item.status) && (
@@ -1406,7 +1406,7 @@ export default function StudentDetailPage() {
                   </div>
 
                   {/* Financials Strip */}
-                  <div className="flex items-center justify-between bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-mono">
+                  <div className="flex items-center justify-between bg-white px-2 py-1 rounded-md border border-slate-200 text-xs font-mono leading-tight">
                     <div>
                       <span className="text-[10px] text-slate-700 block font-sans font-semibold">Fee</span>
                       <span className="font-bold text-black">₹{Number(item.net_price).toFixed(2)}</span>
@@ -1424,7 +1424,7 @@ export default function StudentDetailPage() {
                   </div>
 
                   {/* Actions Grid */}
-                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  <div className="flex flex-wrap items-center gap-1 pt-0.5">
                     {Number(item.balance_due) > 0 && !isRevoked && (
                       <Button
                         size="xs"
