@@ -1455,6 +1455,84 @@ export default function ReportsHubPage() {
                 </div>
               </div>
 
+              {/* Teacher-wise Demo Conversion Table */}
+              <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs">
+                <h3 className="text-xs font-black text-black uppercase tracking-wider mb-3 pb-2 border-b border-slate-100 flex items-center justify-between">
+                  <span>Teacher-wise Demo Conversion</span>
+                  <Badge variant="primary" size="xs">Demo Credit</Badge>
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-slate-50 text-slate-800 font-bold border-b border-slate-200">
+                      <tr>
+                        <th className="p-2.5">Teacher</th>
+                        <th className="p-2.5 text-center">Demos Given</th>
+                        <th className="p-2.5 text-center">Demos Converted</th>
+                        <th className="p-2.5 text-center">Conversion %</th>
+                        <th className="p-2.5">Enrolled Subject(s)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-semibold">
+                      {data?.by_teacher?.length > 0 ? (
+                        data.by_teacher.map((t, idx) => (
+                          <tr key={t.teacher_id || `${t.teacher_name}-${idx}`} className="hover:bg-slate-50">
+                            <td className="p-2.5">
+                              {t.teacher_id ? (
+                                <span
+                                  onClick={() => navigate(`/teachers/${t.teacher_id}`)}
+                                  className="font-bold text-black hover:text-[#714B67] hover:underline cursor-pointer"
+                                >
+                                  {t.teacher_name}
+                                </span>
+                              ) : (
+                                <span className="font-bold text-black">{t.teacher_name}</span>
+                              )}
+                              {t.teacher_code && (
+                                <span className="block text-[10px] text-slate-500 font-mono">{t.teacher_code}</span>
+                              )}
+                            </td>
+                            <td className="p-2.5 text-center font-mono">{t.demos_given}</td>
+                            <td className="p-2.5 text-center font-mono text-emerald-700">{t.demos_converted}</td>
+                            <td className="p-2.5 text-center font-mono font-black text-indigo-900">
+                              {t.conversion_rate_pct}%
+                            </td>
+                            <td className="p-2.5">
+                              {t.enrolled_subjects?.length > 0 ? (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {t.enrolled_subjects.map((sub, sIdx) => (
+                                    <span
+                                      key={sIdx}
+                                      className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold ${
+                                        sub.subject_changed
+                                          ? 'bg-amber-50 text-amber-900 border border-amber-200'
+                                          : 'bg-slate-100 text-black'
+                                      }`}
+                                    >
+                                      {sub.label}
+                                      {sub.count > 1 && (
+                                        <span className="ml-1 text-[10px] font-mono opacity-75">×{sub.count}</span>
+                                      )}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-slate-400 text-[11px]">-</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={5} className="p-4 text-center text-slate-400">
+                            No demo records found.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
               {/* Detailed Enquiries Table */}
               <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">

@@ -1216,6 +1216,7 @@ async def get_admissions_conversion_detailed(
 
     enq_ids = list({enq.id for enq, _ in rows})
     linked_enrollments_by_enq: Dict[uuid.UUID, List[Tuple[AdmissionItem, Admission, str]]] = {}
+    linked_by_demo_id: Dict[uuid.UUID, Tuple[AdmissionItem, Admission, str]] = {}
     if enq_ids:
         link_stmt = (
             select(AdmissionItem, Admission, EnquiryDemoItem)
@@ -1240,9 +1241,34 @@ async def get_admissions_conversion_detailed(
                 linked_enrollments_by_enq.setdefault(demo_itm.enquiry_id, []).append(
                     (adm_item, adm, ref_no)
                 )
+                if ref_no == demo_itm.demo_reference_number:
+                    linked_by_demo_id[demo_itm.id] = (adm_item, adm, ref_no)
+
+    teacher_ids = set()
+    subject_ids = set()
+    for enq, _ in rows:
+        for d in (enq.demo_items or []):
+            if d.teacher_id:
+                teacher_ids.add(d.teacher_id)
+            if d.subject_id:
+                subject_ids.add(d.subject_id)
+    for adm_item, _, _ in linked_by_demo_id.values():
+        if adm_item.subject_id:
+            subject_ids.add(adm_item.subject_id)
+
+    teacher_map: Dict[uuid.UUID, Teacher] = {}
+    if teacher_ids:
+        t_res = await db.execute(select(Teacher).where(Teacher.id.in_(teacher_ids)))
+        teacher_map = {t.id: t for t in t_res.scalars().all()}
+
+    subject_name_map: Dict[uuid.UUID, str] = {}
+    if subject_ids:
+        s_res = await db.execute(select(Subject.id, Subject.name).where(Subject.id.in_(subject_ids)))
+        subject_name_map = {sid: sname for sid, sname in s_res.all()}
 
     by_subject_map: Dict[str, Dict[str, Any]] = {}
     by_source_map: Dict[str, Dict[str, Any]] = {}
+    by_teacher_map: Dict[Tuple[str, str], Dict[str, Any]] = {}
     items = []
 
     total_enquiries = 0
@@ -1285,6 +1311,75 @@ async def get_admissions_conversion_detailed(
         by_source_map[src_name]["enquiries_count"] += 1
         if is_conv:
             by_source_map[src_name]["converted_count"] += 1
+
+        for d in (enq.demo_items or []):
+            if d.teacher_id and d.teacher_id in teacher_map:
+                t_obj = teacher_map[d.teacher_id]
+                t_key = ("id", str(d.teacher_id))
+                t_id_val = str(d.teacher_id)
+                t_name = t_obj.name
+                t_code = t_obj.teacher_code
+            elif d.teacher_id:
+                t_key = ("id", str(d.teacher_id))
+                t_id_val = str(d.teacher_id)
+                t_name = (d.teacher_name_snapshot or "Unknown Teacher").strip()
+                t_code = None
+            elif d.teacher_name_snapshot and d.teacher_name_snapshot.strip():
+                clean_tname = d.teacher_name_snapshot.strip()
+                t_key = ("name", clean_tname.lower())
+                t_id_val = None
+                t_name = clean_tname
+                t_code = None
+            else:
+                t_key = ("unassigned", "")
+                t_id_val = None
+                t_name = "Unassigned"
+                t_code = None
+
+            t_entry = by_teacher_map.setdefault(
+                t_key,
+                {
+                    "teacher_id": t_id_val,
+                    "teacher_name": t_name,
+                    "teacher_code": t_code,
+                    "demos_given": 0,
+                    "demos_converted": 0,
+                    "_subject_details": {},
+                },
+            )
+            t_entry["demos_given"] += 1
+
+            linked_demo = linked_by_demo_id.get(d.id) if d.demo_reference_number else None
+            if linked_demo:
+                adm_item, _adm, _ref_no = linked_demo
+                t_entry["demos_converted"] += 1
+
+                demo_subj = (
+                    d.subject_name_snapshot
+                    or (subject_name_map.get(d.subject_id) if d.subject_id else None)
+                    or "General Demo"
+                ).strip()
+                enrolled_subj = (
+                    (adm_item.subject.name if adm_item.subject and adm_item.subject.name else None)
+                    or (subject_name_map.get(adm_item.subject_id) if adm_item.subject_id else None)
+                    or adm_item.item_name_snapshot
+                    or "Enrolled Course"
+                ).strip()
+                same_subject = (
+                    (d.subject_id is not None and adm_item.subject_id is not None and d.subject_id == adm_item.subject_id)
+                    or (demo_subj.lower() == enrolled_subj.lower())
+                )
+                label = enrolled_subj if same_subject else f"{demo_subj} -> {enrolled_subj}"
+                sd_key = (demo_subj.lower(), enrolled_subj.lower(), same_subject)
+                if sd_key not in t_entry["_subject_details"]:
+                    t_entry["_subject_details"][sd_key] = {
+                        "demo_subject": demo_subj,
+                        "enrolled_subject": enrolled_subj,
+                        "subject_changed": not same_subject,
+                        "label": label,
+                        "count": 0,
+                    }
+                t_entry["_subject_details"][sd_key]["count"] += 1
 
         items.append({
             "id": str(enq.id),
@@ -1338,6 +1433,26 @@ async def get_admissions_conversion_detailed(
         by_source.append({**s, "conversion_rate_pct": rate})
     by_source.sort(key=lambda x: x["enquiries_count"], reverse=True)
 
+    by_teacher = []
+    for t in by_teacher_map.values():
+        given = t["demos_given"]
+        conv = t["demos_converted"]
+        rate = round((conv / given * 100), 1) if given > 0 else 0.0
+        enrolled_subjects = sorted(
+            t["_subject_details"].values(),
+            key=lambda x: (-x["count"], x["label"].lower()),
+        )
+        by_teacher.append({
+            "teacher_id": t["teacher_id"],
+            "teacher_name": t["teacher_name"],
+            "teacher_code": t["teacher_code"],
+            "demos_given": given,
+            "demos_converted": conv,
+            "conversion_rate_pct": rate,
+            "enrolled_subjects": enrolled_subjects,
+        })
+    by_teacher.sort(key=lambda x: (-x["demos_given"], -x["demos_converted"], x["teacher_name"].lower()))
+
     total = len(filtered_items)
     if page is not None:
         effective_page_size = page_size or 15
@@ -1359,6 +1474,7 @@ async def get_admissions_conversion_detailed(
         },
         "by_subject": by_subject,
         "by_source": by_source,
+        "by_teacher": by_teacher,
         "total": total,
         "total_pages": total_pages,
         "page": cur_page,
