@@ -199,7 +199,7 @@ async def test_public_id_card_expired_student_fails_with_404(admin_token):
         # ENR-2026-0002 has no active courses
         res = await client.get("/api/public/id-card/ENR-2026-0002")
         assert res.status_code == 404
-        assert "No active enrolment" in res.json()["detail"]
+        assert res.json()["detail"] == "No matching student or admission record found"
         # Never leak student name or details
         assert "Ananya" not in res.text
         assert "student" not in res.json()

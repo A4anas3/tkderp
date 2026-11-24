@@ -5,6 +5,8 @@ import os
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Thakurdwara ERP - Coaching Institute Management"
     API_V1_STR: str = "/api/v1"
+    # Environment ("production" disables public API docs; set "development" to enable them)
+    ENV: str = "production"
     
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://brightloop_user:brightloop_password@localhost:5432/thakurdwara_erp"

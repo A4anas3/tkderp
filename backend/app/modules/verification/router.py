@@ -29,8 +29,11 @@ from app.core.rate_limit import RateLimiter
 
 router = APIRouter(tags=["Public Verification & ID Card"])
 
-# Rate limiter for public ID card lookup: 60 requests per minute per IP
-id_card_rate_limiter = RateLimiter(times=60, seconds=60, prefix="id_card")
+# Rate limiter for public ID card lookup: 10 requests per minute per IP
+id_card_rate_limiter = RateLimiter(times=10, seconds=60, prefix="id_card")
+
+# Unified 404 message so attackers cannot distinguish unknown identifiers from inactive/expired students
+PUBLIC_NOT_FOUND_DETAIL = "No matching student or admission record found"
 
 
 async def _get_institute_profile(db: AsyncSession) -> dict:
@@ -319,16 +322,10 @@ async def verify_student_credential(
 
     student, matched_adm_number, active_courses_list, is_overall_valid = await get_student_and_active_courses(target_ident, db)
 
-    if not student:
+    if not student or student.status != "ACTIVE":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No matching student or admission record found for identifier '{target_ident}'."
-        )
-
-    if student.status != "ACTIVE":
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No active enrolment or ID card is available for this student."
+            detail=PUBLIC_NOT_FOUND_DETAIL,
         )
 
     today = today_kolkata()
@@ -337,7 +334,7 @@ async def verify_student_credential(
     if (not is_overall_valid or len(active_courses_list) == 0) and len(active_demos_list) == 0:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="No active enrolment or ID card is available for this student."
+            detail=PUBLIC_NOT_FOUND_DETAIL,
         )
 
     student_data = StudentVerificationData(
@@ -491,16 +488,10 @@ async def get_public_id_card(
 
     student, matched_adm_number, active_courses_list, is_overall_valid = await get_student_and_active_courses(target_ident, db)
 
-    if not student:
+    if not student or student.status != "ACTIVE":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No matching student or admission record found for '{target_ident}'."
-        )
-
-    if student.status != "ACTIVE":
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No active enrolment or ID card is available for this student."
+            detail=PUBLIC_NOT_FOUND_DETAIL,
         )
 
     today = today_kolkata()
@@ -510,7 +501,7 @@ async def get_public_id_card(
     if (not is_overall_valid or len(active_courses_list) == 0) and len(active_demos_list) == 0:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="No active enrolment or ID card is available for this student."
+            detail=PUBLIC_NOT_FOUND_DETAIL,
         )
 
     student_data = IDCardStudentData(

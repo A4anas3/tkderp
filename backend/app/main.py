@@ -120,11 +120,16 @@ async def lifespan(app: FastAPI):
         scheduler.shutdown(wait=False)
         await close_redis()
 
+_docs_enabled = settings.ENV.strip().lower() in {"development", "dev", "local"}
+
 app = FastAPI(
     title="Thakurdwara Coaching ERP API",
     description="Backend API for Thakurdwara Coaching Institute Management System",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
+    docs_url="/docs" if _docs_enabled else None,
+    redoc_url="/redoc" if _docs_enabled else None,
+    openapi_url="/openapi.json" if _docs_enabled else None,
 )
 
 # CORS configuration
@@ -209,6 +214,6 @@ async def health_check():
 async def root():
     return {
         "message": "Welcome to Thakurdwara Coaching Institute ERP API",
-        "docs_url": "/docs",
+        "docs_url": "/docs" if _docs_enabled else None,
         "health_url": "/health"
     }
