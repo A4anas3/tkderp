@@ -7,6 +7,7 @@ import uuid
 from app.core.cache import TTL_LONG, cache_get, cache_set, invalidate_user_cache, make_cache_key
 from app.database.session import get_db
 from app.modules.users.models import User
+from app.modules.auth.router import revoke_all_user_refresh_tokens
 from app.modules.auth.schemas import UserResponse
 from app.modules.users.schemas import CreateUserRequest, UpdateUserRequest, ResetPasswordRequest
 from app.core.security import get_password_hash
@@ -99,6 +100,8 @@ async def update_user(
         user.role = req.role
     if req.status is not None:
         user.status = req.status
+        if req.status != "ACTIVE":
+            await revoke_all_user_refresh_tokens(db, user.id)
 
     await db.commit()
     await db.refresh(user)
@@ -117,6 +120,7 @@ async def reset_password(
         raise HTTPException(status_code=404, detail="User not found")
 
     user.password_hash = get_password_hash(req.new_password)
+    await revoke_all_user_refresh_tokens(db, user.id)
     await db.commit()
     await invalidate_user_cache()
     return {"success": True, "message": f"Password reset successfully for {user.employee_id}"}

@@ -5,6 +5,18 @@ export const authApi = {
     const res = await api.post('/auth/login', { username, password });
     return res.data;
   },
+  refresh: async (refreshToken) => {
+    const res = await api.post('/auth/refresh', { refresh_token: refreshToken });
+    return res.data;
+  },
+  logout: async (refreshToken) => {
+    const res = await api.post(
+      '/auth/logout',
+      refreshToken ? { refresh_token: refreshToken } : {},
+      { _skipAuthRefresh: true }
+    );
+    return res.data;
+  },
   getMe: async () => {
     const res = await api.get('/auth/me');
     return res.data;

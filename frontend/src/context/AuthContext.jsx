@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { authApi } from '../services/allApis';
+import { clearAuthStorage } from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -15,19 +16,43 @@ export function AuthProvider({ children }) {
   });
   const [loading, setLoading] = useState(true);
 
-  // Sync / Verify with backend on mount
+  useEffect(() => {
+    const handleTokenRefreshed = (event) => {
+      const { access_token, user: refreshedUser } = event.detail || {};
+      if (access_token) {
+        setToken(access_token);
+      }
+      if (refreshedUser) {
+        setUser(refreshedUser);
+      }
+    };
+    const handleAuthCleared = () => {
+      setToken(null);
+      setUser(null);
+    };
+
+    window.addEventListener('auth:token-refreshed', handleTokenRefreshed);
+    window.addEventListener('auth:cleared', handleAuthCleared);
+    return () => {
+      window.removeEventListener('auth:token-refreshed', handleTokenRefreshed);
+      window.removeEventListener('auth:cleared', handleAuthCleared);
+    };
+  }, []);
+
+  // Sync / Verify with backend on mount (and transparently refresh if access token expired)
   useEffect(() => {
     const initAuth = async () => {
       const storedToken = localStorage.getItem('token');
-      if (storedToken) {
+      const storedRefreshToken = localStorage.getItem('refresh_token');
+      if (storedToken || storedRefreshToken) {
         try {
           const me = await authApi.getMe();
           setUser(me);
+          setToken(localStorage.getItem('token'));
           localStorage.setItem('user', JSON.stringify(me));
         } catch (err) {
           console.warn('Session expired or invalid:', err.message);
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
+          clearAuthStorage();
           setToken(null);
           setUser(null);
         }
@@ -40,20 +65,32 @@ export function AuthProvider({ children }) {
 
   const login = async (username, password) => {
     const res = await authApi.login(username, password);
-    const { access_token, user: userData } = res;
+    const { access_token, refresh_token, user: userData } = res;
     localStorage.setItem('token', access_token);
+    if (refresh_token) {
+      localStorage.setItem('refresh_token', refresh_token);
+    }
     localStorage.setItem('user', JSON.stringify(userData));
     setToken(access_token);
     setUser(userData);
     return userData;
   };
 
-  const logout = useCallback(() => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    setToken(null);
-    setUser(null);
-    window.location.href = '/login';
+  const logout = useCallback(async () => {
+    const storedRefreshToken = localStorage.getItem('refresh_token');
+    const storedToken = localStorage.getItem('token');
+    try {
+      if (storedRefreshToken || storedToken) {
+        await authApi.logout(storedRefreshToken);
+      }
+    } catch {
+      // Ignore server/network errors during logout; always clear local session
+    } finally {
+      clearAuthStorage();
+      setToken(null);
+      setUser(null);
+      window.location.href = '/login';
+    }
   }, []);
 
   const role = user?.role || null;

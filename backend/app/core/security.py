@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Any, Union
+import hashlib
+import secrets
 import jwt
 import bcrypt
 from app.core.config import settings
@@ -34,3 +36,13 @@ def decode_access_token(token: str) -> Optional[dict]:
         return payload
     except jwt.PyJWTError:
         return None
+
+
+def generate_refresh_token() -> str:
+    """Generate a cryptographically random opaque refresh token."""
+    return secrets.token_urlsafe(48)
+
+
+def hash_refresh_token(raw_token: str) -> str:
+    """Return the SHA-256 hex digest of a raw refresh token for storage and lookup."""
+    return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()

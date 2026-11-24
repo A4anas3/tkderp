@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "ThakurdwaraErpSuperSecretKeyMustBeVeryStrongAndSecure2026"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 8  # 8 hours
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
     
     # Firebase (Optional internal authentication provider)
     FIREBASE_CREDENTIALS_PATH: str = ""
