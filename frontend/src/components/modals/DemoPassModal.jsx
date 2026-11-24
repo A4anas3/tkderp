@@ -109,19 +109,23 @@ export default function DemoPassModal({
               <span className="text-xs font-mono font-bold text-black">
                 {formatIndianDate(enquiry.created_at || new Date().toISOString())}
               </span>
-              <span className="text-[10px] text-slate-500 font-mono block mt-0.5">
-                Ref: #{enquiry.id?.slice(0, 8) || 'ENQ-NEW'}
+              <span className="text-[10px] text-odoo-800 font-mono font-bold block mt-0.5">
+                {items.length === 1 && items[0]?.demo_reference_number
+                  ? `Demo ID: ${items[0].demo_reference_number}`
+                  : enquiry.enquiry_code
+                  ? `Enquiry: ${enquiry.enquiry_code}`
+                  : `Demo ID: ${items[0]?.demo_reference_number || 'NEW'}`}
               </span>
             </div>
           </div>
 
           {/* Student Info Box */}
           <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-            <div>
+            <div className="min-w-0">
               <span className="text-[10px] uppercase font-bold text-slate-500 block">
                 Candidate Name
               </span>
-              <span className="font-bold text-black text-sm block">
+              <span className="font-bold text-black text-sm block break-words">
                 {enquiry.student_name}
               </span>
               {enquiry.purpose && (
@@ -172,7 +176,7 @@ export default function DemoPassModal({
                 >
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded bg-purple-50 border border-odoo-200 font-mono font-bold text-xs text-odoo-900 tracking-wider">
+                      <span className="px-2 py-0.5 rounded bg-purple-50 border border-odoo-200 font-mono font-bold text-xs text-odoo-900 tracking-wider whitespace-nowrap shrink-0">
                         {item.demo_reference_number || `DEM-2026-${String(idx + 1).padStart(4, '0')}`}
                       </span>
                       <h4 className="font-bold text-black text-sm">
