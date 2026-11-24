@@ -1,6 +1,7 @@
 /**
  * Helpers for Student ID Card formatting, validity calculations, and WhatsApp sharing.
  */
+import { computeDaysRemaining, parseLocalDate } from './dateCycleUtils';
 
 export function formatDateShort(dateVal) {
   if (!dateVal) return '';
@@ -49,13 +50,28 @@ export function formatDemoDates(startDate, endDate) {
   return 'Active Trial';
 }
 
+function isActiveEnrollmentItem(item) {
+  if (!item) return false;
+  const st = (item.status || 'ACTIVE').toUpperCase();
+  const acc = (item.access_status || 'ACTIVE').toUpperCase();
+  if (st !== 'ACTIVE' || acc !== 'ACTIVE') return false;
+  if (item.valid_to) {
+    const end = parseLocalDate(item.valid_to);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (end && end < today) return false;
+  }
+  return true;
+}
+
 export function extractActiveCourses(student, enrollmentData) {
   const courses = [];
 
   // Check enrollmentData first
   if (enrollmentData) {
-    if (enrollmentData.active_green_card) {
+    if (enrollmentData.active_green_card && isActiveEnrollmentItem(enrollmentData.active_green_card)) {
       const gc = enrollmentData.active_green_card;
+      const computedDays = computeDaysRemaining(gc.valid_to, gc.valid_from);
       courses.push({
         id: gc.id || 'green-card',
         course_name: gc.subject_name || 'Green Card — All Access Annual Pass',
@@ -67,14 +83,15 @@ export function extractActiveCourses(student, enrollmentData) {
         valid_from: gc.valid_from,
         valid_to: gc.valid_to,
         validity_text: formatValidityPeriod(gc.valid_from, gc.valid_to),
-        days_remaining: gc.days_remaining,
+        days_remaining: computedDays !== null ? computedDays : gc.days_remaining,
         admission_number: gc.admission_number,
         item_type: 'GREEN_CARD',
       });
     }
 
     if (Array.isArray(enrollmentData.active_subjects)) {
-      enrollmentData.active_subjects.forEach((subj) => {
+      enrollmentData.active_subjects.filter(isActiveEnrollmentItem).forEach((subj) => {
+        const computedDays = computeDaysRemaining(subj.valid_to, subj.valid_from);
         courses.push({
           id: subj.id,
           course_name: subj.subject_name,
@@ -86,7 +103,7 @@ export function extractActiveCourses(student, enrollmentData) {
           valid_from: subj.valid_from,
           valid_to: subj.valid_to,
           validity_text: formatValidityPeriod(subj.valid_from, subj.valid_to),
-          days_remaining: subj.days_remaining,
+          days_remaining: computedDays !== null ? computedDays : subj.days_remaining,
           admission_number: subj.admission_number,
           item_type: subj.item_type || 'SUBJECT',
         });
@@ -96,7 +113,8 @@ export function extractActiveCourses(student, enrollmentData) {
 
   // Fallback to student.active if enrollmentData yielded nothing
   if (courses.length === 0 && student && Array.isArray(student.active)) {
-    student.active.forEach((line) => {
+    student.active.filter(isActiveEnrollmentItem).forEach((line) => {
+      const computedDays = computeDaysRemaining(line.valid_to, line.valid_from);
       courses.push({
         id: line.id,
         course_name: line.subject_name,
@@ -108,7 +126,7 @@ export function extractActiveCourses(student, enrollmentData) {
         valid_from: line.valid_from,
         valid_to: line.valid_to,
         validity_text: formatValidityPeriod(line.valid_from, line.valid_to),
-        days_remaining: line.days_left,
+        days_remaining: computedDays !== null ? computedDays : line.days_left,
         admission_number: line.slip_number,
         item_type: line.item_type || 'SUBJECT',
       });
@@ -165,13 +183,9 @@ export function extractActiveDemos(student, enrollmentData, demos) {
 
     if (refNo) seenRefs.add(refNo);
 
-    let daysRemaining = item.days_remaining;
-    if ((daysRemaining === undefined || daysRemaining === null) && item.demo_end_date) {
-      const parts = String(item.demo_end_date).split('T')[0].split('-');
-      if (parts.length === 3) {
-        const endDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-        daysRemaining = Math.max(0, Math.ceil((endDate - today) / (1000 * 60 * 60 * 24)));
-      }
+    let daysRemaining = computeDaysRemaining(item.demo_end_date, item.demo_start_date);
+    if (daysRemaining === null) {
+      daysRemaining = item.days_remaining;
     }
 
     active.push({

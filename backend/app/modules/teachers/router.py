@@ -34,6 +34,7 @@ from app.modules.expenses.schemas import SalaryRecordResponse
 from app.database.models import AuditLog
 from app.modules.reports.ledger_queries import get_item_allocated_collected_map, ist_day_boundaries
 from app.common.active_student import active_student_subject_filter, today_kolkata
+from app.common.active_lines import compute_days_remaining
 from app.core.dependencies import require_staff, require_admin
 from app.common.pagination import PageResponse
 
@@ -591,9 +592,9 @@ async def get_teacher_roster(
         else:
             c_status = "ACTIVE"
             s_label = "Active"
-            days_left = (c_end - today).days
+            days_left = compute_days_remaining(c_end, c_start, today)
             days_rem = days_left
-            badge_var = "warning" if days_left <= 7 else "success"
+            badge_var = "warning" if (days_left is not None and days_left <= 7) else "success"
             s_subtext = f"{days_left}d remaining in cycle"
 
         c_period_label = f"{c_start.strftime('%d %b %Y')} → {c_end.strftime('%d %b %Y')}"

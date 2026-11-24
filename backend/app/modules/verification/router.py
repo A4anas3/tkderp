@@ -23,7 +23,7 @@ from app.modules.verification.schemas import (
     IDCardCourseItem,
     IDCardDemoItem,
 )
-from app.common.active_lines import today_kolkata
+from app.common.active_lines import today_kolkata, compute_days_remaining
 from app.common.validators import normalize_mobile
 from app.core.rate_limit import RateLimiter
 
@@ -187,13 +187,11 @@ async def get_student_and_active_courses(
     latest_adm_seen = None
 
     for item, adm in rows:
-        if not latest_adm_seen:
-            latest_adm_seen = adm.admission_number
-
         # Check if line is active
         is_adm_active = (
-            adm.status not in ["REVOKED", "CANCELLED"]
-            and getattr(adm, "document_status", "VALID") != "VOID"
+            adm.status == "ACTIVE"
+            and getattr(adm, "access_status", "ACTIVE") == "ACTIVE"
+            and getattr(adm, "document_status", "VALID") == "VALID"
         )
         is_item_active = (
             item.status == "ACTIVE"
@@ -204,6 +202,9 @@ async def get_student_and_active_courses(
         if not (is_adm_active and is_item_active):
             continue
 
+        if not latest_adm_seen:
+            latest_adm_seen = adm.admission_number
+
         raw_name = item.item_name_snapshot or "Enrolled Course"
         if raw_name.startswith("[Renewal] "):
             raw_name = raw_name[len("[Renewal] "):]
@@ -213,7 +214,7 @@ async def get_student_and_active_courses(
                 sub = subjects_map.get(item.subject_id) or (subjects_by_name.get(raw_name.lower().strip()) if raw_name else None)
                 v_from = item.valid_from or adm.valid_from
                 v_to = item.valid_to or adm.valid_to
-                days_rem = (v_to - today).days if v_to else None
+                days_rem = compute_days_remaining(v_to, v_from, today)
                 teach_name = (sub.teacher_name if sub and sub.teacher_name else item.teacher_name_snapshot)
                 hall_num = (sub.hall_number if sub and sub.hall_number else item.hall_number_snapshot)
                 class_sched = (sub.schedule if sub and sub.schedule else None)
@@ -249,7 +250,7 @@ async def get_student_and_active_courses(
         latest_end = max(valid_tos) if valid_tos else None
 
         latest_item, latest_adm, raw_name = cycle_list[-1]
-        days_rem = (latest_end - today).days if latest_end else None
+        days_rem = compute_days_remaining(latest_end, earliest_start, today)
 
         b_name = batch_names.get(latest_item.batch_id) if latest_item.batch_id else None
         sub = subjects_map.get(latest_item.subject_id) or (subjects_by_name.get(raw_name.lower().strip()) if raw_name else None)
@@ -403,7 +404,7 @@ async def _get_active_demos_for_student(db: AsyncSession, student: Student, toda
             continue
 
         seen_refs.add(ref_no)
-        days_rem = (ditm.demo_end_date - today).days
+        days_rem = compute_days_remaining(ditm.demo_end_date, ditm.demo_start_date, today)
 
         active_demos.append(
             IDCardDemoItem(

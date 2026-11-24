@@ -153,6 +153,11 @@ def evaluate_student_rolling_cycle(
     Rule: joined 19 Nov -> month is 19 Nov to 18 Dec, next 19 Dec to 18 Jan.
     """
     today = date.today()
+    try:
+        from app.common.active_lines import today_kolkata, compute_days_remaining
+        today = today_kolkata()
+    except Exception:
+        compute_days_remaining = None
     c_start = valid_from or admission_date
     if valid_to:
         c_end = valid_to
@@ -181,7 +186,11 @@ def evaluate_student_rolling_cycle(
             "balance_due": 0.0
         }
 
-    days_remaining = (c_end - today).days
+    if compute_days_remaining is not None:
+        days_remaining = compute_days_remaining(c_end, c_start, today)
+    else:
+        ref_start = max(today, c_start) if c_start else today
+        days_remaining = (c_end - ref_start).days
 
     if balance_due > Decimal("0.00") and today > c_end:
         cycle_status = "OVERDUE"

@@ -11,7 +11,7 @@ from app.database.session import get_db
 from app.core.dependencies import require_cashier_or_admin
 from app.modules.users.models import User
 from app.database.models import Admission, AdmissionItem, Student, Batch, Subject
-from app.common.active_lines import today_kolkata
+from app.common.active_lines import today_kolkata, compute_days_remaining
 from app.modules.renewals.schemas import (
     RenewalItemResponse,
     RenewalCounts,
@@ -102,7 +102,8 @@ async def get_renewals_summary(
         AdmissionItem.status.notin_(["DISCONTINUED", "REVOKED", "CANCELLED"]),
         AdmissionItem.access_status.notin_(["REVOKED", "CANCELLED", "DISCONTINUED"]),
         Admission.document_status == "VALID",
-        Admission.status.notin_(["CANCELLED", "REVOKED"]),
+        Admission.status.notin_(["CANCELLED", "REVOKED", "DISCONTINUED"]),
+        Admission.access_status.notin_(["REVOKED", "CANCELLED", "DISCONTINUED"]),
         effective_valid_to != None,
         effective_valid_to >= start_expired,
         effective_valid_to <= end_expiring,
@@ -171,7 +172,8 @@ async def get_renewals_summary(
             AdmissionItem.status.notin_(["DISCONTINUED", "REVOKED", "CANCELLED"]),
             AdmissionItem.access_status.notin_(["REVOKED", "CANCELLED", "DISCONTINUED"]),
             Admission.document_status == "VALID",
-            Admission.status.notin_(["CANCELLED", "REVOKED"]),
+            Admission.status.notin_(["CANCELLED", "REVOKED", "DISCONTINUED"]),
+            Admission.access_status.notin_(["REVOKED", "CANCELLED", "DISCONTINUED"]),
             func.coalesce(AdmissionItem.valid_to, Admission.valid_to) >= today,
         )
         .group_by(AdmissionItem.student_id, AdmissionItem.subject_id)
@@ -190,6 +192,7 @@ async def get_renewals_summary(
         if itm.id in renewed_ids:
             continue
 
+        item_valid_from: Optional[date] = itm.valid_from or adm.valid_from
         item_valid_to: date = itm.valid_to or adm.valid_to
         if not item_valid_to:
             continue
@@ -208,14 +211,14 @@ async def get_renewals_summary(
             if days_diff < 0 or days_diff > window_days:
                 continue
             category = "EXPIRING"
-            days_remaining = days_diff
+            days_remaining = compute_days_remaining(item_valid_to, item_valid_from, today)
             days_ago = None
-            if days_diff == 0:
+            if days_remaining == 0:
                 status_label = "Expires today"
-            elif days_diff == 1:
+            elif days_remaining == 1:
                 status_label = "Expires in 1 day"
             else:
-                status_label = f"Expires in {days_diff} days"
+                status_label = f"Expires in {days_remaining} days"
         else:
             # Recently Expired (1-5 days ago)
             days_ago = (today - item_valid_to).days

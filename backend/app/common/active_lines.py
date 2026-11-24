@@ -6,6 +6,21 @@ def today_kolkata() -> date:
     tz = zoneinfo.ZoneInfo("Asia/Kolkata")
     return datetime.now(tz).date()
 
+def compute_days_remaining(
+    valid_to: Optional[date],
+    valid_from: Optional[date] = None,
+    today: Optional[date] = None,
+) -> Optional[int]:
+    """
+    Compute remaining days for an enrollment as valid_to minus max(today, valid_from).
+    Ensures a future-starting enrollment never exceeds its own validity length.
+    """
+    if valid_to is None:
+        return None
+    t = today or today_kolkata()
+    effective_start = max(t, valid_from) if valid_from is not None else t
+    return (valid_to - effective_start).days
+
 def is_active_line(item: Any, today: Optional[date] = None) -> bool:
     """
     Active line rule:
@@ -28,7 +43,7 @@ def is_active_line(item: Any, today: Optional[date] = None) -> bool:
     if doc_status != "VALID":
         return False
     
-    if adm_status in ("REVOKED", "CANCELLED"):
+    if adm_status in ("REVOKED", "CANCELLED", "DISCONTINUED"):
         return False
     
     access_status = getattr(item, "access_status", "ACTIVE")

@@ -261,13 +261,20 @@ async def get_subject_roster(
     items = []
     for itm, adm, stu, bch in rows:
         itm_coll = collected_map.get(itm.id, Decimal("0.00"))
+        is_line_cancelled = (
+            adm.status in ("CANCELLED", "REVOKED", "DISCONTINUED")
+            or getattr(adm, "document_status", "VALID") == "VOID"
+            or getattr(itm, "status", "ACTIVE") in ("CANCELLED", "REVOKED", "DISCONTINUED")
+            or getattr(itm, "access_status", "ACTIVE") in ("CANCELLED", "REVOKED", "DISCONTINUED")
+        )
         c_info = evaluate_student_rolling_cycle(
             valid_from=itm.valid_from,
             valid_to=itm.valid_to,
             admission_date=adm.admission_date,
             balance_due=itm.balance_due,
             net_price=itm.net_price,
-            amount_collected=itm_coll
+            amount_collected=itm_coll,
+            is_cancelled=is_line_cancelled,
         )
         items.append({
             "item_id": str(itm.id),

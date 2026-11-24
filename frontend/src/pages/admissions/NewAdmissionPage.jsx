@@ -39,7 +39,7 @@ import {
 import { useToast } from '../../context/ToastContext';
 import QuickStudentModal from '../../components/modals/QuickStudentModal';
 import AdmissionReceiptModal from '../../components/receipts/AdmissionReceiptModal';
-import { computeRollingCycle, formatValidityDuration } from '../../utils/dateCycleUtils';
+import { computeRollingCycle, formatValidityDuration, computeDaysRemaining } from '../../utils/dateCycleUtils';
 import { cleanMobileInput } from '../../utils/phoneUtils';
 
 export default function NewAdmissionPage() {
@@ -1188,7 +1188,11 @@ export default function NewAdmissionPage() {
                       Currently Enrolled Courses (Renewals seamlessly continue from last end date):
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                      {activeEnrollment.active_subjects.map((sub) => (
+                      {activeEnrollment.active_subjects
+                        .filter((sub) => (sub.status || 'ACTIVE').toUpperCase() === 'ACTIVE')
+                        .map((sub) => {
+                          const daysLeft = computeDaysRemaining(sub.valid_to, sub.valid_from) ?? sub.days_remaining;
+                          return (
                         <div key={sub.id} className="p-2 bg-white border border-purple-100 rounded-md flex items-center justify-between text-[11px]">
                           <div>
                             <div className="font-bold text-black">{sub.subject_name}</div>
@@ -1196,12 +1200,15 @@ export default function NewAdmissionPage() {
                           </div>
                           <div className="text-right">
                             <span className="font-mono text-odoo-900 font-bold block">{sub.valid_to}</span>
-                            <span className={`text-[10px] font-semibold ${sub.days_remaining <= 7 ? 'text-rose-600' : 'text-emerald-700'}`}>
-                              {sub.days_remaining}d left
-                            </span>
+                            {daysLeft !== null && daysLeft !== undefined && (
+                              <span className={`text-[10px] font-semibold ${daysLeft <= 7 ? 'text-rose-600' : 'text-emerald-700'}`}>
+                                {daysLeft}d left
+                              </span>
+                            )}
                           </div>
                         </div>
-                      ))}
+                          );
+                        })}
                     </div>
                   </div>
                 ) : (

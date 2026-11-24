@@ -10,7 +10,7 @@ from sqlalchemy.orm import lazyload
 from app.database.session import get_db
 from app.core.dependencies import require_staff
 from app.database.models import Admission, AdmissionItem, Student, Batch, Payment, PaymentAllocation
-from app.common.active_lines import today_kolkata
+from app.common.active_lines import today_kolkata, compute_days_remaining
 from app.modules.enrollments.schemas import EnrollmentItemResponse, EnrollmentListResponse
 
 router = APIRouter(tags=["Enrollments"])
@@ -50,7 +50,13 @@ async def list_enrollments(
         .join(Student, AdmissionItem.student_id == Student.id)
     )
 
-    filters = []
+    filters = [
+        AdmissionItem.status.notin_(["DISCONTINUED", "CANCELLED", "REVOKED"]),
+        AdmissionItem.access_status.notin_(["DISCONTINUED", "CANCELLED", "REVOKED"]),
+        Admission.status.notin_(["DISCONTINUED", "CANCELLED", "REVOKED"]),
+        Admission.access_status.notin_(["DISCONTINUED", "CANCELLED", "REVOKED"]),
+        Admission.document_status == "VALID",
+    ]
 
     if student_id:
         filters.append(AdmissionItem.student_id == student_id)
@@ -65,7 +71,9 @@ async def list_enrollments(
         if access_status.upper() == "ACTIVE":
             filters.append(
                 and_(
+                    AdmissionItem.status == "ACTIVE",
                     AdmissionItem.access_status == "ACTIVE",
+                    Admission.status == "ACTIVE",
                     Admission.document_status == "VALID",
                     or_(AdmissionItem.valid_to == None, AdmissionItem.valid_to >= today)
                 )
@@ -77,12 +85,21 @@ async def list_enrollments(
                     and_(
                         AdmissionItem.valid_to != None,
                         AdmissionItem.valid_to < today,
-                        AdmissionItem.access_status != "REVOKED"
+                        AdmissionItem.access_status.notin_(["REVOKED", "CANCELLED", "DISCONTINUED"])
                     )
                 )
             )
         else:
             filters.append(AdmissionItem.access_status == access_status.upper())
+    elif expired_since_days is None:
+        filters.append(
+            and_(
+                AdmissionItem.status == "ACTIVE",
+                AdmissionItem.access_status == "ACTIVE",
+                Admission.status == "ACTIVE",
+                or_(AdmissionItem.valid_to == None, AdmissionItem.valid_to >= today),
+            )
+        )
 
     if expiring_in_days is not None:
         target_date = today + timedelta(days=expiring_in_days)
@@ -177,9 +194,9 @@ async def list_enrollments(
         if isinstance(last_p_date, datetime):
             last_p_date = last_p_date.date()
         is_line_revoked = (
-            itm.access_status in ("REVOKED", "CANCELLED")
-            or getattr(itm, "status", "ACTIVE") in ("REVOKED", "CANCELLED")
-            or adm.status in ("REVOKED", "CANCELLED")
+            itm.access_status in ("REVOKED", "CANCELLED", "DISCONTINUED")
+            or getattr(itm, "status", "ACTIVE") in ("REVOKED", "CANCELLED", "DISCONTINUED")
+            or adm.status in ("REVOKED", "CANCELLED", "DISCONTINUED")
             or getattr(adm, "document_status", "VALID") == "VOID"
         )
         if is_line_revoked:
@@ -187,8 +204,8 @@ async def list_enrollments(
             is_item_expired = False
             is_item_overdue = False
         else:
-            days_left = (itm.valid_to - today).days if itm.valid_to else None
-            is_item_expired = itm.access_status == "EXPIRED" or (days_left is not None and days_left < 0)
+            days_left = compute_days_remaining(itm.valid_to, itm.valid_from or adm.valid_from, today)
+            is_item_expired = itm.access_status == "EXPIRED" or (itm.valid_to is not None and itm.valid_to < today)
             is_item_overdue = is_item_expired and itm.balance_due > Decimal("0.00")
 
         if itm.amount_collected >= itm.net_price:

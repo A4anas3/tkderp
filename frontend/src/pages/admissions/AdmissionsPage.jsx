@@ -41,6 +41,7 @@ export default function AdmissionsPage() {
         page_size: 15,
         search: search.trim() || undefined,
         payment_status: paymentStatusFilter || undefined,
+        active_only: true,
       });
       setAdmissions(res.items || []);
       setTotal(res.total || 0);
@@ -96,7 +97,9 @@ export default function AdmissionsPage() {
       header: 'Purchased Subjects',
       render: (a) => (
         <div className="flex flex-wrap gap-1 max-w-xs">
-          {(a.items || []).map((itm, i) => (
+          {(a.items || [])
+            .filter((itm) => !['DISCONTINUED', 'CANCELLED', 'REVOKED'].includes(itm.status) && !['DISCONTINUED', 'CANCELLED', 'REVOKED'].includes(itm.access_status))
+            .map((itm, i) => (
             <span
               key={i}
               className="inline-block bg-slate-100 border border-slate-200 text-black px-1.5 py-0.5 rounded text-[11px]"
@@ -117,8 +120,8 @@ export default function AdmissionsPage() {
       render: (a) => {
         const vFrom = a.valid_from || a.admission_date;
         const vTo = a.valid_to;
-        const isCancelled = a.status === 'REVOKED' || a.status === 'CANCELLED';
-        const cycle = evaluateCycleStatus(vTo, a.balance_due, isCancelled);
+        const isCancelled = a.status === 'REVOKED' || a.status === 'CANCELLED' || a.status === 'DISCONTINUED';
+        const cycle = evaluateCycleStatus(vTo, a.balance_due, isCancelled, vFrom);
         return (
           <div className="text-xs">
             <span className="font-mono font-bold text-black block">
@@ -325,8 +328,8 @@ export default function AdmissionsPage() {
             {admissions.map((a) => {
               const vFrom = a.valid_from || a.admission_date;
               const vTo = a.valid_to;
-              const isCancelled = a.status === 'REVOKED' || a.status === 'CANCELLED';
-              const cycle = evaluateCycleStatus(vTo, a.balance_due, isCancelled);
+              const isCancelled = a.status === 'REVOKED' || a.status === 'CANCELLED' || a.status === 'DISCONTINUED';
+              const cycle = evaluateCycleStatus(vTo, a.balance_due, isCancelled, vFrom);
 
               return (
                 <div
@@ -369,7 +372,9 @@ export default function AdmissionsPage() {
 
                   {/* Purchased Items */}
                   <div className="flex flex-wrap gap-1">
-                    {(a.items || []).map((itm, i) => (
+                    {(a.items || [])
+                      .filter((itm) => !['DISCONTINUED', 'CANCELLED', 'REVOKED'].includes(itm.status) && !['DISCONTINUED', 'CANCELLED', 'REVOKED'].includes(itm.access_status))
+                      .map((itm, i) => (
                       <span
                         key={i}
                         className="bg-slate-100 border border-slate-200 text-black px-1.5 py-0.5 rounded text-[10px] font-semibold"

@@ -68,7 +68,7 @@ import WaiveDueModal from '../../components/modals/WaiveDueModal';
 import StudentIDCardModal from '../../components/modals/StudentIDCardModal';
 import GiveDemoModal from '../../components/modals/GiveDemoModal';
 import DemoPassModal from '../../components/modals/DemoPassModal';
-import { getCleanCancelReason, formatIndianDate } from '../../utils/dateCycleUtils';
+import { getCleanCancelReason, formatIndianDate, computeDaysRemaining } from '../../utils/dateCycleUtils';
 
 function getValidityStatus(adm) {
   if (adm.status === 'SUSPENDED') {
@@ -93,7 +93,7 @@ function getValidityStatus(adm) {
       isExpired: false,
       isExpiringSoon: false,
       isDiscontinued: true,
-      canRenew: true,
+      canRenew: false,
     };
   }
 
@@ -123,13 +123,18 @@ function getValidityStatus(adm) {
     };
   }
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const end = new Date(adm.valid_to);
-  end.setHours(0, 0, 0, 0);
-
-  const diffTime = end.getTime() - today.getTime();
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  const diffDays = computeDaysRemaining(adm.valid_to, adm.valid_from || adm.admission_date);
+  if (diffDays === null) {
+    return {
+      status: 'ACTIVE',
+      badgeVariant: 'success',
+      label: 'Active',
+      subtext: 'Open validity',
+      isExpired: false,
+      isExpiringSoon: false,
+      canRenew: true,
+    };
+  }
 
   if (diffDays < 0) {
     return {
@@ -574,6 +579,15 @@ export default function StudentDetailPage() {
     const v = getValidityStatus(adm);
     return !v.isExpired && !v.isCancelled && !v.isSuspended && !v.isDiscontinued;
   });
+
+  const activeSubjects = (enrollmentData?.active_subjects || []).filter(
+    (item) => (item.status || 'ACTIVE').toUpperCase() === 'ACTIVE'
+  );
+  const activeGreenCard =
+    enrollmentData?.active_green_card &&
+    (enrollmentData.active_green_card.status || 'ACTIVE').toUpperCase() === 'ACTIVE'
+      ? enrollmentData.active_green_card
+      : null;
 
   const activeTotalFee = activeAdmissions.reduce((acc, a) => acc + Number(a.total_payable || 0), 0);
   const activeTotalPaid = activeAdmissions.reduce((acc, a) => acc + Number(a.amount_paid || 0), 0);
@@ -1240,7 +1254,9 @@ export default function StudentDetailPage() {
         </div>
 
         {/* Active Green Card Pass Banner */}
-        {enrollmentData?.active_green_card && (
+        {activeGreenCard && (() => {
+          const gcDays = computeDaysRemaining(activeGreenCard.valid_to, activeGreenCard.valid_from) ?? activeGreenCard.days_remaining;
+          return (
           <div className="bg-gradient-to-r from-purple-50 via-indigo-50 to-purple-50 border border-purple-200 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
             <div className="flex items-start sm:items-center gap-3">
               <div className="w-9 h-9 rounded-full bg-purple-100 border border-purple-300 flex items-center justify-center text-purple-700 shrink-0">
@@ -1254,11 +1270,11 @@ export default function StudentDetailPage() {
                 <p className="text-[11px] text-purple-900 font-medium mt-0.5">
                   Entitled to attend all classes & subjects • Pass validity:{' '}
                   <span className="font-mono font-bold text-purple-950">
-                    {enrollmentData.active_green_card.valid_from} → {enrollmentData.active_green_card.valid_to}
+                    {activeGreenCard.valid_from} → {activeGreenCard.valid_to}
                   </span>
-                  {enrollmentData.active_green_card.days_remaining !== null && enrollmentData.active_green_card.days_remaining !== undefined && !['CANCELLED', 'REVOKED'].includes(enrollmentData.active_green_card.status) && (
+                  {gcDays !== null && gcDays !== undefined && !['CANCELLED', 'REVOKED', 'DISCONTINUED'].includes(activeGreenCard.status) && (
                     <span className="ml-1.5 px-1.5 py-0.2 rounded bg-purple-200/70 text-purple-900 font-bold font-mono text-[10px]">
-                      {enrollmentData.active_green_card.days_remaining}d remaining
+                      {gcDays}d remaining
                     </span>
                   )}
                 </p>
@@ -1267,11 +1283,11 @@ export default function StudentDetailPage() {
             <div className="flex items-center justify-between sm:justify-end gap-3 text-left sm:text-right text-xs">
               <div>
                 <span className="font-mono font-bold text-purple-950 block">
-                  ₹{Number(enrollmentData.active_green_card.net_price).toFixed(2)}
+                  ₹{Number(activeGreenCard.net_price).toFixed(2)}
                 </span>
-                {Number(enrollmentData.active_green_card.balance_due) > 0 ? (
+                {Number(activeGreenCard.balance_due) > 0 ? (
                   <span className="text-[11px] font-mono text-rose-700 font-bold block">
-                    Due: ₹{Number(enrollmentData.active_green_card.balance_due).toFixed(2)}
+                    Due: ₹{Number(activeGreenCard.balance_due).toFixed(2)}
                   </span>
                 ) : (
                   <span className="text-[10px] text-emerald-800 font-bold block">
@@ -1279,16 +1295,16 @@ export default function StudentDetailPage() {
                   </span>
                 )}
                 <span className="text-[10px] text-purple-700 font-mono block">
-                  Invoice #{enrollmentData.active_green_card.admission_number}
+                  Invoice #{activeGreenCard.admission_number}
                 </span>
               </div>
-              {Number(enrollmentData.active_green_card.balance_due) > 0 && !isRevoked && (
+              {Number(activeGreenCard.balance_due) > 0 && !isRevoked && (
                 <Button
                   size="xs"
                   variant="success"
                   icon={CreditCard}
                   onClick={() => {
-                    setTargetAdmissionId(enrollmentData.active_green_card.admission_id);
+                    setTargetAdmissionId(activeGreenCard.admission_id);
                     setPayModalOpen(true);
                   }}
                   title="Collect pending Green Card pass fee"
@@ -1298,10 +1314,11 @@ export default function StudentDetailPage() {
               )}
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* Active Subjects Content: Mobile Cards + Desktop Table */}
-        {!enrollmentData?.active_subjects || enrollmentData.active_subjects.length === 0 ? (
+        {activeSubjects.length === 0 ? (
           <div className="p-6 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-center space-y-2">
             <p className="text-xs text-slate-800 font-semibold">
               No currently active subjects. The student is inactive or between validity cycles.
@@ -1327,7 +1344,9 @@ export default function StudentDetailPage() {
           <div className="space-y-3">
             {/* Mobile Cards (Phone View) */}
             <div className="block sm:hidden space-y-2.5">
-              {enrollmentData.active_subjects.map((item) => (
+              {activeSubjects.map((item) => {
+                const daysRem = computeDaysRemaining(item.valid_to, item.valid_from) ?? item.days_remaining;
+                return (
                 <div key={item.id} className="bg-slate-50/80 border border-purple-200 rounded-xl p-3 space-y-2.5">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
@@ -1369,16 +1388,16 @@ export default function StudentDetailPage() {
                       <div className="font-mono text-black font-semibold text-[11px] mt-0.5">
                         {item.valid_from} → {item.valid_to}
                       </div>
-                      {item.days_remaining !== null && item.days_remaining !== undefined && !['CANCELLED', 'REVOKED'].includes(item.status) && (
+                      {daysRem !== null && daysRem !== undefined && !['CANCELLED', 'REVOKED', 'DISCONTINUED'].includes(item.status) && (
                         <span className={`inline-block mt-0.5 px-1.5 py-0.2 rounded font-bold text-[10px] ${
-                          item.days_remaining <= 3 ? 'bg-rose-100 text-rose-800 border border-rose-200' :
-                          item.days_remaining <= 7 ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                          daysRem <= 3 ? 'bg-rose-100 text-rose-800 border border-rose-200' :
+                          daysRem <= 7 ? 'bg-amber-100 text-amber-800 border border-amber-200' :
                           'bg-emerald-100 text-emerald-800 border border-emerald-200'
                         }`}>
-                          {item.days_remaining}d remaining
+                          {daysRem}d remaining
                         </span>
                       )}
-                      {['CANCELLED', 'REVOKED'].includes(item.status) && (
+                      {['CANCELLED', 'REVOKED', 'DISCONTINUED'].includes(item.status) && (
                         <span className="inline-block mt-0.5 px-1.5 py-0.2 rounded font-bold text-[10px] bg-rose-50 text-rose-800 border border-rose-200">
                           Cancelled
                         </span>
@@ -1458,7 +1477,8 @@ export default function StudentDetailPage() {
                     )}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Desktop Table (Tablet / Desktop View) */}
@@ -1476,7 +1496,9 @@ export default function StudentDetailPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
-                  {enrollmentData.active_subjects.map((item) => (
+                  {activeSubjects.map((item) => {
+                    const daysRem = computeDaysRemaining(item.valid_to, item.valid_from) ?? item.days_remaining;
+                    return (
                     <tr key={item.id} className="hover:bg-purple-50/30 transition">
                       <td className="py-2.5 px-3">
                         <div className="font-bold text-black flex items-center gap-1.5 flex-wrap">
@@ -1512,15 +1534,15 @@ export default function StudentDetailPage() {
                           {item.valid_from} → {item.valid_to}
                         </div>
                         <div className="text-[10px] mt-0.5">
-                          {item.days_remaining !== null && item.days_remaining !== undefined && !['CANCELLED', 'REVOKED'].includes(item.status) ? (
+                          {daysRem !== null && daysRem !== undefined && !['CANCELLED', 'REVOKED', 'DISCONTINUED'].includes(item.status) ? (
                             <span className={`px-1.5 py-0.2 rounded font-bold ${
-                              item.days_remaining <= 3 ? 'bg-rose-100 text-rose-800' :
-                              item.days_remaining <= 7 ? 'bg-amber-100 text-amber-800' :
+                              daysRem <= 3 ? 'bg-rose-100 text-rose-800' :
+                              daysRem <= 7 ? 'bg-amber-100 text-amber-800' :
                               'bg-emerald-100 text-emerald-800'
                             }`}>
-                              {item.days_remaining}d remaining
+                              {daysRem}d remaining
                             </span>
-                          ) : ['CANCELLED', 'REVOKED'].includes(item.status) ? (
+                          ) : ['CANCELLED', 'REVOKED', 'DISCONTINUED'].includes(item.status) ? (
                             <span className="px-1.5 py-0.2 rounded font-bold bg-rose-50 text-rose-800 border border-rose-200">
                               Cancelled
                             </span>
@@ -1592,7 +1614,8 @@ export default function StudentDetailPage() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1600,7 +1623,7 @@ export default function StudentDetailPage() {
             {/* Active Totals Footer */}
             <div className="bg-purple-50/70 border border-purple-200 p-3 sm:p-3.5 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
               <span className="font-bold text-odoo-900">
-                Active Subjects Summary ({enrollmentData.active_subjects.length} active)
+                Active Subjects Summary ({activeSubjects.length} active)
               </span>
               <div className="flex flex-wrap items-center gap-2 sm:gap-4 font-mono font-bold text-xs">
                 <span className="text-black bg-white px-2 py-0.5 rounded border border-purple-200">
@@ -1851,7 +1874,7 @@ export default function StudentDetailPage() {
                             Pay Due (₹{Number(item.balance_due).toFixed(0)})
                           </Button>
                         )}
-                        {!isCancelled && (
+                        {!isCancelled && !isDiscontinued && (
                           <Button
                             size="xs"
                             variant="success-soft"
@@ -1960,7 +1983,7 @@ export default function StudentDetailPage() {
                                   Pay Due
                                 </Button>
                               )}
-                              {!isCancelled && (
+                              {!isCancelled && !isDiscontinued && (
                                 <Button
                                   size="xs"
                                   variant="success-soft"

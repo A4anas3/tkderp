@@ -33,7 +33,7 @@ from app.modules.enquiries.schemas import EnquiryResponse, EnquiryDemoItemCreate
 from app.modules.enquiries.router import create_enquiry_with_demos
 from app.modules.admissions.schemas import AdmissionResponse, RenewalsDueItemResponse
 from app.modules.payments.schemas import FinancialTransactionResponse
-from app.common.active_lines import today_kolkata, is_active_line, derive_student_status
+from app.common.active_lines import today_kolkata, is_active_line, derive_student_status, compute_days_remaining
 from app.core.dependencies import require_cashier_or_admin, require_staff, require_admin
 from app.common.pagination import PageResponse
 from app.modules.verification.router import _get_active_demos_for_student
@@ -355,7 +355,11 @@ async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db),
     # Financial totals for student
     total_adm_count = len(admissions)
     active_adm_count = sum(1 for a in admissions if a.status == "ACTIVE" and getattr(a, "access_status", "ACTIVE") == "ACTIVE")
-    revoked_adm_count = sum(1 for a in admissions if a.status in ["REVOKED", "CANCELLED"] or getattr(a, "access_status", "ACTIVE") == "REVOKED")
+    revoked_adm_count = sum(
+        1 for a in admissions
+        if a.status in ["REVOKED", "CANCELLED", "DISCONTINUED"]
+        or getattr(a, "access_status", "ACTIVE") in ["REVOKED", "CANCELLED", "DISCONTINUED"]
+    )
 
     valid_adms = [
         a for a in admissions
@@ -430,7 +434,11 @@ async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db),
         last_p_date, last_p_amt = last_payment_info.get(itm.id, (None, None))
         if isinstance(last_p_date, datetime):
             last_p_date = last_p_date.date()
-        days_left = (itm.valid_to - today).days if itm.valid_to else None
+        days_left = compute_days_remaining(
+            itm.valid_to,
+            itm.valid_from or (itm.admission.valid_from if itm.admission else None),
+            today,
+        )
 
         if itm.amount_collected >= itm.net_price:
             pay_st = "PAID"
@@ -440,9 +448,9 @@ async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db),
             pay_st = "UNPAID"
 
         is_line_revoked = (
-            itm.access_status in ("REVOKED", "CANCELLED")
-            or getattr(itm, "status", "ACTIVE") in ("REVOKED", "CANCELLED")
-            or getattr(itm.admission, "status", "ACTIVE") in ("REVOKED", "CANCELLED")
+            itm.access_status in ("REVOKED", "CANCELLED", "DISCONTINUED")
+            or getattr(itm, "status", "ACTIVE") in ("REVOKED", "CANCELLED", "DISCONTINUED")
+            or getattr(itm.admission, "status", "ACTIVE") in ("REVOKED", "CANCELLED", "DISCONTINUED")
             or getattr(itm.admission, "document_status", "VALID") == "VOID"
         )
         if is_line_revoked:
@@ -1113,6 +1121,9 @@ async def get_student_last_fee_period(
         .where(
             Admission.student_id == student_id,
             Admission.status == "ACTIVE",
+            Admission.document_status == "VALID",
+            AdmissionItem.status.notin_(["DISCONTINUED", "REVOKED", "CANCELLED"]),
+            AdmissionItem.access_status.notin_(["DISCONTINUED", "REVOKED", "CANCELLED"]),
             AdmissionItem.item_type != "GREEN_CARD"
         )
     )
@@ -1169,7 +1180,7 @@ async def get_student_renewals_due(
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
 
-    today = date.today()
+    today = today_kolkata()
     window_end = today + timedelta(days=days)
     gap_limit = getattr(settings, "RENEWAL_GAP_RESET_DAYS", 30)
 
@@ -1179,7 +1190,8 @@ async def get_student_renewals_due(
         AdmissionItem.status.notin_(["DISCONTINUED", "REVOKED", "CANCELLED"]),
         AdmissionItem.access_status.notin_(["REVOKED", "CANCELLED", "DISCONTINUED"]),
         Admission.document_status == "VALID",
-        Admission.status.notin_(["CANCELLED", "REVOKED"]),
+        Admission.status.notin_(["CANCELLED", "REVOKED", "DISCONTINUED"]),
+        Admission.access_status.notin_(["REVOKED", "CANCELLED", "DISCONTINUED"]),
         AdmissionItem.valid_to != None,
         AdmissionItem.valid_to <= window_end
     ]
@@ -1206,7 +1218,7 @@ async def get_student_renewals_due(
             select(AdmissionItem.renewed_from_item_id)
             .where(
                 AdmissionItem.renewed_from_item_id.in_(item_ids),
-                AdmissionItem.status != "DISCONTINUED"
+                AdmissionItem.status.notin_(["DISCONTINUED", "REVOKED", "CANCELLED"])
             )
         )
         r_res = await db.execute(r_stmt)
@@ -1214,7 +1226,7 @@ async def get_student_renewals_due(
 
     results = []
     for itm, adm, stu, bch in rows:
-        d_remaining = (itm.valid_to - today).days if itm.valid_to else 0
+        d_remaining = compute_days_remaining(itm.valid_to, itm.valid_from or adm.valid_from, today) or 0
         results.append(
             RenewalsDueItemResponse(
                 item_id=itm.id,
@@ -1265,7 +1277,7 @@ async def get_student_active_enrollment(
     )
     rows = (await db.execute(stmt)).all()
 
-    today = date.today()
+    today = today_kolkata()
     active_green_card = None
     active_subjects_dict = {}  # subj_key -> list of (item, adm, item_dict)
     historical_subjects = []
@@ -1306,10 +1318,15 @@ async def get_student_active_enrollment(
             item.status in ["REVOKED", "CANCELLED"]
         )
         is_discontinued = (
+            adm.status == "DISCONTINUED" or
+            getattr(adm, "access_status", "ACTIVE") == "DISCONTINUED" or
             item.status == "DISCONTINUED" or
             getattr(item, "access_status", "ACTIVE") == "DISCONTINUED"
         )
         is_inactive_or_cancelled = is_cancelled or is_discontinued or getattr(item, "access_status", "ACTIVE") in ["REVOKED", "CANCELLED"]
+
+        eff_from = item.valid_from or adm.valid_from
+        eff_to = item.valid_to or adm.valid_to
 
         # Determine active status: parent admission and item must both be ACTIVE, and valid_to must cover today or future
         is_active = (
@@ -1318,12 +1335,12 @@ async def get_student_active_enrollment(
             getattr(adm, "access_status", "ACTIVE") == "ACTIVE" and
             item.status == "ACTIVE" and
             getattr(item, "access_status", "ACTIVE") == "ACTIVE" and
-            (item.valid_to is None or item.valid_to >= today)
+            (eff_to is None or eff_to >= today)
         )
 
         days_remaining = None
-        if not is_inactive_or_cancelled and item.valid_to:
-            days_remaining = (item.valid_to - today).days
+        if not is_inactive_or_cancelled and eff_to:
+            days_remaining = compute_days_remaining(eff_to, eff_from, today)
 
         # Clean subject name: strip any legacy "[Renewal] " prefix from display
         raw_name = item.item_name_snapshot or ""
@@ -1346,7 +1363,7 @@ async def get_student_active_enrollment(
             is_item_overdue = False
             can_cancel = False
         else:
-            is_item_expired = (days_remaining is not None and days_remaining < 0) or item.status == "EXPIRED" or adm.status == "EXPIRED"
+            is_item_expired = (eff_to is not None and eff_to < today) or item.status == "EXPIRED" or adm.status == "EXPIRED"
             is_item_overdue = is_item_expired and item.balance_due > Decimal("0.00")
             item_status = "EXPIRED" if is_item_expired and item.status not in ["REVOKED", "CANCELLED", "SUSPENDED", "DISCONTINUED"] else (item.status if adm.status == "ACTIVE" else adm.status)
             can_cancel = item.can_cancel
@@ -1439,7 +1456,7 @@ async def get_student_active_enrollment(
 
         days_remaining = None
         if latest_end:
-            days_remaining = (latest_end - today).days
+            days_remaining = compute_days_remaining(latest_end, earliest_start, today)
 
         source_demo_no = next(
             (x[0].source_demo_number for x in cycle_list if x[0].source_demo_number),

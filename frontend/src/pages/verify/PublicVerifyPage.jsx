@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 import { formatValidityPeriod } from '../../utils/idCardHelpers';
+import { computeDaysRemaining } from '../../utils/dateCycleUtils';
 
 export default function PublicVerifyPage() {
   const { identifier } = useParams();
@@ -300,7 +301,11 @@ export default function PublicVerifyPage() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {data.active_courses.map((course, idx) => (
+                  {data.active_courses
+                    .filter((c) => !['CANCELLED', 'REVOKED', 'DISCONTINUED'].includes((c.status || 'ACTIVE').toUpperCase()))
+                    .map((course, idx) => {
+                      const daysRem = computeDaysRemaining(course.valid_to, course.valid_from) ?? course.days_remaining;
+                      return (
                     <div
                       key={idx}
                       className="p-3 bg-white rounded-lg border-2 border-slate-300 space-y-1.5 text-xs shadow-2xs"
@@ -332,20 +337,21 @@ export default function PublicVerifyPage() {
                           {course.validity_period}
                         </span>
 
-                        {course.days_remaining !== null && course.days_remaining !== undefined && (
+                        {daysRem !== null && daysRem !== undefined && (
                           <span
                             className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
-                              course.days_remaining <= 5
+                              daysRem <= 5
                                 ? 'bg-rose-100 text-rose-900 border border-rose-300'
                                 : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
                             }`}
                           >
-                            {course.days_remaining} days remaining
+                            {daysRem} days remaining
                           </span>
                         )}
                       </div>
                     </div>
-                  ))}
+                      );
+                    })}
                 </div>
               )}
             </div>

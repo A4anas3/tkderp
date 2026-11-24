@@ -29,7 +29,7 @@ from app.common.calculations import (
 from app.common.pagination import PaginationParams, PageResponse
 from app.common.numbering import next_number
 from app.common.idempotency import get_idempotency_record, save_idempotency_record, build_idempotent_response
-from app.common.active_lines import today_kolkata, is_active_line
+from app.common.active_lines import today_kolkata, is_active_line, compute_days_remaining
 from app.modules.ledger.service import (
     record_payment_service, process_refund_service, recompute_admission_totals,
     update_student_green_card_status, cancel_admission_service, revoke_admission_service,
@@ -103,11 +103,27 @@ async def list_admissions(
     search: Optional[str] = None,
     student_id: Optional[uuid.UUID] = None,
     payment_status: Optional[str] = None,
+    active_only: bool = Query(False),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
     query = select(Admission).options(selectinload(Admission.items).selectinload(AdmissionItem.demo_item))
     count_query = select(func.count(Admission.id))
+
+    if active_only:
+        active_adm_cond = and_(
+            Admission.status == "ACTIVE",
+            Admission.access_status == "ACTIVE",
+            Admission.document_status == "VALID",
+            Admission.items.any(
+                and_(
+                    AdmissionItem.status.notin_(["DISCONTINUED", "CANCELLED", "REVOKED", "EXPIRED"]),
+                    AdmissionItem.access_status.notin_(["DISCONTINUED", "CANCELLED", "REVOKED", "EXPIRED"]),
+                )
+            ),
+        )
+        query = query.where(active_adm_cond)
+        count_query = count_query.where(active_adm_cond)
 
     if search:
         search_pattern = f"%{search.strip()}%"
@@ -516,7 +532,7 @@ async def get_renewals_due(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
-    today = date.today()
+    today = today_kolkata()
     window_end = today + timedelta(days=days)
     gap_limit = getattr(settings, "RENEWAL_GAP_RESET_DAYS", 30)
 
@@ -525,7 +541,8 @@ async def get_renewals_due(
         AdmissionItem.status.notin_(["DISCONTINUED", "REVOKED", "CANCELLED"]),
         AdmissionItem.access_status.notin_(["REVOKED", "CANCELLED", "DISCONTINUED"]),
         Admission.document_status == "VALID",
-        Admission.status.notin_(["CANCELLED", "REVOKED"]),
+        Admission.status.notin_(["CANCELLED", "REVOKED", "DISCONTINUED"]),
+        Admission.access_status.notin_(["REVOKED", "CANCELLED", "DISCONTINUED"]),
         AdmissionItem.valid_to != None,
         AdmissionItem.valid_to <= window_end
     ]
@@ -558,7 +575,7 @@ async def get_renewals_due(
             select(AdmissionItem.renewed_from_item_id)
             .where(
                 AdmissionItem.renewed_from_item_id.in_(item_ids),
-                AdmissionItem.status != "DISCONTINUED"
+                AdmissionItem.status.notin_(["DISCONTINUED", "REVOKED", "CANCELLED"])
             )
         )
         r_res = await db.execute(r_stmt)
@@ -566,7 +583,7 @@ async def get_renewals_due(
 
     results = []
     for itm, adm, stu, bch in rows:
-        d_remaining = (itm.valid_to - today).days if itm.valid_to else 0
+        d_remaining = compute_days_remaining(itm.valid_to, itm.valid_from or adm.valid_from, today) or 0
         results.append(
             RenewalsDueItemResponse(
                 item_id=itm.id,

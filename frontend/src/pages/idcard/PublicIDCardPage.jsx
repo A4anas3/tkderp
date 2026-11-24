@@ -18,6 +18,7 @@ import {
 import { QRCodeSVG } from 'qrcode.react';
 import axios from 'axios';
 import { formatDemoDates } from '../../utils/idCardHelpers';
+import { computeDaysRemaining } from '../../utils/dateCycleUtils';
 
 export default function PublicIDCardPage() {
   const { identifier: pathIdentifier } = useParams();
@@ -434,7 +435,11 @@ export default function PublicIDCardPage() {
                       </div>
                     ) : (
                       <div className="space-y-2 max-h-[220px] overflow-y-auto pr-0.5">
-                        {cardData.active_courses.map((course, idx) => (
+                        {cardData.active_courses
+                          .filter((c) => !['CANCELLED', 'REVOKED', 'DISCONTINUED'].includes((c.status || 'ACTIVE').toUpperCase()))
+                          .map((course, idx) => {
+                            const daysRem = computeDaysRemaining(course.valid_to, course.valid_from) ?? course.days_remaining;
+                            return (
                           <div
                             key={idx}
                             className="p-2 bg-slate-50 rounded-lg border border-slate-300 text-xs space-y-1"
@@ -475,20 +480,21 @@ export default function PublicIDCardPage() {
                                 {course.validity_period}
                               </span>
 
-                              {course.days_remaining !== null && course.days_remaining !== undefined && (
+                              {daysRem !== null && daysRem !== undefined && (
                                 <span
                                   className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
-                                    course.days_remaining <= 5
+                                    daysRem <= 5
                                       ? 'bg-rose-100 text-rose-900 border border-rose-300'
                                       : 'bg-emerald-100 text-emerald-900 border border-emerald-200'
                                   }`}
                                 >
-                                  {course.days_remaining}d remaining
+                                  {daysRem}d remaining
                                 </span>
                               )}
                             </div>
                           </div>
-                        ))}
+                            );
+                          })}
                       </div>
                     )}
                   </div>

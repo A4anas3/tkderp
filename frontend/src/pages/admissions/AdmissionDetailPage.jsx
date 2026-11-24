@@ -136,12 +136,12 @@ export default function AdmissionDetailPage() {
 
   const isRevoked = admission.status === 'REVOKED';
   const isCancelled = admission.status === 'CANCELLED';
-  const isInactive = isRevoked || isCancelled;
+  const isInactive = isRevoked || isCancelled || admission.status === 'DISCONTINUED';
   const isActive = admission.status === 'ACTIVE';
 
   const validFrom = admission.valid_from || admission.admission_date;
   const validTo = admission.valid_to;
-  const cycleInfo = evaluateCycleStatus(validTo, admission.balance_due, isInactive);
+  const cycleInfo = evaluateCycleStatus(validTo, admission.balance_due, isInactive, validFrom);
 
   return (
     <div className="space-y-4 sm:space-y-5">

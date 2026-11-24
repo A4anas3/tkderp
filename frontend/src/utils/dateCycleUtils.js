@@ -78,7 +78,31 @@ export function getCleanCancelReason(reason) {
   return trimmed;
 }
 
-export function evaluateCycleStatus(endDateStr, balanceDue = 0, isCancelledOrRevoked = false) {
+export function parseLocalDate(dateStr) {
+  if (!dateStr) return null;
+  const parts = String(dateStr).split('T')[0].split('-');
+  if (parts.length !== 3) return null;
+  const y = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10) - 1;
+  const d = parseInt(parts[2], 10);
+  if (isNaN(y) || isNaN(m) || isNaN(d)) return null;
+  const dt = new Date(y, m, d);
+  dt.setHours(0, 0, 0, 0);
+  return dt;
+}
+
+export function computeDaysRemaining(validToStr, validFromStr = null) {
+  const end = parseLocalDate(validToStr);
+  if (!end) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const start = parseLocalDate(validFromStr);
+  const refDate = start && start > today ? start : today;
+  const diffTime = end.getTime() - refDate.getTime();
+  return Math.round(diffTime / (1000 * 60 * 60 * 24));
+}
+
+export function evaluateCycleStatus(endDateStr, balanceDue = 0, isCancelledOrRevoked = false, startDateStr = null) {
   if (isCancelledOrRevoked) {
     return {
       status: 'CANCELLED',
@@ -99,15 +123,16 @@ export function evaluateCycleStatus(endDateStr, balanceDue = 0, isCancelledOrRev
     };
   }
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const parts = endDateStr.split('T')[0].split('-');
-  const end = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-  end.setHours(0, 0, 0, 0);
-
-  const diffTime = end.getTime() - today.getTime();
-  const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  const daysRemaining = computeDaysRemaining(endDateStr, startDateStr);
+  if (daysRemaining === null) {
+    return {
+      status: 'UNKNOWN',
+      label: 'Unknown',
+      variant: 'neutral',
+      daysRemaining: null,
+      subtext: 'No cycle set',
+    };
+  }
 
   if (daysRemaining < 0) {
     return {
