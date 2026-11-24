@@ -215,6 +215,14 @@ export const enquiryApi = {
     const res = await api.post(`/enquiries/${id}/convert`, data);
     return res.data;
   },
+  checkStudentByMobile: async (mobile) => {
+    const res = await api.get('/enquiries/check-student', { params: { mobile } });
+    return res.data;
+  },
+  registerStudentStandalone: async (data) => {
+    const res = await api.post('/enquiries/register-student', data);
+    return res.data;
+  },
   registerStudent: async (id, data = {}) => {
     const res = await api.post(`/enquiries/${id}/register-student`, data);
     return res.data;

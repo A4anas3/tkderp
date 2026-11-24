@@ -25,7 +25,7 @@ async def test_teacher_demos_permissions_and_active_filter():
         teacher_token = teacher_login.json()["access_token"]
         teacher_headers = {"Authorization": f"Bearer {teacher_token}"}
 
-        # 3. Create a test enquiry with active demo items via Admin
+        # 3. Register a test student first (register-first flow), then create active demo items via Admin
         today = date.today()
         # Fetch available subject
         sub_res = await client.get("/api/subjects", headers=admin_headers)
@@ -38,9 +38,18 @@ async def test_teacher_demos_permissions_and_active_filter():
         teachers = tch_res.json()["items"]
         teacher = teachers[0]
 
+        unique_phone = f"9875{str(uuid.uuid4().int)[:6]}"
+        reg_stu_res = await client.post("/api/enquiries/register-student", json={
+            "name": "Test Active Demo Student",
+            "mobile": unique_phone,
+        }, headers=admin_headers)
+        assert reg_stu_res.status_code == 200
+        demo_student_id = reg_stu_res.json()["student_id"]
+
         enq_payload = {
+            "student_id": demo_student_id,
             "student_name": "Test Active Demo Student",
-            "mobile": "9876543210",
+            "mobile": unique_phone,
             "purpose": "Trial Class",
             "notes": "Testing active demos view",
             "status": "ACTIVE_DEMO",

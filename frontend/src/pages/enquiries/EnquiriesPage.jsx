@@ -30,6 +30,9 @@ import {
   Award,
   Layers,
   Search,
+  AlertTriangle,
+  ArrowRight,
+  Loader2,
 } from 'lucide-react';
 import DataTable from '../../components/common/DataTable';
 import Modal from '../../components/common/Modal';
@@ -126,10 +129,16 @@ export default function EnquiriesPage() {
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
   // ==========================================
-  // ADD ENQUIRY & MULTI-SUBJECT DEMO CART MODAL
+  // ADD ENQUIRY & MULTI-SUBJECT DEMO CART MODAL (REGISTER-FIRST)
   // ==========================================
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [demoPhoneInput, setDemoPhoneInput] = useState('');
+  const [phoneCheckLoading, setPhoneCheckLoading] = useState(false);
+  const [phoneCheckResult, setPhoneCheckResult] = useState(null);
+  const [selectedDemoStudent, setSelectedDemoStudent] = useState(null);
+  const [registerForDemoOpen, setRegisterForDemoOpen] = useState(false);
+  const [registerForDemoForceCreate, setRegisterForDemoForceCreate] = useState(false);
   const [enquiryForm, setEnquiryForm] = useState({
     student_name: '',
     mobile: '',
@@ -347,26 +356,109 @@ export default function EnquiriesPage() {
     }
   }, [activeTab, loadEnquiries, loadSummary, loadDeadlines, loadDemos, loadAnalytics]);
 
-  // Create Enquiry with Multi-Subject Cart
-  const handleCreateEnquiry = async (e) => {
-    e.preventDefault();
-    if (!enquiryForm.student_name.trim()) {
-      error('Student name is required');
+  const resetAddDemoModal = useCallback(() => {
+    setAddModalOpen(false);
+    setDemoPhoneInput('');
+    setPhoneCheckLoading(false);
+    setPhoneCheckResult(null);
+    setSelectedDemoStudent(null);
+    setRegisterForDemoOpen(false);
+    setRegisterForDemoForceCreate(false);
+    setEnquiryForm({
+      student_name: '',
+      mobile: '',
+      purpose: 'Class 9-10 Coaching Trial',
+      status: 'ACTIVE_DEMO',
+      notes: '',
+    });
+    setDemoCart([]);
+  }, []);
+
+  const runDemoPhoneCheck = useCallback(async (rawMobile) => {
+    const clean = cleanMobileInput(rawMobile);
+    if (clean.length !== 10) {
+      setPhoneCheckResult(null);
+      setSelectedDemoStudent(null);
+      return null;
+    }
+
+    setPhoneCheckLoading(true);
+    try {
+      const res = await enquiryApi.checkStudentByMobile(clean);
+      setPhoneCheckResult(res);
+      if (res?.exists && !res?.multiple_matches && res?.student) {
+        setSelectedDemoStudent(res.student);
+        setEnquiryForm((prev) => ({
+          ...prev,
+          student_name: res.student.name || '',
+          mobile: res.student.mobile || clean,
+        }));
+      } else {
+        setSelectedDemoStudent(null);
+      }
+      return res;
+    } catch (err) {
+      error(err.message || 'Failed to check student by phone');
+      return null;
+    } finally {
+      setPhoneCheckLoading(false);
+    }
+  }, [error]);
+
+  // Auto-check phone (last 10 digits) as soon as 10 digits are entered in demo modal
+  useEffect(() => {
+    if (!addModalOpen || registerForDemoOpen) return;
+    const clean = cleanMobileInput(demoPhoneInput);
+    if (clean.length !== 10) {
+      setPhoneCheckResult(null);
+      setSelectedDemoStudent(null);
+      return;
+    }
+    if (selectedDemoStudent && cleanMobileInput(selectedDemoStudent.mobile) === clean) {
       return;
     }
 
-    if (enquiryForm.mobile) {
-      const clean = cleanMobileInput(enquiryForm.mobile);
-      if (clean.length !== 10 || !/^\d{10}$/.test(clean)) {
-        error('Contact mobile must be exactly 10 numeric digits');
+    const timer = setTimeout(() => {
+      runDemoPhoneCheck(clean);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [demoPhoneInput, addModalOpen, registerForDemoOpen, selectedDemoStudent, runDemoPhoneCheck]);
+
+  // Create Demo Enquiry (Register-First: student MUST already exist in DB)
+  const handleCreateEnquiry = async (e) => {
+    e.preventDefault();
+    const cleanMob = cleanMobileInput(demoPhoneInput);
+
+    if (cleanMob.length !== 10 || !/^\d{10}$/.test(cleanMob)) {
+      error('A valid 10-digit student mobile number is required before giving a demo');
+      return;
+    }
+
+    if (!selectedDemoStudent) {
+      const checkRes = phoneCheckResult || (await runDemoPhoneCheck(cleanMob));
+      if (checkRes?.multiple_matches) {
+        error('Multiple students match this phone number. Please select a student or register a new profile first.');
+        return;
+      }
+      if (checkRes?.exists && checkRes?.student) {
+        setSelectedDemoStudent(checkRes.student);
+      } else {
+        // Student is NOT registered -> open registration modal FIRST
+        setRegisterForDemoForceCreate(false);
+        setRegisterForDemoOpen(true);
         return;
       }
     }
 
+    const targetStudent = selectedDemoStudent || phoneCheckResult?.student;
+    if (!targetStudent?.id) {
+      setRegisterForDemoForceCreate(false);
+      setRegisterForDemoOpen(true);
+      return;
+    }
+
     setSubmitting(true);
     try {
-      const cleanMob = enquiryForm.mobile ? cleanMobileInput(enquiryForm.mobile) : null;
-
       // Construct demo_items payload from cart
       const demoItemsPayload = demoCart.map((c) => ({
         subject_id: c.subject_id,
@@ -388,29 +480,22 @@ export default function EnquiriesPage() {
       const firstCartItem = demoCart[0];
 
       const payload = {
-        student_name: enquiryForm.student_name.trim(),
-        mobile: cleanMob || null,
+        student_id: targetStudent.id,
+        student_name: targetStudent.name,
+        mobile: targetStudent.mobile || cleanMob,
         purpose: enquiryForm.purpose.trim() || null,
         interested_subject: subjectSummary,
         demo_start_date: firstCartItem?.demo_start_date || new Date().toISOString().split('T')[0],
         demo_duration_days: firstCartItem?.demo_duration_days || 3,
-        status: enquiryForm.status,
+        status: 'ACTIVE_DEMO',
         notes: enquiryForm.notes.trim() || null,
         demo_items: demoItemsPayload,
       };
 
       const res = await enquiryApi.create(payload);
-      success(`Enquiry & ${res.demo_items?.length || 1} Subject Demo Reference Slip(s) created for ${res.student_name}!`);
+      success(`Demo & ${res.demo_items?.length || 1} Subject Demo Reference Slip(s) created for ${res.student_name} (${targetStudent.student_code})!`);
 
-      setAddModalOpen(false);
-      setEnquiryForm({
-        student_name: '',
-        mobile: '',
-        purpose: 'Class 9-10 Coaching Trial',
-        status: 'ACTIVE_DEMO',
-        notes: '',
-      });
-      setDemoCart([]);
+      resetAddDemoModal();
 
       // Prompt to view / print demo slip
       setPassModalEnquiry(res);
@@ -425,7 +510,7 @@ export default function EnquiriesPage() {
         loadAnalytics();
       }
     } catch (err) {
-      error(err.message || 'Failed to create enquiry');
+      error(err.message || 'Failed to create demo');
     } finally {
       setSubmitting(false);
     }
@@ -1230,7 +1315,14 @@ export default function EnquiriesPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="primary" icon={Plus} onClick={() => setAddModalOpen(true)}>
+          <Button
+            variant="primary"
+            icon={Plus}
+            onClick={() => {
+              resetAddDemoModal();
+              setAddModalOpen(true);
+            }}
+          >
             New Enquiry / Demo Pass
           </Button>
         </div>
@@ -2040,259 +2132,443 @@ export default function EnquiriesPage() {
       )}
 
       {/* ========================================================= */}
-      {/* MODAL: ADD ENQUIRY & MULTI-SUBJECT DEMO CART */}
+      {/* MODAL: REGISTER-FIRST DEMO CREATION & MULTI-SUBJECT CART  */}
       {/* ========================================================= */}
       <Modal
-        isOpen={addModalOpen}
-        onClose={() => setAddModalOpen(false)}
-        title="Record New Student Enquiry & Demo Trial Pass"
-        subtitle="Enroll candidate into one or multiple subject demo classes with individual tracking codes"
+        isOpen={addModalOpen && !registerForDemoOpen}
+        onClose={resetAddDemoModal}
+        title="New Demo Trial Pass / Enquiry"
+        subtitle="Check student phone first (register-first), then select demo subjects"
         maxWidth="max-w-2xl"
       >
         <form onSubmit={handleCreateEnquiry} className="space-y-4 text-xs">
-          {/* Candidate Bio Information */}
+          {/* STEP 1: Student Phone Lookup (Register-First) */}
           <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3">
-            <h4 className="font-bold text-black text-xs uppercase tracking-wider flex items-center gap-1.5">
-              <User className="w-3.5 h-3.5 text-odoo-600" />
-              <span>Candidate Information</span>
-            </h4>
-
-            <Input
-              label="Student Full Name"
-              value={enquiryForm.student_name}
-              onChange={(e) => setEnquiryForm({ ...enquiryForm, student_name: e.target.value })}
-              placeholder="e.g. Priyanshu Sharma"
-              required
-              autoFocus
-            />
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Input
-                label="Contact Mobile (Optional)"
-                type="tel"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                maxLength={10}
-                value={enquiryForm.mobile}
-                onChange={(e) =>
-                  setEnquiryForm({ ...enquiryForm, mobile: cleanMobileInput(e.target.value) })
-                }
-                placeholder="10-digit mobile"
-                error={
-                  enquiryForm.mobile && enquiryForm.mobile.length < 10
-                    ? `Must be 10 digits (${enquiryForm.mobile.length}/10)`
-                    : null
-                }
-                helperText={
-                  enquiryForm.mobile && enquiryForm.mobile.length === 10
-                    ? '✓ Valid 10-digit mobile'
-                    : 'Optional 10-digit mobile'
-                }
-              />
-              <Input
-                label="Purpose / Target Class"
-                value={enquiryForm.purpose}
-                onChange={(e) => setEnquiryForm({ ...enquiryForm, purpose: e.target.value })}
-                placeholder="e.g. JEE Preparation / Class 10 Foundation"
-              />
-            </div>
-          </div>
-
-          {/* Multi-Subject Demo Items Cart Builder */}
-          <div className="bg-white p-3.5 rounded-xl border-2 border-purple-100 space-y-3">
-            <div className="flex items-center justify-between border-b border-indigo-50 pb-2">
-              <div className="flex items-center gap-1.5">
-                <BookOpen className="w-4 h-4 text-odoo-600" />
-                <h4 className="font-bold text-black text-xs uppercase tracking-wider">
-                  Book Demo Trial Subjects (Cart Selection)
-                </h4>
-              </div>
-              <span className="text-[10px] font-bold text-odoo-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
-                {demoCart.length} Subject(s) in Cart
-              </span>
+            <div className="flex items-center justify-between">
+              <h4 className="font-bold text-black text-xs uppercase tracking-wider flex items-center gap-1.5">
+                <Phone className="w-3.5 h-3.5 text-odoo-600" />
+                <span>Step 1: Student Phone Check (Last 10 Digits)</span>
+              </h4>
+              {selectedDemoStudent && (
+                <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-300">
+                  ✓ Registered Student Linked
+                </span>
+              )}
             </div>
 
-            {/* Subject Cart Draft Inputs */}
-            <div className="bg-slate-50/70 p-3 rounded-lg border border-slate-200 space-y-2.5">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Select Trial Subject *
-                  </label>
-                  <select
-                    value={cartDraft.subject_id}
-                    onChange={(e) => handleCartSubjectChange(e.target.value)}
-                    className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg text-black font-semibold focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600"
-                  >
-                    <option value="">-- Choose Subject to Demo --</option>
-                    {availableSubjects.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name} ({s.subject_code || 'SUB'})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Faculty / Teacher Assigned
-                  </label>
-                  <select
-                    value={cartDraft.teacher_id}
-                    onChange={(e) =>
-                      setCartDraft((prev) => ({ ...prev, teacher_id: e.target.value }))
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2">
+              <div className="flex-1">
+                <Input
+                  label="Student Mobile Number (10 Digits)"
+                  type="tel"
+                  inputMode="numeric"
+                  maxLength={16}
+                  value={demoPhoneInput}
+                  onChange={(e) => {
+                    const clean = cleanMobileInput(e.target.value);
+                    setDemoPhoneInput(clean);
+                    if (selectedDemoStudent && cleanMobileInput(selectedDemoStudent.mobile) !== clean) {
+                      setSelectedDemoStudent(null);
                     }
-                    className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg text-black font-semibold focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600"
-                  >
-                    <option value="">-- Select Teacher --</option>
-                    {availableTeachers.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                    if (clean.length < 10) {
+                      setPhoneCheckResult(null);
+                    }
+                  }}
+                  placeholder="Enter 10-digit mobile (e.g. 9876543210)"
+                  required
+                  autoFocus
+                  error={
+                    demoPhoneInput && demoPhoneInput.length < 10
+                      ? `Must be 10 digits (${demoPhoneInput.length}/10)`
+                      : null
+                  }
+                />
               </div>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                loading={phoneCheckLoading}
+                disabled={phoneCheckLoading || cleanMobileInput(demoPhoneInput).length !== 10}
+                onClick={() => runDemoPhoneCheck(demoPhoneInput)}
+                className="shrink-0"
+              >
+                Check Phone
+              </Button>
+            </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Classroom / Room
-                  </label>
-                  <input
-                    type="text"
-                    value={cartDraft.hall_number_snapshot}
-                    onChange={(e) =>
-                      setCartDraft((prev) => ({ ...prev, hall_number_snapshot: e.target.value }))
-                    }
-                    placeholder="e.g. Hall 1, Lab 2"
-                    className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg text-black font-semibold focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Demo Start Date
-                  </label>
-                  <input
-                    type="date"
-                    value={cartDraft.demo_start_date}
-                    onChange={(e) =>
-                      setCartDraft((prev) => ({ ...prev, demo_start_date: e.target.value }))
-                    }
-                    className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg text-black font-semibold focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Duration (Days)
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="30"
-                    value={cartDraft.demo_duration_days}
-                    onChange={(e) =>
-                      setCartDraft((prev) => ({
-                        ...prev,
-                        demo_duration_days: parseInt(e.target.value, 10) || 1,
-                      }))
-                    }
-                    className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg text-black font-semibold focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600"
-                  />
-                </div>
+            {phoneCheckLoading && (
+              <div className="flex items-center gap-2 text-xs text-slate-600 py-1">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-odoo-600" />
+                <span>Checking registered students by phone...</span>
               </div>
+            )}
 
-              <div className="flex justify-end pt-1">
+            {/* Case A: Registered Student Linked */}
+            {!phoneCheckLoading && selectedDemoStudent && (
+              <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-start gap-2.5">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-bold text-emerald-950 text-sm">
+                        {selectedDemoStudent.name}
+                      </span>
+                      <span className="font-mono font-bold text-emerald-800 bg-white px-2 py-0.5 rounded border border-emerald-300 text-[11px]">
+                        {selectedDemoStudent.student_code}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-emerald-800 mt-0.5">
+                      Mobile: <span className="font-mono">{selectedDemoStudent.mobile}</span>
+                      {selectedDemoStudent.father_name && ` • Father: ${selectedDemoStudent.father_name}`}
+                    </div>
+                  </div>
+                </div>
                 <Button
                   type="button"
-                  variant="secondary"
                   size="xs"
-                  icon={Plus}
-                  onClick={handleAddSubjectToCart}
+                  variant="secondary"
+                  onClick={() => {
+                    setSelectedDemoStudent(null);
+                    setPhoneCheckResult(null);
+                    setDemoPhoneInput('');
+                  }}
                 >
-                  + Add Subject to Demo Cart
+                  Change
                 </Button>
               </div>
-            </div>
+            )}
 
-            {/* Selected Demo Subjects List */}
-            {demoCart.length > 0 ? (
-              <div className="space-y-1.5 border border-slate-200 rounded-lg p-2 bg-white">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
-                  Booked Trial Subjects (Each receives a unique Reference Code):
-                </span>
-                <div className="divide-y divide-slate-100">
-                  {demoCart.map((item, index) => (
+            {/* Case B: Multiple Registered Students Share This Phone */}
+            {!phoneCheckLoading && !selectedDemoStudent && phoneCheckResult?.multiple_matches && (
+              <div className="space-y-2.5">
+                <div className="p-2.5 bg-amber-50 border border-amber-300 rounded-lg flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-amber-950">
+                      Multiple students ({phoneCheckResult.matches?.length || 0}) match this phone number.
+                    </p>
+                    <p className="text-[11px] text-amber-800">
+                      Select an existing student profile for this demo, or register a new profile.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="border border-slate-200 rounded-lg bg-white divide-y divide-slate-100 overflow-hidden">
+                  {(phoneCheckResult.matches || []).map((m) => (
                     <div
-                      key={item.tempId}
-                      className="py-2 px-2 flex items-center justify-between text-xs hover:bg-slate-50 rounded"
+                      key={m.id}
+                      className="px-3 py-2 flex items-center justify-between gap-2 hover:bg-slate-50"
                     >
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-odoo-700 bg-purple-50 px-1.5 py-0.2 rounded text-[10px] border border-purple-200">
-                            #{index + 1}
+                          <span className="font-mono font-bold text-odoo-700 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200 text-[11px]">
+                            {m.student_code}
                           </span>
-                          <span className="font-bold text-black">{item.subject_name_snapshot}</span>
+                          <span className="font-bold text-black">{m.name}</span>
                         </div>
-                        <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5">
-                          <span>Faculty: <strong className="text-slate-700">{item.teacher_name_snapshot}</strong></span>
-                          <span>•</span>
-                          <span>Room: <strong className="text-slate-700">{item.hall_number_snapshot}</strong></span>
-                          <span>•</span>
-                          <span>Duration: <strong>{item.demo_duration_days} days</strong></span>
+                        <div className="text-[11px] text-slate-500 mt-0.5">
+                          Father: {m.father_name || 'N/A'} • Mobile: {m.mobile}
                         </div>
                       </div>
-
-                      <button
+                      <Button
                         type="button"
-                        onClick={() => handleRemoveCartItem(item.tempId)}
-                        className="p-1 rounded text-rose-500 hover:text-rose-700 hover:bg-rose-50 cursor-pointer"
-                        title="Remove from cart"
+                        size="xs"
+                        variant="primary"
+                        onClick={() => {
+                          setSelectedDemoStudent(m);
+                          setEnquiryForm((prev) => ({
+                            ...prev,
+                            student_name: m.name,
+                            mobile: m.mobile || cleanMobileInput(demoPhoneInput),
+                          }));
+                        }}
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                        Select
+                      </Button>
                     </div>
                   ))}
                 </div>
-              </div>
-            ) : (
-              <div className="bg-slate-50 border border-dashed border-slate-300 rounded-lg p-3 text-center text-slate-500 text-xs">
-                No subjects added to demo cart yet. Select a subject above and click "+ Add Subject to Demo Cart".
+
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="neutral"
+                    onClick={() => {
+                      setRegisterForDemoForceCreate(true);
+                      setRegisterForDemoOpen(true);
+                    }}
+                  >
+                    None of these (Register New Student)
+                  </Button>
+                </div>
               </div>
             )}
+
+            {/* Case C: Student Not Registered -> Must Register First */}
+            {!phoneCheckLoading &&
+              !selectedDemoStudent &&
+              phoneCheckResult &&
+              phoneCheckResult.valid &&
+              !phoneCheckResult.exists && (
+                <div className="p-3 bg-amber-50 border border-amber-300 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-2.5">
+                    <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-amber-950 text-xs">
+                        Student Not Registered
+                      </p>
+                      <p className="text-[11px] text-amber-800 mt-0.5">
+                        No registered student found for mobile <span className="font-mono font-bold">{phoneCheckResult.normalized_mobile}</span>.
+                        Register the student profile first before creating a demo.
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="primary"
+                    icon={ArrowRight}
+                    onClick={() => {
+                      setRegisterForDemoForceCreate(false);
+                      setRegisterForDemoOpen(true);
+                    }}
+                    className="shrink-0"
+                  >
+                    Register Student Profile
+                  </Button>
+                </div>
+              )}
           </div>
 
-          <Input
-            label="Counselor Follow-up Notes (Optional)"
-            value={enquiryForm.notes}
-            onChange={(e) => setEnquiryForm({ ...enquiryForm, notes: e.target.value })}
-            placeholder="e.g. Student referred by school friend, interested in JEE morning class"
-          />
+          {/* STEP 2: Demo Subjects & Details (Only unlocked once registered student exists) */}
+          {selectedDemoStudent ? (
+            <>
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <Input
+                  label="Purpose / Target Class"
+                  value={enquiryForm.purpose}
+                  onChange={(e) => setEnquiryForm({ ...enquiryForm, purpose: e.target.value })}
+                  placeholder="e.g. JEE Preparation / Class 10 Foundation"
+                />
+              </div>
+
+              {/* Multi-Subject Demo Items Cart Builder */}
+              <div className="bg-white p-3.5 rounded-xl border-2 border-purple-100 space-y-3">
+                <div className="flex items-center justify-between border-b border-indigo-50 pb-2">
+                  <div className="flex items-center gap-1.5">
+                    <BookOpen className="w-4 h-4 text-odoo-600" />
+                    <h4 className="font-bold text-black text-xs uppercase tracking-wider">
+                      Step 2: Book Demo Trial Subjects (Cart Selection)
+                    </h4>
+                  </div>
+                  <span className="text-[10px] font-bold text-odoo-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                    {demoCart.length} Subject(s) in Cart
+                  </span>
+                </div>
+
+                {/* Subject Cart Draft Inputs */}
+                <div className="bg-slate-50/70 p-3 rounded-lg border border-slate-200 space-y-2.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Select Trial Subject *
+                      </label>
+                      <select
+                        value={cartDraft.subject_id}
+                        onChange={(e) => handleCartSubjectChange(e.target.value)}
+                        className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg text-black font-semibold focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600"
+                      >
+                        <option value="">-- Choose Subject to Demo --</option>
+                        {availableSubjects.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name} ({s.subject_code || 'SUB'})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Faculty / Teacher Assigned
+                      </label>
+                      <select
+                        value={cartDraft.teacher_id}
+                        onChange={(e) =>
+                          setCartDraft((prev) => ({ ...prev, teacher_id: e.target.value }))
+                        }
+                        className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg text-black font-semibold focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600"
+                      >
+                        <option value="">-- Select Teacher --</option>
+                        {availableTeachers.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Classroom / Room
+                      </label>
+                      <input
+                        type="text"
+                        value={cartDraft.hall_number_snapshot}
+                        onChange={(e) =>
+                          setCartDraft((prev) => ({ ...prev, hall_number_snapshot: e.target.value }))
+                        }
+                        placeholder="e.g. Hall 1, Lab 2"
+                        className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg text-black font-semibold focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Demo Start Date
+                      </label>
+                      <input
+                        type="date"
+                        value={cartDraft.demo_start_date}
+                        onChange={(e) =>
+                          setCartDraft((prev) => ({ ...prev, demo_start_date: e.target.value }))
+                        }
+                        className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg text-black font-semibold focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Duration (Days)
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="30"
+                        value={cartDraft.demo_duration_days}
+                        onChange={(e) =>
+                          setCartDraft((prev) => ({
+                            ...prev,
+                            demo_duration_days: parseInt(e.target.value, 10) || 1,
+                          }))
+                        }
+                        className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg text-black font-semibold focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-1">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="xs"
+                      icon={Plus}
+                      onClick={handleAddSubjectToCart}
+                    >
+                      + Add Subject to Demo Cart
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Selected Demo Subjects List */}
+                {demoCart.length > 0 ? (
+                  <div className="space-y-1.5 border border-slate-200 rounded-lg p-2 bg-white">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
+                      Booked Trial Subjects (Each receives a unique Reference Code):
+                    </span>
+                    <div className="divide-y divide-slate-100">
+                      {demoCart.map((item, index) => (
+                        <div
+                          key={item.tempId}
+                          className="py-2 px-2 flex items-center justify-between text-xs hover:bg-slate-50 rounded"
+                        >
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-bold text-odoo-700 bg-purple-50 px-1.5 py-0.2 rounded text-[10px] border border-purple-200">
+                                #{index + 1}
+                              </span>
+                              <span className="font-bold text-black">{item.subject_name_snapshot}</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5">
+                              <span>Faculty: <strong className="text-slate-700">{item.teacher_name_snapshot}</strong></span>
+                              <span>•</span>
+                              <span>Room: <strong className="text-slate-700">{item.hall_number_snapshot}</strong></span>
+                              <span>•</span>
+                              <span>Duration: <strong>{item.demo_duration_days} days</strong></span>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveCartItem(item.tempId)}
+                            className="p-1 rounded text-rose-500 hover:text-rose-700 hover:bg-rose-50 cursor-pointer"
+                            title="Remove from cart"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-slate-50 border border-dashed border-slate-300 rounded-lg p-3 text-center text-slate-500 text-xs">
+                    No subjects added to demo cart yet. Select a subject above and click "+ Add Subject to Demo Cart".
+                  </div>
+                )}
+              </div>
+
+              <Input
+                label="Counselor Follow-up Notes (Optional)"
+                value={enquiryForm.notes}
+                onChange={(e) => setEnquiryForm({ ...enquiryForm, notes: e.target.value })}
+                placeholder="e.g. Student referred by school friend, interested in JEE morning class"
+              />
+            </>
+          ) : (
+            <div className="bg-slate-50 border border-dashed border-slate-300 rounded-xl p-4 text-center text-slate-500 text-xs">
+              Enter a 10-digit phone number above to verify or register the student profile before booking demo classes.
+            </div>
+          )}
 
           <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
             <Button
               type="button"
               variant="secondary"
-              onClick={() => setAddModalOpen(false)}
+              onClick={resetAddDemoModal}
               disabled={submitting}
             >
               Cancel
             </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              loading={submitting}
-              disabled={
-                submitting ||
-                (Boolean(enquiryForm.mobile) && enquiryForm.mobile.length !== 10)
-              }
-            >
-              {enquiryForm.mobile && enquiryForm.mobile.length !== 10
-                ? 'Enter 10-Digit Mobile'
-                : `Generate Demo Slip (${demoCart.length > 0 ? demoCart.length : 1} Subject${demoCart.length > 1 ? 's' : ''})`}
-            </Button>
+
+            {selectedDemoStudent ? (
+              <Button
+                type="submit"
+                variant="primary"
+                loading={submitting}
+                disabled={submitting}
+              >
+                {`Generate Demo Slip (${demoCart.length > 0 ? demoCart.length : 1} Subject${demoCart.length > 1 ? 's' : ''})`}
+              </Button>
+            ) : (
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={
+                  phoneCheckLoading ||
+                  cleanMobileInput(demoPhoneInput).length !== 10 ||
+                  Boolean(phoneCheckResult?.multiple_matches)
+                }
+              >
+                {cleanMobileInput(demoPhoneInput).length !== 10
+                  ? 'Enter 10-Digit Mobile'
+                  : phoneCheckResult?.multiple_matches
+                  ? 'Select Matching Student Above'
+                  : 'Register Student First →'}
+              </Button>
+            )}
           </div>
         </form>
       </Modal>
@@ -2374,6 +2650,40 @@ export default function EnquiriesPage() {
         }}
         enquiry={passModalEnquiry}
         demoItem={passModalDemoItem}
+      />
+
+      {/* ========================================================= */}
+      {/* MODAL: REGISTER STUDENT FIRST (BEFORE CREATING DEMO)      */}
+      {/* ========================================================= */}
+      <RegisterStudentModal
+        isOpen={registerForDemoOpen}
+        onClose={() => {
+          setRegisterForDemoOpen(false);
+          setRegisterForDemoForceCreate(false);
+        }}
+        standaloneMode={true}
+        initialMobile={cleanMobileInput(demoPhoneInput)}
+        forceCreateInitial={registerForDemoForceCreate}
+        onStudentReady={(stu) => {
+          setSelectedDemoStudent(stu);
+          const cleanStuMob = cleanMobileInput(stu.mobile || demoPhoneInput);
+          setDemoPhoneInput(cleanStuMob);
+          setPhoneCheckResult({
+            valid: true,
+            exists: true,
+            multiple_matches: false,
+            normalized_mobile: cleanStuMob,
+            student: stu,
+            matches: [stu],
+          });
+          setEnquiryForm((prev) => ({
+            ...prev,
+            student_name: stu.name || '',
+            mobile: stu.mobile || cleanStuMob,
+          }));
+          setRegisterForDemoOpen(false);
+          setRegisterForDemoForceCreate(false);
+        }}
       />
 
       {/* ========================================================= */}

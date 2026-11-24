@@ -25,12 +25,26 @@ async def test_demo_profile_and_purchase_linking():
         subj1 = subjects[0]
         subj2 = subjects[1]
 
-        # 3. Create test enquiry with 2 demo subjects
+        # 3. Register student FIRST (register-first flow), then create test enquiry with 2 demo subjects
         unique_suffix = str(uuid.uuid4().int)[:6]
         phone = f"9988{unique_suffix}"
         today_str = date.today().isoformat()
 
+        reg_res = await client.post("/api/enquiries/register-student", json={
+            "name": f"Demo Candidate {unique_suffix}",
+            "mobile": phone,
+            "father_name": f"Demo Father {unique_suffix}",
+            "school_college": "Model Senior Secondary School"
+        }, headers=headers)
+        assert reg_res.status_code == 200, reg_res.text
+        reg_data = reg_res.json()
+        assert reg_data["success"] is True
+        student_id = reg_data["student_id"]
+        student_code = reg_data["student_code"]
+        assert student_id is not None
+
         enq_payload = {
+            "student_id": student_id,
             "student_name": f"Demo Candidate {unique_suffix}",
             "mobile": phone,
             "father_name": f"Demo Father {unique_suffix}",
@@ -61,6 +75,7 @@ async def test_demo_profile_and_purchase_linking():
         assert create_enq_res.status_code == 201, create_enq_res.text
         enq_data = create_enq_res.json()
         enquiry_id = enq_data["id"]
+        assert enq_data["converted_student_id"] == student_id
         assert len(enq_data["demo_items"]) == 2
 
         demo_item_1 = next(d for d in enq_data["demo_items"] if d["subject_id"] == subj1["id"])
@@ -69,15 +84,6 @@ async def test_demo_profile_and_purchase_linking():
         assert demo_item_2["status"] == "SCHEDULED"
         assert demo_item_1["converted_admission_item_id"] is None
         assert demo_item_2["converted_admission_item_id"] is None
-
-        # 4. Register student from enquiry at demo time
-        reg_res = await client.post(f"/api/enquiries/{enquiry_id}/register-student", headers=headers)
-        assert reg_res.status_code == 200, reg_res.text
-        reg_data = reg_res.json()
-        assert reg_data["success"] is True
-        student_id = reg_data["student_id"]
-        student_code = reg_data["student_code"]
-        assert student_id is not None
 
         # 5. Check GET /students/{student_id}/demos BEFORE purchase
         # Both demos should appear, neither converted

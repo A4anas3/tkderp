@@ -68,6 +68,8 @@ class EnquiryBase(BaseModel):
         return validate_mobile_10_digits(v, required=False)
 
 class EnquiryCreate(EnquiryBase):
+    student_name: Optional[str] = Field(default=None, min_length=2, max_length=150)
+    student_id: Optional[uuid.UUID] = None
     demo_items: Optional[List[EnquiryDemoItemCreate]] = None
 
 class EnquiryUpdate(BaseModel):
@@ -184,6 +186,24 @@ class RegisterStudentFromEnquiryRequest(BaseModel):
     selected_student_id: Optional[uuid.UUID] = None
     force_create: bool = False
 
+class RegisterStudentStandaloneRequest(BaseModel):
+    name: str = Field(..., min_length=2, max_length=150)
+    mobile: str
+    father_name: Optional[str] = None
+    school_college: Optional[str] = None
+    email: Optional[str] = None
+    address: Optional[str] = None
+    dob: Optional[date] = None
+    photo_url: Optional[str] = None
+    notes: Optional[str] = None
+    selected_student_id: Optional[uuid.UUID] = None
+    force_create: bool = False
+
+    @field_validator("mobile", mode="before")
+    @classmethod
+    def validate_mobile(cls, v):
+        return validate_mobile_10_digits(v, required=True)
+
 class StudentMatchItem(BaseModel):
     id: uuid.UUID
     student_code: str
@@ -194,6 +214,15 @@ class StudentMatchItem(BaseModel):
     status: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+class StudentMobileCheckResponse(BaseModel):
+    valid: bool = True
+    exists: bool = False
+    multiple_matches: bool = False
+    normalized_mobile: Optional[str] = None
+    student: Optional[StudentMatchItem] = None
+    matches: List[StudentMatchItem] = []
+    message: str = ""
 
 class RegisterStudentResponse(BaseModel):
     success: bool = True

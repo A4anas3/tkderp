@@ -16,7 +16,8 @@ from app.modules.enquiries.schemas import (
     EnquiryCreate, EnquiryUpdate, EnquiryResponse, ConvertEnquiryRequest,
     EnquiryDemoItemResponse, EnquiryDemoItemStatusUpdate, EnquiryDemoRegisterItem,
     DemoAnalyticsResponse, DemoAnalyticsSummary, TeacherDemoMetric, SubjectDemoMetric,
-    RegisterStudentFromEnquiryRequest, StudentMatchItem, RegisterStudentResponse
+    RegisterStudentFromEnquiryRequest, RegisterStudentStandaloneRequest,
+    StudentMatchItem, StudentMobileCheckResponse, RegisterStudentResponse
 )
 from app.common.pagination import PaginationParams, PageResponse
 
@@ -109,6 +110,90 @@ async def _find_matching_students_by_mobile(db: AsyncSession, last_10_mobile: st
     return [s for s in candidates if extract_last_10_mobile(s.mobile) == last_10_mobile]
 
 
+async def _create_student_record(
+    db: AsyncSession,
+    name: str,
+    mobile: Optional[str],
+    current_user_id: Optional[uuid.UUID] = None,
+    father_name: Optional[str] = None,
+    school_college: Optional[str] = None,
+    email: Optional[str] = None,
+    address: Optional[str] = None,
+    dob: Optional[date] = None,
+    photo_url: Optional[str] = None,
+    notes: Optional[str] = None,
+    audit_action: str = "STUDENT_CREATED",
+    extra_audit_details: Optional[dict] = None,
+    commit: bool = True
+) -> Student:
+    """
+    Shared helper to create a Student record with validated name, normalised 10-digit mobile,
+    sequential STU code, and audit log entry.
+    """
+    clean_name = (name or "").strip()
+    if len(clean_name) < 2:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Student name must be at least 2 characters long"
+        )
+
+    norm_mob = extract_last_10_mobile(mobile)
+    if mobile and not norm_mob:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Mobile number must be exactly 10 numeric digits"
+        )
+
+    notes_parts = []
+    if school_college and school_college.strip():
+        notes_parts.append(f"School/College: {school_college.strip()}")
+    if notes and notes.strip():
+        notes_parts.append(notes.strip())
+    combined_notes = " • ".join(notes_parts) if notes_parts else None
+
+    candidate_code = await _generate_student_code(db)
+
+    student = Student(
+        student_code=candidate_code,
+        name=clean_name,
+        father_name=(father_name or "").strip() or None,
+        mobile=norm_mob,
+        email=(email.strip().lower() if email else None),
+        photo_url=photo_url,
+        address=(address.strip() if address else None),
+        dob=dob,
+        registration_date=date.today(),
+        status="ACTIVE",
+        notes=combined_notes
+    )
+    db.add(student)
+    await db.flush()
+
+    details = {
+        "student_id": str(student.id),
+        "student_code": student.student_code,
+        "name": student.name,
+        "mobile": student.mobile,
+    }
+    if extra_audit_details:
+        details.update(extra_audit_details)
+
+    audit = AuditLog(
+        user_id=current_user_id,
+        action=audit_action,
+        entity_type="STUDENT",
+        entity_id=student.id,
+        details=json.dumps(details)
+    )
+    db.add(audit)
+
+    if commit:
+        await db.commit()
+        await db.refresh(student)
+
+    return student
+
+
 async def _create_student_from_enquiry(
     db: AsyncSession,
     enquiry: Enquiry,
@@ -121,68 +206,24 @@ async def _create_student_from_enquiry(
     """
     Creates student pre-filled from enquiry (student_name, mobile, father_name, school_college)
     with the same validation as normal student creation.
-    Reused across demo registration and admission conversion to prevent duplication.
     """
-    name = (enquiry.student_name or "").strip()
-    if len(name) < 2:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Student name must be at least 2 characters long"
-        )
-
-    norm_mob = extract_last_10_mobile(enquiry.mobile)
-    if enquiry.mobile and not norm_mob:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Mobile number must be exactly 10 numeric digits"
-        )
-
-    # Combine school_college and existing enquiry notes
-    notes_parts = []
-    if enquiry.school_college and enquiry.school_college.strip():
-        notes_parts.append(f"School/College: {enquiry.school_college.strip()}")
-    if enquiry.notes and enquiry.notes.strip():
-        notes_parts.append(enquiry.notes.strip())
-    combined_notes = " • ".join(notes_parts) if notes_parts else None
-
-    # Sequential unique student registration code STU{Year}{Count:04d}
-    candidate_code = await _generate_student_code(db)
-
-    student = Student(
-        student_code=candidate_code,
-        name=name,
-        father_name=(father_name or enquiry.father_name or "").strip() or None,
-        mobile=norm_mob,
-        email=(email.strip().lower() if email else None),
-        address=(address.strip() if address else None),
-        registration_date=date.today(),
-        status="ACTIVE",
-        notes=combined_notes
-    )
-    db.add(student)
-    await db.flush()
-
-    audit = AuditLog(
-        user_id=current_user_id,
-        action="STUDENT_CREATED_FROM_ENQUIRY",
-        entity_type="STUDENT",
-        entity_id=student.id,
-        details=json.dumps({
-            "student_id": str(student.id),
-            "student_code": student.student_code,
-            "name": student.name,
-            "mobile": student.mobile,
+    return await _create_student_record(
+        db=db,
+        name=enquiry.student_name or "",
+        mobile=enquiry.mobile,
+        current_user_id=current_user_id,
+        father_name=father_name or enquiry.father_name,
+        school_college=enquiry.school_college,
+        email=email,
+        address=address,
+        notes=enquiry.notes,
+        audit_action="STUDENT_CREATED_FROM_ENQUIRY",
+        extra_audit_details={
             "enquiry_id": str(enquiry.id),
             "enquiry_code": enquiry.enquiry_code
-        })
+        },
+        commit=commit
     )
-    db.add(audit)
-
-    if commit:
-        await db.commit()
-        await db.refresh(student)
-
-    return student
 
 
 def _format_demo_item_response(itm: EnquiryDemoItem, today: date) -> EnquiryDemoItemResponse:
@@ -744,6 +785,152 @@ async def get_upcoming_demo_deadlines(
     return response_items
 
 
+@router.get("/check-student", response_model=StudentMobileCheckResponse)
+async def check_student_by_mobile_for_demo(
+    mobile: str = Query(..., description="Mobile number to normalize (last 10 digits) and match against registered students"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_staff)
+):
+    """
+    Phone-only lookup (last 10 digits) before giving a demo.
+    Uses the exact same duplicate-matching rule as L1 (_find_matching_students_by_mobile).
+    """
+    norm_mob = extract_last_10_mobile(mobile)
+    if not norm_mob:
+        return StudentMobileCheckResponse(
+            valid=False,
+            exists=False,
+            multiple_matches=False,
+            normalized_mobile=None,
+            student=None,
+            matches=[],
+            message="Mobile number must contain at least 10 numeric digits"
+        )
+
+    matches = await _find_matching_students_by_mobile(db, norm_mob)
+    match_items = [StudentMatchItem.model_validate(m) for m in matches]
+
+    if len(match_items) > 1:
+        return StudentMobileCheckResponse(
+            valid=True,
+            exists=True,
+            multiple_matches=True,
+            normalized_mobile=norm_mob,
+            student=None,
+            matches=match_items,
+            message=f"Multiple students ({len(match_items)}) found with mobile number ending in {norm_mob}."
+        )
+    if len(match_items) == 1:
+        return StudentMobileCheckResponse(
+            valid=True,
+            exists=True,
+            multiple_matches=False,
+            normalized_mobile=norm_mob,
+            student=match_items[0],
+            matches=match_items,
+            message=f"Already registered with student code {match_items[0].student_code}"
+        )
+    return StudentMobileCheckResponse(
+        valid=True,
+        exists=False,
+        multiple_matches=False,
+        normalized_mobile=norm_mob,
+        student=None,
+        matches=[],
+        message="No registered student found for this mobile number"
+    )
+
+
+@router.post("/register-student", response_model=RegisterStudentResponse, status_code=status.HTTP_200_OK)
+async def register_student_before_demo(
+    payload: RegisterStudentStandaloneRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_cashier_or_admin)
+):
+    """
+    Register-first endpoint used before creating a demo when the student is not yet registered.
+    Enforces the L1 duplicate rule (phone-only match on last 10 digits):
+    - If selected_student_id is provided, returns that existing student.
+    - If 1 existing student matches the normalised 10-digit phone (and not force_create),
+      returns already_registered=True without creating a duplicate student.
+    - If multiple students match (and not force_create), returns multiple_matches=True.
+    - Otherwise creates the new student record in DB and returns it.
+    """
+    if payload.selected_student_id:
+        stu_res = await db.execute(select(Student).where(Student.id == payload.selected_student_id))
+        selected_student = stu_res.scalar_one_or_none()
+        if not selected_student:
+            raise HTTPException(status_code=404, detail="Selected student profile not found")
+        return RegisterStudentResponse(
+            success=True,
+            already_registered=True,
+            multiple_matches=False,
+            student_id=selected_student.id,
+            student_code=selected_student.student_code,
+            student_name=selected_student.name,
+            mobile=selected_student.mobile,
+            message=f"Already registered with student code {selected_student.student_code}"
+        )
+
+    norm_mob = extract_last_10_mobile(payload.mobile)
+    if not norm_mob:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A valid 10-digit mobile number is required to register student"
+        )
+
+    matches = await _find_matching_students_by_mobile(db, norm_mob)
+
+    if len(matches) > 1 and not payload.force_create:
+        return RegisterStudentResponse(
+            success=True,
+            already_registered=False,
+            multiple_matches=True,
+            matches=[StudentMatchItem.model_validate(m) for m in matches],
+            message=f"Multiple students ({len(matches)}) found with mobile number ending in {norm_mob}. Please select the matching student."
+        )
+
+    if len(matches) == 1 and not payload.force_create:
+        matched = matches[0]
+        return RegisterStudentResponse(
+            success=True,
+            already_registered=True,
+            multiple_matches=False,
+            student_id=matched.id,
+            student_code=matched.student_code,
+            student_name=matched.name,
+            mobile=matched.mobile,
+            message=f"Already registered with student code {matched.student_code}"
+        )
+
+    student = await _create_student_record(
+        db=db,
+        name=payload.name,
+        mobile=norm_mob,
+        current_user_id=current_user.id,
+        father_name=payload.father_name,
+        school_college=payload.school_college,
+        email=payload.email,
+        address=payload.address,
+        dob=payload.dob,
+        photo_url=payload.photo_url,
+        notes=payload.notes,
+        audit_action="STUDENT_CREATED_BEFORE_DEMO",
+        commit=True
+    )
+
+    return RegisterStudentResponse(
+        success=True,
+        already_registered=False,
+        multiple_matches=False,
+        student_id=student.id,
+        student_code=student.student_code,
+        student_name=student.name,
+        mobile=student.mobile,
+        message=f"Student {student.name} ({student.student_code}) registered successfully"
+    )
+
+
 @router.post("", response_model=EnquiryResponse, status_code=status.HTTP_201_CREATED)
 async def create_enquiry(
     payload: EnquiryCreate,
@@ -753,16 +940,65 @@ async def create_enquiry(
     """
     Creates master enquiry ticket and automatically creates individual child
     EnquiryDemoItem records with unique DEM-YYYY-NNNN reference numbers for each subject.
+    Register-first rule: a demo is NEVER created for an unregistered student.
     """
-    year_str = date.today().strftime("%Y")
-    count_query = select(func.count(Enquiry.id))
-    cnt_res = await db.execute(count_query)
-    seq = (cnt_res.scalar_one() or 0) + 1
-    enquiry_code = f"ENQ{year_str}{seq:04d}"
+    is_demo_request = (
+        bool(payload.demo_items and len(payload.demo_items) > 0)
+        or payload.status == "ACTIVE_DEMO"
+        or payload.demo_start_date is not None
+    )
 
-    demo_start = payload.demo_start_date or date.today()
+    # Resolve registered student (by explicit student_id or phone-only last-10-digit match)
+    linked_student: Optional[Student] = None
+    if payload.student_id:
+        stu_res = await db.execute(select(Student).where(Student.id == payload.student_id))
+        linked_student = stu_res.scalar_one_or_none()
+        if not linked_student:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Registered student not found"
+            )
+    elif payload.mobile:
+        norm_mob = extract_last_10_mobile(payload.mobile)
+        if norm_mob:
+            matches = await _find_matching_students_by_mobile(db, norm_mob)
+            if len(matches) == 1:
+                linked_student = matches[0]
+            elif len(matches) > 1 and is_demo_request:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Multiple registered students match this mobile number. Please select the student first."
+                )
+
+    if is_demo_request and linked_student is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Student must be registered before creating a demo. Please register the student profile first."
+        )
+
+    resolved_student_name = (payload.student_name or (linked_student.name if linked_student else "")).strip()
+    if len(resolved_student_name) < 2:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Student name must be at least 2 characters long"
+        )
+    resolved_mobile = payload.mobile or (linked_student.mobile if linked_student else None)
+    resolved_father_name = payload.father_name or (linked_student.father_name if linked_student else None)
+
+    year_str = date.today().strftime("%Y")
+    cnt_res = await db.execute(select(func.count(Enquiry.id)))
+    seq = (cnt_res.scalar_one() or 0) + 1
+    while True:
+        candidate_enq_code = f"ENQ{year_str}{seq:04d}"
+        exists = (await db.execute(select(Enquiry.id).where(Enquiry.enquiry_code == candidate_enq_code).limit(1))).scalar_one_or_none()
+        if not exists:
+            enquiry_code = candidate_enq_code
+            break
+        seq += 1
+
+    demo_start = (payload.demo_start_date or date.today()) if is_demo_request else None
     demo_duration = payload.demo_duration_days or 3
-    deadline = demo_start + timedelta(days=demo_duration)
+    deadline = (demo_start + timedelta(days=demo_duration)) if demo_start else None
 
     # Determine summary interested subject string
     summary_subject = payload.interested_subject or ""
@@ -779,9 +1015,9 @@ async def create_enquiry(
 
     enquiry = Enquiry(
         enquiry_code=enquiry_code,
-        student_name=payload.student_name,
-        mobile=payload.mobile,
-        father_name=payload.father_name,
+        student_name=resolved_student_name,
+        mobile=resolved_mobile,
+        father_name=resolved_father_name,
         school_college=payload.school_college,
         purpose=payload.purpose or "Admission Enquiry",
         source=payload.source or "Direct Walk-in",
@@ -791,77 +1027,79 @@ async def create_enquiry(
         demo_deadline=deadline,
         notes=payload.notes,
         status="ACTIVE_DEMO" if (payload.demo_items or payload.demo_start_date) else payload.status,
+        converted_student_id=linked_student.id if linked_student else None,
         created_by=current_user.id
     )
     db.add(enquiry)
     await db.flush()
 
-    # Create child EnquiryDemoItem records
+    # Create child EnquiryDemoItem records (only when creating a demo)
     child_items = []
-    if payload.demo_items and len(payload.demo_items) > 0:
-        for idx, itm in enumerate(payload.demo_items):
-            sub = None
-            if itm.subject_id:
-                sub = (await db.execute(select(Subject).where(Subject.id == itm.subject_id))).scalar_one_or_none()
-            
-            bch = None
-            if itm.batch_id:
-                bch = (await db.execute(select(Batch).where(Batch.id == itm.batch_id))).scalar_one_or_none()
+    if is_demo_request:
+        if payload.demo_items and len(payload.demo_items) > 0:
+            for idx, itm in enumerate(payload.demo_items):
+                sub = None
+                if itm.subject_id:
+                    sub = (await db.execute(select(Subject).where(Subject.id == itm.subject_id))).scalar_one_or_none()
+                
+                bch = None
+                if itm.batch_id:
+                    bch = (await db.execute(select(Batch).where(Batch.id == itm.batch_id))).scalar_one_or_none()
 
-            tch = None
-            if itm.teacher_id:
-                tch = (await db.execute(select(Teacher).where(Teacher.id == itm.teacher_id))).scalar_one_or_none()
-            elif sub and sub.teacher_id:
-                tch = (await db.execute(select(Teacher).where(Teacher.id == sub.teacher_id))).scalar_one_or_none()
-            elif bch and bch.teacher_id:
-                tch = (await db.execute(select(Teacher).where(Teacher.id == bch.teacher_id))).scalar_one_or_none()
+                tch = None
+                if itm.teacher_id:
+                    tch = (await db.execute(select(Teacher).where(Teacher.id == itm.teacher_id))).scalar_one_or_none()
+                elif sub and sub.teacher_id:
+                    tch = (await db.execute(select(Teacher).where(Teacher.id == sub.teacher_id))).scalar_one_or_none()
+                elif bch and bch.teacher_id:
+                    tch = (await db.execute(select(Teacher).where(Teacher.id == bch.teacher_id))).scalar_one_or_none()
 
-            s_name = itm.subject_name or itm.subject_name_snapshot or (sub.name if sub else (bch.name if bch else "General Demo"))
-            t_name = itm.teacher_name_snapshot or (tch.name if tch else (sub.teacher_name_snapshot if sub else (bch.teacher_name_snapshot if bch else None)))
-            h_no = itm.hall_number_snapshot or (bch.hall_number if bch else (sub.hall_number if sub else "Main Hall"))
-            
-            itm_start = itm.demo_start_date or demo_start
-            itm_duration = itm.demo_duration_days or demo_duration
-            itm_end = itm_start + timedelta(days=itm_duration)
-            ref_no = await _generate_demo_reference_number(db, offset=idx)
+                s_name = itm.subject_name or itm.subject_name_snapshot or (sub.name if sub else (bch.name if bch else "General Demo"))
+                t_name = itm.teacher_name_snapshot or (tch.name if tch else (sub.teacher_name_snapshot if sub else (bch.teacher_name_snapshot if bch else None)))
+                h_no = itm.hall_number_snapshot or (bch.hall_number if bch else (sub.hall_number if sub else "Main Hall"))
+                
+                itm_start = itm.demo_start_date or demo_start
+                itm_duration = itm.demo_duration_days or demo_duration
+                itm_end = itm_start + timedelta(days=itm_duration)
+                ref_no = await _generate_demo_reference_number(db, offset=idx)
 
+                demo_item = EnquiryDemoItem(
+                    enquiry_id=enquiry.id,
+                    demo_reference_number=ref_no,
+                    subject_id=itm.subject_id,
+                    batch_id=itm.batch_id,
+                    teacher_id=tch.id if tch else None,
+                    subject_name_snapshot=s_name,
+                    teacher_name_snapshot=t_name,
+                    hall_number_snapshot=h_no,
+                    demo_start_date=itm_start,
+                    demo_end_date=itm_end,
+                    demo_duration_days=itm_duration,
+                    status="SCHEDULED",
+                    notes=itm.notes
+                )
+                db.add(demo_item)
+                child_items.append(demo_item)
+        else:
+            # Create 1 default demo item so that every demo receives a verifiable demo slip
+            ref_no = await _generate_demo_reference_number(db)
             demo_item = EnquiryDemoItem(
                 enquiry_id=enquiry.id,
                 demo_reference_number=ref_no,
-                subject_id=itm.subject_id,
-                batch_id=itm.batch_id,
-                teacher_id=tch.id if tch else None,
-                subject_name_snapshot=s_name,
-                teacher_name_snapshot=t_name,
-                hall_number_snapshot=h_no,
-                demo_start_date=itm_start,
-                demo_end_date=itm_end,
-                demo_duration_days=itm_duration,
+                subject_id=None,
+                batch_id=None,
+                teacher_id=None,
+                subject_name_snapshot=enquiry.interested_subject or "General Course Demo",
+                teacher_name_snapshot=None,
+                hall_number_snapshot="Main Campus",
+                demo_start_date=demo_start,
+                demo_end_date=deadline,
+                demo_duration_days=demo_duration,
                 status="SCHEDULED",
-                notes=itm.notes
+                notes=payload.notes
             )
             db.add(demo_item)
             child_items.append(demo_item)
-    else:
-        # Create 1 default demo item so that every enquiry receives a verifiable demo slip
-        ref_no = await _generate_demo_reference_number(db)
-        demo_item = EnquiryDemoItem(
-            enquiry_id=enquiry.id,
-            demo_reference_number=ref_no,
-            subject_id=None,
-            batch_id=None,
-            teacher_id=None,
-            subject_name_snapshot=enquiry.interested_subject or "General Course Demo",
-            teacher_name_snapshot=None,
-            hall_number_snapshot="Main Campus",
-            demo_start_date=demo_start,
-            demo_end_date=deadline,
-            demo_duration_days=demo_duration,
-            status="SCHEDULED",
-            notes=payload.notes
-        )
-        db.add(demo_item)
-        child_items.append(demo_item)
 
     await db.commit()
     await db.refresh(enquiry)

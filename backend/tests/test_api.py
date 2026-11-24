@@ -106,10 +106,19 @@ async def test_upcoming_demo_deadlines():
         token = login_res.json()["access_token"]
         headers = {"Authorization": f"Bearer {token}"}
 
-        # Create an active demo to ensure an upcoming deadline is present
+        # Register student first, then create an active demo to ensure an upcoming deadline is present
+        unique_phone = f"9874{str(uuid.uuid4().int)[:6]}"
+        reg_res = await client.post("/api/enquiries/register-student", json={
+            "name": "Test Upcoming Demo Student",
+            "mobile": unique_phone,
+        }, headers=headers)
+        assert reg_res.status_code == 200
+        stu_id = reg_res.json()["student_id"]
+
         await client.post("/api/enquiries", json={
+            "student_id": stu_id,
             "student_name": "Test Upcoming Demo Student",
-            "mobile": "9876543210",
+            "mobile": unique_phone,
             "purpose": "Physics Test Demo",
             "interested_subject": "Physics",
             "demo_start_date": "2026-11-20",
@@ -137,10 +146,19 @@ async def test_enquiry_creation_and_conversion():
         token = login_res.json()["access_token"]
         headers = {"Authorization": f"Bearer {token}"}
 
-        # Create Enquiry
+        # Register student first, then create Demo Enquiry
+        unique_phone = f"9811{str(uuid.uuid4().int)[:6]}"
+        reg_res = await client.post("/api/enquiries/register-student", json={
+            "name": "Aman Verma",
+            "mobile": unique_phone,
+        }, headers=headers)
+        assert reg_res.status_code == 200
+        stu_id = reg_res.json()["student_id"]
+
         enq_data = {
+            "student_id": stu_id,
             "student_name": "Aman Verma",
-            "mobile": "9811223344",
+            "mobile": unique_phone,
             "purpose": "Class 10 Board prep",
             "interested_subject": "Mathematics",
             "demo_start_date": "2026-11-20",

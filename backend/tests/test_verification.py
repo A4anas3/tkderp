@@ -254,13 +254,25 @@ async def test_public_id_card_active_demos_included(admin_token):
         subj_active = subjects[0]
         subj_expired = subjects[1]
 
-        # 2. Create enquiry with 2 demos: 1 active, 1 expired
+        # 2. Register student FIRST (register-first flow), then create enquiry with 2 demos: 1 active, 1 expired
         unique_suffix = str(uuid.uuid4().int)[:6]
         phone = f"9871{unique_suffix}"
         today = date.today()
         today_str = today.isoformat()
 
+        reg_res = await client.post("/api/enquiries/register-student", json={
+            "name": f"Demo Card Test {unique_suffix}",
+            "mobile": phone,
+            "father_name": f"Demo Father {unique_suffix}",
+            "school_college": "Demo Test School",
+        }, headers=headers)
+        assert reg_res.status_code == 200, reg_res.text
+        reg_data = reg_res.json()
+        student_id = reg_data["student_id"]
+        student_code = reg_data["student_code"]
+
         enq_payload = {
+            "student_id": student_id,
             "student_name": f"Demo Card Test {unique_suffix}",
             "mobile": phone,
             "father_name": f"Demo Father {unique_suffix}",
@@ -304,13 +316,6 @@ async def test_public_id_card_active_demos_included(admin_token):
             expired_item.demo_end_date = today - timedelta(days=7)
             expired_item.status = "EXPIRED"
             await session.commit()
-
-        # 3. Register student from enquiry
-        reg_res = await client.post(f"/api/enquiries/{enquiry_id}/register-student", headers=headers)
-        assert reg_res.status_code == 200, reg_res.text
-        reg_data = reg_res.json()
-        student_id = reg_data["student_id"]
-        student_code = reg_data["student_code"]
 
         # 4. Query public ID card by student_code
         card_res = await client.get(f"/api/public/id-card/{student_code}")
