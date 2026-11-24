@@ -73,7 +73,7 @@ export default function ReceiptHeader({
             </p>
             {govtRegdNo && (
               <p className="text-[10px] text-slate-700 font-semibold mt-0.5">
-                Govt. Regd. No: <span className="text-black font-black">{govtRegdNo}</span>
+                MSME No: <span className="text-black font-black">{govtRegdNo}</span>
               </p>
             )}
             {isoCertification && (

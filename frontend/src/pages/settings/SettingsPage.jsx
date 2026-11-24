@@ -437,7 +437,7 @@ export default function SettingsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold text-slate-800 mb-1">
-                  Govt. Regd. No <span className="text-[11px] font-normal text-slate-500">(Optional)</span>
+                  MSME No <span className="text-[11px] font-normal text-slate-500">(Optional)</span>
                 </label>
                 <input
                   type="text"
