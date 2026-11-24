@@ -18,7 +18,6 @@ import {
   AlertTriangle,
   Camera,
   RefreshCw,
-  ArrowLeftRight,
   Receipt,
   CheckCircle2,
   Clock,
@@ -64,9 +63,7 @@ import RevokeStudentModal from '../../components/modals/RevokeStudentModal';
 import CancelPurchaseModal from '../../components/modals/CancelPurchaseModal';
 import EditStudentModal from '../../components/modals/EditStudentModal';
 import EditValidityModal from '../../components/modals/EditValidityModal';
-import SuspendDiscontinueModal from '../../components/modals/SuspendDiscontinueModal';
 import RenewSubjectModal from '../../components/modals/RenewSubjectModal';
-import ChangeSubjectModal from '../../components/modals/ChangeSubjectModal';
 import WaiveDueModal from '../../components/modals/WaiveDueModal';
 import StudentIDCardModal from '../../components/modals/StudentIDCardModal';
 import GiveDemoModal from '../../components/modals/GiveDemoModal';
@@ -191,13 +188,8 @@ export default function StudentDetailPage() {
   const [renewModalOpen, setRenewModalOpen] = useState(false);
   const [selectedItemForRenew, setSelectedItemForRenew] = useState(null);
 
-  // Subject Change Modal
-  const [changeModalOpen, setChangeModalOpen] = useState(false);
-  const [selectedItemForChange, setSelectedItemForChange] = useState(null);
-
   // Item-level Validity & Lifecycle Actions
   const [selectedItemForValidity, setSelectedItemForValidity] = useState(null);
-  const [selectedItemForSuspend, setSelectedItemForSuspend] = useState(null);
   const [resumingItemId, setResumingItemId] = useState(null);
 
   // Modals
@@ -211,17 +203,16 @@ export default function StudentDetailPage() {
   const [giveDemoModalOpen, setGiveDemoModalOpen] = useState(false);
   const [demoPassToShow, setDemoPassToShow] = useState(null);
 
-  // Lifecycle Modals (Edit Validity, Suspend, Discontinue)
+  // Lifecycle Modals (Edit Validity)
   const [selectedAdmissionForValidity, setSelectedAdmissionForValidity] = useState(null);
   const [validityModalOpen, setValidityModalOpen] = useState(false);
-  const [selectedAdmissionForSuspend, setSelectedAdmissionForSuspend] = useState(null);
-  const [suspendModalOpen, setSuspendModalOpen] = useState(false);
-  const [suspendMode, setSuspendMode] = useState('SUSPEND');
 
   // Revocation & Refund Modals
   const [revokeModalOpen, setRevokeModalOpen] = useState(false);
   const [cancelPurchaseModalOpen, setCancelPurchaseModalOpen] = useState(false);
   const [selectedAdmissionForPurchaseCancel, setSelectedAdmissionForPurchaseCancel] = useState(null);
+  const [selectedItemForCancel, setSelectedItemForCancel] = useState(null);
+  const [cancellingItemLoadingId, setCancellingItemLoadingId] = useState(null);
   const [refundModalOpen, setRefundModalOpen] = useState(false);
   const [selectedAdmissionForRefund, setSelectedAdmissionForRefund] = useState(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -392,6 +383,28 @@ export default function StudentDetailPage() {
       error(err.message || 'Failed to resume subject');
     } finally {
       setResumingItemId(null);
+    }
+  };
+
+  const handleOpenItemCancel = async (item) => {
+    if (!item?.admission_id) return;
+    const existingAdm = admissions.find((a) => a.id === item.admission_id);
+    if (existingAdm) {
+      setSelectedAdmissionForPurchaseCancel(existingAdm);
+      setSelectedItemForCancel(item);
+      setCancelPurchaseModalOpen(true);
+      return;
+    }
+    setCancellingItemLoadingId(item.id);
+    try {
+      const adm = await admissionApi.get(item.admission_id);
+      setSelectedAdmissionForPurchaseCancel(adm);
+      setSelectedItemForCancel(item);
+      setCancelPurchaseModalOpen(true);
+    } catch (err) {
+      error(err.message || 'Failed to load course purchase details');
+    } finally {
+      setCancellingItemLoadingId(null);
     }
   };
 
@@ -1421,19 +1434,6 @@ export default function StudentDetailPage() {
                     </Button>
                     <Button
                       size="xs"
-                      variant="teal-soft"
-                      icon={ArrowLeftRight}
-                      onClick={() => {
-                        setSelectedItemForChange(item);
-                        setChangeModalOpen(true);
-                      }}
-                      className="flex-1 justify-center"
-                      title="Change Subject"
-                    >
-                      Change
-                    </Button>
-                    <Button
-                      size="xs"
                       variant="indigo"
                       icon={Calendar}
                       onClick={() => {
@@ -1444,33 +1444,17 @@ export default function StudentDetailPage() {
                     >
                       Dates
                     </Button>
-                    {isAdmin && (
-                      <>
-                        <Button
-                          size="xs"
-                          variant="amber"
-                          className="flex-1 justify-center"
-                          onClick={() => {
-                            setSelectedItemForSuspend(item);
-                            setSuspendMode('SUSPEND');
-                            setSuspendModalOpen(true);
-                          }}
-                        >
-                          Suspend
-                        </Button>
-                        <Button
-                          size="xs"
-                          variant="danger-soft"
-                          className="flex-1 justify-center"
-                          onClick={() => {
-                            setSelectedItemForSuspend(item);
-                            setSuspendMode('DISCONTINUE');
-                            setSuspendModalOpen(true);
-                          }}
-                        >
-                          Stop
-                        </Button>
-                      </>
+                    {isAdmin && !isRevoked && item.can_cancel !== false && (
+                      <Button
+                        size="xs"
+                        variant="danger-soft"
+                        loading={cancellingItemLoadingId === item.id}
+                        onClick={() => handleOpenItemCancel(item)}
+                        className="flex-1 justify-center"
+                        title="Cancel this subject enrollment"
+                      >
+                        Cancel
+                      </Button>
                     )}
                   </div>
                 </div>
@@ -1584,18 +1568,6 @@ export default function StudentDetailPage() {
                           </Button>
                           <Button
                             size="xs"
-                            variant="teal-soft"
-                            icon={ArrowLeftRight}
-                            onClick={() => {
-                              setSelectedItemForChange(item);
-                              setChangeModalOpen(true);
-                            }}
-                            title="Change to another subject"
-                          >
-                            Change
-                          </Button>
-                          <Button
-                            size="xs"
                             variant="indigo"
                             icon={Calendar}
                             onClick={() => {
@@ -1606,33 +1578,16 @@ export default function StudentDetailPage() {
                           >
                             Dates
                           </Button>
-                          {isAdmin && (
-                            <>
-                              <Button
-                                size="xs"
-                                variant="amber"
-                                onClick={() => {
-                                  setSelectedItemForSuspend(item);
-                                  setSuspendMode('SUSPEND');
-                                  setSuspendModalOpen(true);
-                                }}
-                                title="Suspend Subject Temporarily"
-                              >
-                                Suspend
-                              </Button>
-                              <Button
-                                size="xs"
-                                variant="danger-soft"
-                                onClick={() => {
-                                  setSelectedItemForSuspend(item);
-                                  setSuspendMode('DISCONTINUE');
-                                  setSuspendModalOpen(true);
-                                }}
-                                title="Discontinue Subject"
-                              >
-                                Stop
-                              </Button>
-                            </>
+                          {isAdmin && !isRevoked && item.can_cancel !== false && (
+                            <Button
+                              size="xs"
+                              variant="danger-soft"
+                              loading={cancellingItemLoadingId === item.id}
+                              onClick={() => handleOpenItemCancel(item)}
+                              title="Cancel this subject enrollment"
+                            >
+                              Cancel
+                            </Button>
                           )}
                         </div>
                       </td>
@@ -3531,14 +3486,17 @@ export default function StudentDetailPage() {
         onClose={() => {
           setCancelPurchaseModalOpen(false);
           setSelectedAdmissionForPurchaseCancel(null);
+          setSelectedItemForCancel(null);
         }}
         admission={selectedAdmissionForPurchaseCancel}
+        item={selectedItemForCancel}
         onSuccess={async (res, hasRefund) => {
           await fetchStudentData();
-          if (hasRefund && selectedAdmissionForPurchaseCancel) {
+          const admId = res?.id || selectedAdmissionForPurchaseCancel?.id;
+          if (hasRefund && admId) {
             try {
               const refList = await paymentApi.listRefunds({
-                admission_id: selectedAdmissionForPurchaseCancel.id,
+                admission_id: admId,
                 page_size: 1,
               });
               if (refList.items?.length > 0) {
@@ -3599,23 +3557,6 @@ export default function StudentDetailPage() {
         }}
       />
 
-      {/* Change Subject Modal */}
-      <ChangeSubjectModal
-        isOpen={changeModalOpen}
-        onClose={() => {
-          setChangeModalOpen(false);
-          setSelectedItemForChange(null);
-        }}
-        student={student}
-        item={selectedItemForChange}
-        onSuccess={(createdAdmission) => {
-          fetchStudentData();
-          if (createdAdmission) {
-            setAdmissionSlipToShow(createdAdmission);
-          }
-        }}
-      />
-
       {/* Edit Validity Dates Modal */}
       <EditValidityModal
         isOpen={validityModalOpen}
@@ -3626,20 +3567,6 @@ export default function StudentDetailPage() {
         }}
         admission={selectedAdmissionForValidity}
         item={selectedItemForValidity}
-        onSuccess={() => fetchStudentData()}
-      />
-
-      {/* Suspend or Discontinue Modal */}
-      <SuspendDiscontinueModal
-        isOpen={suspendModalOpen}
-        onClose={() => {
-          setSuspendModalOpen(false);
-          setSelectedAdmissionForSuspend(null);
-          setSelectedItemForSuspend(null);
-        }}
-        admission={selectedAdmissionForSuspend}
-        item={selectedItemForSuspend}
-        mode={suspendMode}
         onSuccess={() => fetchStudentData()}
       />
 

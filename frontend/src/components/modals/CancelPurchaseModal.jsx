@@ -12,6 +12,7 @@ export default function CancelPurchaseModal({
   isOpen,
   onClose,
   admission,
+  item = null,
   onSuccess,
 }) {
   const { success, error } = useToast();
@@ -21,22 +22,36 @@ export default function CancelPurchaseModal({
   const [refundMode, setRefundMode] = useState('CASH');
   const [submitting, setSubmitting] = useState(false);
 
-  // Sync state when admission changes
+  // Sync state when admission or target item changes
   React.useEffect(() => {
     if (admission) {
       setReason('');
-      const paid = Number(admission.amount_paid || 0);
+      const matched = item
+        ? (admission.items || []).find((i) => i.id === item.id) || item
+        : null;
+      const paid = Number(matched ? matched.amount_collected || 0 : admission.amount_paid || 0);
       setIssueRefund(paid > 0);
       setRefundAmount(paid > 0 ? String(paid) : '0');
       setRefundMode('CASH');
     }
-  }, [admission]);
+  }, [admission, item]);
 
   if (!admission) return null;
 
-  const maxPaid = Number(admission.amount_paid || 0);
+  const targetItem = item
+    ? (admission.items || []).find((i) => i.id === item.id) || item
+    : null;
+  const maxPaid = Number(targetItem ? targetItem.amount_collected || 0 : admission.amount_paid || 0);
+  const totalBilled = Number(
+    targetItem ? targetItem.net_price ?? targetItem.original_price ?? 0 : admission.total_payable || 0
+  );
+  const balanceDue = Number(targetItem ? targetItem.balance_due || 0 : admission.balance_due || 0);
+  const displayItems = targetItem ? [targetItem] : (admission.items || []);
   const txnId = admission.purchase_transaction_id || admission.admission_number;
-  const isCannotCancel = admission.can_cancel === false;
+  const isCannotCancel = targetItem ? targetItem.can_cancel === false : admission.can_cancel === false;
+  const targetSubjectName = targetItem
+    ? targetItem.item_name_snapshot || targetItem.subject_name
+    : '';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -65,15 +80,29 @@ export default function CancelPurchaseModal({
 
     setSubmitting(true);
     try {
-      const payload = {
-        reason: cleanR,
-        refund_amount: refundVal,
-        refund_mode: refundMode,
-      };
+      const payload = targetItem
+        ? {
+            reason: cleanR,
+            scope: 'SELECTED_ITEMS',
+            item_ids: [targetItem.id],
+            refund_amount: refundVal,
+            refund_mode: refundMode,
+            ...(refundVal > 0
+              ? { line_refunds: [{ item_id: targetItem.id, refund_amount: refundVal }] }
+              : {}),
+          }
+        : {
+            reason: cleanR,
+            refund_amount: refundVal,
+            refund_mode: refundMode,
+          };
 
       const res = await admissionApi.revoke(admission.id, payload);
+      const cancelLabel = targetItem
+        ? `${targetSubjectName} (${txnId})`
+        : `Course purchase (${txnId})`;
       success(
-        `Course purchase (${txnId}) cancelled successfully.${
+        `${cancelLabel} cancelled successfully.${
           refundVal > 0 ? ` Refunded ₹${refundVal} to student.` : ''
         }`
       );
@@ -93,8 +122,12 @@ export default function CancelPurchaseModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Cancel Course Purchase"
-      subtitle="Cancelling this purchase drops the student from active class attendance lists and voids pending balance due"
+      title={targetItem ? `Cancel Course: ${targetSubjectName}` : 'Cancel Course Purchase'}
+      subtitle={
+        targetItem
+          ? 'Cancelling this course drops the student from this subject’s active list and voids its pending balance due'
+          : 'Cancelling this purchase drops the student from active class attendance lists and voids pending balance due'
+      }
       maxWidth="max-w-md"
     >
       <form onSubmit={handleSubmit} className="space-y-3.5">
@@ -111,13 +144,15 @@ export default function CancelPurchaseModal({
 
           <div className="pt-1 border-t border-slate-200">
             <span className="text-[11px] font-semibold text-slate-600 block mb-0.5">
-              Enrolled Subjects / Course Items:
+              {targetItem ? 'Course Item to Cancel:' : 'Enrolled Subjects / Course Items:'}
             </span>
             <div className="space-y-0.5">
-              {(admission.items || []).map((itm, i) => (
+              {displayItems.map((itm, i) => (
                 <div key={i} className="text-[11px] font-medium text-black flex items-center justify-between">
-                  <span>• {itm.item_name_snapshot}</span>
-                  <span className="font-mono text-slate-600">₹{Number(itm.original_price).toFixed(2)}</span>
+                  <span>• {itm.item_name_snapshot || itm.subject_name}</span>
+                  <span className="font-mono text-slate-600">
+                    ₹{Number(itm.original_price ?? itm.net_price ?? 0).toFixed(2)}
+                  </span>
                 </div>
               ))}
             </div>
@@ -127,7 +162,7 @@ export default function CancelPurchaseModal({
             <div>
               <span className="text-slate-500 block text-[10px]">Total Billed</span>
               <span className="font-mono font-bold text-black text-xs">
-                ₹{Number(admission.total_payable).toFixed(2)}
+                ₹{totalBilled.toFixed(2)}
               </span>
             </div>
             <div>
@@ -139,7 +174,7 @@ export default function CancelPurchaseModal({
             <div>
               <span className="text-slate-500 block text-[10px]">Balance Due</span>
               <span className="font-mono font-bold text-rose-700 text-xs">
-                ₹{Number(admission.balance_due).toFixed(2)}
+                ₹{balanceDue.toFixed(2)}
               </span>
             </div>
           </div>
