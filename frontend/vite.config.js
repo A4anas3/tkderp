@@ -57,6 +57,10 @@ function isAllowedSpaPath(rawUrl) {
     pathname = pathname.slice(0, -1);
   }
 
+  if (pathname === '/index.html') {
+    return true;
+  }
+
   const segments = pathname.split('/').filter(Boolean);
   if (segments.some((seg) => seg.startsWith('.') || NON_APP_EXTENSION_RE.test(seg))) {
     return false;
@@ -80,7 +84,7 @@ function spaPreviewFallbackGuardPlugin() {
             }
             res.statusCode = 404;
             res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-            res.end('404 Not Found');
+            res.end(req.method === 'HEAD' ? undefined : '404 Not Found');
             return;
           }
           next();
