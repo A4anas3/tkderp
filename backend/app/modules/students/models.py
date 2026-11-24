@@ -1,13 +1,16 @@
 import uuid
 from datetime import date, datetime
 from typing import Optional
-from sqlalchemy import String, Date, DateTime, Text, Boolean, ForeignKey
+from sqlalchemy import String, Date, DateTime, Text, Boolean, ForeignKey, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database.base import BaseModel
 
 class Student(BaseModel):
     __tablename__ = "students"
+    __table_args__ = (
+        UniqueConstraint("mobile", name="uq_students_mobile"),
+    )
 
     student_code: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
     name: Mapped[str] = mapped_column(String(150), nullable=False, index=True)

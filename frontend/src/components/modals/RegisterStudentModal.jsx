@@ -333,20 +333,7 @@ export default function RegisterStudentModal({
                 ))}
               </div>
 
-              <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-2 border-t border-slate-100">
-                <Button
-                  type="button"
-                  variant="neutral"
-                  size="xs"
-                  disabled={savingStandalone}
-                  onClick={() => {
-                    setForceCreate(true);
-                    setMobileCheckResult(null);
-                  }}
-                >
-                  None of these (Register New Student)
-                </Button>
-
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
                 <Button type="button" variant="secondary" size="xs" onClick={onClose}>
                   Cancel
                 </Button>
@@ -418,6 +405,8 @@ export default function RegisterStudentModal({
                     error={
                       formData.mobile && formData.mobile.length < 10
                         ? `Must be 10 digits (${formData.mobile.length}/10)`
+                        : matchedSingle
+                        ? 'This phone number is already registered'
                         : null
                     }
                     helperText={
@@ -450,7 +439,7 @@ export default function RegisterStudentModal({
                     <AlertCircle className="w-4 h-4 text-blue-700 shrink-0 mt-0.5" />
                     <div className="flex-1">
                       <span className="font-bold text-blue-950 block">
-                        Already registered with student code {matchedSingle.student_code}
+                        This phone number is already registered ({matchedSingle.student_code})
                       </span>
                       <span className="text-[11px] text-blue-800 block mt-0.5">
                         Existing student <strong>{matchedSingle.name}</strong> matched on normalised 10-digit phone ({matchedSingle.mobile}).
@@ -638,18 +627,7 @@ export default function RegisterStudentModal({
               ))}
             </div>
 
-            <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-2 border-t border-slate-100">
-              <Button
-                type="button"
-                variant="neutral"
-                size="xs"
-                disabled={submitting}
-                onClick={() => onSelectStudent && onSelectStudent(null, true)}
-                title="Create a new student with this phone number"
-              >
-                None of these (Register New Student)
-              </Button>
-
+            <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
               <Button
                 type="button"
                 variant="secondary"

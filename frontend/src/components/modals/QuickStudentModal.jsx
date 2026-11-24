@@ -132,7 +132,7 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
     }
 
     if (existingStudent) {
-      error(`Student already registered with mobile ${formData.mobile}: ${existingStudent.name} (${existingStudent.student_code}). User already has admission/registration.`);
+      error(`This phone number is already registered (${existingStudent.name} - ${existingStudent.student_code})`);
       return;
     }
 
@@ -261,7 +261,7 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
                 formData.mobile && formData.mobile.length < 10
                   ? `Must be exactly 10 numeric digits (${formData.mobile.length}/10)`
                   : existingStudent
-                  ? 'Student already registered with this mobile number'
+                  ? 'This phone number is already registered'
                   : null
               }
               helperText={
@@ -295,7 +295,7 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
               <AlertCircle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
               <div className="flex-1">
                 <span className="font-bold text-amber-950 block">
-                  Student Already Registered with this Mobile Number!
+                  This phone number is already registered
                 </span>
                 <span className="text-amber-900 font-medium block mt-0.5">
                   <strong className="text-black">{existingStudent.name}</strong> • Code:{' '}

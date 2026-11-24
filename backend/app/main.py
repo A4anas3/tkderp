@@ -69,6 +69,16 @@ async def lifespan(app: FastAPI):
             await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_teacher_attendance_teacher_month ON teacher_attendance(teacher_id, month_year);"))
             await conn.execute(text("ALTER TABLE admissions ADD COLUMN IF NOT EXISTS gst_number VARCHAR(50);"))
             await conn.execute(text("""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM pg_constraint WHERE conname = 'uq_students_mobile'
+                    ) THEN
+                        ALTER TABLE students ADD CONSTRAINT uq_students_mobile UNIQUE (mobile);
+                    END IF;
+                END $$;
+            """))
+            await conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS institute_settings (
                     id UUID PRIMARY KEY,
                     key VARCHAR(50) UNIQUE NOT NULL DEFAULT 'institute_profile',

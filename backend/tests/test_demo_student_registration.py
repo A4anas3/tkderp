@@ -155,46 +155,43 @@ async def test_demo_student_registration_full_flow():
         assert student3_code != student1_code
 
         # -------------------------------------------------------------
-        # 4. Multiple students sharing same phone number:
-        #    Create a second student with phone_b directly, then check/create demo
+        # 4. Phone number is strictly unique (one student per phone):
+        #    Attempting to create a second student with phone_b is blocked
+        #    and demo phone-check keeps finding the single registered student.
         # -------------------------------------------------------------
-        stu_sibling = await client.post("/api/students", json={
-            "name": "Sibling Student Two",
-            "mobile": phone_b,
+        dup_stu_res = await client.post("/api/students", json={
+            "name": "Duplicate Phone Student",
+            "mobile": f"+91{phone_b}",
             "father_name": "Test Father One",
             "status": "ACTIVE"
         }, headers=headers)
-        assert stu_sibling.status_code == 201
-        sibling_id = stu_sibling.json()["id"]
+        assert dup_stu_res.status_code == 400
+        assert "already registered" in dup_stu_res.json()["detail"].lower()
 
-        chk_multi = await client.get(f"/api/enquiries/check-student?mobile=+91{phone_b}", headers=headers)
-        assert chk_multi.status_code == 200
-        chk_multi_data = chk_multi.json()
-        assert chk_multi_data["exists"] is True
-        assert chk_multi_data["multiple_matches"] is True
-        matched_ids = [m["id"] for m in chk_multi_data["matches"]]
-        assert student3_id in matched_ids
-        assert sibling_id in matched_ids
+        dup_force_res = await client.post("/api/enquiries/register-student", json={
+            "name": "Duplicate Force Student",
+            "mobile": f"0{phone_b}",
+            "force_create": True
+        }, headers=headers)
+        assert dup_force_res.status_code == 400
+        assert "already registered" in dup_force_res.json()["detail"].lower()
 
-        # Creating demo with ambiguous phone without student_id is rejected
-        ambig_demo = await client.post("/api/enquiries", json={
-            "student_name": "Enquiry With Sibling Phone",
+        chk_single = await client.get(f"/api/enquiries/check-student?mobile=+91{phone_b}", headers=headers)
+        assert chk_single.status_code == 200
+        chk_single_data = chk_single.json()
+        assert chk_single_data["exists"] is True
+        assert chk_single_data["multiple_matches"] is False
+        assert chk_single_data["student"]["id"] == student3_id
+
+        # Creating demo with normalised phone links to single registered student3_id
+        enq4_res = await client.post("/api/enquiries", json={
+            "student_name": "Test Demo Student One",
             "mobile": f"+91{phone_b}",
             "interested_subject": "Biology",
             "status": "ACTIVE_DEMO"
         }, headers=headers)
-        assert ambig_demo.status_code == 400
-
-        # Selecting sibling_id creates demo for sibling_id
-        enq4_res = await client.post("/api/enquiries", json={
-            "student_id": sibling_id,
-            "student_name": "Sibling Student Two",
-            "mobile": phone_b,
-            "interested_subject": "Biology",
-            "status": "ACTIVE_DEMO"
-        }, headers=headers)
         assert enq4_res.status_code == 201
-        assert enq4_res.json()["converted_student_id"] == sibling_id
+        assert enq4_res.json()["converted_student_id"] == student3_id
 
         # -------------------------------------------------------------
         # 5. Enquiry page keeps Register Student action for non-demo PENDING enquiries

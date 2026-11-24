@@ -7,6 +7,7 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, and_, desc, case
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from app.database.session import get_db
@@ -144,6 +145,14 @@ async def _create_student_record(
             detail="Mobile number must be exactly 10 numeric digits"
         )
 
+    if norm_mob:
+        existing_matches = await _find_matching_students_by_mobile(db, norm_mob)
+        if existing_matches:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This phone number is already registered"
+            )
+
     notes_parts = []
     if school_college and school_college.strip():
         notes_parts.append(f"School/College: {school_college.strip()}")
@@ -167,7 +176,14 @@ async def _create_student_record(
         notes=combined_notes
     )
     db.add(student)
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This phone number is already registered"
+        )
 
     details = {
         "student_id": str(student.id),
@@ -188,7 +204,14 @@ async def _create_student_record(
     db.add(audit)
 
     if commit:
-        await db.commit()
+        try:
+            await db.commit()
+        except IntegrityError:
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This phone number is already registered"
+            )
         await db.refresh(student)
 
     return student
@@ -347,10 +370,15 @@ async def list_enquiries(
 
     student_map_by_mobile = {}
     if mobiles:
-        s_res2 = await db.execute(select(Student).where(Student.mobile.in_(mobiles)))
-        for s in s_res2.scalars().all():
-            if s.mobile not in student_map_by_mobile:
-                student_map_by_mobile[s.mobile] = s
+        norm_mobiles = list({extract_last_10_mobile(m) for m in mobiles if extract_last_10_mobile(m)})
+        if norm_mobiles:
+            s_res2 = await db.execute(select(Student).where(or_(Student.mobile.in_(mobiles), Student.mobile.in_(norm_mobiles))))
+            for s in s_res2.scalars().all():
+                s_norm = extract_last_10_mobile(s.mobile)
+                if s.mobile and s.mobile not in student_map_by_mobile:
+                    student_map_by_mobile[s.mobile] = s
+                if s_norm and s_norm not in student_map_by_mobile:
+                    student_map_by_mobile[s_norm] = s
 
     all_found_student_ids = set(student_map_by_id.keys())
     for s in student_map_by_mobile.values():
@@ -385,7 +413,7 @@ async def list_enquiries(
 
         matched_student = student_map_by_id.get(item.converted_student_id)
         if not matched_student and item.mobile:
-            matched_student = student_map_by_mobile.get(item.mobile)
+            matched_student = student_map_by_mobile.get(item.mobile) or student_map_by_mobile.get(extract_last_10_mobile(item.mobile))
 
         effective_student_id = item.converted_student_id or (matched_student.id if matched_student else None)
         effective_student_code = matched_student.student_code if matched_student else None
@@ -890,16 +918,12 @@ async def register_student_before_demo(
 
     matches = await _find_matching_students_by_mobile(db, norm_mob)
 
-    if len(matches) > 1 and not payload.force_create:
-        return RegisterStudentResponse(
-            success=True,
-            already_registered=False,
-            multiple_matches=True,
-            matches=[StudentMatchItem.model_validate(m) for m in matches],
-            message=f"Multiple students ({len(matches)}) found with mobile number ending in {norm_mob}. Please select the matching student."
-        )
-
-    if len(matches) == 1 and not payload.force_create:
+    if matches:
+        if payload.force_create:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This phone number is already registered"
+            )
         matched = matches[0]
         return RegisterStudentResponse(
             success=True,
@@ -909,7 +933,7 @@ async def register_student_before_demo(
             student_code=matched.student_code,
             student_name=matched.name,
             mobile=matched.mobile,
-            message=f"Already registered with student code {matched.student_code}"
+            message=f"This phone number is already registered ({matched.student_code})"
         )
 
     student = await _create_student_record(
@@ -1214,8 +1238,10 @@ async def _resolve_single_enquiry_response(db: AsyncSession, enquiry: Enquiry, f
         s_res = await db.execute(select(Student).where(Student.id == enquiry.converted_student_id))
         matched_student = s_res.scalar_one_or_none()
     elif enquiry.mobile:
-        s_res = await db.execute(select(Student).where(Student.mobile == enquiry.mobile))
-        matched_student = s_res.scalars().first()
+        norm_m = extract_last_10_mobile(enquiry.mobile)
+        if norm_m:
+            matched_list = await _find_matching_students_by_mobile(db, norm_m)
+            matched_student = matched_list[0] if matched_list else None
 
     effective_student_id = enquiry.converted_student_id or (matched_student.id if matched_student else None)
     effective_student_code = matched_student.student_code if matched_student else None
@@ -1446,29 +1472,13 @@ async def register_student_from_enquiry(
 
     matches = await _find_matching_students_by_mobile(db, norm_mob)
 
-    # 3a. Multiple students share the same mobile number
-    if len(matches) > 1 and not req.force_create:
-        return RegisterStudentResponse(
-            success=True,
-            already_registered=False,
-            multiple_matches=True,
-            matches=[
-                StudentMatchItem(
-                    id=m.id,
-                    student_code=m.student_code,
-                    name=m.name,
-                    father_name=m.father_name,
-                    mobile=m.mobile,
-                    registration_date=m.registration_date,
-                    status=m.status
-                )
-                for m in matches
-            ],
-            message=f"Multiple students ({len(matches)}) found with mobile number ending in {norm_mob}. Please select the matching student."
-        )
-
-    # 3b. Exactly 1 match found -> link to existing student
-    if len(matches) == 1 and not req.force_create:
+    # 3a/3b. Existing student found -> link to single registered student (never create a second student with same phone)
+    if matches:
+        if req.force_create:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This phone number is already registered"
+            )
         matched = matches[0]
         enquiry.converted_student_id = matched.id
         audit = AuditLog(
@@ -1498,7 +1508,7 @@ async def register_student_from_enquiry(
             student_code=matched.student_code,
             student_name=matched.name,
             mobile=matched.mobile,
-            message=f"Already registered with student code {matched.student_code}"
+            message=f"This phone number is already registered ({matched.student_code})"
         )
 
     # 3c. No match -> create new student pre-filled from enquiry

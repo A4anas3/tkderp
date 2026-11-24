@@ -2354,19 +2354,6 @@ export default function EnquiriesPage() {
                   ))}
                 </div>
 
-                <div className="flex justify-end">
-                  <Button
-                    type="button"
-                    size="xs"
-                    variant="neutral"
-                    onClick={() => {
-                      setRegisterForDemoForceCreate(true);
-                      setRegisterForDemoOpen(true);
-                    }}
-                  >
-                    None of these (Register New Student)
-                  </Button>
-                </div>
               </div>
             )}
 

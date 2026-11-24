@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, and_, desc
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload, joinedload
 from decimal import Decimal
 from datetime import datetime, timezone, date, timedelta
@@ -71,6 +72,31 @@ def compress_avatar_image(file_bytes: bytes, max_kb: int = 20) -> bytes:
     return buf.getvalue()
 
 router = APIRouter(prefix="/api/students", tags=["Students"])
+
+
+async def _find_student_by_mobile(
+    db: AsyncSession,
+    norm_mob: str,
+    exclude_student_id: Optional[uuid.UUID] = None
+) -> Optional[Student]:
+    """
+    Find the single registered student matching a normalized 10-digit mobile number.
+    """
+    clauses = [
+        Student.mobile == norm_mob,
+        Student.mobile == f"0{norm_mob}",
+        Student.mobile == f"+91{norm_mob}",
+    ]
+    try:
+        clauses.append(func.right(func.regexp_replace(Student.mobile, r'[^0-9]', '', 'g'), 10) == norm_mob)
+    except Exception:
+        pass
+
+    stmt = select(Student).where(Student.mobile.isnot(None), or_(*clauses))
+    if exclude_student_id is not None:
+        stmt = stmt.where(Student.id != exclude_student_id)
+    stmt = stmt.order_by(Student.registration_date.asc(), Student.created_at.asc()).limit(1)
+    return (await db.execute(stmt)).scalars().first()
 
 @router.get("", response_model=PageResponse[StudentResponse])
 async def list_students(
@@ -264,14 +290,7 @@ async def check_student_by_mobile(
     if not norm or len(norm) != 10:
         return {"exists": False, "valid": False, "message": "Mobile number must be exactly 10 numeric digits", "student": None}
 
-    clauses = [
-        Student.mobile == norm,
-        Student.mobile == f"0{norm}",
-        Student.mobile == f"+91{norm}",
-        Student.mobile == clean_mob,
-    ]
-    stmt = select(Student).where(or_(*clauses)).order_by(Student.registration_date.desc(), Student.created_at.desc()).limit(1)
-    student = (await db.execute(stmt)).scalars().first()
+    student = await _find_student_by_mobile(db, norm)
 
     if not student:
         return {"exists": False, "valid": True, "student": None}
@@ -683,22 +702,13 @@ async def create_student(
             )
         req.mobile = norm_mob
 
-    # Check mobile number constraint when requested
-    if norm_mob and check_duplicate:
-        match_clauses = [
-            Student.mobile == norm_mob,
-            Student.mobile == f"0{norm_mob}",
-            Student.mobile == f"+91{norm_mob}",
-        ]
-        existing = (await db.execute(select(Student).where(or_(*match_clauses)).limit(1))).scalars().first()
+    # Enforce unique phone number (normalised to last 10 digits)
+    if norm_mob:
+        existing = await _find_student_by_mobile(db, norm_mob)
         if existing:
-            adm_exists = (await db.execute(
-                select(Admission.admission_number).where(Admission.student_id == existing.id).limit(1)
-            )).scalar_one_or_none()
-            adm_text = f" with admission #{adm_exists}" if adm_exists else ""
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Student already registered{adm_text} with mobile {norm_mob}: {existing.name} ({existing.student_code}). Student ID: {existing.id}"
+                detail="This phone number is already registered"
             )
 
     # Auto-generate unique student code STU<Year><Count:04d>
@@ -727,7 +737,14 @@ async def create_student(
         notes=req.notes
     )
     db.add(new_student)
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This phone number is already registered"
+        )
 
     audit = AuditLog(
         user_id=user.id,
@@ -746,7 +763,14 @@ async def create_student(
         })
     )
     db.add(audit)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This phone number is already registered"
+        )
     await db.refresh(new_student)
     return StudentResponse.model_validate(new_student)
 
@@ -769,6 +793,12 @@ async def update_student(
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Mobile number must be exactly 10 numeric digits"
+                )
+            existing = await _find_student_by_mobile(db, norm_mob, exclude_student_id=student.id)
+            if existing:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="This phone number is already registered"
                 )
             student.mobile = norm_mob
         else:
@@ -798,7 +828,14 @@ async def update_student(
     )
     db.add(audit)
 
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This phone number is already registered"
+        )
     await db.refresh(student)
     return StudentResponse.model_validate(student)
 

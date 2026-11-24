@@ -16,6 +16,8 @@ export default function EditStudentModal({ isOpen, onClose, student, onSuccess }
   const [photoPreview, setPhotoPreview] = useState(null);
   const [photoFile, setPhotoFile] = useState(null);
   const [photoSizeKb, setPhotoSizeKb] = useState(null);
+  const [duplicateStudent, setDuplicateStudent] = useState(null);
+  const [checkingMobile, setCheckingMobile] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -45,8 +47,43 @@ export default function EditStudentModal({ isOpen, onClose, student, onSuccess }
       setPhotoPreview(student.photo_url || null);
       setPhotoFile(null);
       setPhotoSizeKb(null);
+      setDuplicateStudent(null);
     }
   }, [student, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !student) {
+      setDuplicateStudent(null);
+      setCheckingMobile(false);
+      return;
+    }
+
+    const clean = cleanMobileInput(formData.mobile);
+    const currentClean = cleanMobileInput(student.mobile || '');
+    if (clean.length !== 10 || clean === currentClean) {
+      setDuplicateStudent(null);
+      setCheckingMobile(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setCheckingMobile(true);
+      try {
+        const res = await studentApi.checkMobile(clean);
+        if (res?.exists && res?.student && res.student.id !== student.id) {
+          setDuplicateStudent(res.student);
+        } else {
+          setDuplicateStudent(null);
+        }
+      } catch (err) {
+        console.warn('Failed to verify mobile uniqueness:', err);
+      } finally {
+        setCheckingMobile(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [formData.mobile, isOpen, student]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -89,6 +126,11 @@ export default function EditStudentModal({ isOpen, onClose, student, onSuccess }
         error('Mobile number must be exactly 10 numeric digits');
         return;
       }
+    }
+
+    if (duplicateStudent) {
+      error('This phone number is already registered');
+      return;
     }
 
     setLoading(true);
@@ -206,10 +248,14 @@ export default function EditStudentModal({ isOpen, onClose, student, onSuccess }
             error={
               formData.mobile && formData.mobile.length < 10
                 ? `Mobile number must be exactly 10 digits (${formData.mobile.length}/10)`
+                : duplicateStudent
+                ? 'This phone number is already registered'
                 : null
             }
             helperText={
-              formData.mobile && formData.mobile.length === 10
+              checkingMobile
+                ? 'Checking phone availability...'
+                : formData.mobile && formData.mobile.length === 10 && !duplicateStudent
                 ? '✓ Valid 10-digit mobile'
                 : 'Optional 10-digit contact number'
             }
@@ -287,10 +333,14 @@ export default function EditStudentModal({ isOpen, onClose, student, onSuccess }
             variant="primary"
             loading={loading}
             icon={Edit3}
-            disabled={loading || (Boolean(formData.mobile) && formData.mobile.length !== 10)}
+            disabled={loading || !!duplicateStudent || (Boolean(formData.mobile) && formData.mobile.length !== 10)}
             className="w-full sm:w-auto"
           >
-            {formData.mobile && formData.mobile.length !== 10 ? 'Enter 10-Digit Mobile' : 'Save Changes'}
+            {duplicateStudent
+              ? 'Phone Already Registered'
+              : formData.mobile && formData.mobile.length !== 10
+              ? 'Enter 10-Digit Mobile'
+              : 'Save Changes'}
           </Button>
         </div>
       </form>
