@@ -71,6 +71,10 @@ export const teacherApi = {
     const res = await api.get(`/teachers/${id}/collections`);
     return res.data;
   },
+  getDemoConversion: async (id) => {
+    const res = await api.get(`/teachers/${id}/demo-conversion`);
+    return res.data;
+  },
   getSalaries: async (id) => {
     const res = await api.get(`/teachers/${id}/salaries`);
     return res.data;

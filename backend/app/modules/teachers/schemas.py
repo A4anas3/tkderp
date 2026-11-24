@@ -340,3 +340,42 @@ class TeacherMonthlyAttendanceResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class TeacherDemoConversionSubjectDetail(BaseModel):
+    demo_subject: str
+    enrolled_subject: str
+    subject_changed: bool = False
+    label: str
+    count: int = 1
+
+
+class TeacherConvertedDemoItem(BaseModel):
+    demo_item_id: uuid.UUID
+    enquiry_id: uuid.UUID
+    enquiry_code: str
+    demo_reference_number: str
+    source_demo_number: str
+    demo_start_date: Optional[date] = None
+    demo_end_date: Optional[date] = None
+    student_id: Optional[uuid.UUID] = None
+    student_name: str
+    student_code: Optional[str] = None
+    admission_id: uuid.UUID
+    admission_number: str
+    admission_date: Optional[date] = None
+    demo_subject: str
+    enrolled_subject: str
+    subject_changed: bool = False
+    subject_label: str
+
+
+class TeacherDemoConversionResponse(BaseModel):
+    teacher_id: uuid.UUID
+    teacher_name: str
+    teacher_code: str
+    demos_given: int = 0
+    demos_converted: int = 0
+    conversion_rate_pct: float = 0.0
+    enrolled_subjects: List[TeacherDemoConversionSubjectDetail] = []
+    converted_demos: List[TeacherConvertedDemoItem] = []
+
+

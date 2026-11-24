@@ -22,7 +22,8 @@ from app.modules.teachers.schemas import (
     TeacherSubjectBreakupItem, TeacherStudentBreakupItem, TeacherBreakupResponse,
     TeacherCollectionItem, TeacherCollectionsResponse,
     TeacherAttendanceToggle, TeacherAttendanceBulkUpdate, TeacherAttendanceRecordResponse,
-    TeacherAttendanceMonthlySummary, TeacherMonthlyAttendanceResponse
+    TeacherAttendanceMonthlySummary, TeacherMonthlyAttendanceResponse,
+    TeacherDemoConversionResponse
 )
 from app.modules.batches.models import Batch
 from app.modules.subjects.models import Subject
@@ -32,7 +33,11 @@ from app.modules.students.models import Student
 from app.modules.expenses.models import SalaryRecord
 from app.modules.expenses.schemas import SalaryRecordResponse
 from app.database.models import AuditLog
-from app.modules.reports.ledger_queries import get_item_allocated_collected_map, ist_day_boundaries
+from app.modules.reports.ledger_queries import (
+    get_item_allocated_collected_map,
+    ist_day_boundaries,
+    get_teacher_demo_conversion,
+)
 from app.common.active_student import active_student_subject_filter, today_kolkata
 from app.common.active_lines import compute_days_remaining
 from app.core.dependencies import require_staff, require_admin
@@ -1405,6 +1410,33 @@ async def get_teacher_collections(
         collections_count=len(items),
         by_mode=dict(by_mode),
         items=items
+    )
+
+
+@router.get("/{teacher_id}/demo-conversion", response_model=TeacherDemoConversionResponse)
+async def get_teacher_demo_conversion_endpoint(
+    teacher_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user = Depends(require_staff)
+):
+    """
+    Demo conversion metrics credited to this teacher as the demo giver,
+    verified by source_demo_number, matching the Reports teacher-wise demo conversion table.
+    """
+    teacher = (await db.execute(select(Teacher).where(Teacher.id == teacher_id))).scalar_one_or_none()
+    if not teacher:
+        raise HTTPException(status_code=404, detail="Teacher not found")
+
+    stats = await get_teacher_demo_conversion(db, teacher_id)
+    return TeacherDemoConversionResponse(
+        teacher_id=teacher.id,
+        teacher_name=teacher.name,
+        teacher_code=teacher.teacher_code,
+        demos_given=stats["demos_given"],
+        demos_converted=stats["demos_converted"],
+        conversion_rate_pct=stats["conversion_rate_pct"],
+        enrolled_subjects=stats["enrolled_subjects"],
+        converted_demos=stats["converted_demos"],
     )
 
 @router.get("/{teacher_id}/attendance", response_model=TeacherMonthlyAttendanceResponse)

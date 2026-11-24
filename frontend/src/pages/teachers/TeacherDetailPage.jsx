@@ -94,6 +94,10 @@ export default function TeacherDetailPage() {
   });
   const [collectionsLoading, setCollectionsLoading] = useState(false);
 
+  // 5b. Demo Conversion State (credited as demo giver, verified via source_demo_number)
+  const [demoConversion, setDemoConversion] = useState(null);
+  const [demoConversionLoading, setDemoConversionLoading] = useState(false);
+
   // 6. Roster State (from database roster endpoint)
   const [rosterItems, setRosterItems] = useState([]);
   const [rosterTotal, setRosterTotal] = useState(0);
@@ -234,6 +238,20 @@ export default function TeacherDetailPage() {
     }
   }, [id]);
 
+  // Load demo conversion stats (credited as demo giver, verified by source_demo_number)
+  const loadDemoConversion = useCallback(async () => {
+    if (!id) return;
+    setDemoConversionLoading(true);
+    try {
+      const data = await teacherApi.getDemoConversion(id);
+      setDemoConversion(data);
+    } catch (err) {
+      console.error('Failed to load teacher demo conversion:', err);
+    } finally {
+      setDemoConversionLoading(false);
+    }
+  }, [id]);
+
   // Load course enrollments roster
   const loadRoster = useCallback(async () => {
     if (!id) return;
@@ -284,9 +302,10 @@ export default function TeacherDetailPage() {
     loadBreakup();
     loadHistory();
     loadCollections();
+    loadDemoConversion();
     loadRoster();
     loadSalaries();
-  }, [loadProfile, loadBreakup, loadHistory, loadCollections, loadRoster, loadSalaries]);
+  }, [loadProfile, loadBreakup, loadHistory, loadCollections, loadDemoConversion, loadRoster, loadSalaries]);
 
   useEffect(() => {
     refreshAll();
@@ -698,6 +717,160 @@ export default function TeacherDetailPage() {
             Payable: ₹{salaries.reduce((sum, s) => sum + Number(s.salary_amount || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
           </span>
         </div>
+      </div>
+
+      {/* Demo Conversion Section (Credited as Demo Giver, Verified via source_demo_number) */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 sm:p-5 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          <div>
+            <h3 className="text-xs font-black text-black uppercase tracking-wider flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-indigo-600" />
+              <span>Demo Conversion</span>
+            </h3>
+            <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+              Credited to {teacher.name} as demo giver • Verified via demo reference number (source_demo_number)
+            </p>
+          </div>
+          <Badge variant="primary" size="xs">Demo Credit</Badge>
+        </div>
+
+        {demoConversionLoading && !demoConversion ? (
+          <div className="py-6 text-center text-xs text-slate-500 animate-pulse">
+            Loading demo conversion metrics...
+          </div>
+        ) : (
+          <>
+            {/* Summary Metrics & Enrolled Subjects Strip */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+              <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                  Demos Given
+                </span>
+                <span className="font-mono font-black text-black text-lg mt-0.5 block">
+                  {demoConversion?.demos_given ?? 0}
+                </span>
+              </div>
+
+              <div className="bg-emerald-50/70 p-3 rounded-lg border border-emerald-200">
+                <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">
+                  Demos Converted
+                </span>
+                <span className="font-mono font-black text-emerald-800 text-lg mt-0.5 block">
+                  {demoConversion?.demos_converted ?? 0}
+                </span>
+              </div>
+
+              <div className="bg-indigo-50/70 p-3 rounded-lg border border-indigo-200">
+                <span className="text-[10px] font-bold text-indigo-800 uppercase tracking-wider block">
+                  Conversion %
+                </span>
+                <span className="font-mono font-black text-indigo-900 text-lg mt-0.5 block">
+                  {demoConversion?.conversion_rate_pct ?? 0}%
+                </span>
+              </div>
+
+              <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 col-span-2 lg:col-span-1">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                  Enrolled Subject(s)
+                </span>
+                {demoConversion?.enrolled_subjects?.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {demoConversion.enrolled_subjects.map((sub, sIdx) => (
+                      <span
+                        key={sIdx}
+                        className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold ${
+                          sub.subject_changed
+                            ? 'bg-amber-50 text-amber-900 border border-amber-200'
+                            : 'bg-white text-black border border-slate-200'
+                        }`}
+                      >
+                        {sub.label}
+                        {sub.count > 1 && (
+                          <span className="ml-1 text-[10px] font-mono opacity-75">×{sub.count}</span>
+                        )}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-slate-400 text-xs font-medium">—</span>
+                )}
+              </div>
+            </div>
+
+            {/* Detailed Enrolled Subject Per Converted Demo */}
+            {demoConversion?.converted_demos?.length > 0 ? (
+              <div className="overflow-x-auto rounded-lg border border-slate-200">
+                <table className="w-full text-xs text-left min-w-[650px]">
+                  <thead className="bg-slate-50 text-slate-800 font-bold border-b border-slate-200">
+                    <tr>
+                      <th className="p-2.5">Demo Ref #</th>
+                      <th className="p-2.5">Student</th>
+                      <th className="p-2.5">Demo Subject → Enrolled Subject</th>
+                      <th className="p-2.5">Admission</th>
+                      <th className="p-2.5">Demo Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium">
+                    {demoConversion.converted_demos.map((cd) => (
+                      <tr key={cd.demo_item_id} className="hover:bg-slate-50 transition">
+                        <td className="p-2.5">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-emerald-50 text-emerald-900 border border-emerald-200 font-mono font-bold text-[11px]">
+                            {cd.source_demo_number}
+                          </span>
+                        </td>
+                        <td className="p-2.5">
+                          {cd.student_id ? (
+                            <Link
+                              to={`/students/${cd.student_id}`}
+                              className="font-bold text-black hover:text-odoo-600 block leading-tight"
+                            >
+                              {cd.student_name}
+                            </Link>
+                          ) : (
+                            <span className="font-bold text-black block leading-tight">{cd.student_name}</span>
+                          )}
+                          <span className="text-[10px] text-slate-500 font-mono">
+                            {cd.student_code ? `#${cd.student_code} • ` : ''}{cd.enquiry_code}
+                          </span>
+                        </td>
+                        <td className="p-2.5">
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold ${
+                              cd.subject_changed
+                                ? 'bg-amber-50 text-amber-900 border border-amber-200'
+                                : 'bg-slate-100 text-black'
+                            }`}
+                          >
+                            {cd.demo_subject} → {cd.enrolled_subject}
+                          </span>
+                        </td>
+                        <td className="p-2.5">
+                          <span className="font-mono font-bold text-black block">
+                            {cd.admission_number}
+                          </span>
+                          {cd.admission_date && (
+                            <span className="text-[10px] text-slate-500 font-mono">
+                              {formatIndianDate(cd.admission_date)}
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-2.5 font-mono text-slate-600">
+                          {cd.demo_start_date ? formatIndianDate(cd.demo_start_date) : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-4 bg-slate-50 rounded-lg border border-dashed border-slate-200 text-xs text-slate-500">
+                {(demoConversion?.demos_given ?? 0) > 0
+                  ? 'No converted demos verified via source_demo_number yet.'
+                  : 'No demos assigned to this teacher yet.'}
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {/* Main Feature Tabs mirroring Subject module (G3) */}

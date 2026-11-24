@@ -1173,6 +1173,41 @@ async def get_expenses_detailed(
     }
 
 
+def resolve_demo_conversion_subject(
+    demo_item: EnquiryDemoItem,
+    adm_item: AdmissionItem,
+    subject_name_map: Optional[Dict[uuid.UUID, str]] = None,
+) -> Dict[str, Any]:
+    """Resolves demo subject -> enrolled subject mapping for a verified converted demo."""
+    smap = subject_name_map or {}
+    demo_subj = (
+        demo_item.subject_name_snapshot
+        or (smap.get(demo_item.subject_id) if demo_item.subject_id else None)
+        or "General Demo"
+    ).strip()
+    enrolled_subj = (
+        (adm_item.subject.name if adm_item.subject and adm_item.subject.name else None)
+        or (smap.get(adm_item.subject_id) if adm_item.subject_id else None)
+        or adm_item.item_name_snapshot
+        or "Enrolled Course"
+    ).strip()
+    same_subject = (
+        (
+            demo_item.subject_id is not None
+            and adm_item.subject_id is not None
+            and demo_item.subject_id == adm_item.subject_id
+        )
+        or (demo_subj.lower() == enrolled_subj.lower())
+    )
+    label = enrolled_subj if same_subject else f"{demo_subj} -> {enrolled_subj}"
+    return {
+        "demo_subject": demo_subj,
+        "enrolled_subject": enrolled_subj,
+        "subject_changed": not same_subject,
+        "label": label,
+    }
+
+
 async def get_admissions_conversion_detailed(
     db: AsyncSession,
     from_date: Optional[date] = None,
@@ -1354,29 +1389,16 @@ async def get_admissions_conversion_detailed(
                 adm_item, _adm, _ref_no = linked_demo
                 t_entry["demos_converted"] += 1
 
-                demo_subj = (
-                    d.subject_name_snapshot
-                    or (subject_name_map.get(d.subject_id) if d.subject_id else None)
-                    or "General Demo"
-                ).strip()
-                enrolled_subj = (
-                    (adm_item.subject.name if adm_item.subject and adm_item.subject.name else None)
-                    or (subject_name_map.get(adm_item.subject_id) if adm_item.subject_id else None)
-                    or adm_item.item_name_snapshot
-                    or "Enrolled Course"
-                ).strip()
-                same_subject = (
-                    (d.subject_id is not None and adm_item.subject_id is not None and d.subject_id == adm_item.subject_id)
-                    or (demo_subj.lower() == enrolled_subj.lower())
+                sub_info = resolve_demo_conversion_subject(d, adm_item, subject_name_map)
+                same_subject = not sub_info["subject_changed"]
+                sd_key = (
+                    sub_info["demo_subject"].lower(),
+                    sub_info["enrolled_subject"].lower(),
+                    same_subject,
                 )
-                label = enrolled_subj if same_subject else f"{demo_subj} -> {enrolled_subj}"
-                sd_key = (demo_subj.lower(), enrolled_subj.lower(), same_subject)
                 if sd_key not in t_entry["_subject_details"]:
                     t_entry["_subject_details"][sd_key] = {
-                        "demo_subject": demo_subj,
-                        "enrolled_subject": enrolled_subj,
-                        "subject_changed": not same_subject,
-                        "label": label,
+                        **sub_info,
                         "count": 0,
                     }
                 t_entry["_subject_details"][sd_key]["count"] += 1
@@ -1480,6 +1502,127 @@ async def get_admissions_conversion_detailed(
         "page": cur_page,
         "page_size": effective_page_size,
         "items": paged_items
+    }
+
+
+async def get_teacher_demo_conversion(
+    db: AsyncSession,
+    teacher_id: uuid.UUID,
+) -> Dict[str, Any]:
+    """
+    Teacher-specific Demo Conversion metrics credited to this teacher as the demo giver,
+    verified strictly by demo reference number (AdmissionItem.source_demo_number == EnquiryDemoItem.demo_reference_number)
+    on valid non-cancelled admissions, matching the Reports teacher-wise demo conversion table.
+    """
+    demo_stmt = (
+        select(EnquiryDemoItem, Enquiry)
+        .join(Enquiry, EnquiryDemoItem.enquiry_id == Enquiry.id)
+        .where(EnquiryDemoItem.teacher_id == teacher_id)
+        .order_by(EnquiryDemoItem.demo_start_date.desc(), EnquiryDemoItem.created_at.desc())
+    )
+    demo_rows = (await db.execute(demo_stmt)).all()
+
+    demo_ids = [d.id for d, _enq in demo_rows if d.demo_reference_number]
+    linked_by_demo_id: Dict[uuid.UUID, Tuple[AdmissionItem, Admission, str]] = {}
+    if demo_ids:
+        link_stmt = (
+            select(AdmissionItem, Admission, EnquiryDemoItem)
+            .join(Admission, AdmissionItem.admission_id == Admission.id)
+            .join(
+                EnquiryDemoItem,
+                EnquiryDemoItem.converted_admission_item_id == AdmissionItem.id,
+            )
+            .options(
+                selectinload(AdmissionItem.demo_item),
+                selectinload(Admission.student),
+            )
+            .where(
+                EnquiryDemoItem.id.in_(demo_ids),
+                EnquiryDemoItem.demo_reference_number.isnot(None),
+                Admission.status != "CANCELLED",
+                Admission.document_status == "VALID",
+            )
+            .order_by(Admission.admission_date.desc(), Admission.created_at.desc())
+        )
+        for adm_item, adm, demo_itm in (await db.execute(link_stmt)).all():
+            ref_no = adm_item.source_demo_number
+            if ref_no and ref_no == demo_itm.demo_reference_number:
+                linked_by_demo_id[demo_itm.id] = (adm_item, adm, ref_no)
+
+    subject_ids = set()
+    for d, _enq in demo_rows:
+        if d.subject_id:
+            subject_ids.add(d.subject_id)
+    for adm_item, _adm, _ref_no in linked_by_demo_id.values():
+        if adm_item.subject_id:
+            subject_ids.add(adm_item.subject_id)
+
+    subject_name_map: Dict[uuid.UUID, str] = {}
+    if subject_ids:
+        s_res = await db.execute(select(Subject.id, Subject.name).where(Subject.id.in_(subject_ids)))
+        subject_name_map = {sid: sname for sid, sname in s_res.all()}
+
+    demos_given = 0
+    demos_converted = 0
+    subject_details_map: Dict[Tuple[str, str, bool], Dict[str, Any]] = {}
+    converted_demos: List[Dict[str, Any]] = []
+
+    for d, enq in demo_rows:
+        demos_given += 1
+        linked_demo = linked_by_demo_id.get(d.id) if d.demo_reference_number else None
+        if not linked_demo:
+            continue
+
+        adm_item, adm, ref_no = linked_demo
+        demos_converted += 1
+
+        sub_info = resolve_demo_conversion_subject(d, adm_item, subject_name_map)
+        same_subject = not sub_info["subject_changed"]
+        sd_key = (
+            sub_info["demo_subject"].lower(),
+            sub_info["enrolled_subject"].lower(),
+            same_subject,
+        )
+        if sd_key not in subject_details_map:
+            subject_details_map[sd_key] = {
+                **sub_info,
+                "count": 0,
+            }
+        subject_details_map[sd_key]["count"] += 1
+
+        stu = adm.student
+        converted_demos.append({
+            "demo_item_id": d.id,
+            "enquiry_id": enq.id,
+            "enquiry_code": enq.enquiry_code,
+            "demo_reference_number": d.demo_reference_number,
+            "source_demo_number": ref_no,
+            "demo_start_date": d.demo_start_date,
+            "demo_end_date": d.demo_end_date,
+            "student_id": adm.student_id,
+            "student_name": stu.name if stu else enq.student_name,
+            "student_code": stu.student_code if stu else None,
+            "admission_id": adm.id,
+            "admission_number": adm.admission_number,
+            "admission_date": adm.admission_date,
+            "demo_subject": sub_info["demo_subject"],
+            "enrolled_subject": sub_info["enrolled_subject"],
+            "subject_changed": sub_info["subject_changed"],
+            "subject_label": f"{sub_info['demo_subject']} -> {sub_info['enrolled_subject']}",
+        })
+
+    conversion_rate_pct = round((demos_converted / demos_given * 100), 1) if demos_given > 0 else 0.0
+    enrolled_subjects = sorted(
+        subject_details_map.values(),
+        key=lambda x: (-x["count"], x["label"].lower()),
+    )
+
+    return {
+        "demos_given": demos_given,
+        "demos_converted": demos_converted,
+        "conversion_rate_pct": conversion_rate_pct,
+        "enrolled_subjects": enrolled_subjects,
+        "converted_demos": converted_demos,
     }
 
 
