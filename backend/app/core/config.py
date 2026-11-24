@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     PAYMENT_GRACE_DAYS: int = 7
 
     # CORS
-    BACKEND_CORS_ORIGINS: List[str] = ["*"]
+    BACKEND_CORS_ORIGINS: List[str] = ["http://100.85.230.18:5173"]
     
     # Uploads & Storage Provider
     STORAGE_PROVIDER: str = "local" # local, cloudinary, oracle

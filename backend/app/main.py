@@ -132,13 +132,19 @@ app = FastAPI(
     openapi_url="/openapi.json" if _docs_enabled else None,
 )
 
-# CORS configuration
+# CORS configuration — restrict to configured frontend origins (no wildcard)
+_allowed_origins = [
+    origin.strip().rstrip("/")
+    for origin in settings.BACKEND_CORS_ORIGINS
+    if origin and origin.strip() != "*"
+] or ["http://100.85.230.18:5173"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_allowed_origins,
+    allow_credentials=False,  # Bearer token auth uses the Authorization header, not cookies
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"],
 )
 
 SECURITY_HEADERS = {
@@ -146,6 +152,10 @@ SECURITY_HEADERS = {
     "X-Frame-Options": "SAMEORIGIN",
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer-when-downgrade",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Cross-Origin-Embedder-Policy": "require-corp",
+    "Cross-Origin-Resource-Policy": "same-origin",
 }
 
 
