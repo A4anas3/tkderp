@@ -296,17 +296,10 @@ class AdmissionValidityUpdate(BaseModel):
     valid_to: Optional[date] = None
     notes: Optional[str] = None
 
-class AdmissionLifecycleAction(BaseModel):
-    reason: Optional[str] = None
-
 class AdmissionItemValidityUpdate(BaseModel):
     valid_from: Optional[date] = None
     valid_to: Optional[date] = None
     notes: Optional[str] = None
-
-class AdmissionItemLifecycleAction(BaseModel):
-    action: str = Field(..., pattern="^(SUSPEND|RESUME|DISCONTINUE)$")
-    reason: Optional[str] = None
 
 class SubjectRenewalRequest(BaseModel):
     student_id: uuid.UUID
@@ -347,23 +340,6 @@ class RenewalCalculateResponse(BaseModel):
     discount_value: Decimal
     discount_amount: Decimal
     net_payable: Decimal
-
-class SubjectChangeRequest(BaseModel):
-    student_id: uuid.UUID
-    old_item_id: Optional[uuid.UUID] = None
-    old_subject_id: Optional[uuid.UUID] = None
-    new_subject_id: uuid.UUID
-    teacher_id: Optional[uuid.UUID] = None
-    batch_id: Optional[uuid.UUID] = None
-    valid_from: Optional[date] = None
-    valid_to: Optional[date] = None
-    months: int = Field(default=1, ge=1)
-    fee: Optional[Decimal] = Field(default=None, ge=0)
-    price_override_reason: Optional[str] = None
-    discount_type: str = Field(default="NONE", pattern="^(NONE|FIXED|PERCENTAGE)$")
-    discount_value: Decimal = Field(default=Decimal("0.00"), ge=0)
-    initial_payment: Optional[InitialPaymentData] = None
-    notes: Optional[str] = None
 
 class ItemRenewalSpec(BaseModel):
     item_id: uuid.UUID

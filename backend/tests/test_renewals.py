@@ -240,16 +240,22 @@ async def test_discontinued_item_renewal_rejected():
                 "valid_to": "2026-05-31"
             }]
         }, headers=admin_headers)
-        item = adm_res.json()["items"][0]
+        adm = adm_res.json()
+        item = adm["items"][0]
 
-        # Discontinue the item
+        # Cancel/revoke the item via individual course cancel
         disc_res = await client.post(
-            f"/api/admissions/items/{item['id']}/discontinue",
-            json={"action": "DISCONTINUE", "reason": "Student relocated"},
+            f"/api/admissions/{adm['id']}/revoke",
+            json={
+                "reason": "Student relocated",
+                "scope": "SELECTED_ITEMS",
+                "item_ids": [item["id"]],
+                "pending_due_action": "WAIVE"
+            },
             headers=admin_headers
         )
         assert disc_res.status_code == 200
-        assert disc_res.json()["status"] == "DISCONTINUED"
+        assert disc_res.json()["items"][0]["status"] == "DISCONTINUED"
 
         # Attempt renewal via /items/{id}/renew
         renew_res = await client.post(f"/api/admissions/items/{item['id']}/renew", json={

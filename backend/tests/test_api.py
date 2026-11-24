@@ -1398,38 +1398,28 @@ async def test_subject_lifecycle_and_renewal_flow():
         assert val_res.status_code == 200
         assert val_res.json()["valid_to"] == new_end.isoformat()
 
-        # 7. Test item-level suspension
+        # 7. Verify item-level suspend and discontinue endpoints are removed
         sus_res = await client.post(f"/api/admissions/items/{item_id}/suspend", json={
             "action": "SUSPEND",
             "reason": "Student traveling"
         }, headers=headers)
-        assert sus_res.status_code == 200
-        assert sus_res.json()["status"] == "SUSPENDED"
+        assert sus_res.status_code in (404, 405)
 
-        # Check active enrollment after suspension: subject moved to history
-        enr_sus = await client.get(f"/api/students/{student_id}/active-enrollment", headers=headers)
-        assert enr_sus.status_code == 200
-        assert enr_sus.json()["is_student_active"] is False
-        assert len(enr_sus.json()["active_subjects"]) == 0
-        assert len(enr_sus.json()["historical_subjects"]) == 1
-        assert enr_sus.json()["historical_subjects"][0]["status"] == "SUSPENDED"
-
-        # 8. Test item-level resume
-        res_res = await client.post(f"/api/admissions/items/{item_id}/resume", headers=headers)
-        assert res_res.status_code == 200
-        assert res_res.json()["status"] == "ACTIVE"
-
-        enr_resumed = await client.get(f"/api/students/{student_id}/active-enrollment", headers=headers)
-        assert enr_resumed.json()["is_student_active"] is True
-        assert len(enr_resumed.json()["active_subjects"]) == 1
-
-        # 9. Test item-level discontinuation
-        disc_res = await client.post(f"/api/admissions/items/{item_id}/discontinue", json={
+        disc_removed_res = await client.post(f"/api/admissions/items/{item_id}/discontinue", json={
             "action": "DISCONTINUE",
             "reason": "Shifted to morning timings"
         }, headers=headers)
+        assert disc_removed_res.status_code in (404, 405)
+
+        # 8. Cancel the individual course item via revoke (SELECTED_ITEMS)
+        disc_res = await client.post(f"/api/admissions/{adm_data['id']}/revoke", json={
+            "reason": "Shifted to morning timings",
+            "scope": "SELECTED_ITEMS",
+            "item_ids": [item_id],
+            "pending_due_action": "WAIVE"
+        }, headers=headers)
         assert disc_res.status_code == 200
-        assert disc_res.json()["status"] == "DISCONTINUED"
+        assert disc_res.json()["items"][0]["status"] == "DISCONTINUED"
 
         enr_disc = await client.get(f"/api/students/{student_id}/active-enrollment", headers=headers)
         assert enr_disc.json()["is_student_active"] is False

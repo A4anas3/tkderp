@@ -587,10 +587,12 @@ async def test_payment_rejection_discontinued_and_non_active():
         adm = adm_res.json()
         item_id = adm["items"][0]["id"]
 
-        # 1. Discontinue item -> payment rejected with 400
-        disc_res = await client.post(f"/api/admissions/items/{item_id}/discontinue", json={
-            "action": "DISCONTINUE",
-            "reason": "Student opted out"
+        # 1. Cancel/revoke item -> payment rejected with 400
+        disc_res = await client.post(f"/api/admissions/{adm['id']}/revoke", json={
+            "reason": "Student opted out",
+            "scope": "SELECTED_ITEMS",
+            "item_ids": [item_id],
+            "pending_due_action": "WAIVE"
         }, headers=admin_headers)
         assert disc_res.status_code == 200
 
