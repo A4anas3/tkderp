@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import axios from 'axios';
+import { formatDemoDates } from '../../utils/idCardHelpers';
 
 export default function PublicIDCardPage() {
   const { identifier: pathIdentifier } = useParams();
@@ -305,8 +306,8 @@ export default function PublicIDCardPage() {
           </div>
         )}
 
-        {/* ACTIVE UPDATED ID CARD SECTION (ONLY when active subjects exist) */}
-        {!loading && cardData && cardData.student && cardData.active_courses?.length > 0 && (
+        {/* ACTIVE UPDATED ID CARD SECTION (ONLY when active subjects or demos exist) */}
+        {!loading && cardData && cardData.student && (cardData.active_courses?.length > 0 || cardData.active_demos?.length > 0) && (
           <div className="space-y-4">
             {/* Top Card Controls Bar (no-print) */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 bg-white border border-slate-300 rounded-xl shadow-2xs no-print">
@@ -418,71 +419,143 @@ export default function PublicIDCardPage() {
                     <div className="flex items-center justify-between border-b border-slate-300 pb-1">
                       <span className="text-[11px] font-black uppercase tracking-wider text-black flex items-center gap-1.5">
                         <BookOpen className="w-3.5 h-3.5 text-odoo-800 shrink-0" />
-                        Enrolled Active Courses ({cardData.active_courses.length})
+                        Enrolled Active Courses ({cardData.active_courses?.length || 0})
                       </span>
                       <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
                         Active & Valid
                       </span>
                     </div>
 
-                    <div className="space-y-2 max-h-[220px] overflow-y-auto pr-0.5">
-                      {cardData.active_courses.map((course, idx) => (
-                        <div
-                          key={idx}
-                          className="p-2 bg-slate-50 rounded-lg border border-slate-300 text-xs space-y-1"
-                        >
-                          <div className="flex items-start justify-between gap-1.5">
-                            <span className="font-bold text-black leading-tight flex-1">
-                              {course.course_name}
-                            </span>
+                    {!cardData.active_courses || cardData.active_courses.length === 0 ? (
+                      <div className="p-2.5 rounded border border-dashed border-slate-300 bg-slate-50 text-center">
+                        <p className="text-xs font-semibold text-slate-700">
+                          No active courses currently enrolled.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-[220px] overflow-y-auto pr-0.5">
+                        {cardData.active_courses.map((course, idx) => (
+                          <div
+                            key={idx}
+                            className="p-2 bg-slate-50 rounded-lg border border-slate-300 text-xs space-y-1"
+                          >
+                            <div className="flex items-start justify-between gap-1.5">
+                              <span className="font-bold text-black leading-tight flex-1">
+                                {course.course_name}
+                              </span>
 
-                          </div>
+                            </div>
 
-                          {/* Class Timing, Hall Number & Teacher Name */}
-                          {((course.schedule || course.timing) || course.hall_number || course.teacher_name) && (
-                            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] text-slate-700 font-medium">
-                              {(course.schedule || course.timing) && (
-                                <div className="flex items-center gap-1">
-                                  <Clock className="w-3 h-3 text-slate-500 shrink-0" />
-                                  <span>Timing: <strong className="text-black">{course.schedule || course.timing}</strong></span>
-                                </div>
-                              )}
-                              {course.hall_number && (
-                                <span>
-                                  Hall: <strong className="text-black">{course.hall_number}</strong>
-                                </span>
-                              )}
-                              {course.teacher_name && (
-                                <span>
-                                  Teacher: <strong className="text-black">{course.teacher_name}</strong>
+                            {/* Class Timing, Hall Number & Teacher Name */}
+                            {((course.schedule || course.timing) || course.hall_number || course.teacher_name) && (
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] text-slate-700 font-medium">
+                                {(course.schedule || course.timing) && (
+                                  <div className="flex items-center gap-1">
+                                    <Clock className="w-3 h-3 text-slate-500 shrink-0" />
+                                    <span>Timing: <strong className="text-black">{course.schedule || course.timing}</strong></span>
+                                  </div>
+                                )}
+                                {course.hall_number && (
+                                  <span>
+                                    Hall: <strong className="text-black">{course.hall_number}</strong>
+                                  </span>
+                                )}
+                                {course.teacher_name && (
+                                  <span>
+                                    Teacher: <strong className="text-black">{course.teacher_name}</strong>
+                                  </span>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Validity Period */}
+                            <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] pt-0.5 border-t border-slate-200">
+                              <span className="font-bold text-odoo-900 bg-purple-50 px-2 py-0.5 rounded border border-purple-200 inline-flex items-center gap-1">
+                                <Calendar className="w-3 h-3 text-odoo-700 shrink-0" />
+                                {course.validity_period}
+                              </span>
+
+                              {course.days_remaining !== null && course.days_remaining !== undefined && (
+                                <span
+                                  className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
+                                    course.days_remaining <= 5
+                                      ? 'bg-rose-100 text-rose-900 border border-rose-300'
+                                      : 'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                                  }`}
+                                >
+                                  {course.days_remaining}d remaining
                                 </span>
                               )}
                             </div>
-                          )}
-
-                          {/* Validity Period */}
-                          <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] pt-0.5 border-t border-slate-200">
-                            <span className="font-bold text-odoo-900 bg-purple-50 px-2 py-0.5 rounded border border-purple-200 inline-flex items-center gap-1">
-                              <Calendar className="w-3 h-3 text-odoo-700 shrink-0" />
-                              {course.validity_period}
-                            </span>
-
-                            {course.days_remaining !== null && course.days_remaining !== undefined && (
-                              <span
-                                className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
-                                  course.days_remaining <= 5
-                                    ? 'bg-rose-100 text-rose-900 border border-rose-300'
-                                    : 'bg-emerald-100 text-emerald-900 border border-emerald-200'
-                                }`}
-                              >
-                                {course.days_remaining}d remaining
-                              </span>
-                            )}
                           </div>
-                        </div>
-                      ))}
-                    </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
+
+                  {/* Active Demos Section (Hidden completely if no active demos) */}
+                  {cardData.active_demos && cardData.active_demos.length > 0 && (
+                    <div className="space-y-2 pt-1 border-t border-slate-200">
+                      <div className="flex items-center justify-between border-b border-amber-300 pb-1">
+                        <span className="text-[11px] font-black uppercase tracking-wider text-black flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                          Active Trial Demos ({cardData.active_demos.length})
+                        </span>
+                        <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-300">
+                          Demo Trial
+                        </span>
+                      </div>
+
+                      <div className="space-y-2 max-h-[180px] overflow-y-auto pr-0.5">
+                        {cardData.active_demos.map((demo, idx) => (
+                          <div
+                            key={demo.demo_reference_number || idx}
+                            className="p-2 bg-amber-50/50 rounded-lg border border-amber-200 text-xs space-y-1"
+                          >
+                            {/* Subject & Demo Reference Number */}
+                            <div className="flex items-start justify-between gap-1.5">
+                              <span className="font-bold text-black leading-tight flex-1">
+                                {demo.subject_name}
+                              </span>
+                              <span className="font-mono text-[10px] font-black text-amber-950 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-300 shrink-0">
+                                {demo.demo_reference_number}
+                              </span>
+                            </div>
+
+                            {/* Teacher & Hall */}
+                            {(demo.teacher_name || demo.hall_number) && (
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] text-slate-700 font-medium">
+                                {demo.teacher_name && (
+                                  <span>
+                                    Teacher: <strong className="text-black">{demo.teacher_name}</strong>
+                                  </span>
+                                )}
+                                {demo.hall_number && (
+                                  <span>
+                                    Hall: <strong className="text-black">{demo.hall_number}</strong>
+                                  </span>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Demo Dates & Days Remaining */}
+                            <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] pt-0.5 border-t border-amber-200/60">
+                              <span className="font-bold text-amber-950 bg-white px-2 py-0.5 rounded border border-amber-300 inline-flex items-center gap-1">
+                                <Calendar className="w-3 h-3 text-amber-700 shrink-0" />
+                                Demo: {formatDemoDates(demo.demo_start_date, demo.demo_end_date)}
+                              </span>
+
+                              {demo.days_remaining !== null && demo.days_remaining !== undefined && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300">
+                                  {demo.days_remaining}d left
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Live Due Balance (Small, unobtrusive text) */}
                   <div className="text-[10px] text-slate-500 pt-1 border-t border-slate-200 flex items-center justify-between">

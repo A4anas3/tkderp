@@ -31,12 +31,26 @@ class StudentVerificationData(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+class IDCardDemoItem(BaseModel):
+    demo_reference_number: str
+    subject_name: str
+    teacher_name: Optional[str] = None
+    hall_number: Optional[str] = None
+    demo_start_date: Optional[date] = None
+    demo_end_date: Optional[date] = None
+    days_remaining: Optional[int] = None
+    status: str = "SCHEDULED"
+
+    model_config = ConfigDict(from_attributes=True)
+
 class PublicVerificationResponse(BaseModel):
     verified: bool = True
     is_valid: bool = True
     student: StudentVerificationData
     active_courses: List[VerificationCourseItem] = []
     total_active_courses: int = 0
+    active_demos: List[IDCardDemoItem] = []
+    total_active_demos: int = 0
     institute_name: str = "Thakurdwara Coaching Institute"
     institute_address: str = "Civil Lines, Thakurdwara (U.P.)"
     institute_phone: str = "+91 98765 43210"
@@ -76,8 +90,10 @@ class PublicIDCardResponse(BaseModel):
     verified: bool = True
     is_valid: bool = True
     student: IDCardStudentData
-    active_courses: List[IDCardCourseItem]
-    total_active_courses: int
+    active_courses: List[IDCardCourseItem] = []
+    total_active_courses: int = 0
+    active_demos: List[IDCardDemoItem] = []
+    total_active_demos: int = 0
     due_balance: Decimal = Decimal("0.00")
     institute_name: str = "THAKURDWARA COACHING INSTITUTE"
     institute_tagline: str = "Civil Lines, Thakurdwara (U.P.) • ISO 9001:2015 Certified"

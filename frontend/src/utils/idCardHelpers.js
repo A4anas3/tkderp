@@ -33,6 +33,22 @@ export function formatValidityPeriod(validFrom, validTo) {
   return 'Valid: Active Academic Session';
 }
 
+export function formatDemoDates(startDate, endDate) {
+  const fromStr = formatDateShort(startDate);
+  const toStr = formatDateShort(endDate);
+
+  if (fromStr && toStr) {
+    return `${fromStr} to ${toStr}`;
+  }
+  if (toStr) {
+    return `Until ${toStr}`;
+  }
+  if (fromStr) {
+    return `From ${fromStr}`;
+  }
+  return 'Active Trial';
+}
+
 export function extractActiveCourses(student, enrollmentData) {
   const courses = [];
 
@@ -102,7 +118,79 @@ export function extractActiveCourses(student, enrollmentData) {
   return courses;
 }
 
-export function buildWhatsAppShareUrl({ student, admissionNo, activeCourses, verifyUrl }) {
+export function extractActiveDemos(student, enrollmentData, demos) {
+  // If active_demos already pre-filtered on student or enrollmentData
+  if (Array.isArray(student?.active_demos) && student.active_demos.length > 0) {
+    return student.active_demos;
+  }
+  if (Array.isArray(enrollmentData?.active_demos) && enrollmentData.active_demos.length > 0) {
+    return enrollmentData.active_demos;
+  }
+
+  const rawList = demos || student?.demos || [];
+  if (!Array.isArray(rawList) || rawList.length === 0) {
+    return [];
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const active = [];
+  const seenRefs = new Set();
+
+  for (const item of rawList) {
+    const refNo = item.demo_reference_number || item.reference_number || '';
+    if (refNo && seenRefs.has(refNo)) continue;
+
+    const status = (item.status || '').toUpperCase();
+    if (['CONVERTED', 'DROPPED', 'EXPIRED'].includes(status)) continue;
+    if (item.converted_admission_item_id) continue;
+
+    // Check date
+    const endDateVal = item.demo_end_date;
+    if (endDateVal) {
+      const parts = String(endDateVal).split('T')[0].split('-');
+      if (parts.length === 3) {
+        const endDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        endDate.setHours(23, 59, 59, 999);
+        if (endDate < today) continue;
+      }
+    }
+
+    // Status condition: SCHEDULED, ATTENDED, or enquiry status ACTIVE_DEMO
+    const enquiryStatus = (item.enquiry_status || item.enquiry?.status || '').toUpperCase();
+    if (!(['SCHEDULED', 'ATTENDED'].includes(status) || enquiryStatus === 'ACTIVE_DEMO')) {
+      continue;
+    }
+
+    if (refNo) seenRefs.add(refNo);
+
+    let daysRemaining = item.days_remaining;
+    if ((daysRemaining === undefined || daysRemaining === null) && item.demo_end_date) {
+      const parts = String(item.demo_end_date).split('T')[0].split('-');
+      if (parts.length === 3) {
+        const endDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        daysRemaining = Math.max(0, Math.ceil((endDate - today) / (1000 * 60 * 60 * 24)));
+      }
+    }
+
+    active.push({
+      id: item.id || refNo,
+      demo_reference_number: refNo,
+      subject_name: item.subject_name || item.subject_name_snapshot || item.subject || 'Demo Trial',
+      teacher_name: item.teacher_name || item.teacher_name_snapshot || null,
+      hall_number: item.hall_number || item.hall_number_snapshot || item.hall || null,
+      demo_start_date: item.demo_start_date,
+      demo_end_date: item.demo_end_date,
+      days_remaining: daysRemaining,
+      status: item.status || 'SCHEDULED',
+    });
+  }
+
+  return active;
+}
+
+export function buildWhatsAppShareUrl({ student, admissionNo, activeCourses, activeDemos, verifyUrl }) {
   if (!student?.mobile) return null;
 
   const rawDigits = student.mobile.replace(/\D/g, '');
@@ -130,6 +218,14 @@ export function buildWhatsAppShareUrl({ student, admissionNo, activeCourses, ver
     });
   } else {
     msg += `• No active courses currently.\n`;
+  }
+
+  if (activeDemos && activeDemos.length > 0) {
+    msg += `\n*Active Trial Demos:*\n`;
+    activeDemos.forEach((d, idx) => {
+      const period = formatDemoDates(d.demo_start_date, d.demo_end_date);
+      msg += `${idx + 1}. *${d.subject_name}* (${d.demo_reference_number})\n   Dates: ${period}${d.teacher_name ? ` | Teacher: ${d.teacher_name}` : ''}${d.hall_number ? ` | Hall: ${d.hall_number}` : ''}\n`;
+    });
   }
 
   if (verifyUrl) {

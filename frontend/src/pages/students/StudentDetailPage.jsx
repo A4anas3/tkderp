@@ -3565,6 +3565,7 @@ export default function StudentDetailPage() {
         onClose={() => setIdCardModalOpen(false)}
         student={student}
         enrollmentData={enrollmentData}
+        demos={demos}
       />
     </div>
   );

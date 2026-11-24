@@ -33,6 +33,8 @@ from app.modules.payments.schemas import FinancialTransactionResponse
 from app.common.active_lines import today_kolkata, is_active_line, derive_student_status
 from app.core.dependencies import require_cashier_or_admin, require_staff, require_admin
 from app.common.pagination import PageResponse
+from app.modules.verification.router import _get_active_demos_for_student
+from app.modules.verification.schemas import IDCardDemoItem
 from app.common.calculations import compute_rolling_cycle_end
 
 def compress_avatar_image(file_bytes: bytes, max_kb: int = 20) -> bytes:
@@ -1379,6 +1381,8 @@ async def get_student_active_enrollment(
     # Permanent enrollment code (stable)
     enrollment_number = f"ENR-{student.student_code}" if student.student_code else f"ENR-{student.id.hex[:8]}"
 
+    active_demos = await _get_active_demos_for_student(db, student, today)
+
     return {
         "student_id": str(student.id),
         "student_code": student.student_code,
@@ -1386,10 +1390,12 @@ async def get_student_active_enrollment(
         "student_name": student.name,
         "has_active_green_card": active_green_card is not None or student.has_green_card,
         "active_green_card": active_green_card,
-        "is_student_active": len(active_subjects) > 0 or active_green_card is not None,
+        "is_student_active": len(active_subjects) > 0 or active_green_card is not None or len(active_demos) > 0,
         "active_subjects": active_subjects,
         "historical_subjects": historical_subjects,
         "historical_memberships": historical_memberships,
+        "active_demos": [d.model_dump() for d in active_demos],
+        "total_active_demos": len(active_demos),
         "expired_due_total": float(expired_due_total),
         "total_due": float(total_due_all),
         "active_totals": {

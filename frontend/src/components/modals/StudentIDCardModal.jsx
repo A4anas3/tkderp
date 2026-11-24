@@ -1,14 +1,17 @@
-import React from 'react';
-import { Printer, X, ShieldCheck, Calendar, BookOpen, AlertCircle, Phone, User, Clock } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Printer, X, ShieldCheck, Calendar, BookOpen, AlertCircle, Phone, User, Clock, Sparkles } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import axios from 'axios';
 import Modal from '../common/Modal';
 import Button from '../common/Button';
 import Badge from '../common/Badge';
 import Avatar from '../common/Avatar';
 import {
   extractActiveCourses,
+  extractActiveDemos,
   buildWhatsAppShareUrl,
   formatValidityPeriod,
+  formatDemoDates,
 } from '../../utils/idCardHelpers';
 
 // Official WhatsApp icon
@@ -25,12 +28,33 @@ export default function StudentIDCardModal({
   onClose,
   student,
   enrollmentData,
+  demos = null,
   admissionNumberOverride = null,
 }) {
   if (!isOpen || !student) return null;
 
-  // Extract all active courses
+  const [fetchedDemos, setFetchedDemos] = useState([]);
+
+  useEffect(() => {
+    if (!isOpen || !student) return;
+    if (demos || student.demos || student.active_demos || enrollmentData?.active_demos) return;
+
+    const ident = student.student_code || student.id;
+    if (ident) {
+      axios
+        .get(`/api/public/id-card/${encodeURIComponent(ident)}`)
+        .then((res) => {
+          if (res.data?.active_demos) {
+            setFetchedDemos(res.data.active_demos);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isOpen, student, demos, enrollmentData]);
+
+  // Extract all active courses and active demos
   const activeCourses = extractActiveCourses(student, enrollmentData);
+  const activeDemos = extractActiveDemos(student, enrollmentData, demos || fetchedDemos);
 
   // Determine admission number to show and verify
   const admissionNo =
@@ -50,6 +74,7 @@ export default function StudentIDCardModal({
     student,
     admissionNo,
     activeCourses,
+    activeDemos,
     verifyUrl,
   });
 
@@ -281,6 +306,70 @@ export default function StudentIDCardModal({
                   </div>
                 )}
               </div>
+
+              {/* Active Demos Section (Hidden completely if no active demos) */}
+              {activeDemos && activeDemos.length > 0 && (
+                <div className="space-y-2 pt-1 border-t border-slate-200">
+                  <div className="flex items-center justify-between border-b border-amber-300 pb-1">
+                    <span className="text-[11px] font-black uppercase tracking-wider text-black flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                      Active Trial Demos ({activeDemos.length})
+                    </span>
+                    <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-300">
+                      Demo Trial
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 max-h-[180px] overflow-y-auto pr-0.5">
+                    {activeDemos.map((demo, idx) => (
+                      <div
+                        key={demo.demo_reference_number || demo.id || idx}
+                        className="p-2 bg-amber-50/50 rounded-lg border border-amber-200 text-xs space-y-1"
+                      >
+                        {/* Subject & Demo Reference Number */}
+                        <div className="flex items-start justify-between gap-1.5">
+                          <span className="font-bold text-black leading-tight flex-1">
+                            {demo.subject_name}
+                          </span>
+                          <span className="font-mono text-[10px] font-black text-amber-950 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-300 shrink-0">
+                            {demo.demo_reference_number}
+                          </span>
+                        </div>
+
+                        {/* Teacher & Hall */}
+                        {(demo.teacher_name || demo.hall_number) && (
+                          <div className="text-[10px] text-slate-700 font-medium flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
+                            {demo.teacher_name && (
+                              <span>
+                                Teacher: <strong className="text-black">{demo.teacher_name}</strong>
+                              </span>
+                            )}
+                            {demo.hall_number && (
+                              <span>
+                                Hall: <strong className="text-black">{demo.hall_number}</strong>
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Demo Dates & Days Remaining */}
+                        <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] pt-0.5 border-t border-amber-200/60">
+                          <span className="font-bold text-amber-950 bg-white px-2 py-0.5 rounded border border-amber-300 inline-flex items-center gap-1">
+                            <Calendar className="w-3 h-3 text-amber-700 shrink-0" />
+                            Demo: {formatDemoDates(demo.demo_start_date, demo.demo_end_date)}
+                          </span>
+
+                          {demo.days_remaining !== null && demo.days_remaining !== undefined && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300">
+                              {demo.days_remaining}d left
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Live Due Balance (Small, unobtrusive text) */}
               <div className="text-[10px] text-slate-500 pt-1 border-t border-slate-200 flex items-center justify-between">

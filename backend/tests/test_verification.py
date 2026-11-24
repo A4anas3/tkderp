@@ -236,3 +236,100 @@ async def test_rate_limiter_blocks_abuse():
         await limiter(req)
     assert "Rate limit exceeded" in str(excinfo.value.detail)
 
+@pytest.mark.asyncio
+async def test_public_id_card_active_demos_included(admin_token):
+    from datetime import date, timedelta
+    import uuid
+    from app.database.session import AsyncSessionLocal
+    from app.modules.enquiries.models import EnquiryDemoItem
+    from sqlalchemy import select
+
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # 1. Fetch subjects
+        sub_res = await client.get("/api/subjects", headers=headers)
+        assert sub_res.status_code == 200
+        subjects = sub_res.json().get("items", sub_res.json())
+        assert len(subjects) >= 2
+        subj_active = subjects[0]
+        subj_expired = subjects[1]
+
+        # 2. Create enquiry with 2 demos: 1 active, 1 expired
+        unique_suffix = str(uuid.uuid4().int)[:6]
+        phone = f"9871{unique_suffix}"
+        today = date.today()
+        today_str = today.isoformat()
+
+        enq_payload = {
+            "student_name": f"Demo Card Test {unique_suffix}",
+            "mobile": phone,
+            "father_name": f"Demo Father {unique_suffix}",
+            "school_college": "Demo Test School",
+            "purpose": "ID Card Demo Trial Test",
+            "interested_subject": f"{subj_active['name']}, {subj_expired['name']}",
+            "demo_start_date": today_str,
+            "demo_duration_days": 3,
+            "status": "ACTIVE_DEMO",
+            "demo_items": [
+                {
+                    "subject_id": subj_active["id"],
+                    "teacher_id": subj_active.get("teacher_id"),
+                    "demo_duration_days": 3,
+                    "demo_start_date": today_str,
+                    "notes": "Active demo trial"
+                },
+                {
+                    "subject_id": subj_expired["id"],
+                    "teacher_id": subj_expired.get("teacher_id"),
+                    "demo_duration_days": 3,
+                    "demo_start_date": (today - timedelta(days=10)).isoformat(),
+                    "notes": "Past demo trial"
+                }
+            ]
+        }
+
+        create_res = await client.post("/api/enquiries", json=enq_payload, headers=headers)
+        assert create_res.status_code == 201, create_res.text
+        enq_data = create_res.json()
+        enquiry_id = enq_data["id"]
+
+        # Directly update the second demo item to have an expired demo_end_date in the past
+        async with AsyncSessionLocal() as session:
+            stmt = select(EnquiryDemoItem).where(
+                EnquiryDemoItem.enquiry_id == uuid.UUID(enquiry_id),
+                EnquiryDemoItem.subject_id == uuid.UUID(subj_expired["id"])
+            )
+            expired_item = (await session.execute(stmt)).scalar_one()
+            expired_item.demo_start_date = today - timedelta(days=10)
+            expired_item.demo_end_date = today - timedelta(days=7)
+            expired_item.status = "EXPIRED"
+            await session.commit()
+
+        # 3. Register student from enquiry
+        reg_res = await client.post(f"/api/enquiries/{enquiry_id}/register-student", headers=headers)
+        assert reg_res.status_code == 200, reg_res.text
+        reg_data = reg_res.json()
+        student_id = reg_data["student_id"]
+        student_code = reg_data["student_code"]
+
+        # 4. Query public ID card by student_code
+        card_res = await client.get(f"/api/public/id-card/{student_code}")
+        assert card_res.status_code == 200, card_res.text
+        card_data = card_res.json()
+
+        assert card_data["verified"] is True
+        assert card_data["student"]["student_code"] == student_code
+        assert "active_demos" in card_data
+        assert card_data["total_active_demos"] == 1
+        assert len(card_data["active_demos"]) == 1
+
+        active_d = card_data["active_demos"][0]
+        assert active_d["subject_name"] == subj_active["name"]
+        assert active_d["status"] == "SCHEDULED"
+        assert active_d["demo_reference_number"].startswith("DEM-")
+        assert active_d["days_remaining"] >= 0
+
+        # Expired demo must NOT be in active_demos
+        expired_refs = [d["subject_name"] for d in card_data["active_demos"]]
+        assert subj_expired["name"] not in expired_refs
+

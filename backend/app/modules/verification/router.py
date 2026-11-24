@@ -5,7 +5,7 @@ from typing import Optional, List, Tuple
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, desc, or_
+from sqlalchemy import select, func, desc, or_, and_
 from sqlalchemy.orm import selectinload, joinedload
 
 from app.database.session import get_db
@@ -13,6 +13,7 @@ from app.modules.students.models import Student
 from app.modules.admissions.models import Admission, AdmissionItem
 from app.modules.batches.models import Batch
 from app.modules.subjects.models import Subject
+from app.modules.enquiries.models import Enquiry, EnquiryDemoItem
 from app.modules.verification.schemas import (
     PublicVerificationResponse,
     StudentVerificationData,
@@ -20,6 +21,7 @@ from app.modules.verification.schemas import (
     PublicIDCardResponse,
     IDCardStudentData,
     IDCardCourseItem,
+    IDCardDemoItem,
 )
 from app.common.active_lines import today_kolkata
 from app.common.validators import normalize_mobile
@@ -341,14 +343,82 @@ async def verify_student_credential(
         registration_date=student.registration_date
     )
 
+    today = today_kolkata()
+    active_demos_list = await _get_active_demos_for_student(db, student, today)
+
     return PublicVerificationResponse(
         verified=True,
-        is_valid=is_overall_valid,
+        is_valid=is_overall_valid or len(active_demos_list) > 0,
         student=student_data,
         active_courses=active_courses_list,
         total_active_courses=len(active_courses_list),
+        active_demos=active_demos_list,
+        total_active_demos=len(active_demos_list),
         verified_at=datetime.now(timezone.utc)
     )
+
+async def _get_active_demos_for_student(db: AsyncSession, student: Student, today: date) -> List[IDCardDemoItem]:
+    """
+    Returns active demo items for a student.
+    Active demo means a demo item with status SCHEDULED or ATTENDED
+    (or an enquiry with status ACTIVE_DEMO), with demo_end_date today or later,
+    and NOT CONVERTED, DROPPED or EXPIRED.
+    """
+    cond = (Enquiry.converted_student_id == student.id)
+    norm_mob = normalize_mobile(student.mobile) if student.mobile else None
+    if norm_mob and len(norm_mob) >= 10:
+        last10 = norm_mob[-10:]
+        cond = or_(
+            Enquiry.converted_student_id == student.id,
+            and_(Enquiry.converted_student_id.is_(None), Enquiry.mobile.like(f"%{last10}%"))
+        )
+
+    q = (
+        select(EnquiryDemoItem, Enquiry)
+        .join(Enquiry, EnquiryDemoItem.enquiry_id == Enquiry.id)
+        .where(cond)
+        .order_by(EnquiryDemoItem.demo_start_date.asc(), EnquiryDemoItem.created_at.asc())
+    )
+    rows = (await db.execute(q)).all()
+
+    active_demos: List[IDCardDemoItem] = []
+    seen_refs = set()
+
+    for ditm, enq in rows:
+        ref_no = ditm.demo_reference_number
+        if not ref_no or ref_no in seen_refs:
+            continue
+
+        item_status = (ditm.status or "").upper()
+        # Active demo criteria
+        if item_status in ["CONVERTED", "DROPPED", "EXPIRED"]:
+            continue
+        if ditm.converted_admission_item_id is not None:
+            continue
+        if ditm.demo_end_date < today:
+            continue
+
+        enq_status = (enq.status or "").upper()
+        if not (item_status in ["SCHEDULED", "ATTENDED"] or enq_status == "ACTIVE_DEMO"):
+            continue
+
+        seen_refs.add(ref_no)
+        days_rem = (ditm.demo_end_date - today).days
+
+        active_demos.append(
+            IDCardDemoItem(
+                demo_reference_number=ref_no,
+                subject_name=ditm.subject_name_snapshot,
+                teacher_name=ditm.teacher_name_snapshot,
+                hall_number=ditm.hall_number_snapshot,
+                demo_start_date=ditm.demo_start_date,
+                demo_end_date=ditm.demo_end_date,
+                days_remaining=days_rem,
+                status=ditm.status,
+            )
+        )
+
+    return active_demos
 
 @router.get("/api/public/id-card/{identifier}", response_model=PublicIDCardResponse)
 @router.get("/api/id-card/{identifier}", response_model=PublicIDCardResponse)
@@ -393,8 +463,11 @@ async def get_public_id_card(
             detail=f"No matching student or admission record found for '{target_ident}'."
         )
 
-    # Return ID card data ONLY if the student has an active subject/enrolment
-    if not is_overall_valid or len(active_courses_list) == 0:
+    today = today_kolkata()
+    active_demos_list = await _get_active_demos_for_student(db, student, today)
+
+    # Return ID card data ONLY if the student has an active subject/enrolment or active demo
+    if (not is_overall_valid or len(active_courses_list) == 0) and len(active_demos_list) == 0:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No active enrolment or ID card is available for this student."
@@ -445,6 +518,8 @@ async def get_public_id_card(
         student=student_data,
         active_courses=course_items,
         total_active_courses=len(course_items),
+        active_demos=active_demos_list,
+        total_active_demos=len(active_demos_list),
         due_balance=live_due_balance,
         institute_name="THAKURDWARA COACHING INSTITUTE",
         institute_tagline="Civil Lines, Thakurdwara (U.P.) • ISO 9001:2015 Certified",
