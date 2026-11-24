@@ -1,9 +1,13 @@
 import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.datastructures import MutableHeaders
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.database.session import get_db
 from app.core.dependencies import require_cashier_or_admin
@@ -159,17 +163,78 @@ SECURITY_HEADERS = {
 }
 
 
-class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    """Add standard HTTP security headers to every API response."""
+def _strip_uvicorn_server_header(send: Send) -> None:
+    """
+    Strip Uvicorn's default `Server: uvicorn` header from the per-request
+    protocol cycle so it is not prepended after `http.response.start`.
+    """
+    visited: set[int] = set()
+    queue: list[object] = [send]
+    while queue:
+        obj = queue.pop()
+        obj_id = id(obj)
+        if obj_id in visited:
+            continue
+        visited.add(obj_id)
 
-    async def dispatch(self, request: Request, call_next):
-        response = await call_next(request)
-        for header, value in SECURITY_HEADERS.items():
-            response.headers[header] = value
-        return response
+        owner = getattr(obj, "__self__", None)
+        if owner is not None:
+            default_headers = getattr(owner, "default_headers", None)
+            if isinstance(default_headers, list):
+                owner.default_headers = [
+                    item for item in default_headers if item[0].lower() != b"server"
+                ]
+
+        closure = getattr(obj, "__closure__", None)
+        if closure:
+            for cell in closure:
+                try:
+                    val = cell.cell_contents
+                except ValueError:
+                    continue
+                if callable(val):
+                    queue.append(val)
+
+
+class SecurityHeadersMiddleware:
+    """Add standard HTTP security headers and remove Server header on every response."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        _strip_uvicorn_server_header(send)
+
+        async def send_wrapper(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                if "server" in headers:
+                    del headers["server"]
+                for header, value in SECURITY_HEADERS.items():
+                    headers[header] = value
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
 
 
 app.add_middleware(SecurityHeadersMiddleware)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Return validation errors without echoing raw user-supplied input."""
+    sanitized_errors = [
+        {k: v for k, v in err.items() if k != "input"}
+        for err in exc.errors()
+    ]
+    return JSONResponse(
+        status_code=422,
+        content={"detail": jsonable_encoder(sanitized_errors)},
+    )
 
 # Mount local uploads for static serving
 uploads_path = os.path.abspath(settings.UPLOAD_DIR)
