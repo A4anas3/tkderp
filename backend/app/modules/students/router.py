@@ -668,7 +668,7 @@ async def create_student_demo(
         enquiry_status="ACTIVE_DEMO",
         demo_items=demo_items,
         is_demo_request=True,
-        audit_action="STUDENT_DEMO_CREATED",
+        audit_action="DEMO_CREATED",
     )
 
 @router.get("/{student_id}/audit", response_model=PageResponse[AuditLogResponse])

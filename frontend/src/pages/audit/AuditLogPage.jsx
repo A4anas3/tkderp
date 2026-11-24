@@ -29,6 +29,7 @@ import {
   SlidersHorizontal,
   ArrowLeftRight,
   Sparkles,
+  BookOpen,
 } from 'lucide-react';
 import { auditApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
@@ -89,6 +90,9 @@ export function getActionMeta(action) {
       return { label: 'Fee Due Waived', variant: 'warning', icon: Sparkles };
     case 'TEACHER_STATUS_UPDATED':
       return { label: 'Teacher Status Updated', variant: 'primary', icon: RefreshCw };
+    case 'DEMO_CREATED':
+    case 'STUDENT_DEMO_CREATED':
+      return { label: 'Demo Created', variant: 'info', icon: BookOpen };
     default:
       return {
         label: action ? action.replace(/_/g, ' ') : 'System Action',
@@ -188,6 +192,52 @@ export function AuditDetailsSummary({ audit }) {
         </span>
         {parsed.new_admission_number && (
           <span className="text-slate-500 font-mono text-[10px]">({parsed.new_admission_number})</span>
+        )}
+      </div>
+    );
+  }
+
+  if (
+    audit.action === 'DEMO_CREATED' ||
+    audit.action === 'STUDENT_DEMO_CREATED' ||
+    parsed.demo_reference_number ||
+    (Array.isArray(parsed.demo_reference_numbers) && parsed.demo_reference_numbers.length > 0)
+  ) {
+    const demoRefs =
+      Array.isArray(parsed.demo_reference_numbers) && parsed.demo_reference_numbers.length > 0
+        ? parsed.demo_reference_numbers
+        : parsed.demo_reference_number
+          ? [parsed.demo_reference_number]
+          : [];
+    const subjectsText =
+      parsed.subject ||
+      (Array.isArray(parsed.subjects) && parsed.subjects.filter(Boolean).join(', '));
+    const teachersText =
+      parsed.teacher ||
+      (Array.isArray(parsed.teachers) && [...new Set(parsed.teachers.filter(Boolean))].join(', '));
+
+    return (
+      <div className="flex flex-wrap items-center gap-1.5 text-xs">
+        {(parsed.student_name || parsed.name) && (
+          <span className="font-bold text-black">{parsed.student_name || parsed.name}</span>
+        )}
+        {demoRefs.map((ref, idx) => (
+          <span
+            key={`${ref}-${idx}`}
+            className="font-mono text-[10px] text-odoo-800 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200 font-bold"
+          >
+            {ref}
+          </span>
+        ))}
+        {subjectsText && (
+          <span className="text-slate-700 font-semibold text-[11px]">
+            • {subjectsText}
+          </span>
+        )}
+        {teachersText && (
+          <span className="text-slate-600 text-[11px]">
+            (Teacher: <span className="font-semibold text-slate-800">{teachersText}</span>)
+          </span>
         )}
       </div>
     );

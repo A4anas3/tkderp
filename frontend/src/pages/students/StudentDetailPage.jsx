@@ -3163,6 +3163,7 @@ export default function StudentDetailPage() {
                 <option value="ALL">All Event Types</option>
                 <option value="STUDENT_CREATED">Student Registered</option>
                 <option value="STUDENT_UPDATED">Profile Updated</option>
+                <option value="DEMO_CREATED">Demo Created</option>
                 <option value="ADMISSION_CREATED">Course Admission</option>
                 <option value="PAYMENT_RECORDED">Payment Collected</option>
                 <option value="PAYMENT_EDITED">Payment Edited</option>

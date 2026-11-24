@@ -1132,20 +1132,30 @@ async def create_enquiry_with_demos(
             db.add(demo_item)
             child_items.append(demo_item)
 
-    if audit_action and linked_student:
+    if audit_action:
+        demo_refs = [d.demo_reference_number for d in child_items if d.demo_reference_number]
+        demo_subjects = [d.subject_name_snapshot for d in child_items if d.subject_name_snapshot]
+        demo_teachers = [d.teacher_name_snapshot for d in child_items if d.teacher_name_snapshot]
+        unique_teachers = list(dict.fromkeys(demo_teachers))
+        resolved_name = linked_student.name if linked_student else student_name
         audit = AuditLog(
             user_id=current_user.id,
             action=audit_action,
-            entity_type="STUDENT",
-            entity_id=linked_student.id,
+            entity_type="STUDENT" if linked_student else "ENQUIRY",
+            entity_id=linked_student.id if linked_student else enquiry.id,
             details=json.dumps({
-                "student_id": str(linked_student.id),
-                "student_code": linked_student.student_code,
-                "name": linked_student.name,
+                "student_id": str(linked_student.id) if linked_student else None,
+                "student_code": linked_student.student_code if linked_student else None,
+                "name": resolved_name,
+                "student_name": resolved_name,
                 "enquiry_id": str(enquiry.id),
                 "enquiry_code": enquiry.enquiry_code,
-                "demo_reference_numbers": [d.demo_reference_number for d in child_items],
-                "subjects": [d.subject_name_snapshot for d in child_items],
+                "demo_reference_number": ", ".join(demo_refs) if demo_refs else None,
+                "demo_reference_numbers": demo_refs,
+                "subject": ", ".join(demo_subjects) if demo_subjects else None,
+                "subjects": demo_subjects,
+                "teacher": ", ".join(unique_teachers) if unique_teachers else None,
+                "teachers": demo_teachers,
             })
         )
         db.add(audit)
@@ -1229,6 +1239,7 @@ async def create_enquiry(
         enquiry_status=payload.status,
         demo_items=payload.demo_items,
         is_demo_request=is_demo_request,
+        audit_action="DEMO_CREATED" if is_demo_request else None,
     )
 
 
