@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta
 from typing import Optional, List, Dict, Any, Tuple
 from sqlalchemy import select, func, and_, or_, case, desc
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.database.models import (
     PaymentAllocation, AdmissionItem, Admission, Payment, Refund, User, Subject, Teacher, Batch, TeacherEarning,
@@ -1184,7 +1185,8 @@ async def get_admissions_conversion_detailed(
 ) -> Dict[str, Any]:
     """
     Admissions & Conversion Report:
-    Enquiries received, converted to admissions, conversion rate, by subject and by source.
+    Enquiries received, verified enrollments via demo reference number (source_demo_number),
+    admission % enrolled, by subject and by source.
     """
     start_dt, end_dt = ist_day_boundaries(from_date, to_date)
     conds = []
@@ -1195,7 +1197,6 @@ async def get_admissions_conversion_detailed(
     if subject_id:
         sub_obj = await db.get(Subject, subject_id)
         if sub_obj:
-            from app.modules.enquiries.models import EnquiryDemoItem
             conds.append(
                 or_(
                     Enquiry.interested_subject.ilike(f"%{sub_obj.name}%"),
@@ -1204,14 +1205,41 @@ async def get_admissions_conversion_detailed(
             )
 
     stmt = (
-        select(Enquiry, Student, Admission)
+        select(Enquiry, Student)
         .outerjoin(Student, Enquiry.converted_student_id == Student.id)
-        .outerjoin(Admission, Student.id == Admission.student_id)
+        .options(selectinload(Enquiry.demo_items))
         .where(*conds)
         .order_by(Enquiry.created_at.desc())
     )
     res = await db.execute(stmt)
     rows = res.all()
+
+    enq_ids = list({enq.id for enq, _ in rows})
+    linked_enrollments_by_enq: Dict[uuid.UUID, List[Tuple[AdmissionItem, Admission, str]]] = {}
+    if enq_ids:
+        link_stmt = (
+            select(AdmissionItem, Admission, EnquiryDemoItem)
+            .join(Admission, AdmissionItem.admission_id == Admission.id)
+            .join(
+                EnquiryDemoItem,
+                EnquiryDemoItem.converted_admission_item_id == AdmissionItem.id,
+            )
+            .options(selectinload(AdmissionItem.demo_item))
+            .where(
+                EnquiryDemoItem.enquiry_id.in_(enq_ids),
+                EnquiryDemoItem.demo_reference_number.isnot(None),
+                Admission.status != "CANCELLED",
+                Admission.document_status == "VALID",
+            )
+            .order_by(Admission.admission_date.desc(), Admission.created_at.desc())
+        )
+        link_res = await db.execute(link_stmt)
+        for adm_item, adm, demo_itm in link_res.all():
+            ref_no = adm_item.source_demo_number
+            if ref_no:
+                linked_enrollments_by_enq.setdefault(demo_itm.enquiry_id, []).append(
+                    (adm_item, adm, ref_no)
+                )
 
     by_subject_map: Dict[str, Dict[str, Any]] = {}
     by_source_map: Dict[str, Dict[str, Any]] = {}
@@ -1221,12 +1249,26 @@ async def get_admissions_conversion_detailed(
     total_converted = 0
     seen_enq = set()
 
-    for enq, stu, adm in rows:
+    for enq, stu in rows:
         if enq.id in seen_enq:
             continue
         seen_enq.add(enq.id)
 
-        is_conv = (enq.status == "CONVERTED" or enq.converted_student_id is not None)
+        # Count an enquiry/demo as enrolled ONLY when a valid enrollment carries its demo reference number
+        enq_demo_refs = {
+            d.demo_reference_number
+            for d in (enq.demo_items or [])
+            if d.demo_reference_number
+        }
+        linked_entries = [
+            (adm_item, adm, ref_no)
+            for adm_item, adm, ref_no in linked_enrollments_by_enq.get(enq.id, [])
+            if ref_no in enq_demo_refs
+        ]
+        is_conv = len(linked_entries) > 0
+        linked_adm = linked_entries[0][1] if linked_entries else None
+        linked_stu = stu or (linked_adm.student if linked_adm else None)
+
         total_enquiries += 1
         if is_conv:
             total_converted += 1
@@ -1256,10 +1298,11 @@ async def get_admissions_conversion_detailed(
             "source": src_name,
             "status": enq.status,
             "is_converted": is_conv,
-            "converted_student_id": str(enq.converted_student_id) if enq.converted_student_id else None,
-            "converted_student_name": stu.name if stu else None,
-            "converted_student_code": stu.student_code if stu else None,
-            "admission_number": adm.admission_number if adm else None,
+            "source_demo_number": linked_entries[0][2] if linked_entries else None,
+            "converted_student_id": str(linked_stu.id) if linked_stu else (str(enq.converted_student_id) if enq.converted_student_id else None),
+            "converted_student_name": linked_stu.name if linked_stu else None,
+            "converted_student_code": linked_stu.student_code if linked_stu else None,
+            "admission_number": linked_adm.admission_number if linked_adm else None,
             "created_at": enq.created_at.isoformat() if enq.created_at else None
         })
 

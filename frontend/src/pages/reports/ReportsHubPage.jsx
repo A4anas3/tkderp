@@ -1373,9 +1373,9 @@ export default function ReportsHubPage() {
                   color="emerald"
                 />
                 <StatCard
-                  title="Conversion Rate"
+                  title="Admission % Enrolled"
                   value={`${data?.summary?.overall_conversion_rate || 0}%`}
-                  subtext="Lead-to-admission ratio"
+                  subtext="Percentage enrolled"
                   icon={TrendingUp}
                   color="indigo"
                 />
@@ -1403,7 +1403,7 @@ export default function ReportsHubPage() {
                           <th className="p-2">Lead Source</th>
                           <th className="p-2 text-center">Enquiries</th>
                           <th className="p-2 text-center">Converted</th>
-                          <th className="p-2 text-right">Conversion Rate</th>
+                          <th className="p-2 text-right">Admission % Enrolled</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 font-semibold">
@@ -1435,7 +1435,7 @@ export default function ReportsHubPage() {
                           <th className="p-2">Subject</th>
                           <th className="p-2 text-center">Enquiries</th>
                           <th className="p-2 text-center">Converted</th>
-                          <th className="p-2 text-right">Conversion Rate</th>
+                          <th className="p-2 text-right">Admission % Enrolled</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 font-semibold">
