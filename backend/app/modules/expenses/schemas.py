@@ -3,6 +3,7 @@ from typing import Optional
 from datetime import date
 from pydantic import BaseModel, Field, ConfigDict
 import uuid
+from app.common.pagination import PageResponse
 
 # Categories
 class ExpenseCategoryBase(BaseModel):
@@ -35,6 +36,9 @@ class ExpenseResponse(ExpenseBase):
     category_name: Optional[str] = None
     added_by: Optional[uuid.UUID] = None
     model_config = ConfigDict(from_attributes=True)
+
+class ExpensePageResponse(PageResponse[ExpenseResponse]):
+    total_amount: Decimal = Decimal("0.00")
 
 # Salary Records
 class SalaryRecordBase(BaseModel):
@@ -78,3 +82,8 @@ class SalaryFilterStaffOption(BaseModel):
 class SalaryFilterOptionsResponse(BaseModel):
     staff: list[SalaryFilterStaffOption]
     months: list[str]
+
+class SalaryPageResponse(PageResponse[SalaryRecordResponse]):
+    total_amount: Decimal = Decimal("0.00")
+    total_paid_amount: Decimal = Decimal("0.00")
+    total_salary_amount: Decimal = Decimal("0.00")

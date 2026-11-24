@@ -42,6 +42,12 @@ const formatMonthLabel = (monthYearStr) => {
   return mName ? `${mName} ${yearNum} (${monthYearStr})` : monthYearStr;
 };
 
+const formatINR = (amount) =>
+  Number(amount || 0).toLocaleString('en-IN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
 export default function ExpensesPage() {
   const { success, error } = useToast();
   const [activeTab, setActiveTab] = useState('daily'); // 'daily' | 'salaries' | 'categories'
@@ -56,6 +62,7 @@ export default function ExpensesPage() {
   // Daily Expenses
   const [expenses, setExpenses] = useState([]);
   const [expTotal, setExpTotal] = useState(0);
+  const [expTotalAmount, setExpTotalAmount] = useState(0);
   const [expPage, setExpPage] = useState(1);
   const [expSearch, setExpSearch] = useState('');
   const [expFromDate, setExpFromDate] = useState('');
@@ -77,6 +84,8 @@ export default function ExpensesPage() {
   // Salaries
   const [salaries, setSalaries] = useState([]);
   const [salTotal, setSalTotal] = useState(0);
+  const [salTotalPaidAmount, setSalTotalPaidAmount] = useState(0);
+  const [salTotalSalaryAmount, setSalTotalSalaryAmount] = useState(0);
   const [salPage, setSalPage] = useState(1);
   const [salLoading, setSalLoading] = useState(true);
   const [salModalOpen, setSalModalOpen] = useState(false);
@@ -168,6 +177,7 @@ export default function ExpensesPage() {
       const res = await expenseApi.listExpenses(params);
       setExpenses(res.items || []);
       setExpTotal(res.total || 0);
+      setExpTotalAmount(Number(res.total_amount ?? 0));
     } catch (err) {
       error(err.message || 'Failed to load expenses');
     } finally {
@@ -202,6 +212,8 @@ export default function ExpensesPage() {
       const res = await expenseApi.listSalaries(params);
       setSalaries(res.items || []);
       setSalTotal(res.total || 0);
+      setSalTotalPaidAmount(Number(res.total_paid_amount ?? res.total_amount ?? 0));
+      setSalTotalSalaryAmount(Number(res.total_salary_amount ?? 0));
     } catch (err) {
       error(err.message || 'Failed to load salary records');
     } finally {
@@ -893,6 +905,32 @@ export default function ExpensesPage() {
             </div>
           </div>
 
+          <div className="bg-white border border-slate-200 rounded-lg px-4 py-3 flex flex-wrap items-center justify-between gap-2 shadow-2xs">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-rose-50 border border-rose-200 flex items-center justify-center shrink-0">
+                <Receipt className="w-4 h-4 text-rose-700" />
+              </div>
+              <div>
+                <span className="text-xs font-bold text-slate-800 block">Total Expenses</span>
+                <span className="text-[11px] text-slate-500">
+                  {expFromDate && expToDate
+                    ? `${expFromDate} to ${expToDate}`
+                    : expFromDate
+                      ? `From ${expFromDate}`
+                      : expToDate
+                        ? `Up to ${expToDate}`
+                        : 'All dates'}{' '}
+                  • {expTotal} {expTotal === 1 ? 'expense' : 'expenses'}
+                </span>
+              </div>
+            </div>
+            <div className={`text-right transition-opacity ${expLoading ? 'opacity-60' : ''}`}>
+              <span className="text-lg font-mono font-bold text-rose-800">
+                ₹{formatINR(expTotalAmount)}
+              </span>
+            </div>
+          </div>
+
           <DataTable
             columns={expenseColumns}
             data={expenses}
@@ -1048,6 +1086,29 @@ export default function ExpensesPage() {
                   <option value="PARTIALLY_PAID">Partially Paid</option>
                 </select>
               </div>
+            </div>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-lg px-4 py-3 flex flex-wrap items-center justify-between gap-2 shadow-2xs">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-200 flex items-center justify-center shrink-0">
+                <Wallet className="w-4 h-4 text-indigo-700" />
+              </div>
+              <div>
+                <span className="text-xs font-bold text-slate-800 block">Total Payroll</span>
+                <span className="text-[11px] text-slate-500">
+                  {salMonthFilter !== 'ALL' ? formatMonthLabel(salMonthFilter) : 'All months'} •{' '}
+                  {salTotal} {salTotal === 1 ? 'entry' : 'entries'}
+                </span>
+              </div>
+            </div>
+            <div className={`text-right transition-opacity ${salLoading ? 'opacity-60' : ''}`}>
+              <span className="text-lg font-mono font-bold text-indigo-900 block leading-tight">
+                ₹{formatINR(salTotalPaidAmount)}
+              </span>
+              <span className="text-[11px] font-mono text-slate-500 block mt-0.5">
+                Payable: ₹{formatINR(salTotalSalaryAmount)}
+              </span>
             </div>
           </div>
 

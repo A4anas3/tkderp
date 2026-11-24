@@ -13,8 +13,8 @@ from app.core.dependencies import require_staff, require_cashier_or_admin, requi
 from app.database.models import ExpenseCategory, Expense, SalaryRecord, User, AuditLog, Teacher, TeacherAttendance
 from app.modules.expenses.schemas import (
     ExpenseCategoryCreate, ExpenseCategoryResponse,
-    ExpenseCreate, ExpenseResponse,
-    SalaryRecordCreate, SalaryRecordResponse, PaySalaryRequest,
+    ExpenseCreate, ExpenseResponse, ExpensePageResponse,
+    SalaryRecordCreate, SalaryRecordResponse, SalaryPageResponse, PaySalaryRequest,
     SalaryFilterStaffOption, SalaryFilterOptionsResponse
 )
 from app.common.pagination import PaginationParams, PageResponse
@@ -51,7 +51,7 @@ async def create_expense_category(
     return cat
 
 # --- Daily Expenses ---
-@router.get("", response_model=PageResponse[ExpenseResponse])
+@router.get("", response_model=ExpensePageResponse)
 async def list_expenses(
     page: int = Query(1, ge=1),
     page_size: int = Query(15, ge=1, le=100),
@@ -63,40 +63,47 @@ async def list_expenses(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
-    query = select(Expense).options(selectinload(Expense.category))
-    count_query = select(func.count(Expense.id))
+    conditions = []
 
     if search and search.strip():
         search_pattern = f"%{search.strip()}%"
-        filter_clause = or_(
-            Expense.title.ilike(search_pattern),
-            Expense.transaction_reference.ilike(search_pattern)
+        conditions.append(
+            or_(
+                Expense.title.ilike(search_pattern),
+                Expense.transaction_reference.ilike(search_pattern)
+            )
         )
-        query = query.where(filter_clause)
-        count_query = count_query.where(filter_clause)
 
     if category_id:
-        query = query.where(Expense.category_id == category_id)
-        count_query = count_query.where(Expense.category_id == category_id)
+        conditions.append(Expense.category_id == category_id)
 
     if payment_mode and payment_mode.strip() and payment_mode.strip().upper() != "ALL":
         mode_val = payment_mode.strip().upper()
-        query = query.where(func.upper(Expense.payment_mode) == mode_val)
-        count_query = count_query.where(func.upper(Expense.payment_mode) == mode_val)
+        conditions.append(func.upper(Expense.payment_mode) == mode_val)
 
     if from_date:
-        query = query.where(Expense.expense_date >= from_date)
-        count_query = count_query.where(Expense.expense_date >= from_date)
+        conditions.append(Expense.expense_date >= from_date)
 
     if to_date:
-        query = query.where(Expense.expense_date <= to_date)
-        count_query = count_query.where(Expense.expense_date <= to_date)
+        conditions.append(Expense.expense_date <= to_date)
 
-    total_result = await db.execute(count_query)
+    total_result = await db.execute(select(func.count(Expense.id)).where(*conditions))
     total = total_result.scalar_one()
 
+    sum_result = await db.execute(
+        select(func.coalesce(func.sum(Expense.amount), Decimal("0.00"))).where(*conditions)
+    )
+    total_amount = sum_result.scalar_one()
+
     offset = (page - 1) * page_size
-    query = query.order_by(desc(Expense.expense_date), desc(Expense.created_at)).offset(offset).limit(page_size)
+    query = (
+        select(Expense)
+        .options(selectinload(Expense.category))
+        .where(*conditions)
+        .order_by(desc(Expense.expense_date), desc(Expense.created_at))
+        .offset(offset)
+        .limit(page_size)
+    )
     items_result = await db.execute(query)
     expenses = items_result.scalars().all()
 
@@ -116,7 +123,15 @@ async def list_expenses(
         for exp in expenses
     ]
 
-    return PageResponse.create(items=response_items, total=total, params=PaginationParams(page=page, page_size=page_size))
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+    return ExpensePageResponse(
+        items=response_items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+        total_amount=total_amount,
+    )
 
 @router.post("", response_model=ExpenseResponse, status_code=status.HTTP_201_CREATED)
 async def create_expense(
@@ -240,7 +255,7 @@ async def get_salary_filter_options(
 
     return SalaryFilterOptionsResponse(staff=staff_options, months=months)
 
-@router.get("/salaries", response_model=PageResponse[SalaryRecordResponse])
+@router.get("/salaries", response_model=SalaryPageResponse)
 async def list_salary_records(
     page: int = Query(1, ge=1),
     page_size: int = Query(15, ge=1, le=100),
@@ -253,22 +268,18 @@ async def list_salary_records(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
-    query = select(SalaryRecord)
-    count_query = select(func.count(SalaryRecord.id))
+    conditions = []
 
     if search and search.strip():
         search_pattern = f"%{search.strip()}%"
-        query = query.where(SalaryRecord.employee_name_snapshot.ilike(search_pattern))
-        count_query = count_query.where(SalaryRecord.employee_name_snapshot.ilike(search_pattern))
+        conditions.append(SalaryRecord.employee_name_snapshot.ilike(search_pattern))
 
     if month_year and month_year.strip() and month_year.strip().upper() != "ALL":
-        query = query.where(SalaryRecord.month_year == month_year.strip())
-        count_query = count_query.where(SalaryRecord.month_year == month_year.strip())
+        conditions.append(SalaryRecord.month_year == month_year.strip())
 
     eff_status = (status_filter or status or "").strip().upper()
     if eff_status and eff_status != "ALL":
-        query = query.where(func.upper(SalaryRecord.status) == eff_status)
-        count_query = count_query.where(func.upper(SalaryRecord.status) == eff_status)
+        conditions.append(func.upper(SalaryRecord.status) == eff_status)
 
     if employee_id:
         t_name = (await db.execute(select(Teacher.name).where(Teacher.id == employee_id))).scalar_one_or_none()
@@ -279,19 +290,31 @@ async def list_salary_records(
             )
         else:
             emp_clause = (SalaryRecord.employee_id == employee_id)
-        query = query.where(emp_clause)
-        count_query = count_query.where(emp_clause)
+        conditions.append(emp_clause)
 
     if employee_name and employee_name.strip():
         name_clause = func.lower(func.trim(SalaryRecord.employee_name_snapshot)) == employee_name.strip().lower()
-        query = query.where(name_clause)
-        count_query = count_query.where(name_clause)
+        conditions.append(name_clause)
 
-    total_result = await db.execute(count_query)
+    total_result = await db.execute(select(func.count(SalaryRecord.id)).where(*conditions))
     total = total_result.scalar_one()
 
+    sum_result = await db.execute(
+        select(
+            func.coalesce(func.sum(SalaryRecord.paid_amount), Decimal("0.00")),
+            func.coalesce(func.sum(SalaryRecord.salary_amount), Decimal("0.00")),
+        ).where(*conditions)
+    )
+    total_paid_amount, total_salary_amount = sum_result.one()
+
     offset = (page - 1) * page_size
-    query = query.order_by(desc(SalaryRecord.month_year), desc(SalaryRecord.created_at), desc(SalaryRecord.due_date)).offset(offset).limit(page_size)
+    query = (
+        select(SalaryRecord)
+        .where(*conditions)
+        .order_by(desc(SalaryRecord.month_year), desc(SalaryRecord.created_at), desc(SalaryRecord.due_date))
+        .offset(offset)
+        .limit(page_size)
+    )
     items_result = await db.execute(query)
     items = items_result.scalars().all()
 
@@ -338,7 +361,17 @@ async def list_salary_records(
             )
         )
 
-    return PageResponse.create(items=response_items, total=total, params=PaginationParams(page=page, page_size=page_size))
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+    return SalaryPageResponse(
+        items=response_items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+        total_amount=total_paid_amount,
+        total_paid_amount=total_paid_amount,
+        total_salary_amount=total_salary_amount,
+    )
 
 @router.post("/salaries", response_model=SalaryRecordResponse, status_code=status.HTTP_201_CREATED)
 async def create_salary_record(
