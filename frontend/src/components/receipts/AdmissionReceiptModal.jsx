@@ -59,7 +59,6 @@ const formatFeePeriod = (validFrom, validTo) => {
 export default function AdmissionReceiptModal({ isOpen, onClose, admission, admissionData }) {
   const { institute } = useInstitute();
   const [copyMode, setCopyMode] = useState('STUDENT'); // 'STUDENT' | 'OFFICE' | 'BOTH'
-  const [includeGst, setIncludeGst] = useState(false);
   const [gstRate, setGstRate] = useState(18.0);
   const [gstNumber, setGstNumber] = useState('09AAACT1234F1Z5');
   const [resolvedCollector, setResolvedCollector] = useState(null);
@@ -104,7 +103,6 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission, admi
 
   useEffect(() => {
     if (!data) return;
-    setIncludeGst(Boolean(data.gst_enabled));
     if (data.gst_rate !== undefined && Number(data.gst_rate) > 0) {
       setGstRate(Number(data.gst_rate));
     }
@@ -138,48 +136,11 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission, admi
         }
       }).catch(() => {});
     }
-  }, [data?.id, data?.admission_number, data?.gst_enabled, data?.gst_rate, data?.gst_number]);
+  }, [data?.id, data?.admission_number, data?.gst_rate, data?.gst_number]);
 
   if (!isOpen || !data) return null;
 
-  const handleToggleGst = async () => {
-    const nextState = !includeGst;
-    setIncludeGst(nextState);
-
-    let activeRate = gstRate;
-    let activeGstin = gstNumber;
-
-    if (nextState && (!activeRate || activeRate <= 0)) {
-      const cached = localStorage.getItem('institute_gst_settings');
-      if (cached) {
-        try {
-          const parsed = JSON.parse(cached);
-          if (parsed.gst_rate) {
-            activeRate = Number(parsed.gst_rate);
-            setGstRate(activeRate);
-          }
-          if (parsed.gstin) {
-            activeGstin = parsed.gstin;
-            setGstNumber(activeGstin);
-          }
-        } catch {}
-      }
-    }
-
-    // Save with invoice/slip if admission id exists
-    const admId = data.id || data.admission_id;
-    if (admId) {
-      try {
-        await admissionApi.updateGst(admId, {
-          gst_enabled: nextState,
-          gst_rate: activeRate,
-          gst_number: activeGstin,
-        });
-      } catch (err) {
-        console.warn('Could not persist GST toggle to server:', err);
-      }
-    }
-  };
+  const includeGst = Boolean(data.gst_enabled);
 
   const handlePrint = () => {
     window.print();
@@ -611,20 +572,6 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission, admi
               }`}
             >
               Both (Dual Slip)
-            </button>
-            <div className="h-4 w-px bg-slate-300 mx-1 hidden sm:block" />
-            <button
-              type="button"
-              onClick={handleToggleGst}
-              className={`min-h-[32px] px-3 py-1 rounded text-xs font-bold transition-colors inline-flex items-center gap-1.5 cursor-pointer ${
-                includeGst
-                  ? 'bg-odoo-600 text-white shadow-xs'
-                  : 'bg-slate-100 text-slate-800 hover:bg-slate-200'
-              }`}
-              title={includeGst ? 'GST included. Click to turn off.' : 'Click to include GST'}
-            >
-              <span className={`w-2 h-2 rounded-full ${includeGst ? 'bg-emerald-300' : 'bg-slate-400'}`}></span>
-              <span>GST: {includeGst ? `ON (${gstRate}%)` : 'OFF'}</span>
             </button>
           </div>
 
