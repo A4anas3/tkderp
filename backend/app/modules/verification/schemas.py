@@ -24,7 +24,6 @@ class StudentVerificationData(BaseModel):
     student_code: str
     admission_number: str
     photo_url: Optional[str] = None
-    father_name: Optional[str] = None
     status: str
 
     model_config = ConfigDict(from_attributes=True)
@@ -79,7 +78,6 @@ class IDCardStudentData(BaseModel):
     student_code: str
     admission_number: str
     photo_url: Optional[str] = None
-    father_name: Optional[str] = None
     status: str = "ACTIVE"
 
     model_config = ConfigDict(from_attributes=True)

@@ -99,7 +99,7 @@ async def get_all_active_teachers(
 async def get_teacher_by_mobile(
     mobile: str,
     db: AsyncSession = Depends(get_db),
-    user = Depends(require_cashier_or_admin)
+    user = Depends(require_admin)
 ):
     clean = mobile.strip()
     if len(clean) > 10:
@@ -198,7 +198,7 @@ async def list_teacher_attendance_monthly(
     return summary_list
 
 @router.get("/{teacher_id}", response_model=TeacherResponse)
-async def get_teacher(teacher_id: uuid.UUID, db: AsyncSession = Depends(get_db), user = Depends(require_cashier_or_admin)):
+async def get_teacher(teacher_id: uuid.UUID, db: AsyncSession = Depends(get_db), user = Depends(require_admin)):
     teacher = (await db.execute(select(Teacher).where(Teacher.id == teacher_id))).scalar_one_or_none()
     if not teacher:
         raise HTTPException(status_code=404, detail="Teacher not found")
@@ -1561,7 +1561,7 @@ async def bulk_set_teacher_attendance(
 async def get_teacher_salary_history(
     teacher_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    user = Depends(require_cashier_or_admin)
+    user = Depends(require_admin)
 ):
     teacher = (await db.execute(select(Teacher).where(Teacher.id == teacher_id))).scalar_one_or_none()
     if not teacher:

@@ -333,7 +333,6 @@ async def verify_student_credential(
         student_code=student.student_code,
         admission_number=matched_adm_number,
         photo_url=student.photo_url,
-        father_name=student.father_name,
         status=student.status,
     )
 
@@ -488,7 +487,6 @@ async def get_public_id_card(
         student_code=student.student_code,
         admission_number=matched_adm_number or student.student_code,
         photo_url=student.photo_url,
-        father_name=student.father_name,
         status=student.status,
     )
 

@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, and_, desc, case
 
 from app.database.session import get_db
-from app.core.dependencies import require_staff, require_admin
+from app.core.dependencies import require_staff, require_admin, require_teacher_or_admin
 from app.database.models import Subject, User, Teacher, Batch
 from app.modules.admissions.models import Admission, AdmissionItem
 from app.modules.students.models import Student
@@ -172,7 +172,7 @@ async def get_subject_roster(
     search: Optional[str] = Query(None),
     status_filter: Optional[str] = Query("ALL"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_teacher_or_admin)
 ):
     today = today_kolkata()
     is_green_card = subject_id.upper() in ("GREEN-CARD", "GREEN-CARD-ALL-ACCESS", "GREEN_CARD")
@@ -333,7 +333,7 @@ async def get_subject_roster(
 async def get_subject(
     subject_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_teacher_or_admin)
 ):
     res = await db.execute(select(Subject).where(Subject.id == subject_id))
     subject = res.scalar_one_or_none()

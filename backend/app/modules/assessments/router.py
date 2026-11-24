@@ -4,10 +4,16 @@ from decimal import Decimal
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, desc
+from sqlalchemy import select, func, and_, or_, desc
 
 from app.database.session import get_db
-from app.core.dependencies import require_cashier_or_admin, require_admin
+from app.core.dependencies import require_teacher_or_admin
+from app.common.teacher_scope import (
+    is_teacher_user,
+    resolve_teacher_for_user,
+    get_teacher_subject_ids,
+    is_active_student_of_teacher,
+)
 from app.database.models import User, Teacher, Subject, Batch, Student
 from app.modules.assessments.models import Assessment, StudentMark
 from app.modules.assessments.schemas import (
@@ -46,18 +52,23 @@ async def list_assessments(
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_cashier_or_admin)
+    current_user: User = Depends(require_teacher_or_admin)
 ):
     query = select(Assessment)
     count_query = select(func.count(Assessment.id))
 
     # If user is a teacher, restrict to their assigned subjects/assessments
-    if current_user.role == "TEACHER":
-        t_res = await db.execute(select(Teacher).where(Teacher.user_id == current_user.id))
-        teacher = t_res.scalar_one_or_none()
-        if teacher:
-            query = query.where(Assessment.teacher_id == teacher.id)
-            count_query = count_query.where(Assessment.teacher_id == teacher.id)
+    if is_teacher_user(current_user):
+        teacher = await resolve_teacher_for_user(db, current_user)
+        if not teacher:
+            return PageResponse(items=[], total=0, page=page, page_size=page_size, total_pages=0)
+        teacher_sub_ids = await get_teacher_subject_ids(db, teacher.id)
+        if teacher_sub_ids:
+            scope_clause = or_(Assessment.teacher_id == teacher.id, Assessment.subject_id.in_(teacher_sub_ids))
+        else:
+            scope_clause = (Assessment.teacher_id == teacher.id)
+        query = query.where(scope_clause)
+        count_query = count_query.where(scope_clause)
 
     if subject_id:
         query = query.where(Assessment.subject_id == subject_id)
@@ -122,7 +133,7 @@ async def list_assessments(
 async def create_assessment(
     payload: AssessmentCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_cashier_or_admin)
+    current_user: User = Depends(require_teacher_or_admin)
 ):
     # Verify subject exists
     sub = await db.get(Subject, payload.subject_id)
@@ -130,7 +141,15 @@ async def create_assessment(
         raise HTTPException(status_code=404, detail="Subject not found")
 
     teacher_id = payload.teacher_id
-    if not teacher_id and sub.teacher_id:
+    if is_teacher_user(current_user):
+        teacher = await resolve_teacher_for_user(db, current_user)
+        if not teacher or sub.teacher_id != teacher.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: you are not assigned to this subject",
+            )
+        teacher_id = teacher.id
+    elif not teacher_id and sub.teacher_id:
         teacher_id = sub.teacher_id
 
     assessment = Assessment(
@@ -171,11 +190,19 @@ async def create_assessment(
 async def get_assessment(
     id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_cashier_or_admin)
+    current_user: User = Depends(require_teacher_or_admin)
 ):
     a = await db.get(Assessment, id)
     if not a:
         raise HTTPException(status_code=404, detail="Assessment not found")
+    if is_teacher_user(current_user):
+        teacher = await resolve_teacher_for_user(db, current_user)
+        teacher_sub_ids = await get_teacher_subject_ids(db, teacher.id) if teacher else []
+        if not teacher or (a.teacher_id != teacher.id and a.subject_id not in teacher_sub_ids):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: you are not assigned to this assessment",
+            )
 
     marks_rows = []
     for m in a.marks:
@@ -222,11 +249,19 @@ async def record_student_marks(
     id: uuid.UUID,
     payload: StudentMarkBulkUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_cashier_or_admin)
+    current_user: User = Depends(require_teacher_or_admin)
 ):
     a = await db.get(Assessment, id)
     if not a:
         raise HTTPException(status_code=404, detail="Assessment not found")
+    if is_teacher_user(current_user):
+        teacher = await resolve_teacher_for_user(db, current_user)
+        teacher_sub_ids = await get_teacher_subject_ids(db, teacher.id) if teacher else []
+        if not teacher or (a.teacher_id != teacher.id and a.subject_id not in teacher_sub_ids):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: you are not assigned to this assessment",
+            )
 
     # Load existing marks for assessment
     existing_marks_res = await db.execute(select(StudentMark).where(StudentMark.assessment_id == id))
@@ -288,7 +323,7 @@ async def record_student_marks(
 async def get_student_assessment_history(
     student_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_cashier_or_admin)
+    current_user: User = Depends(require_teacher_or_admin)
 ):
     stmt = (
         select(StudentMark, Assessment, Subject)
@@ -297,6 +332,17 @@ async def get_student_assessment_history(
         .where(StudentMark.student_id == student_id)
         .order_by(desc(Assessment.exam_date), desc(StudentMark.created_at))
     )
+    if is_teacher_user(current_user):
+        teacher = await resolve_teacher_for_user(db, current_user)
+        allowed, teacher_sub_ids = await is_active_student_of_teacher(
+            db, student_id, teacher.id if teacher else None
+        )
+        if not allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: student is not an active student in your assigned subjects",
+            )
+        stmt = stmt.where(Subject.id.in_(teacher_sub_ids))
     res = await db.execute(stmt)
     rows = res.all()
 
