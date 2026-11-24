@@ -1135,7 +1135,7 @@ export default function ExpensesPage() {
               Cancel
             </Button>
             <Button type="submit" variant="primary" loading={submitting}>
-              Create Salary Record
+              Pay Salary
             </Button>
           </div>
         </form>
