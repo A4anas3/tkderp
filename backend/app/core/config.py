@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     # JWT & Auth
     SECRET_KEY: str = "ThakurdwaraErpSuperSecretKeyMustBeVeryStrongAndSecure2026"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 8  # 8 hours
     
     # Firebase (Optional internal authentication provider)
     FIREBASE_CREDENTIALS_PATH: str = ""

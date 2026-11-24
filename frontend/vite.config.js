@@ -19,6 +19,14 @@ export default defineConfig({
       },
     },
   },
+  preview: {
+    headers: {
+      'Content-Security-Policy': "default-src 'self'; frame-ancestors 'self';",
+      'X-Frame-Options': 'SAMEORIGIN',
+      'X-Content-Type-Options': 'nosniff',
+      'Referrer-Policy': 'no-referrer-when-downgrade',
+    },
+  },
   build: {
     chunkSizeWarningLimit: 600,
     rollupOptions: {

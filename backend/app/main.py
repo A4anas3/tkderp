@@ -1,8 +1,9 @@
 import os
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.database.session import get_db
 from app.core.dependencies import require_cashier_or_admin
@@ -134,6 +135,26 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+SECURITY_HEADERS = {
+    "Content-Security-Policy": "default-src 'self'; frame-ancestors 'self';",
+    "X-Frame-Options": "SAMEORIGIN",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer-when-downgrade",
+}
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add standard HTTP security headers to every API response."""
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        for header, value in SECURITY_HEADERS.items():
+            response.headers[header] = value
+        return response
+
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Mount local uploads for static serving
 uploads_path = os.path.abspath(settings.UPLOAD_DIR)
