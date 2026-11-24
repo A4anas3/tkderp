@@ -332,10 +332,13 @@ async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db),
 
     today = today_kolkata()
 
-    # Load all admissions with their items
+    # Load all admissions with their items and payment history
     adms_stmt = (
         select(Admission)
-        .options(selectinload(Admission.items).selectinload(AdmissionItem.demo_item))
+        .options(
+            selectinload(Admission.items).selectinload(AdmissionItem.demo_item),
+            selectinload(Admission.payments),
+        )
         .where(Admission.student_id == student_id)
         .order_by(Admission.admission_date.desc(), Admission.created_at.desc())
     )

@@ -1835,7 +1835,8 @@ async def renew_admission_items_service(
         select(Admission)
         .options(
             selectinload(Admission.items),
-            selectinload(Admission.student)
+            selectinload(Admission.student),
+            selectinload(Admission.payments),
         )
         .where(Admission.id == admission.id)
     )

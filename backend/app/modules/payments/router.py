@@ -18,6 +18,7 @@ from app.modules.payments.schemas import (
     RefundCreate, RefundResponse, RefundReceiptResponse, TransactionResponse
 )
 from app.common.calculations import allocate_payment_proportionally
+from app.common.collector import resolve_payment_collector_name
 from app.common.pagination import PaginationParams, PageResponse
 from app.common.numbering import next_number
 from app.common.idempotency import get_idempotency_record, save_idempotency_record, build_idempotent_response
@@ -107,6 +108,7 @@ async def list_payments(
                 payment_date=p.payment_date,
                 collected_by=p.collected_by,
                 collector_name_snapshot=p.collector_name_snapshot,
+                collector_name=resolve_payment_collector_name(p),
                 notes=p.notes,
                 valid_from=p.valid_from,
                 valid_to=p.valid_to,
@@ -179,7 +181,7 @@ async def list_transactions(
 
         collector_name = None
         if t.payment:
-            collector_name = t.payment.collector_name_snapshot
+            collector_name = resolve_payment_collector_name(t.payment)
 
         response_items.append(
             TransactionResponse(
@@ -269,6 +271,7 @@ async def record_payment(
         payment_date=payment.payment_date,
         collected_by=payment.collected_by,
         collector_name_snapshot=payment.collector_name_snapshot,
+        collector_name=resolve_payment_collector_name(payment),
         notes=payment.notes,
         valid_from=payment.valid_from,
         valid_to=payment.valid_to,
@@ -333,7 +336,7 @@ async def get_payment_receipt(
         amount=p.amount,
         payment_mode=p.payment_mode,
         transaction_reference=p.transaction_reference,
-        collector_name=p.collector_name_snapshot,
+        collector_name=resolve_payment_collector_name(p),
         student_name=p.student.full_name,
         student_reg_no=p.student.registration_no,
         student_mobile=p.student.mobile,
@@ -433,6 +436,7 @@ async def update_payment(
         payment_date=updated_payment.payment_date,
         collected_by=updated_payment.collected_by,
         collector_name_snapshot=updated_payment.collector_name_snapshot,
+        collector_name=resolve_payment_collector_name(updated_payment),
         notes=updated_payment.notes,
         valid_from=updated_payment.valid_from,
         valid_to=updated_payment.valid_to,

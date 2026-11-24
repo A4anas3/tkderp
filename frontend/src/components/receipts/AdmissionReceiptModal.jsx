@@ -4,7 +4,7 @@ import Modal from '../common/Modal';
 import Button from '../common/Button';
 import Badge from '../common/Badge';
 import ReceiptHeader from './ReceiptHeader';
-import ReceiptFooter from './ReceiptFooter';
+import ReceiptFooter, { sanitizeCollectorName } from './ReceiptFooter';
 import { admissionApi, settingsApi } from '../../services/allApis';
 import { useInstitute } from '../../context/InstituteContext';
 import {
@@ -62,8 +62,45 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission, admi
   const [includeGst, setIncludeGst] = useState(false);
   const [gstRate, setGstRate] = useState(18.0);
   const [gstNumber, setGstNumber] = useState('09AAACT1234F1Z5');
+  const [resolvedCollector, setResolvedCollector] = useState(null);
 
   const data = admission || admissionData;
+
+  useEffect(() => {
+    if (!isOpen || !data) {
+      setResolvedCollector(null);
+      return;
+    }
+    const directCollector =
+      sanitizeCollectorName(data.collector_name) ||
+      sanitizeCollectorName(data.collector_name_snapshot);
+    if (directCollector) {
+      setResolvedCollector(directCollector);
+      return;
+    }
+    setResolvedCollector(null);
+    const admId = data.id || data.admission_id;
+    if (Number(data.amount_paid || 0) > 0 && admId) {
+      let cancelled = false;
+      admissionApi.getSlips(admId).then((res) => {
+        if (cancelled || !res) return;
+        const fromSlips =
+          sanitizeCollectorName(res.collector_name) ||
+          (res.slips || [])
+            .filter((s) => s.slip_type === 'PAYMENT_RECEIPT')
+            .map((s) => sanitizeCollectorName(s.data?.collector_name) || sanitizeCollectorName(s.collector_or_processor))
+            .filter(Boolean)
+            .pop() ||
+          null;
+        if (fromSlips) {
+          setResolvedCollector(fromSlips);
+        }
+      }).catch(() => {});
+      return () => {
+        cancelled = true;
+      };
+    }
+  }, [isOpen, data?.id, data?.admission_id, data?.collector_name, data?.collector_name_snapshot, data?.amount_paid]);
 
   useEffect(() => {
     if (!data) return;
@@ -530,6 +567,7 @@ export default function AdmissionReceiptModal({ isOpen, onClose, admission, admi
         <ReceiptFooter
           amount={amountPaid > 0 ? amountPaid : effectiveTotal}
           issuedDate={data.admission_date}
+          collectedBy={resolvedCollector}
           collectorName="Accounts Section"
           terms={[
             'Course admission is strictly subject to institute rules and disciplinary regulations.',

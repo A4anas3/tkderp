@@ -30,6 +30,7 @@ from app.common.pagination import PaginationParams, PageResponse
 from app.common.numbering import next_number
 from app.common.idempotency import get_idempotency_record, save_idempotency_record, build_idempotent_response
 from app.common.active_lines import today_kolkata, is_active_line, compute_days_remaining
+from app.common.collector import resolve_payment_collector_name
 from app.modules.ledger.service import (
     record_payment_service, process_refund_service, recompute_admission_totals,
     update_student_green_card_status, cancel_admission_service, revoke_admission_service,
@@ -107,7 +108,10 @@ async def list_admissions(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
-    query = select(Admission).options(selectinload(Admission.items).selectinload(AdmissionItem.demo_item))
+    query = select(Admission).options(
+        selectinload(Admission.items).selectinload(AdmissionItem.demo_item),
+        selectinload(Admission.payments),
+    )
     count_query = select(func.count(Admission.id))
 
     if active_only:
@@ -620,7 +624,10 @@ async def get_admission(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
-    query = select(Admission).options(selectinload(Admission.items).selectinload(AdmissionItem.demo_item)).where(Admission.id == admission_id)
+    query = select(Admission).options(
+        selectinload(Admission.items).selectinload(AdmissionItem.demo_item),
+        selectinload(Admission.payments),
+    ).where(Admission.id == admission_id)
     res = await db.execute(query)
     admission = res.scalar_one_or_none()
     if not admission:
@@ -682,6 +689,13 @@ async def get_admission_slips(
 
     slips: List[SlipItemResponse] = []
 
+    invoice_collector_name: Optional[str] = None
+    for p in reversed(payments):
+        resolved_name = resolve_payment_collector_name(p)
+        if resolved_name:
+            invoice_collector_name = resolved_name
+            break
+
     # 1. Course Enrollment / Admission Slip
     adm_dict = {
         "id": str(admission.id),
@@ -693,6 +707,7 @@ async def get_admission_slips(
         "student_mobile": admission.student.mobile if admission.student else None,
         "student_father_name": admission.student.father_name if admission.student else None,
         "admission_date": admission.admission_date.isoformat(),
+        "collector_name": invoice_collector_name,
         "subtotal": float(admission.subtotal),
         "individual_discount_total": float(admission.individual_discount_total),
         "overall_discount_type": admission.overall_discount_type,
@@ -763,7 +778,7 @@ async def get_admission_slips(
             amount=admission.total_payable,
             mode="INVOICE",
             ref=admission.admission_number,
-            collector_or_processor=admission.student_name_snapshot,
+            collector_or_processor=invoice_collector_name,
             notes=admission.notes,
             status_badge=admission.payment_status,
             data=adm_dict
@@ -789,13 +804,14 @@ async def get_admission_slips(
             }
             for a in p.allocations
         ]
+        p_collector = resolve_payment_collector_name(p)
         p_receipt_data = {
             "payment_number": p.payment_number,
             "payment_date": p.payment_date.isoformat(),
             "amount": float(p.amount),
             "payment_mode": p.payment_mode,
             "transaction_reference": p.transaction_reference,
-            "collector_name": p.collector_name_snapshot,
+            "collector_name": p_collector,
             "student_name": admission.student.full_name if admission.student else admission.student_name_snapshot,
             "student_reg_no": admission.student.registration_no if admission.student else "—",
             "student_mobile": admission.student.mobile if admission.student else None,
@@ -821,7 +837,7 @@ async def get_admission_slips(
                 amount=p.amount,
                 mode=p.payment_mode,
                 ref=p.transaction_reference,
-                collector_or_processor=p.collector_name_snapshot,
+                collector_or_processor=p_collector,
                 notes=p.notes,
                 status_badge="PAID",
                 data=p_receipt_data
@@ -930,6 +946,7 @@ async def get_admission_slips(
         gst_enabled=admission.gst_enabled,
         gst_rate=admission.gst_rate,
         gst_number=getattr(admission, "gst_number", None),
+        collector_name=invoice_collector_name,
         allocations=adm_dict["allocations"],
         items=admission.items,
         slips=slips
@@ -952,7 +969,8 @@ async def update_admission_gst(
         select(Admission)
         .options(
             selectinload(Admission.items).joinedload(AdmissionItem.subject).joinedload(Subject.teacher),
-            selectinload(Admission.student)
+            selectinload(Admission.student),
+            selectinload(Admission.payments),
         )
         .where(Admission.id == admission_id)
     )

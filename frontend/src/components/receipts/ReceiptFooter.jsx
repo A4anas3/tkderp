@@ -2,10 +2,42 @@ import React from 'react';
 import { numberToIndianWords } from '../../utils/numberToWords';
 import { useInstitute } from '../../context/InstituteContext';
 
+const ROLE_ONLY_COLLECTOR_NAMES = new Set([
+  'cashier',
+  'admin',
+  'administrator',
+  'system admin',
+  'system administrator',
+  'super admin',
+  'staff',
+  'system',
+  'system staff',
+  'teacher',
+  'faculty',
+  'accounts desk',
+  'accounts section',
+  'authorized officer',
+  'disbursement officer',
+  '—',
+  '-',
+]);
+
+const TRAILING_ROLE_RE = /\s*[\(\[\-–—]\s*(?:cashier|admin|administrator|staff|teacher|faculty)\s*[\)\]]?\s*$/i;
+
+export function sanitizeCollectorName(rawName) {
+  if (!rawName || typeof rawName !== 'string') return null;
+  const cleaned = rawName.replace(TRAILING_ROLE_RE, '').trim();
+  if (!cleaned || ROLE_ONLY_COLLECTOR_NAMES.has(cleaned.toLowerCase())) {
+    return null;
+  }
+  return cleaned;
+}
+
 export default function ReceiptFooter({
   amount = null,
   amountInWords = null,
   collectorName = 'Authorized Officer',
+  collectedBy = null,
   issuedDate = null,
   terms = [
     'Fees once deposited are strictly non-refundable and non-transferable under all circumstances.',
@@ -14,6 +46,7 @@ export default function ReceiptFooter({
   ],
   customNote = null,
 }) {
+  const cleanCollectedBy = sanitizeCollectorName(collectedBy);
   const { institute } = useInstitute();
   const instituteName = institute?.institute_name || 'THAKURDWARA COACHING INSTITUTE';
   const displayWords =
@@ -103,9 +136,20 @@ export default function ReceiptFooter({
             <p className="text-[10px] font-black text-black mt-1">
               Authorized Signatory
             </p>
-            <p className="text-[9px] text-slate-700 font-medium font-mono">
-              {collectorName} • {formattedDate}
-            </p>
+            {cleanCollectedBy ? (
+              <>
+                <p className="text-[9px] text-indigo-950 font-bold mt-0.5">
+                  Collected by: {cleanCollectedBy}
+                </p>
+                <p className="text-[9px] text-slate-700 font-medium font-mono">
+                  {formattedDate}
+                </p>
+              </>
+            ) : (
+              <p className="text-[9px] text-slate-700 font-medium font-mono">
+                {collectorName} • {formattedDate}
+              </p>
+            )}
           </div>
         </div>
       </div>

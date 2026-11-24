@@ -109,6 +109,7 @@ class PaymentResponse(BaseModel):
     payment_date: datetime
     collected_by: Optional[uuid.UUID] = None
     collector_name_snapshot: str
+    collector_name: Optional[str] = None
     notes: Optional[str] = None
     valid_from: Optional[date] = None
     valid_to: Optional[date] = None
@@ -123,7 +124,7 @@ class PaymentReceiptResponse(BaseModel):
     amount: Decimal
     payment_mode: str
     transaction_reference: Optional[str] = None
-    collector_name: str
+    collector_name: Optional[str] = None
     student_name: str
     student_reg_no: str
     student_mobile: Optional[str] = None

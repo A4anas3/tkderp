@@ -16,7 +16,7 @@ import AdmissionReceiptModal from './AdmissionReceiptModal';
 import PaymentReceiptModal from './PaymentReceiptModal';
 import RefundReceiptModal from './RefundReceiptModal';
 import ReceiptHeader from './ReceiptHeader';
-import ReceiptFooter from './ReceiptFooter';
+import ReceiptFooter, { sanitizeCollectorName } from './ReceiptFooter';
 import { useInstitute } from '../../context/InstituteContext';
 import {
   WhatsAppIcon,
@@ -168,6 +168,14 @@ export default function AdmissionAllSlipsModal({
   if (!isOpen) return null;
 
   const slips = data?.slips || [];
+  const statementCollector =
+    sanitizeCollectorName(data?.collector_name) ||
+    slips
+      .filter((s) => s.slip_type === 'PAYMENT_RECEIPT')
+      .map((s) => sanitizeCollectorName(s.data?.collector_name) || sanitizeCollectorName(s.collector_or_processor))
+      .filter(Boolean)
+      .pop() ||
+    null;
   const filteredSlips = slips.filter((s) => {
     if (activeTab === 'ALL') return true;
     if (activeTab === 'INVOICE') return s.slip_type === 'ADMISSION_INVOICE';
@@ -629,6 +637,7 @@ export default function AdmissionAllSlipsModal({
                 <ReceiptFooter
                   amount={totalPaid}
                   issuedDate={data?.admission_date}
+                  collectedBy={statementCollector}
                   collectorName="Accounts Section"
                   terms={[
                     'This statement reflects complete financial transactions (fees billed, receipts realized & refunds).',

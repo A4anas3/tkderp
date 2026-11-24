@@ -4,7 +4,7 @@ import Modal from '../common/Modal';
 import Button from '../common/Button';
 import Badge from '../common/Badge';
 import ReceiptHeader from './ReceiptHeader';
-import ReceiptFooter from './ReceiptFooter';
+import ReceiptFooter, { sanitizeCollectorName } from './ReceiptFooter';
 import { admissionApi, settingsApi } from '../../services/allApis';
 import { useInstitute } from '../../context/InstituteContext';
 import {
@@ -433,7 +433,12 @@ export default function PaymentReceiptModal({ isOpen, onClose, receipt, payment 
         <ReceiptFooter
           amount={currentPaid}
           issuedDate={data.payment_date}
-          collectorName={data.collector_name || data.collector_name_snapshot || 'Accounts Desk'}
+          collectedBy={
+            sanitizeCollectorName(data.collector_name) ||
+            sanitizeCollectorName(data.collector_name_snapshot) ||
+            sanitizeCollectorName(data.collector)
+          }
+          collectorName="Accounts Desk"
           terms={[
             'Fees once paid are non-refundable and non-transferable under any circumstances.',
             'Please preserve this computer-generated receipt for future verification and ID card issuance.',

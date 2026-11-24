@@ -31,6 +31,11 @@ class Payment(BaseModel):
     allocations: Mapped[List["PaymentAllocation"]] = relationship("PaymentAllocation", back_populates="payment", cascade="all, delete-orphan", lazy="selectin")
     admission: Mapped["app.modules.admissions.models.Admission"] = relationship("app.modules.admissions.models.Admission", lazy="joined")
     student: Mapped["app.modules.students.models.Student"] = relationship("app.modules.students.models.Student", lazy="joined")
+    collector_user: Mapped[Optional["app.modules.users.models.User"]] = relationship(
+        "app.modules.users.models.User",
+        foreign_keys=[collected_by],
+        lazy="joined"
+    )
 
 class PaymentAllocation(BaseModel):
     __tablename__ = "payment_allocations"

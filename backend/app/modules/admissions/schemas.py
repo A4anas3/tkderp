@@ -192,6 +192,7 @@ class AdmissionResponse(BaseModel):
     revoked_at: Optional[datetime] = None
     revoked_by: Optional[uuid.UUID] = None
     created_by: Optional[uuid.UUID] = None
+    collector_name: Optional[str] = None
     items: List[AdmissionItemResponse] = Field(default_factory=list)
     can_cancel: bool = True
 
@@ -285,6 +286,7 @@ class AdmissionSlipsResponse(BaseModel):
     gst_enabled: bool = False
     gst_rate: Decimal = Decimal("18.00")
     gst_number: Optional[str] = None
+    collector_name: Optional[str] = None
     allocations: Optional[List[dict]] = None
     items: List[AdmissionItemResponse] = Field(default_factory=list)
     slips: List[SlipItemResponse] = Field(default_factory=list)

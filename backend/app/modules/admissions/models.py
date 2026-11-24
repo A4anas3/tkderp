@@ -6,6 +6,7 @@ from sqlalchemy import String, Date, DateTime, Numeric, Boolean, Text, ForeignKe
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base import BaseModel
+from app.common.collector import resolve_payment_collector_name
 
 class Admission(BaseModel):
     __tablename__ = "admissions"
@@ -93,9 +94,26 @@ class Admission(BaseModel):
                 return False
         return True
 
+    @property
+    def collector_name(self) -> Optional[str]:
+        payments = self.__dict__.get("payments")
+        if not payments:
+            return None
+        for p in reversed(payments):
+            name = resolve_payment_collector_name(p)
+            if name:
+                return name
+        return None
+
     # Relationships
     items: Mapped[List["AdmissionItem"]] = relationship("AdmissionItem", back_populates="admission", cascade="all, delete-orphan", lazy="selectin")
     student: Mapped["app.modules.students.models.Student"] = relationship("app.modules.students.models.Student", lazy="joined")
+    payments: Mapped[List["app.modules.payments.models.Payment"]] = relationship(
+        "app.modules.payments.models.Payment",
+        viewonly=True,
+        lazy="select",
+        order_by="app.modules.payments.models.Payment.payment_date.asc()",
+    )
 
 class AdmissionItem(BaseModel):
     __tablename__ = "admission_items"
