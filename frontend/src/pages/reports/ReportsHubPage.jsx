@@ -25,7 +25,6 @@ import {
   RotateCcw,
   Receipt,
   BarChart3,
-  Download,
   Printer,
   RefreshCw,
   Search,
@@ -48,7 +47,6 @@ import StatCard from '../../components/common/StatCard';
 import Badge from '../../components/common/Badge';
 import InstituteLogo from '../../components/common/InstituteLogo';
 import { reportApi, subjectApi } from '../../services/allApis';
-import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useInstitute } from '../../context/InstituteContext';
 
@@ -203,8 +201,8 @@ export default function ReportsHubPage() {
 
   // Data & loading states
   const [data, setData] = useState(null);
+  const [dataTab, setDataTab] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [exporting, setExporting] = useState(false);
   const [tablePage, setTablePage] = useState(1);
   const [cashierPage, setCashierPage] = useState(1);
   const [subjectPage, setSubjectPage] = useState(1);
@@ -217,6 +215,7 @@ export default function ReportsHubPage() {
   // Clear previous tab's data immediately upon tab change to prevent rendering mismatched data shapes
   useEffect(() => {
     setData(null);
+    setDataTab(null);
   }, [activeTab]);
 
   // Debounce search query so typing does not fire redundant requests
@@ -453,6 +452,7 @@ export default function ReportsHubPage() {
       }
       if (seq === fetchSeqRef.current) {
         setData(res);
+        setDataTab(activeTab);
       }
     } catch (err) {
       if (seq === fetchSeqRef.current) {
@@ -468,43 +468,6 @@ export default function ReportsHubPage() {
   useEffect(() => {
     fetchReportData();
   }, [fetchReportData]);
-
-  // Handle CSV export
-  const handleExportCsv = async () => {
-    setExporting(true);
-    try {
-      const params = buildQueryParams(false);
-      params.format = 'csv';
-      const query = new URLSearchParams();
-      Object.entries(params).forEach(([k, v]) => {
-        if (v !== null && v !== undefined && v !== '') {
-          query.append(k, v);
-        }
-      });
-
-      let endpoint = `/reports/${activeTab}`;
-      if (activeTab === 'subject-breakup') endpoint = '/reports/subject-breakup';
-      if (activeTab === 'teacher-breakup') endpoint = '/reports/teacher-breakup';
-
-      const response = await api.get(`${endpoint}/csv?${query.toString()}`, {
-        responseType: 'blob',
-      });
-      const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8;' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `${activeTab}_report_${new Date().toISOString().slice(0, 10)}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error('CSV export failed:', err);
-      alert('Failed to export CSV. Please try again.');
-    } finally {
-      setExporting(false);
-    }
-  };
 
   // Handle Print
   const handlePrint = () => {
@@ -532,7 +495,7 @@ export default function ReportsHubPage() {
           </p>
         </div>
 
-        {/* Action Buttons: Export CSV, Print View, Refresh */}
+        {/* Action Buttons: Refresh, Print View */}
         <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
@@ -543,17 +506,6 @@ export default function ReportsHubPage() {
           >
             <RefreshCw className={`w-3.5 h-3.5 text-slate-600 ${loading ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline">Refresh</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleExportCsv}
-            disabled={exporting || loading}
-            className="inline-flex items-center gap-1.5 h-8 min-h-[32px] px-3 py-1 text-xs font-bold rounded-md bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs transition-all cursor-pointer disabled:opacity-50"
-            title="Export full ledger data to CSV"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>{exporting ? 'Exporting...' : 'Export CSV'}</span>
           </button>
 
           <button
@@ -696,8 +648,8 @@ export default function ReportsHubPage() {
                   className="w-full h-8 px-2 text-xs font-semibold text-black bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#714B67]"
                 >
                   <option value="ALL">All Cashiers</option>
-                  {(data?.cashier_options || data?.by_cashier || []).map((c, idx) => (
-                    <option key={c.cashier_id ? `cashier-${c.cashier_id}-${idx}` : `cashier-${idx}`} value={c.cashier_id || c.user_id}>
+                  {(dataTab === activeTab ? (data?.cashier_options || data?.by_cashier || []) : []).map((c, idx) => (
+                    <option key={(c.user_id || c.cashier_id) ? `cashier-${c.user_id || c.cashier_id}-${idx}` : `cashier-${idx}`} value={c.cashier_id || c.user_id}>
                       {c.cashier_name}
                     </option>
                   ))}
@@ -816,8 +768,8 @@ export default function ReportsHubPage() {
                   className="w-full h-8 px-2 text-xs font-semibold text-black bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#714B67]"
                 >
                   <option value="ALL">All Categories</option>
-                  {data?.by_category?.map((c) => (
-                    <option key={c.category_name} value={c.category_name}>
+                  {(dataTab === activeTab ? data?.by_category : [])?.map((c, idx) => (
+                    <option key={c.category_name ? `exp-cat-opt-${c.category_name}-${idx}` : `exp-cat-opt-${idx}`} value={c.category_name}>
                       {c.category_name}
                     </option>
                   ))}
@@ -891,7 +843,7 @@ export default function ReportsHubPage() {
       </div>
 
       {/* 4. Active Report Content */}
-      {loading ? (
+      {(loading || dataTab !== activeTab) ? (
         <div className="bg-white border border-slate-200 rounded-xl p-12 text-center shadow-2xs animate-pulse">
           <div className="w-8 h-8 rounded-full border-2 border-[#714B67] border-t-transparent animate-spin mx-auto mb-3" />
           <p className="text-xs font-bold text-slate-700">Loading {currentTabInfo.label} from Ledger...</p>
@@ -956,16 +908,16 @@ export default function ReportsHubPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 font-semibold">
-                        {data?.by_mode?.map((m) => (
-                          <tr key={m.mode} className="hover:bg-slate-50">
+                        {data?.by_mode?.map((m, idx) => (
+                          <tr key={m.mode ? `mode-${m.mode}-${idx}` : `mode-${idx}`} className="hover:bg-slate-50">
                             <td className="p-2 flex items-center gap-2">
                               <span className="w-2 h-2 rounded-full bg-emerald-500" />
                               <span className="font-bold text-black">{m.mode}</span>
                             </td>
                             <td className="p-2 text-center font-mono">{m.payment_count}</td>
-                            <td className="p-2 text-right font-mono">₹{m.gross_collected.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                            <td className="p-2 text-right font-mono text-rose-700">₹{m.total_refunded.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                            <td className="p-2 text-right font-mono font-black text-emerald-800">₹{m.net_collected.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                            <td className="p-2 text-right font-mono">₹{(m.gross_collected ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                            <td className="p-2 text-right font-mono text-rose-700">₹{(m.total_refunded ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                            <td className="p-2 text-right font-mono font-black text-emerald-800">₹{(m.net_collected ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -990,15 +942,15 @@ export default function ReportsHubPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 font-semibold">
-                        {data?.by_cashier?.map((c) => (
-                          <tr key={c.cashier_name} className="hover:bg-slate-50">
+                        {data?.by_cashier?.map((c, idx) => (
+                          <tr key={c.user_id ? `cashier-row-${c.user_id}-${idx}` : `cashier-row-${c.username || c.cashier_name || idx}-${idx}`} className="hover:bg-slate-50">
                             <td className="p-2">
                               <p className="font-bold text-black">{c.cashier_name}</p>
                               <p className="text-[10px] text-slate-500 font-mono">{c.username}</p>
                             </td>
                             <td className="p-2 text-center font-mono">{c.payment_count}</td>
-                            <td className="p-2 text-right font-mono">₹{c.gross_collected.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                            <td className="p-2 text-right font-mono font-black text-emerald-800">₹{c.net_collected.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                            <td className="p-2 text-right font-mono">₹{(c.gross_collected ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                            <td className="p-2 text-right font-mono font-black text-emerald-800">₹{(c.net_collected ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1039,8 +991,8 @@ export default function ReportsHubPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-medium">
-                      {data?.transactions?.map((t) => (
-                        <tr key={t.id} className="hover:bg-slate-50 transition-colors">
+                      {data?.transactions?.map((t, idx) => (
+                        <tr key={t.id ? `txn-${t.id}` : `txn-${idx}`} className="hover:bg-slate-50 transition-colors">
                           <td className="p-2.5 font-mono text-slate-600 whitespace-nowrap">
                             {t.payment_date ? t.payment_date.slice(0, 10) : '-'}
                           </td>
@@ -1058,7 +1010,7 @@ export default function ReportsHubPage() {
                           </td>
                           <td className="p-2.5 font-mono text-slate-700 whitespace-nowrap">{t.admission_number}</td>
                           <td className="p-2.5 text-right font-mono font-black text-emerald-800 whitespace-nowrap">
-                            ₹{t.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            ₹{(t.amount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                           </td>
                           <td className="p-2.5 text-center">
                             <Badge variant={t.payment_mode === 'CASH' ? 'success' : 'teal'} size="xs">
@@ -1155,8 +1107,8 @@ export default function ReportsHubPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-medium">
-                      {data?.items?.map((i) => (
-                        <tr key={i.item_id} className="hover:bg-slate-50 transition-colors">
+                      {data?.items?.map((i, idx) => (
+                        <tr key={i.item_id ? `due-${i.item_id}-${idx}` : `due-${idx}`} className="hover:bg-slate-50 transition-colors">
                           <td className="p-2.5">
                             <span
                               onClick={() => navigate(`/students/${i.student_id}`)}
@@ -1170,9 +1122,9 @@ export default function ReportsHubPage() {
                           </td>
                           <td className="p-2.5 font-mono text-slate-700">{i.mobile || '-'}</td>
                           <td className="p-2.5 font-bold text-black">{i.subject_name}</td>
-                          <td className="p-2.5 text-right font-mono">₹{i.net_price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                          <td className="p-2.5 text-right font-mono text-emerald-700 font-semibold">₹{i.amount_collected.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                          <td className="p-2.5 text-right font-mono font-black text-rose-700">₹{i.balance_due.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                          <td className="p-2.5 text-right font-mono">₹{(i.net_price ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                          <td className="p-2.5 text-right font-mono text-emerald-700 font-semibold">₹{(i.amount_collected ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                          <td className="p-2.5 text-right font-mono font-black text-rose-700">₹{(i.balance_due ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                           <td className="p-2.5 text-center font-mono font-bold text-slate-800">{i.age_days}d</td>
                           <td className="p-2.5 text-center">
                             <Badge
@@ -1279,12 +1231,12 @@ export default function ReportsHubPage() {
                           </td>
                           <td className="p-2.5 text-center font-mono font-bold text-black">{s.enrolled_count}</td>
                           <td className="p-2.5 text-center font-mono text-emerald-700">{s.active_enrollments || 0}</td>
-                          <td className="p-2.5 text-right font-mono">₹{s.fees_billed?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) || s.total_booked?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                          <td className="p-2.5 text-right font-mono font-black text-emerald-800">₹{s.collected?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) || s.total_collected?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                          <td className="p-2.5 text-right font-mono font-black text-rose-700">₹{s.due?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) || s.balance_due?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                          <td className="p-2.5 text-right font-mono text-amber-700">₹{(s.waived || s.total_waived || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                          <td className="p-2.5 text-right font-mono text-rose-600">₹{(s.refunded || s.total_refunded || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                          <td className="p-2.5 text-right font-mono font-black text-indigo-900">₹{(s.net_revenue || s.collected || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                          <td className="p-2.5 text-right font-mono">₹{(s.fees_billed ?? s.total_booked ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                          <td className="p-2.5 text-right font-mono font-black text-emerald-800">₹{(s.collected ?? s.total_collected ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                          <td className="p-2.5 text-right font-mono font-black text-rose-700">₹{(s.due ?? s.balance_due ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                          <td className="p-2.5 text-right font-mono text-amber-700">₹{(s.waived ?? s.total_waived ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                          <td className="p-2.5 text-right font-mono text-rose-600">₹{(s.refunded ?? s.total_refunded ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                          <td className="p-2.5 text-right font-mono font-black text-indigo-900">₹{(s.net_revenue ?? s.collected ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1375,8 +1327,8 @@ export default function ReportsHubPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-semibold">
-                      {(Array.isArray(data) ? data : data?.items || []).map((t) => (
-                        <tr key={t.teacher_id} className="hover:bg-slate-50">
+                      {(Array.isArray(data) ? data : data?.items || []).map((t, idx) => (
+                        <tr key={t.teacher_id ? `tb-${t.teacher_id}-${idx}` : `tb-${idx}`} className="hover:bg-slate-50">
                           <td className="p-2.5">
                             <span
                               onClick={() => navigate(`/teachers/${t.teacher_id}`)}
@@ -1390,8 +1342,8 @@ export default function ReportsHubPage() {
                           <td className="p-2.5">
                             <div className="flex flex-wrap gap-1 max-w-[220px]">
                               {t.subjects?.length > 0 ? (
-                                t.subjects.map((sub, idx) => (
-                                  <span key={idx} className="bg-slate-100 text-black px-1.5 py-0.5 rounded text-[10px] font-bold">
+                                t.subjects.map((sub, sIdx) => (
+                                  <span key={`${t.teacher_id || 't'}-sub-${sub}-${sIdx}`} className="bg-slate-100 text-black px-1.5 py-0.5 rounded text-[10px] font-bold">
                                     {sub}
                                   </span>
                                 ))
@@ -1401,9 +1353,9 @@ export default function ReportsHubPage() {
                             </div>
                           </td>
                           <td className="p-2.5 text-center font-mono font-bold text-black">{t.enrolled_count}</td>
-                          <td className="p-2.5 text-right font-mono">₹{(t.fees_billed || t.total_booked || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                          <td className="p-2.5 text-right font-mono font-black text-emerald-800">₹{(t.collections || t.total_collected || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                          <td className="p-2.5 text-right font-mono font-bold text-rose-700">₹{(t.due || t.balance_due || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                          <td className="p-2.5 text-right font-mono">₹{(t.fees_billed ?? t.total_booked ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                          <td className="p-2.5 text-right font-mono font-black text-emerald-800">₹{(t.collections ?? t.total_collected ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                          <td className="p-2.5 text-right font-mono font-bold text-rose-700">₹{(t.due ?? t.balance_due ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1471,8 +1423,8 @@ export default function ReportsHubPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 font-semibold">
-                        {data?.by_source?.map((src) => (
-                          <tr key={src.source_name} className="hover:bg-slate-50">
+                        {data?.by_source?.map((src, idx) => (
+                          <tr key={src.source_name ? `src-${src.source_name}-${idx}` : `src-${idx}`} className="hover:bg-slate-50">
                             <td className="p-2 font-bold text-black">{src.source_name}</td>
                             <td className="p-2 text-center font-mono">{src.enquiries_count}</td>
                             <td className="p-2 text-center font-mono text-emerald-700">{src.converted_count}</td>
@@ -1503,8 +1455,8 @@ export default function ReportsHubPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 font-semibold">
-                        {data?.by_subject?.map((sub) => (
-                          <tr key={sub.subject_name} className="hover:bg-slate-50">
+                        {data?.by_subject?.map((sub, idx) => (
+                          <tr key={sub.subject_name ? `conv-subj-${sub.subject_name}-${idx}` : `conv-subj-${idx}`} className="hover:bg-slate-50">
                             <td className="p-2 font-bold text-black">{sub.subject_name}</td>
                             <td className="p-2 text-center font-mono">{sub.enquiries_count}</td>
                             <td className="p-2 text-center font-mono text-emerald-700">{sub.converted_count}</td>
@@ -1548,7 +1500,7 @@ export default function ReportsHubPage() {
                     <tbody className="divide-y divide-slate-100 font-semibold">
                       {data?.by_teacher?.length > 0 ? (
                         data.by_teacher.map((t, idx) => (
-                          <tr key={t.teacher_id || `${t.teacher_name}-${idx}`} className="hover:bg-slate-50">
+                          <tr key={t.teacher_id ? `conv-tea-${t.teacher_id}-${idx}` : `conv-tea-${t.teacher_name || idx}-${idx}`} className="hover:bg-slate-50">
                             <td className="p-2.5">
                               {t.teacher_id ? (
                                 <span
@@ -1574,7 +1526,7 @@ export default function ReportsHubPage() {
                                 <div className="flex flex-wrap gap-1.5">
                                   {t.enrolled_subjects.map((sub, sIdx) => (
                                     <span
-                                      key={sIdx}
+                                      key={`${t.teacher_id || t.teacher_name || 't'}-esub-${sub.label || sIdx}-${sIdx}`}
                                       className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold ${
                                         sub.subject_changed
                                           ? 'bg-amber-50 text-amber-900 border border-amber-200'
@@ -1638,8 +1590,8 @@ export default function ReportsHubPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-medium">
-                      {data?.items?.map((e) => (
-                        <tr key={e.id} className="hover:bg-slate-50 transition-colors">
+                      {data?.items?.map((e, idx) => (
+                        <tr key={e.id ? `enq-${e.id}` : `enq-${idx}`} className="hover:bg-slate-50 transition-colors">
                           <td className="p-2.5 font-mono text-slate-600 whitespace-nowrap">
                             {e.created_at ? e.created_at.slice(0, 10) : '-'}
                           </td>
@@ -1847,8 +1799,8 @@ export default function ReportsHubPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-medium">
-                      {data?.items?.map((r) => (
-                        <tr key={r.id} className="hover:bg-slate-50 transition-colors">
+                      {data?.items?.map((r, idx) => (
+                        <tr key={r.id ? `ref-${r.id}` : `ref-${idx}`} className="hover:bg-slate-50 transition-colors">
                           <td className="p-2.5 font-mono text-slate-600 whitespace-nowrap">
                             {r.refund_date ? r.refund_date.slice(0, 10) : '-'}
                           </td>
@@ -1863,9 +1815,9 @@ export default function ReportsHubPage() {
                             <span className="block text-[10px] text-slate-500 font-mono">{r.student_code}</span>
                           </td>
                           <td className="p-2.5 font-mono text-slate-700 whitespace-nowrap">{r.admission_number}</td>
-                          <td className="p-2.5 text-right font-mono">₹{r.refund_amount_requested.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                          <td className="p-2.5 text-right font-mono text-amber-700">₹{r.deduction_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                          <td className="p-2.5 text-right font-mono font-black text-rose-700 whitespace-nowrap">₹{r.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                          <td className="p-2.5 text-right font-mono">₹{(r.refund_amount_requested ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                          <td className="p-2.5 text-right font-mono text-amber-700">₹{(r.deduction_amount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                          <td className="p-2.5 text-right font-mono font-black text-rose-700 whitespace-nowrap">₹{(r.amount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                           <td className="p-2.5 text-center">
                             <Badge variant="danger" size="xs">{r.refund_mode}</Badge>
                           </td>
@@ -1933,13 +1885,13 @@ export default function ReportsHubPage() {
                   <Badge variant="primary" size="xs">Operating Ledger</Badge>
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
-                  {data?.by_category?.map((c) => (
-                    <div key={c.category_name} className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                  {data?.by_category?.map((c, idx) => (
+                    <div key={c.category_name ? `exp-cat-${c.category_name}-${idx}` : `exp-cat-${idx}`} className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
                       <p className="text-xs font-bold text-black truncate">{c.category_name}</p>
                       <div className="flex items-center justify-between mt-1">
                         <span className="text-[11px] text-slate-500 font-mono">{c.count} records</span>
                         <span className="text-sm font-black font-mono text-rose-800">
-                          ₹{c.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          ₹{(c.amount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
                     </div>
@@ -1965,8 +1917,8 @@ export default function ReportsHubPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-medium">
-                      {data?.items?.map((i) => (
-                        <tr key={i.id} className="hover:bg-slate-50 transition-colors">
+                      {data?.items?.map((i, idx) => (
+                        <tr key={i.id ? `exp-${i.type || 'item'}-${i.id}-${idx}` : `exp-${idx}`} className="hover:bg-slate-50 transition-colors">
                           <td className="p-2.5 font-mono text-slate-600 whitespace-nowrap">{i.date}</td>
                           <td className="p-2.5">
                             <Badge variant={i.type === 'SALARY' ? 'primary' : 'teal'} size="xs">{i.type}</Badge>
@@ -1974,7 +1926,7 @@ export default function ReportsHubPage() {
                           <td className="p-2.5 font-bold text-black">{i.title}</td>
                           <td className="p-2.5 text-slate-700">{i.category_name}</td>
                           <td className="p-2.5 text-right font-mono font-black text-rose-800 whitespace-nowrap">
-                            ₹{i.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            ₹{(i.amount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                           </td>
                           <td className="p-2.5 text-center">
                             <Badge variant="neutral" size="xs">{i.payment_mode}</Badge>
@@ -2088,16 +2040,16 @@ export default function ReportsHubPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-semibold">
-                      {data?.intervals?.map((row) => (
-                        <tr key={row.period_key} className="hover:bg-slate-50">
+                      {data?.intervals?.map((row, idx) => (
+                        <tr key={row.period_key ? `period-${row.period_key}-${idx}` : `period-${idx}`} className="hover:bg-slate-50">
                           <td className="p-2.5 font-bold text-black">{row.period_label}</td>
-                          <td className="p-2.5 text-right font-mono text-purple-900">₹{row.billed.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                          <td className="p-2.5 text-right font-mono font-black text-emerald-800">₹{row.collected.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                          <td className="p-2.5 text-right font-mono text-rose-700">₹{row.due.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                          <td className="p-2.5 text-right font-mono text-rose-800">₹{row.expenses.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                          <td className="p-2.5 text-right font-mono text-amber-700">₹{row.refunds.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                          <td className="p-2.5 text-right font-mono text-purple-900">₹{(row.billed ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                          <td className="p-2.5 text-right font-mono font-black text-emerald-800">₹{(row.collected ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                          <td className="p-2.5 text-right font-mono text-rose-700">₹{(row.due ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                          <td className="p-2.5 text-right font-mono text-rose-800">₹{(row.expenses ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                          <td className="p-2.5 text-right font-mono text-amber-700">₹{(row.refunds ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                           <td className={`p-2.5 text-right font-mono font-black ${row.net_cash >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
-                            ₹{row.net_cash.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            ₹{(row.net_cash ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                           </td>
                         </tr>
                       ))}
@@ -2179,7 +2131,7 @@ export default function ReportsHubPage() {
         </div>
 
         {/* Printable Summary KPIs */}
-        {data?.summary && (
+        {dataTab === activeTab && data?.summary && (
           <div className="grid grid-cols-4 gap-2 mb-4">
             {Object.entries(data.summary)
               .filter(([k, v]) => typeof v === 'number' && k !== 'total_records' && k !== 'filtered_transactions_count')
@@ -2309,56 +2261,56 @@ export default function ReportsHubPage() {
             </thead>
             <tbody className="divide-y divide-black font-semibold text-[11px]">
               {/* Dynamic printable rows matching the active tab */}
-              {activeTab === 'collections' &&
-                data?.transactions?.slice(0, 50).map((t) => (
-                  <tr key={t.id}>
+              {dataTab === activeTab && activeTab === 'collections' &&
+                data?.transactions?.slice(0, 50).map((t, idx) => (
+                  <tr key={t.id ? `print-txn-${t.id}` : `print-txn-${idx}`}>
                     <td className="p-1 border border-black font-mono">{t.payment_date?.slice(0, 10)}</td>
                     <td className="p-1 border border-black font-mono font-bold">{t.payment_number}</td>
                     <td className="p-1 border border-black">{t.student_name}</td>
                     <td className="p-1 border border-black font-mono">{t.admission_number}</td>
-                    <td className="p-1 border border-black text-right font-mono font-black">₹{t.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="p-1 border border-black text-right font-mono font-black">₹{(t.amount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                     <td className="p-1 border border-black">{t.payment_mode}</td>
                     <td className="p-1 border border-black">{t.cashier_name}</td>
                   </tr>
                 ))}
-              {activeTab === 'dues-ageing' &&
-                data?.items?.slice(0, 50).map((i) => (
-                  <tr key={i.item_id}>
+              {dataTab === activeTab && activeTab === 'dues-ageing' &&
+                data?.items?.slice(0, 50).map((i, idx) => (
+                  <tr key={i.item_id ? `print-due-${i.item_id}-${idx}` : `print-due-${idx}`}>
                     <td className="p-1 border border-black font-bold">{i.student_name} ({i.student_code})</td>
                     <td className="p-1 border border-black font-mono">{i.mobile || '-'}</td>
                     <td className="p-1 border border-black">{i.subject_name}</td>
-                    <td className="p-1 border border-black text-right font-mono">₹{i.net_price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td className="p-1 border border-black text-right font-mono">₹{i.amount_collected.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td className="p-1 border border-black text-right font-mono font-black">₹{i.balance_due.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="p-1 border border-black text-right font-mono">₹{(i.net_price ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="p-1 border border-black text-right font-mono">₹{(i.amount_collected ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="p-1 border border-black text-right font-mono font-black">₹{(i.balance_due ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                     <td className="p-1 border border-black text-center font-mono">{i.age_days}d</td>
                     <td className="p-1 border border-black text-center font-bold">{i.ageing_bucket}</td>
                   </tr>
                 ))}
-              {activeTab === 'subject-breakup' &&
+              {dataTab === activeTab && activeTab === 'subject-breakup' &&
                 data?.items?.map((s, idx) => (
                   <tr key={s.subject_id ? `print-subj-${s.subject_id}-${idx}` : `print-subj-${idx}`}>
                     <td className="p-1 border border-black font-bold">{s.subject_name}</td>
                     <td className="p-1 border border-black text-center font-mono">{s.enrolled_count}</td>
-                    <td className="p-1 border border-black text-right font-mono">₹{(s.fees_billed || s.total_booked || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td className="p-1 border border-black text-right font-mono font-black">₹{(s.collected || s.total_collected || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td className="p-1 border border-black text-right font-mono">₹{(s.due || s.balance_due || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td className="p-1 border border-black text-right font-mono">₹{(s.waived || s.total_waived || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td className="p-1 border border-black text-right font-mono">₹{(s.refunded || s.total_refunded || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td className="p-1 border border-black text-right font-mono font-black">₹{(s.net_revenue || s.collected || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="p-1 border border-black text-right font-mono">₹{(s.fees_billed ?? s.total_booked ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="p-1 border border-black text-right font-mono font-black">₹{(s.collected ?? s.total_collected ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="p-1 border border-black text-right font-mono">₹{(s.due ?? s.balance_due ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="p-1 border border-black text-right font-mono">₹{(s.waived ?? s.total_waived ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="p-1 border border-black text-right font-mono">₹{(s.refunded ?? s.total_refunded ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="p-1 border border-black text-right font-mono font-black">₹{(s.net_revenue ?? s.collected ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                   </tr>
                 ))}
-              {activeTab === 'teacher-breakup' &&
+              {dataTab === activeTab && activeTab === 'teacher-breakup' &&
                 (Array.isArray(data) ? data : data?.items || []).map((t, idx) => (
                   <tr key={t.teacher_id ? `print-tea-${t.teacher_id}-${idx}` : `print-tea-${idx}`}>
                     <td className="p-1 border border-black font-bold">{t.teacher_name}</td>
                     <td className="p-1 border border-black">{t.specialization}</td>
                     <td className="p-1 border border-black text-center font-mono">{t.enrolled_count}</td>
-                    <td className="p-1 border border-black text-right font-mono">₹{(t.fees_billed || t.total_booked || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td className="p-1 border border-black text-right font-mono font-black">₹{(t.collections || t.total_collected || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td className="p-1 border border-black text-right font-mono">₹{(t.due || t.balance_due || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="p-1 border border-black text-right font-mono">₹{(t.fees_billed ?? t.total_booked ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="p-1 border border-black text-right font-mono font-black">₹{(t.collections ?? t.total_collected ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="p-1 border border-black text-right font-mono">₹{(t.due ?? t.balance_due ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                   </tr>
                 ))}
-              {activeTab === 'admissions-conversion' &&
+              {dataTab === activeTab && activeTab === 'admissions-conversion' &&
                 data?.items?.slice(0, 50).map((e, idx) => (
                   <tr key={e.id ? `print-adm-${e.id}-${idx}` : `print-adm-${idx}`}>
                     <td className="p-1 border border-black font-mono">{e.created_at?.slice(0, 10)}</td>
@@ -2370,7 +2322,7 @@ export default function ReportsHubPage() {
                     <td className="p-1 border border-black font-mono">{e.admission_number || e.converted_student_code || '-'}</td>
                   </tr>
                 ))}
-              {activeTab === 'waivers' &&
+              {dataTab === activeTab && activeTab === 'waivers' &&
                 dedupedWaivers?.slice(0, 50).map((w, idx) => (
                   <tr key={w.id ? `print-w-${w.id}-${idx}` : `print-waiver-${w.waiver_number || idx}-${idx}`}>
                     <td className="p-1 border border-black font-mono">{w.date ? w.date.slice(0, 10) : '—'}</td>
@@ -2384,41 +2336,41 @@ export default function ReportsHubPage() {
                     <td className="p-1 border border-black">{w.reason || '—'}</td>
                   </tr>
                 ))}
-              {activeTab === 'refunds' &&
+              {dataTab === activeTab && activeTab === 'refunds' &&
                 data?.items?.slice(0, 50).map((r, idx) => (
                   <tr key={r.id ? `print-ref-${r.id}-${idx}` : `print-ref-${idx}`}>
                     <td className="p-1 border border-black font-mono">{r.refund_date?.slice(0, 10)}</td>
                     <td className="p-1 border border-black font-mono font-bold">{r.refund_number}</td>
                     <td className="p-1 border border-black">{r.student_name} ({r.student_code})</td>
                     <td className="p-1 border border-black font-mono">{r.admission_number}</td>
-                    <td className="p-1 border border-black text-right font-mono">₹{r.refund_amount_requested.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td className="p-1 border border-black text-right font-mono">₹{r.deduction_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td className="p-1 border border-black text-right font-mono font-black">₹{r.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="p-1 border border-black text-right font-mono">₹{(r.refund_amount_requested ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="p-1 border border-black text-right font-mono">₹{(r.deduction_amount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="p-1 border border-black text-right font-mono font-black">₹{(r.amount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                     <td className="p-1 border border-black">{r.refund_mode}</td>
                   </tr>
                 ))}
-              {activeTab === 'expenses' &&
+              {dataTab === activeTab && activeTab === 'expenses' &&
                 data?.items?.slice(0, 50).map((i, idx) => (
                   <tr key={i.id ? `print-exp-${i.id}-${idx}` : `print-exp-${idx}`}>
                     <td className="p-1 border border-black font-mono">{i.date}</td>
                     <td className="p-1 border border-black font-bold">{i.type}</td>
                     <td className="p-1 border border-black">{i.title}</td>
                     <td className="p-1 border border-black">{i.category_name}</td>
-                    <td className="p-1 border border-black text-right font-mono font-black">₹{i.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="p-1 border border-black text-right font-mono font-black">₹{(i.amount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                     <td className="p-1 border border-black">{i.payment_mode}</td>
                     <td className="p-1 border border-black">{i.added_by_name}</td>
                   </tr>
                 ))}
-              {activeTab === 'summary-dashboard' &&
+              {dataTab === activeTab && activeTab === 'summary-dashboard' &&
                 data?.intervals?.map((row, idx) => (
                   <tr key={row.period_key ? `print-period-${row.period_key}-${idx}` : `print-period-${idx}`}>
                     <td className="p-1 border border-black font-bold">{row.period_label}</td>
-                    <td className="p-1 border border-black text-right font-mono">₹{row.billed.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td className="p-1 border border-black text-right font-mono font-black">₹{row.collected.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td className="p-1 border border-black text-right font-mono">₹{row.due.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td className="p-1 border border-black text-right font-mono">₹{row.expenses.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td className="p-1 border border-black text-right font-mono">₹{row.refunds.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td className="p-1 border border-black text-right font-mono font-black">₹{row.net_cash.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="p-1 border border-black text-right font-mono">₹{(row.billed ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="p-1 border border-black text-right font-mono font-black">₹{(row.collected ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="p-1 border border-black text-right font-mono">₹{(row.due ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="p-1 border border-black text-right font-mono">₹{(row.expenses ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="p-1 border border-black text-right font-mono">₹{(row.refunds ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="p-1 border border-black text-right font-mono font-black">₹{(row.net_cash ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                   </tr>
                 ))}
             </tbody>

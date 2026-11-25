@@ -535,7 +535,7 @@ async def get_dues_and_ageing(
     start_col = func.coalesce(AdmissionItem.valid_from, Admission.valid_from, Admission.admission_date)
 
     conds = [
-        AdmissionItem.balance_due > Decimal("0.00"),
+        func.coalesce(AdmissionItem.balance_due, Decimal("0.00")) > Decimal("0.00"),
         Admission.status != "CANCELLED",
         Admission.document_status == "VALID"
     ]
@@ -549,7 +549,18 @@ async def get_dues_and_ageing(
         conds.append(AdmissionItem.batch_id == batch_id)
 
     stmt = (
-        select(AdmissionItem, Admission, Student, Subject, Batch, Teacher)
+        select(
+            AdmissionItem,
+            Admission,
+            Student,
+            Subject,
+            Batch,
+            Teacher,
+            func.coalesce(AdmissionItem.net_price, Decimal("0.00")).label("coalesced_net_price"),
+            func.coalesce(AdmissionItem.amount_collected, Decimal("0.00")).label("coalesced_amount_collected"),
+            func.coalesce(AdmissionItem.balance_due, Decimal("0.00")).label("coalesced_balance_due"),
+            func.coalesce(AdmissionItem.written_off_amount, Decimal("0.00")).label("coalesced_written_off_amount"),
+        )
         .join(Admission, AdmissionItem.admission_id == Admission.id)
         .join(Student, Admission.student_id == Student.id)
         .outerjoin(Subject, AdmissionItem.subject_id == Subject.id)
@@ -567,7 +578,7 @@ async def get_dues_and_ageing(
     total_due = Decimal("0.00")
 
     all_items = []
-    for itm, adm, stu, sub, bch, tch in rows:
+    for itm, adm, stu, sub, bch, tch, net_price_val, amount_collected_val, balance_due_val, written_off_val in rows:
         ref_d = itm.valid_from or adm.valid_from or adm.admission_date
         age_days = (today - ref_d).days if ref_d else 0
         if age_days < 0:
@@ -582,7 +593,7 @@ async def get_dues_and_ageing(
         else:
             b_key = "90+"
 
-        due_val = itm.balance_due or Decimal("0.00")
+        due_val = balance_due_val if balance_due_val is not None else Decimal("0.00")
         bucket_counts[b_key] += 1
         bucket_amounts[b_key] += due_val
         total_due += due_val
@@ -606,10 +617,10 @@ async def get_dues_and_ageing(
             "batch_id": str(bch.id) if bch else (str(itm.batch_id) if itm.batch_id else None),
             "batch_name": bch.name if bch else (itm.item_name_snapshot or "Direct Subject"),
             "teacher_name": itm.teacher_name_snapshot or (tch.name if tch else (bch.teacher_name_snapshot if bch else "Faculty")),
-            "net_price": float(itm.net_price),
-            "amount_collected": float(itm.amount_collected),
-            "balance_due": float(itm.balance_due),
-            "written_off_amount": float(itm.written_off_amount or Decimal("0.00")),
+            "net_price": float(net_price_val if net_price_val is not None else Decimal("0.00")),
+            "amount_collected": float(amount_collected_val if amount_collected_val is not None else Decimal("0.00")),
+            "balance_due": float(due_val),
+            "written_off_amount": float(written_off_val if written_off_val is not None else Decimal("0.00")),
             "age_days": age_days,
             "ageing_bucket": b_key
         })
@@ -749,7 +760,7 @@ async def get_collections_detailed(
             "id": str(p.id),
             "payment_number": p.payment_number,
             "payment_date": p.payment_date.isoformat() if p.payment_date else None,
-            "amount": float(p.amount),
+            "amount": float(p.amount or Decimal("0.00")),
             "payment_mode": p.payment_mode,
             "transaction_reference": p.transaction_reference or "",
             "cashier_id": str(p.collected_by) if p.collected_by else None,
