@@ -1271,7 +1271,7 @@ async def get_admissions_conversion_detailed(
     """
     Admissions & Conversion Report:
     Enquiries received, verified enrollments via demo reference number (source_demo_number),
-    admission % enrolled, by subject and by source.
+    demo % enrolled (demos converted / demos given * 100), by subject, by source, and by teacher.
     """
     start_dt, end_dt = ist_day_boundaries(from_date, to_date)
     conds = []
@@ -1358,6 +1358,8 @@ async def get_admissions_conversion_detailed(
 
     total_enquiries = 0
     total_converted = 0
+    total_demos_given = 0
+    total_demos_converted = 0
     seen_enq = set()
 
     for enq, stu in rows:
@@ -1433,11 +1435,13 @@ async def get_admissions_conversion_detailed(
                 },
             )
             t_entry["demos_given"] += 1
+            total_demos_given += 1
 
             linked_demo = linked_by_demo_id.get(d.id) if d.demo_reference_number else None
             if linked_demo:
                 adm_item, _adm, _ref_no = linked_demo
                 t_entry["demos_converted"] += 1
+                total_demos_converted += 1
 
                 sub_info = resolve_demo_conversion_subject(d, adm_item, subject_name_map)
                 same_subject = not sub_info["subject_changed"]
@@ -1487,7 +1491,11 @@ async def get_admissions_conversion_detailed(
             or q in i["source"].lower()
         ]
 
-    overall_rate = round((total_converted / total_enquiries * 100), 1) if total_enquiries > 0 else 0.0
+    demo_conversion_rate = (
+        round((total_demos_converted / total_demos_given * 100), 1)
+        if total_demos_given > 0
+        else 0.0
+    )
 
     by_subject = []
     for s in by_subject_map.values():
@@ -1539,7 +1547,10 @@ async def get_admissions_conversion_detailed(
         "summary": {
             "total_enquiries": total_enquiries,
             "total_converted": total_converted,
-            "overall_conversion_rate": overall_rate
+            "total_demos_given": total_demos_given,
+            "total_demos_converted": total_demos_converted,
+            "demo_conversion_rate": demo_conversion_rate,
+            "overall_conversion_rate": demo_conversion_rate
         },
         "by_subject": paged_subjects,
         "by_subject_total": subj_total,

@@ -1428,7 +1428,7 @@ export default function ReportsHubPage() {
           {/* ========================================================= */}
           {activeTab === 'admissions-conversion' && (
             <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <StatCard
                   title="Enquiries Received"
                   value={`${data?.summary?.total_enquiries || 0}`}
@@ -1437,16 +1437,9 @@ export default function ReportsHubPage() {
                   color="amber"
                 />
                 <StatCard
-                  title="Admissions Converted"
-                  value={`${data?.summary?.total_converted || 0}`}
-                  subtext="Enrolled into coaching subjects"
-                  icon={GraduationCap}
-                  color="emerald"
-                />
-                <StatCard
-                  title="Admission % Enrolled"
-                  value={`${data?.summary?.overall_conversion_rate || 0}%`}
-                  subtext="Percentage enrolled"
+                  title="Demo % Enrolled"
+                  value={`${data?.summary?.demo_conversion_rate ?? data?.summary?.overall_conversion_rate ?? 0}%`}
+                  subtext={`${data?.summary?.total_demos_converted || 0} of ${data?.summary?.total_demos_given || 0} demos converted`}
                   icon={TrendingUp}
                   color="indigo"
                 />
