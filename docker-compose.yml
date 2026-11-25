@@ -1,68 +1,62 @@
+# Thakurdwara ERP — FRESH production stack.
+# Runs ALONGSIDE the old services (systemd backend :8080, frontend :5173,
+# brightloop-postgres :5432, thakurdwara-redis :6379). Nothing here touches them.
+# Secrets live ONLY in .env.production on this server (never in git).
+# Start with: docker compose --env-file .env.production up -d --build
+# Backend is reachable ONLY on 127.0.0.1:8081 (Cloudflare Tunnel points here).
+# Postgres/Redis publish NO ports — container network only.
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: thakurdwara-postgres
-    restart: always
-    environment:
-      POSTGRES_USER: brightloop_user
-      POSTGRES_PASSWORD: brightloop_password
-      POSTGRES_DB: thakurdwara_erp
-    ports:
-      - "5432:5432"
+  erp-thakurdwara-postgres:
+    image: postgres:17-alpine
+    container_name: erp-thakurdwara-postgres
+    restart: unless-stopped
+    mem_limit: 300m
+    env_file:
+      - .env.production
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - erp_thakurdwara_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U brightloop_user -d thakurdwara_erp"]
+      test: [CMD-SHELL, pg_isready -U brightloop_user -d thakurdwara_erp]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
 
-  redis:
+  erp-thakurdwara-redis:
     image: redis:7-alpine
-    container_name: thakurdwara-redis
-    restart: always
-    ports:
-      - "6379:6379"
+    container_name: erp-thakurdwara-redis
+    restart: unless-stopped
+    mem_limit: 60m
+    command: [redis-server, --appendonly, yes, --maxmemory, 50mb, --maxmemory-policy, allkeys-lru]
     volumes:
-      - redis_data:/data
+      - erp_thakurdwara_redisdata:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [CMD, redis-cli, ping]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
 
-  backend:
+  erp-thakurdwara-backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: thakurdwara-backend
-    restart: always
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+    image: erp-thakurdwara-backend:latest
+    container_name: erp-thakurdwara-backend
+    restart: unless-stopped
+    mem_limit: 256m
+    env_file:
+      - .env.production
     environment:
-      DATABASE_URL: postgresql+asyncpg://brightloop_user:brightloop_password@postgres:5432/thakurdwara_erp
-      SECRET_KEY: ThakurdwaraErpSuperSecretKeyMustBeVeryStrongAndSecure2026
-      REDIS_URL: redis://redis:6379/0
       PORT: 8080
+    depends_on:
+      erp-thakurdwara-postgres:
+        condition: service_healthy
+      erp-thakurdwara-redis:
+        condition: service_healthy
     ports:
-      - "8080:8080"
+      - 127.0.0.1:8081:8080
     volumes:
       - ./backend/uploads:/app/uploads
 
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: thakurdwara-frontend
-    restart: always
-    depends_on:
-      - backend
-    ports:
-      - "5173:5173"
-
 volumes:
-  postgres_data:
-  redis_data:
+  erp_thakurdwara_pgdata:
+  erp_thakurdwara_redisdata:

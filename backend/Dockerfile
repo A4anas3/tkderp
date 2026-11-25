@@ -2,12 +2,9 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libpq-dev \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+# NOTE: no apt packages needed - all requirements ship cp312 wheels,
+# and the backend code uses no curl. (apt-get update fails here:
+# deb.debian.org returns 403 from container egress; host gets 200.)
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

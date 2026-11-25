@@ -38,3 +38,6 @@ backups/
 # UI reference screenshots
 /*.jpg
 /*-verification.png
+
+# Production Docker stack (server-only, never commit)
+.env.production
