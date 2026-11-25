@@ -1,6 +1,7 @@
 import uuid
 import json
-from datetime import date
+import calendar
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -23,7 +24,7 @@ from app.modules.expenses.schemas import (
     ExpenseCategoryCreate, ExpenseCategoryResponse,
     ExpenseCreate, ExpenseResponse, ExpensePageResponse,
     SalaryRecordCreate, SalaryRecordResponse, SalaryPageResponse, PaySalaryRequest,
-    SalaryFilterStaffOption, SalaryFilterOptionsResponse
+    SalaryFilterStaffOption, SalaryFilterOptionsResponse, SalarySlipResponse
 )
 from app.common.pagination import PaginationParams, PageResponse
 
@@ -552,3 +553,99 @@ async def pay_salary(
         base_salary=record.base_salary,
         holidays_count=record.holidays_count or 0
     )
+
+
+def _parse_month_info(month_year: str) -> tuple[str, int]:
+    """Return human-readable month label (e.g. 'November 2026') and real calendar day count."""
+    try:
+        parts = month_year.strip().split("-")
+        year = int(parts[0])
+        month = int(parts[1])
+        days_in_month = calendar.monthrange(year, month)[1]
+        label = date(year, month, 1).strftime("%B %Y")
+        return label, days_in_month
+    except (ValueError, IndexError):
+        return month_year, 30
+
+
+@router.get("/salaries/{record_id}/slip", response_model=SalarySlipResponse)
+async def get_salary_slip(
+    record_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_cashier_or_admin)
+):
+    """Build printable salary slip data from an existing salary/payroll record."""
+    cache_key = make_cache_key("expenses", "salary_slip", record_id)
+    hit, cached = await cache_get(cache_key)
+    if hit:
+        return cached
+
+    res = await db.execute(select(SalaryRecord).where(SalaryRecord.id == record_id))
+    record = res.scalar_one_or_none()
+    if not record:
+        raise HTTPException(status_code=404, detail="Salary record not found")
+
+    teacher = None
+    if record.employee_id:
+        t_res = await db.execute(select(Teacher).where(Teacher.id == record.employee_id))
+        teacher = t_res.scalar_one_or_none()
+    if not teacher and record.employee_type == "TEACHER" and record.employee_name_snapshot:
+        t_res = await db.execute(
+            select(Teacher).where(Teacher.name.ilike(record.employee_name_snapshot.strip()))
+        )
+        teacher = t_res.scalars().first()
+
+    tid = record.employee_id or (teacher.id if teacher else None)
+    abs_count: Optional[int] = None
+    if tid:
+        cnt_res = await db.execute(
+            select(func.count(TeacherAttendance.id))
+            .where(TeacherAttendance.teacher_id == tid, TeacherAttendance.month_year == record.month_year)
+        )
+        abs_count = cnt_res.scalar() or 0
+
+    disbursed_by: Optional[str] = None
+    audit_res = await db.execute(
+        select(User.full_name)
+        .select_from(AuditLog)
+        .join(User, AuditLog.user_id == User.id)
+        .where(AuditLog.entity_type == "SALARY", AuditLog.entity_id == record.id)
+        .order_by(desc(AuditLog.created_at))
+        .limit(1)
+    )
+    disbursed_by = audit_res.scalar_one_or_none()
+
+    month_label, calendar_days = _parse_month_info(record.month_year)
+    slip_number = f"SAL-{record.month_year.replace('-', '')}-{str(record.id)[:8].upper()}"
+    balance_due = max(Decimal("0.00"), record.salary_amount - record.paid_amount)
+
+    resp = SalarySlipResponse(
+        id=record.id,
+        slip_number=slip_number,
+        employee_id=tid,
+        employee_type=record.employee_type,
+        employee_name=record.employee_name_snapshot,
+        employee_code=teacher.teacher_code if teacher else None,
+        employee_mobile=teacher.mobile if teacher else None,
+        employee_email=teacher.email if teacher else None,
+        employee_qualification=teacher.qualification if teacher else None,
+        employee_specialization=teacher.specialization if teacher else None,
+        month_year=record.month_year,
+        month_label=month_label,
+        base_salary=record.base_salary,
+        salary_amount=record.salary_amount,
+        paid_amount=record.paid_amount,
+        balance_due=balance_due,
+        payment_mode=record.payment_mode,
+        payment_date=record.payment_date,
+        due_date=record.due_date,
+        status=record.status,
+        absent_days_count=abs_count,
+        holidays_count=record.holidays_count or 0,
+        calendar_days=calendar_days,
+        notes=record.notes,
+        disbursed_by=disbursed_by,
+        created_at=record.created_at,
+    )
+    await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=SalarySlipResponse)
+    return resp

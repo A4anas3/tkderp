@@ -1,6 +1,6 @@
 from decimal import Decimal
 from typing import Optional
-from datetime import date
+from datetime import date, datetime
 from pydantic import BaseModel, Field, ConfigDict
 import uuid
 from app.common.pagination import PageResponse
@@ -87,3 +87,33 @@ class SalaryPageResponse(PageResponse[SalaryRecordResponse]):
     total_amount: Decimal = Decimal("0.00")
     total_paid_amount: Decimal = Decimal("0.00")
     total_salary_amount: Decimal = Decimal("0.00")
+
+
+class SalarySlipResponse(BaseModel):
+    id: uuid.UUID
+    slip_number: str
+    employee_id: Optional[uuid.UUID] = None
+    employee_type: str
+    employee_name: str
+    employee_code: Optional[str] = None
+    employee_mobile: Optional[str] = None
+    employee_email: Optional[str] = None
+    employee_qualification: Optional[str] = None
+    employee_specialization: Optional[str] = None
+    month_year: str
+    month_label: str
+    base_salary: Optional[Decimal] = None
+    salary_amount: Decimal
+    paid_amount: Decimal
+    balance_due: Decimal
+    payment_mode: Optional[str] = None
+    payment_date: Optional[date] = None
+    due_date: date
+    status: str
+    absent_days_count: Optional[int] = None
+    holidays_count: int = 0
+    calendar_days: int = 30
+    notes: Optional[str] = None
+    disbursed_by: Optional[str] = None
+    created_at: Optional[datetime] = None
+    model_config = ConfigDict(from_attributes=True)

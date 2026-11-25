@@ -13,6 +13,7 @@ import {
   Sparkles,
   Filter,
   RotateCcw,
+  Printer,
 } from 'lucide-react';
 import DataTable from '../../components/common/DataTable';
 import Modal from '../../components/common/Modal';
@@ -20,6 +21,7 @@ import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
+import SalarySlipModal from '../../components/receipts/SalarySlipModal';
 import { expenseApi, teacherApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 import { parseMonthYear } from '../../utils/calendarUtils';
@@ -126,6 +128,7 @@ export default function ExpensesPage() {
   });
 
   const [submitting, setSubmitting] = useState(false);
+  const [salarySlipToShow, setSalarySlipToShow] = useState(null);
 
   // Load Categories
   const loadCategories = async () => {
@@ -582,6 +585,15 @@ export default function ExpensesPage() {
     }
   };
 
+  const handleOpenSalarySlip = async (record) => {
+    try {
+      const slipData = await expenseApi.getSalarySlip(record.id);
+      setSalarySlipToShow(slipData);
+    } catch (err) {
+      error(err.message || 'Failed to load salary slip');
+    }
+  };
+
   const expenseColumns = [
     {
       header: 'Title / Description',
@@ -718,21 +730,29 @@ export default function ExpensesPage() {
     },
     {
       header: 'Actions',
-      className: 'text-right w-28 whitespace-nowrap',
-      render: (s) =>
-        s.status !== 'PAID' ? (
-          <div className="flex items-center justify-end whitespace-nowrap">
+      className: 'text-right w-40 whitespace-nowrap',
+      render: (s) => (
+        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+          <Button
+            size="xs"
+            variant="indigo"
+            icon={Printer}
+            onClick={() => handleOpenSalarySlip(s)}
+            title="View, Print & Share Salary Slip"
+          >
+            Slip
+          </Button>
+          {s.status !== 'PAID' ? (
             <Button size="xs" variant="success-soft" onClick={() => handleOpenPaySalary(s)}>
               Pay Salary
             </Button>
-          </div>
-        ) : (
-          <div className="flex items-center justify-end whitespace-nowrap">
+          ) : (
             <Badge size="xs" variant="success">
               Paid
             </Badge>
-          </div>
-        ),
+          )}
+        </div>
+      ),
     },
   ];
 
@@ -1715,6 +1735,13 @@ export default function ExpensesPage() {
           </div>
         </form>
       </Modal>
+
+      {/* Printable Salary Slip Modal */}
+      <SalarySlipModal
+        isOpen={!!salarySlipToShow}
+        onClose={() => setSalarySlipToShow(null)}
+        slip={salarySlipToShow}
+      />
     </div>
   );
 }

@@ -39,6 +39,8 @@ export default function ReceiptFooter({
   collectorName = 'Authorized Officer',
   collectedBy = null,
   issuedDate = null,
+  leftSignatureLabel = 'Student / Depositor',
+  collectedByPrefix = 'Collected by:',
   terms = [
     'Fees once deposited are strictly non-refundable and non-transferable under all circumstances.',
     'Please retain this original computer-generated slip for student identity card issuance & class entry.',
@@ -110,7 +112,7 @@ export default function ReceiptFooter({
           <div className="flex-1">
             <div className="h-10 border-b border-dashed border-slate-400"></div>
             <p className="text-[10px] font-bold text-black mt-1">
-              Student / Depositor
+              {leftSignatureLabel}
             </p>
             <p className="text-[9px] text-slate-500">Signature</p>
           </div>
@@ -139,7 +141,7 @@ export default function ReceiptFooter({
             {cleanCollectedBy ? (
               <>
                 <p className="text-[9px] text-indigo-950 font-bold mt-0.5">
-                  Collected by: {cleanCollectedBy}
+                  {collectedByPrefix} {cleanCollectedBy}
                 </p>
                 <p className="text-[9px] text-slate-700 font-medium font-mono">
                   {formattedDate}

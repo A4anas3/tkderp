@@ -123,3 +123,45 @@ export function buildAdmissionReceiptWhatsAppMessage(data, instituteName = 'THAK
 
   return msg;
 }
+
+/**
+ * Builds pre-filled WhatsApp salary slip message for Faculty & Staff Payroll.
+ */
+export function buildSalarySlipWhatsAppMessage(data, instituteName = 'THAKURDWARA COACHING INSTITUTE', instituteAddress = '') {
+  const employeeName = data.employee_name || data.employee_name_snapshot || 'Staff Member';
+  const slipNo = data.slip_number || '—';
+  const monthLabel = data.month_label || data.month_year || '—';
+  const payableSalary = formatINR(data.salary_amount || 0);
+  const paidAmount = formatINR(data.paid_amount || 0);
+  const balanceDue = Number(data.balance_due !== undefined ? data.balance_due : Math.max(0, Number(data.salary_amount || 0) - Number(data.paid_amount || 0)));
+  const paymentMode = data.payment_mode || '—';
+  const dueDate = formatSlipDate(data.due_date);
+  const paymentDate = data.payment_date ? formatSlipDate(data.payment_date) : null;
+  const status = data.status || 'PENDING';
+
+  let msg = `🏫 *${instituteName}*\n`;
+  msg += `*Official Salary / Payroll Slip*\n\n`;
+  msg += `Dear *${employeeName}*,\n`;
+  msg += `Please find your payroll statement details below:\n\n`;
+  msg += `🧾 *Slip No:* ${slipNo}\n`;
+  msg += `🗓️ *Salary Month:* ${monthLabel}\n`;
+  msg += `💵 *Payable Salary:* ${payableSalary}\n`;
+  msg += `💰 *Paid Amount:* ${paidAmount}\n`;
+  if (balanceDue > 0) {
+    msg += `⚠️ *Balance Due:* ${formatINR(balanceDue)}\n`;
+  }
+  msg += `💳 *Payment Mode:* ${paymentMode}\n`;
+  if (data.employee_type === 'TEACHER' || (data.absent_days_count !== null && data.absent_days_count !== undefined)) {
+    const absDays = data.absent_days_count ?? 0;
+    msg += `📅 *Absent Days:* ${absDays} ${absDays === 1 ? 'day' : 'days'}\n`;
+  }
+  msg += `📆 *Due Date:* ${dueDate}\n`;
+  if (paymentDate) {
+    msg += `🗓️ *Payment Date:* ${paymentDate}\n`;
+  }
+  msg += `📌 *Status:* ${status}\n\n`;
+  msg += `_Please preserve this salary slip for your records._\n`;
+  msg += `_${instituteName}${instituteAddress ? ` • ${instituteAddress}` : ''}_`;
+
+  return msg;
+}

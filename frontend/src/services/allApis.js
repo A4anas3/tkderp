@@ -450,6 +450,10 @@ export const expenseApi = {
     const res = await api.post(`/expenses/salaries/${recordId}/pay`, data);
     return res.data;
   },
+  getSalarySlip: async (recordId) => {
+    const res = await api.get(`/expenses/salaries/${recordId}/slip`);
+    return res.data;
+  },
 };
 
 export const reportApi = {
