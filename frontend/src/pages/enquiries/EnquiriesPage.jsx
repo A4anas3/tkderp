@@ -47,6 +47,7 @@ import DemoPassModal from '../../components/modals/DemoPassModal';
 import RegisterStudentModal from '../../components/modals/RegisterStudentModal';
 import { enquiryApi, subjectApi, teacherApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 import { cleanMobileInput } from '../../utils/phoneUtils';
 import { formatIndianDate } from '../../utils/dateCycleUtils';
 
@@ -58,9 +59,14 @@ export default function EnquiriesPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { success, error } = useToast();
+  const { isAdmin } = useAuth();
+  const canEdit = isAdmin;
 
   // Active Main View Tab: 'enquiries' | 'demos' | 'analytics'
-  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'enquiries');
+  const requestedTab = searchParams.get('tab') || 'enquiries';
+  const [activeTab, setActiveTab] = useState(
+    !isAdmin && requestedTab === 'analytics' ? 'enquiries' : requestedTab
+  );
 
   // Month & Year Filter (100% Backend-Driven across all views)
   const currentYear = new Date().getFullYear();
@@ -359,9 +365,13 @@ export default function EnquiriesPage() {
     } else if (activeTab === 'demos') {
       loadDemos();
     } else if (activeTab === 'analytics') {
-      loadAnalytics();
+      if (isAdmin) {
+        loadAnalytics();
+      } else {
+        setActiveTab('enquiries');
+      }
     }
-  }, [activeTab, loadEnquiries, loadSummary, loadDeadlines, loadDemos, loadAnalytics]);
+  }, [activeTab, isAdmin, loadEnquiries, loadSummary, loadDeadlines, loadDemos, loadAnalytics]);
 
   const resetAddDemoModal = useCallback(() => {
     setAddModalOpen(false);
@@ -750,13 +760,15 @@ export default function EnquiriesPage() {
                 </div>
               )}
             </div>
-            <button
-              onClick={(ev) => handleOpenCourseUpdate(e, ev)}
-              title="Change / Update Interested Subject & Trial Details"
-              className="p-1 rounded text-odoo-600 hover:text-odoo-800 hover:bg-purple-50 border border-transparent hover:border-purple-200 transition cursor-pointer shrink-0"
-            >
-              <Edit2 className="w-3.5 h-3.5" />
-            </button>
+            {canEdit && (
+              <button
+                onClick={(ev) => handleOpenCourseUpdate(e, ev)}
+                title="Change / Update Interested Subject & Trial Details"
+                className="p-1 rounded text-odoo-600 hover:text-odoo-800 hover:bg-purple-50 border border-transparent hover:border-purple-200 transition cursor-pointer shrink-0"
+              >
+                <Edit2 className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         );
       },
@@ -933,14 +945,16 @@ export default function EnquiriesPage() {
               </>
             ) : hasStudent || isConverted ? (
               <>
-                <Button
-                  size="xs"
-                  variant="primary"
-                  onClick={(ev) => handleConvertToAdmission(e, ev)}
-                  title="Student is registered! Click to purchase course and collect fees"
-                >
-                  Buy Course ↗
-                </Button>
+                {canEdit && (
+                  <Button
+                    size="xs"
+                    variant="primary"
+                    onClick={(ev) => handleConvertToAdmission(e, ev)}
+                    title="Student is registered! Click to purchase course and collect fees"
+                  >
+                    Buy Course ↗
+                  </Button>
+                )}
                 <Button
                   size="xs"
                   variant="info"
@@ -954,7 +968,7 @@ export default function EnquiriesPage() {
                   Detail ↗
                 </Button>
               </>
-            ) : (
+            ) : canEdit ? (
               <>
                 <Button
                   size="xs"
@@ -1093,6 +1107,19 @@ export default function EnquiriesPage() {
                   )}
                 </div>
               </>
+            ) : (
+              <Button
+                size="xs"
+                variant="info"
+                icon={ExternalLink}
+                onClick={(ev) => {
+                  ev.stopPropagation();
+                  navigate(`/enquiries/${e.id}`);
+                }}
+                title="View Full Details"
+              >
+                Detail ↗
+              </Button>
             )}
           </div>
         );
@@ -1273,7 +1300,7 @@ export default function EnquiriesPage() {
             Slip
           </Button>
 
-          {(d.status === 'ACTIVE' || d.status === 'SCHEDULED') && (
+          {canEdit && (d.status === 'ACTIVE' || d.status === 'SCHEDULED') && (
             <>
               <Button
                 size="xs"
@@ -1294,7 +1321,7 @@ export default function EnquiriesPage() {
             </>
           )}
 
-          {d.status === 'ATTENDED' && (
+          {canEdit && d.status === 'ATTENDED' && (
             <>
               <Button
                 size="xs"
@@ -1332,7 +1359,7 @@ export default function EnquiriesPage() {
             </Badge>
           )}
 
-          {(d.status === 'DROPPED' || d.status === 'EXPIRED') && (
+          {canEdit && (d.status === 'DROPPED' || d.status === 'EXPIRED') && (
             <Button
               size="xs"
               variant="teal-soft"
@@ -1359,24 +1386,31 @@ export default function EnquiriesPage() {
             <span className="text-[10px] font-bold uppercase tracking-wider bg-purple-50 text-odoo-700 border border-purple-200 px-2 py-0.5 rounded-full">
               Multi-Subject Demo Tracking
             </span>
+            {!canEdit && (
+              <span className="px-2 py-0.5 text-[11px] font-semibold bg-slate-100 text-slate-600 rounded-md border border-slate-200">
+                View Only
+              </span>
+            )}
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
             Manage student walk-ins, print official trial passes with reference numbers, and track faculty conversion metrics
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button
-            variant="primary"
-            icon={Plus}
-            onClick={() => {
-              resetAddDemoModal();
-              setAddModalOpen(true);
-            }}
-          >
-            New Enquiry / Demo Pass
-          </Button>
-        </div>
+        {canEdit && (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="primary"
+              icon={Plus}
+              onClick={() => {
+                resetAddDemoModal();
+                setAddModalOpen(true);
+              }}
+            >
+              New Enquiry / Demo Pass
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Main View Tabs (Segmented Control) */}
@@ -1416,18 +1450,20 @@ export default function EnquiriesPage() {
             )}
           </button>
 
-          <button
-            type="button"
-            onClick={() => handleTabChange('analytics')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
-              activeTab === 'analytics'
-                ? 'bg-white text-black shadow-xs border border-slate-200'
-                : 'text-slate-600 hover:text-black hover:bg-slate-200/60'
-            }`}
-          >
-            <BarChart3 className="w-3.5 h-3.5 text-amber-600" />
-            <span>Faculty & Subject Analytics</span>
-          </button>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => handleTabChange('analytics')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+                activeTab === 'analytics'
+                  ? 'bg-white text-black shadow-xs border border-slate-200'
+                  : 'text-slate-600 hover:text-black hover:bg-slate-200/60'
+              }`}
+            >
+              <BarChart3 className="w-3.5 h-3.5 text-amber-600" />
+              <span>Faculty & Subject Analytics</span>
+            </button>
+          )}
         </div>
 
         {/* Global Month & Year Filter Toolbar (Pushed 100% to backend) */}
@@ -1708,14 +1744,16 @@ export default function EnquiriesPage() {
                           <p className="text-[11px] text-slate-600">
                             Subject: <strong className="text-black">{d.interested_subject || 'General'}</strong>
                           </p>
-                          <button
-                            onClick={(ev) => handleOpenCourseUpdate(d, ev)}
-                            className="text-[10px] font-bold text-odoo-700 hover:text-odoo-900 bg-purple-50 hover:bg-purple-100 px-1.5 py-0.5 rounded border border-purple-200 inline-flex items-center gap-0.5 cursor-pointer ml-1"
-                            title="Change / Update Interested Subject"
-                          >
-                            <Edit2 className="w-2.5 h-2.5" />
-                            <span>Change</span>
-                          </button>
+                          {canEdit && (
+                            <button
+                              onClick={(ev) => handleOpenCourseUpdate(d, ev)}
+                              className="text-[10px] font-bold text-odoo-700 hover:text-odoo-900 bg-purple-50 hover:bg-purple-100 px-1.5 py-0.5 rounded border border-purple-200 inline-flex items-center gap-0.5 cursor-pointer ml-1"
+                              title="Change / Update Interested Subject"
+                            >
+                              <Edit2 className="w-2.5 h-2.5" />
+                              <span>Change</span>
+                            </button>
+                          )}
                         </div>
                         <p className="text-[11px] text-slate-500 mt-0.5">
                           Deadline: <strong className="font-mono text-black">{d.demo_deadline}</strong>
@@ -1740,7 +1778,7 @@ export default function EnquiriesPage() {
                             <Printer className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 shrink-0" />
                             Slip
                           </Button>
-                          {!isInterested && (
+                          {canEdit && !isInterested && (
                             <Button
                               size="xs"
                               variant="success-soft"
@@ -1751,24 +1789,28 @@ export default function EnquiriesPage() {
                               👍 Interested
                             </Button>
                           )}
-                          <Button
-                            size="xs"
-                            variant="danger-soft"
-                            className={DEMO_CARD_ACTION_BTN_CLASS}
-                            onClick={(ev) => handleOpenNotInterestedModal(d, ev)}
-                            title="Student not interested / drop"
-                          >
-                            👎 Drop
-                          </Button>
-                          <Button
-                            size="xs"
-                            variant="primary"
-                            className={DEMO_CARD_ACTION_BTN_CLASS}
-                            onClick={() => handleConvertToAdmission(d)}
-                            title="Convert to full student enrollment"
-                          >
-                            Enroll ↗
-                          </Button>
+                          {canEdit && (
+                            <Button
+                              size="xs"
+                              variant="danger-soft"
+                              className={DEMO_CARD_ACTION_BTN_CLASS}
+                              onClick={(ev) => handleOpenNotInterestedModal(d, ev)}
+                              title="Student not interested / drop"
+                            >
+                              👎 Drop
+                            </Button>
+                          )}
+                          {canEdit && (
+                            <Button
+                              size="xs"
+                              variant="primary"
+                              className={DEMO_CARD_ACTION_BTN_CLASS}
+                              onClick={() => handleConvertToAdmission(d)}
+                              title="Convert to full student enrollment"
+                            >
+                              Enroll ↗
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -2715,7 +2757,7 @@ export default function EnquiriesPage() {
       {/* MODAL: REGISTER STUDENT FIRST (BEFORE CREATING DEMO)      */}
       {/* ========================================================= */}
       <RegisterStudentModal
-        isOpen={registerForDemoOpen}
+        isOpen={canEdit && registerForDemoOpen}
         onClose={() => {
           setRegisterForDemoOpen(false);
           setRegisterForDemoForceCreate(false);
@@ -2749,7 +2791,7 @@ export default function EnquiriesPage() {
       {/* MODAL: REGISTER STUDENT BEFORE COURSE PURCHASE */}
       {/* ========================================================= */}
       <RegisterStudentModal
-        isOpen={registerModalOpen}
+        isOpen={canEdit && registerModalOpen}
         onClose={() => {
           setRegisterModalOpen(false);
           setRegisterModalEnquiry(null);
@@ -2772,8 +2814,8 @@ export default function EnquiriesPage() {
         isOpen={!!detailEnquiry}
         onClose={() => setDetailEnquiry(null)}
         enquiry={detailEnquiry}
-        onConvertToAdmission={(e) => handleConvertToAdmission(e)}
-        onRegisterStudent={(e) => handleRegisterStudent(e)}
+        onConvertToAdmission={canEdit ? (e) => handleConvertToAdmission(e) : undefined}
+        onRegisterStudent={canEdit ? (e) => handleRegisterStudent(e) : undefined}
       />
 
       {/* ========================================================= */}

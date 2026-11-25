@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import {
   ArrowLeft,
   Clock,
@@ -38,9 +38,12 @@ import { cleanMobileInput } from '../../utils/phoneUtils';
 export default function EnquiryDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { success, error } = useToast();
   const { user, role, isAdmin, isCashier, isTeacher } = useAuth();
   const canEdit = isAdmin;
+  const backRoute = isTeacher ? '/demos' : location.pathname.startsWith('/demos') ? '/demos' : '/enquiries';
+  const backLabel = backRoute === '/demos' ? 'Demos' : 'Enquiries';
 
   const [enquiry, setEnquiry] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -240,8 +243,8 @@ export default function EnquiryDetailPage() {
   if (!enquiry) {
     return (
       <div className="p-6 max-w-4xl mx-auto space-y-4">
-        <Button variant="secondary" icon={ArrowLeft} onClick={() => navigate(isAdmin ? '/enquiries' : '/demos')}>
-          Back to {isAdmin ? 'Enquiries' : 'Demos'}
+        <Button variant="secondary" icon={ArrowLeft} onClick={() => navigate(backRoute)}>
+          Back to {backLabel}
         </Button>
         <div className="bg-white p-8 rounded-xl border border-slate-200 text-center">
           <p className="text-sm font-semibold text-rose-700">Enquiry record not found.</p>
@@ -291,9 +294,9 @@ export default function EnquiryDetailPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-start sm:items-center gap-2.5 min-w-0">
           <button
-            onClick={() => navigate(isAdmin ? '/enquiries' : '/demos')}
+            onClick={() => navigate(backRoute)}
             className="p-2 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 transition-colors shadow-2xs cursor-pointer shrink-0 min-h-[38px] min-w-[38px] flex items-center justify-center"
-            title={isAdmin ? "Back to Enquiries" : "Back to Demos"}
+            title={`Back to ${backLabel}`}
           >
             <ArrowLeft className="w-4 h-4" />
           </button>

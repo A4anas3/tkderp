@@ -218,11 +218,11 @@ export default function AppRoutes() {
           }
         />
 
-        {/* Enquiries & Demos (Admin only for register list, Teacher read-only detail) */}
+        {/* Enquiries & Demos (Admin & Cashier for register list, Teacher read-only detail) */}
         <Route
           path="enquiries"
           element={
-            <ProtectedRoute allowedRoles={['ADMIN']}>
+            <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER']}>
               <EnquiriesPage />
             </ProtectedRoute>
           }
@@ -230,7 +230,7 @@ export default function AppRoutes() {
         <Route
           path="enquiries/:id"
           element={
-            <ProtectedRoute allowedRoles={['ADMIN', 'TEACHER']}>
+            <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER', 'TEACHER']}>
               <EnquiryDetailPage />
             </ProtectedRoute>
           }

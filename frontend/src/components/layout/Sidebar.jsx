@@ -92,6 +92,12 @@ export default function Sidebar({ isOpen, onClose }) {
               show: true,
             },
             {
+              to: '/enquiries',
+              label: 'Enquiries & Demos',
+              icon: ClipboardList,
+              show: true,
+            },
+            {
               to: '/enrollments',
               label: 'Enrollment (Courses)',
               icon: CreditCard,
