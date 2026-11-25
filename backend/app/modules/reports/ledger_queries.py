@@ -16,6 +16,23 @@ from app.common.active_student import today_kolkata
 
 IST_TZ = zoneinfo.ZoneInfo("Asia/Kolkata")
 
+
+def _paginate_slice(
+    items: List[Any],
+    page: Optional[int],
+    page_size: Optional[int],
+    default_page_size: int = 15,
+) -> Tuple[List[Any], int, int, int, int]:
+    """Slice a list for pagination and return (paged_items, total, total_pages, cur_page, effective_page_size)."""
+    total = len(items)
+    if page is not None:
+        effective_page_size = page_size or default_page_size
+        total_pages = max(1, (total + effective_page_size - 1) // effective_page_size) if total > 0 else 1
+        start = (page - 1) * effective_page_size
+        return items[start:start + effective_page_size], total, total_pages, page, effective_page_size
+    effective_page_size = total or default_page_size
+    return items, total, 1, 1, effective_page_size
+
 def ist_day_boundaries(
     from_date: Optional[date] = None,
     to_date: Optional[date] = None
@@ -655,7 +672,9 @@ async def get_collections_detailed(
     search: Optional[str] = None,
     limit: Optional[int] = 500,
     page: Optional[int] = None,
-    page_size: Optional[int] = None
+    page_size: Optional[int] = None,
+    cashier_page: Optional[int] = None,
+    cashier_page_size: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     Collections Report:
@@ -676,6 +695,21 @@ async def get_collections_detailed(
     if cashier_id:
         conds.append(Payment.collected_by == cashier_id)
 
+    if search and search.strip():
+        pattern = f"%{search.strip()}%"
+        cashier_expr = func.coalesce(User.full_name, Payment.collector_name_snapshot, "Staff")
+        conds.append(
+            or_(
+                Payment.payment_number.ilike(pattern),
+                Student.name.ilike(pattern),
+                Student.student_code.ilike(pattern),
+                func.coalesce(Student.mobile, "").ilike(pattern),
+                Admission.admission_number.ilike(pattern),
+                cashier_expr.ilike(pattern),
+                func.coalesce(Payment.transaction_reference, "").ilike(pattern),
+            )
+        )
+
     stmt = (
         select(Payment, Student, Admission, User)
         .join(Student, Payment.student_id == Student.id)
@@ -684,13 +718,34 @@ async def get_collections_detailed(
         .where(*conds)
         .order_by(Payment.payment_date.desc())
     )
-    res = await db.execute(stmt)
-    rows = res.all()
 
-    txns = []
+    if page is not None:
+        effective_page_size = page_size or 15
+        count_stmt = (
+            select(func.count(Payment.id))
+            .join(Student, Payment.student_id == Student.id)
+            .join(Admission, Payment.admission_id == Admission.id)
+            .outerjoin(User, Payment.collected_by == User.id)
+            .where(*conds)
+        )
+        total = int((await db.execute(count_stmt)).scalar_one() or 0)
+        total_pages = max(1, (total + effective_page_size - 1) // effective_page_size) if total > 0 else 1
+        cur_page = page
+        stmt = stmt.offset((page - 1) * effective_page_size).limit(effective_page_size)
+        rows = (await db.execute(stmt)).all()
+    else:
+        if limit:
+            stmt = stmt.limit(limit)
+        rows = (await db.execute(stmt)).all()
+        total = len(rows)
+        effective_page_size = limit or total or 15
+        total_pages = 1
+        cur_page = 1
+
+    paged_txns = []
     for p, stu, adm, usr in rows:
         c_name = usr.full_name if usr else (p.collector_name_snapshot or "Staff")
-        txns.append({
+        paged_txns.append({
             "id": str(p.id),
             "payment_number": p.payment_number,
             "payment_date": p.payment_date.isoformat() if p.payment_date else None,
@@ -709,36 +764,22 @@ async def get_collections_detailed(
             "notes": p.notes or ""
         })
 
-    if search and search.strip():
-        q = search.strip().lower()
-        txns = [
-            t for t in txns
-            if q in t["payment_number"].lower()
-            or q in t["student_name"].lower()
-            or q in t["student_code"].lower()
-            or q in t["mobile"].lower()
-            or q in t["admission_number"].lower()
-            or q in t["cashier_name"].lower()
-            or q in t["transaction_reference"].lower()
-        ]
-
     gross = sum((m["gross_collected"] for m in by_mode), Decimal("0.00"))
     ref = sum((m["total_refunded"] for m in by_mode), Decimal("0.00"))
     net = gross - ref
     p_count = sum((m["payment_count"] for m in by_mode), 0)
 
-    total = len(txns)
-    if page is not None:
-        effective_page_size = page_size or 15
-        total_pages = max(1, (total + effective_page_size - 1) // effective_page_size) if total > 0 else 1
-        start = (page - 1) * effective_page_size
-        paged_txns = txns[start:start + effective_page_size]
-        cur_page = page
-    else:
-        effective_page_size = limit or len(txns) or 15
-        total_pages = 1
-        paged_txns = txns[:limit] if limit else txns
-        cur_page = 1
+    cashier_options = [
+        {
+            "user_id": c["user_id"],
+            "cashier_name": c["cashier_name"],
+            "username": c["username"],
+        }
+        for c in by_cashier
+    ]
+    paged_cashiers, c_total, c_total_pages, c_cur_page, c_page_size = _paginate_slice(
+        by_cashier, cashier_page, cashier_page_size
+    )
 
     return {
         "summary": {
@@ -771,8 +812,13 @@ async def get_collections_detailed(
                 "total_refunded": float(c["total_refunded"]),
                 "net_collected": float(c["net_collected"])
             }
-            for c in by_cashier
+            for c in paged_cashiers
         ],
+        "cashier_options": cashier_options,
+        "cashier_total": c_total,
+        "cashier_total_pages": c_total_pages,
+        "cashier_page": c_cur_page,
+        "cashier_page_size": c_page_size,
         "total": total,
         "total_pages": total_pages,
         "page": cur_page,
@@ -1216,7 +1262,11 @@ async def get_admissions_conversion_detailed(
     source: Optional[str] = None,
     search: Optional[str] = None,
     page: Optional[int] = None,
-    page_size: Optional[int] = None
+    page_size: Optional[int] = None,
+    subject_page: Optional[int] = None,
+    subject_page_size: Optional[int] = None,
+    teacher_page: Optional[int] = None,
+    teacher_page_size: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     Admissions & Conversion Report:
@@ -1475,18 +1525,15 @@ async def get_admissions_conversion_detailed(
         })
     by_teacher.sort(key=lambda x: (-x["demos_given"], -x["demos_converted"], x["teacher_name"].lower()))
 
-    total = len(filtered_items)
-    if page is not None:
-        effective_page_size = page_size or 15
-        total_pages = max(1, (total + effective_page_size - 1) // effective_page_size) if total > 0 else 1
-        start = (page - 1) * effective_page_size
-        paged_items = filtered_items[start:start + effective_page_size]
-        cur_page = page
-    else:
-        effective_page_size = len(filtered_items) or 15
-        total_pages = 1
-        paged_items = filtered_items
-        cur_page = 1
+    paged_items, total, total_pages, cur_page, effective_page_size = _paginate_slice(
+        filtered_items, page, page_size
+    )
+    paged_subjects, subj_total, subj_total_pages, subj_cur_page, subj_page_size = _paginate_slice(
+        by_subject, subject_page, subject_page_size
+    )
+    paged_teachers, tch_total, tch_total_pages, tch_cur_page, tch_page_size = _paginate_slice(
+        by_teacher, teacher_page, teacher_page_size
+    )
 
     return {
         "summary": {
@@ -1494,9 +1541,17 @@ async def get_admissions_conversion_detailed(
             "total_converted": total_converted,
             "overall_conversion_rate": overall_rate
         },
-        "by_subject": by_subject,
+        "by_subject": paged_subjects,
+        "by_subject_total": subj_total,
+        "by_subject_total_pages": subj_total_pages,
+        "by_subject_page": subj_cur_page,
+        "by_subject_page_size": subj_page_size,
         "by_source": by_source,
-        "by_teacher": by_teacher,
+        "by_teacher": paged_teachers,
+        "by_teacher_total": tch_total,
+        "by_teacher_total_pages": tch_total_pages,
+        "by_teacher_page": tch_cur_page,
+        "by_teacher_page_size": tch_page_size,
         "total": total,
         "total_pages": total_pages,
         "page": cur_page,
@@ -1632,7 +1687,9 @@ async def get_summary_dashboard_detailed(
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
     month: Optional[int] = None,
-    year: Optional[int] = None
+    year: Optional[int] = None,
+    page: Optional[int] = None,
+    page_size: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     Daily / Monthly Summary Dashboard:
@@ -1810,6 +1867,10 @@ async def get_summary_dashboard_detailed(
             else:
                 cur_month += 1
 
+    paged_intervals, total, total_pages, cur_page, effective_page_size = _paginate_slice(
+        intervals, page, page_size
+    )
+
     return {
         "filters": {
             "from_date": str(f_date) if f_date else None,
@@ -1824,7 +1885,12 @@ async def get_summary_dashboard_detailed(
             "total_refunds": float(tot_ref),
             "net_cash": float(net_cash)
         },
-        "intervals": intervals
+        "total": total,
+        "total_pages": total_pages,
+        "page": cur_page,
+        "page_size": effective_page_size,
+        "chart_intervals": intervals,
+        "intervals": paged_intervals
     }
 
 

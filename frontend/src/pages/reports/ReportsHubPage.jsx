@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   BarChart,
@@ -34,7 +34,10 @@ import {
   ArrowDownRight,
   Clock,
   AlertTriangle,
+  ChevronLeft,
   ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   TrendingUp,
   CheckCircle2,
   Building,
@@ -63,6 +66,74 @@ const REPORT_TABS = [
   { id: 'expenses', label: 'Expenses', sublabel: 'Operations & Staff Salaries', icon: Receipt, color: 'blue' },
   { id: 'summary-dashboard', label: 'Summary Dashboard', sublabel: 'Daily / Monthly Net Cash', icon: BarChart3, color: 'odoo' },
 ];
+
+function ReportPagination({
+  page,
+  pageSize = 15,
+  total = 0,
+  totalPages = 1,
+  onPageChange,
+  loading = false,
+  itemLabel = 'records',
+}) {
+  const safeTotal = Number(total || 0);
+  const safeTotalPages = Math.max(1, Number(totalPages) || Math.ceil(safeTotal / pageSize) || 1);
+  if (safeTotal <= 0 && safeTotalPages <= 1 && page <= 1) return null;
+
+  const start = safeTotal === 0 ? 0 : (page - 1) * pageSize + 1;
+  const end = Math.min(page * pageSize, safeTotal);
+
+  return (
+    <div className="px-3 py-2.5 mt-3 border-t border-slate-200 bg-slate-50/70 rounded-b-lg flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs text-slate-700 font-medium">
+      <div className="text-center sm:text-left">
+        Showing <span className="font-bold text-black">{start}</span> to{' '}
+        <span className="font-bold text-black">{end}</span> of{' '}
+        <span className="font-bold text-black">{safeTotal}</span> {itemLabel}
+      </div>
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => onPageChange(1)}
+          disabled={page <= 1 || loading}
+          className="min-h-[32px] min-w-[32px] p-1.5 rounded-md border border-slate-300 bg-white hover:bg-slate-50 active:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-colors shadow-2xs cursor-pointer"
+          title="First Page"
+        >
+          <ChevronsLeft className="w-3.5 h-3.5 text-black" />
+        </button>
+        <button
+          type="button"
+          onClick={() => onPageChange(Math.max(1, page - 1))}
+          disabled={page <= 1 || loading}
+          className="min-h-[32px] min-w-[32px] p-1.5 rounded-md border border-slate-300 bg-white hover:bg-slate-50 active:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-colors shadow-2xs cursor-pointer"
+          title="Previous Page"
+        >
+          <ChevronLeft className="w-3.5 h-3.5 text-black" />
+        </button>
+        <span className="px-3 py-1 text-xs font-bold text-black bg-white border border-slate-300 rounded-md shadow-2xs">
+          Page {page} of {safeTotalPages}
+        </span>
+        <button
+          type="button"
+          onClick={() => onPageChange(Math.min(safeTotalPages, page + 1))}
+          disabled={page >= safeTotalPages || loading}
+          className="min-h-[32px] min-w-[32px] p-1.5 rounded-md border border-slate-300 bg-white hover:bg-slate-50 active:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-colors shadow-2xs cursor-pointer"
+          title="Next Page"
+        >
+          <ChevronRight className="w-3.5 h-3.5 text-black" />
+        </button>
+        <button
+          type="button"
+          onClick={() => onPageChange(safeTotalPages)}
+          disabled={page >= safeTotalPages || loading}
+          className="min-h-[32px] min-w-[32px] p-1.5 rounded-md border border-slate-300 bg-white hover:bg-slate-50 active:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-colors shadow-2xs cursor-pointer"
+          title="Last Page"
+        >
+          <ChevronsRight className="w-3.5 h-3.5 text-black" />
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function ReportsHubPage() {
   const { reportTab } = useParams();
@@ -135,12 +206,26 @@ export default function ReportsHubPage() {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [tablePage, setTablePage] = useState(1);
+  const [cashierPage, setCashierPage] = useState(1);
+  const [subjectPage, setSubjectPage] = useState(1);
+  const [teacherPage, setTeacherPage] = useState(1);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const PAGE_SIZE = 15;
+  const fetchSeqRef = useRef(0);
+  const prevFilterKeyRef = useRef('');
 
   // Clear previous tab's data immediately upon tab change to prevent rendering mismatched data shapes
   useEffect(() => {
     setData(null);
   }, [activeTab]);
+
+  // Debounce search query so typing does not fire redundant requests
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   // Deduplicate waiver items defensively in the UI
   const dedupedWaivers = useMemo(() => {
@@ -212,29 +297,46 @@ export default function ReportsHubPage() {
     setSelectedYear(y || currentYear);
   };
 
-  // Reset tablePage to 1 whenever any filter or tab changes
-  useEffect(() => {
-    setTablePage(1);
-  }, [
-    activeTab,
-    fromDate,
-    toDate,
-    selectedMonth,
-    selectedYear,
-    searchQuery,
-    paymentModeFilter,
-    cashierFilter,
-    ageingBucketFilter,
-    selectedSubjectFilter,
-    enquirySourceFilter,
-    refundModeFilter,
-    expenseCategoryFilter,
-    summaryPeriod,
-  ]);
+  const filterKey = useMemo(
+    () =>
+      JSON.stringify({
+        activeTab,
+        fromDate,
+        toDate,
+        selectedMonth,
+        selectedYear,
+        debouncedSearch,
+        paymentModeFilter,
+        cashierFilter,
+        ageingBucketFilter,
+        selectedSubjectFilter,
+        enquirySourceFilter,
+        refundModeFilter,
+        expenseCategoryFilter,
+        summaryPeriod,
+      }),
+    [
+      activeTab,
+      fromDate,
+      toDate,
+      selectedMonth,
+      selectedYear,
+      debouncedSearch,
+      paymentModeFilter,
+      cashierFilter,
+      ageingBucketFilter,
+      selectedSubjectFilter,
+      enquirySourceFilter,
+      refundModeFilter,
+      expenseCategoryFilter,
+      summaryPeriod,
+    ]
+  );
 
   // Build query params
   const buildQueryParams = useCallback((includePagination = true) => {
     const params = {};
+    const effectiveSearch = includePagination ? debouncedSearch : searchQuery;
     if (includePagination) {
       params.page = tablePage;
       params.page_size = PAGE_SIZE;
@@ -243,11 +345,15 @@ export default function ReportsHubPage() {
     if (toDate) params.to_date = toDate;
     if (selectedMonth) params.month = selectedMonth;
     if (selectedYear) params.year = selectedYear;
-    if (searchQuery.trim()) params.search = searchQuery.trim();
+    if (effectiveSearch.trim()) params.search = effectiveSearch.trim();
 
     if (activeTab === 'collections') {
       if (paymentModeFilter !== 'ALL') params.payment_mode = paymentModeFilter;
       if (cashierFilter !== 'ALL') params.cashier_id = cashierFilter;
+      if (includePagination) {
+        params.cashier_page = cashierPage;
+        params.cashier_page_size = PAGE_SIZE;
+      }
     }
     if (activeTab === 'dues-ageing') {
       if (ageingBucketFilter !== 'ALL') params.ageing_bucket = ageingBucketFilter;
@@ -256,6 +362,12 @@ export default function ReportsHubPage() {
     if (activeTab === 'admissions-conversion') {
       if (enquirySourceFilter !== 'ALL') params.source = enquirySourceFilter;
       if (selectedSubjectFilter !== 'ALL') params.subject_id = selectedSubjectFilter;
+      if (includePagination) {
+        params.subject_page = subjectPage;
+        params.subject_page_size = PAGE_SIZE;
+        params.teacher_page = teacherPage;
+        params.teacher_page_size = PAGE_SIZE;
+      }
     }
     if (activeTab === 'refunds') {
       if (refundModeFilter !== 'ALL') params.refund_mode = refundModeFilter;
@@ -270,10 +382,14 @@ export default function ReportsHubPage() {
     return params;
   }, [
     tablePage,
+    cashierPage,
+    subjectPage,
+    teacherPage,
     fromDate,
     toDate,
     selectedMonth,
     selectedYear,
+    debouncedSearch,
     searchQuery,
     activeTab,
     paymentModeFilter,
@@ -286,8 +402,20 @@ export default function ReportsHubPage() {
     summaryPeriod,
   ]);
 
-  // Fetch report data
+  // Fetch report data (coordinating page reset on filter/tab changes without double-fetching stale pages)
   const fetchReportData = useCallback(async () => {
+    if (prevFilterKeyRef.current !== filterKey) {
+      prevFilterKeyRef.current = filterKey;
+      if (tablePage !== 1 || cashierPage !== 1 || subjectPage !== 1 || teacherPage !== 1) {
+        setTablePage(1);
+        setCashierPage(1);
+        setSubjectPage(1);
+        setTeacherPage(1);
+        return;
+      }
+    }
+
+    const seq = ++fetchSeqRef.current;
     setLoading(true);
     try {
       const params = buildQueryParams(true);
@@ -323,13 +451,19 @@ export default function ReportsHubPage() {
         default:
           res = await reportApi.getCollections(params);
       }
-      setData(res);
+      if (seq === fetchSeqRef.current) {
+        setData(res);
+      }
     } catch (err) {
-      console.error(`Failed to fetch report [${activeTab}]:`, err);
+      if (seq === fetchSeqRef.current) {
+        console.error(`Failed to fetch report [${activeTab}]:`, err);
+      }
     } finally {
-      setLoading(false);
+      if (seq === fetchSeqRef.current) {
+        setLoading(false);
+      }
     }
-  }, [activeTab, buildQueryParams]);
+  }, [activeTab, buildQueryParams, filterKey, tablePage, cashierPage, subjectPage, teacherPage]);
 
   useEffect(() => {
     fetchReportData();
@@ -562,7 +696,7 @@ export default function ReportsHubPage() {
                   className="w-full h-8 px-2 text-xs font-semibold text-black bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#714B67]"
                 >
                   <option value="ALL">All Cashiers</option>
-                  {data?.by_cashier?.map((c, idx) => (
+                  {(data?.cashier_options || data?.by_cashier || []).map((c, idx) => (
                     <option key={c.cashier_id ? `cashier-${c.cashier_id}-${idx}` : `cashier-${idx}`} value={c.cashier_id || c.user_id}>
                       {c.cashier_name}
                     </option>
@@ -795,7 +929,7 @@ export default function ReportsHubPage() {
                 />
                 <StatCard
                   title="Transactions Logged"
-                  value={`${data?.transactions?.length || 0}`}
+                  value={`${data?.total ?? data?.summary?.total_matching ?? data?.transactions?.length ?? 0}`}
                   subtext={`Matching date & mode filters`}
                   icon={Calendar}
                   color="teal"
@@ -870,6 +1004,15 @@ export default function ReportsHubPage() {
                       </tbody>
                     </table>
                   </div>
+                  <ReportPagination
+                    page={cashierPage}
+                    pageSize={PAGE_SIZE}
+                    total={data?.cashier_total ?? data?.by_cashier?.length ?? 0}
+                    totalPages={data?.cashier_total_pages ?? 1}
+                    onPageChange={setCashierPage}
+                    loading={loading}
+                    itemLabel="cashiers"
+                  />
                 </div>
               </div>
 
@@ -877,7 +1020,7 @@ export default function ReportsHubPage() {
               <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
                   <h3 className="text-xs font-black text-black uppercase tracking-wider">
-                    Receipt Ledger ({data?.transactions?.length || 0} Transactions)
+                    Receipt Ledger ({data?.total ?? data?.transactions?.length ?? 0} Transactions)
                   </h3>
                   <span className="text-[11px] text-slate-500 font-medium">Click student name to view profile</span>
                 </div>
@@ -932,33 +1075,15 @@ export default function ReportsHubPage() {
                   </table>
                 </div>
 
-                {/* Pagination */}
-                {((data?.total ?? 0) > PAGE_SIZE || (data?.total_pages ?? 1) > 1 || tablePage > 1) && (
-                  <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100 text-xs">
-                    <span className="text-slate-500">
-                      Showing {(tablePage - 1) * PAGE_SIZE + 1} to {Math.min(tablePage * PAGE_SIZE, data.total ?? data.transactions?.length ?? 0)} of {data.total ?? data.transactions?.length ?? 0}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => setTablePage((p) => Math.max(1, p - 1))}
-                        disabled={tablePage === 1}
-                        className="px-2 py-1 rounded border border-slate-200 disabled:opacity-50 font-bold"
-                      >
-                        Prev
-                      </button>
-                      <span className="px-2 font-bold text-slate-800">
-                        {tablePage} / {data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE))}
-                      </span>
-                      <button
-                        onClick={() => setTablePage((p) => p + 1)}
-                        disabled={tablePage >= (data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE)))}
-                        className="px-2 py-1 rounded border border-slate-200 disabled:opacity-50 font-bold"
-                      >
-                        Next
-                      </button>
-                    </div>
-                  </div>
-                )}
+                <ReportPagination
+                  page={tablePage}
+                  pageSize={PAGE_SIZE}
+                  total={data?.total ?? data?.transactions?.length ?? 0}
+                  totalPages={data?.total_pages}
+                  onPageChange={setTablePage}
+                  loading={loading}
+                  itemLabel="transactions"
+                />
               </div>
             </div>
           )}
@@ -1011,7 +1136,7 @@ export default function ReportsHubPage() {
               <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
                   <h3 className="text-xs font-black text-black uppercase tracking-wider">
-                    Student-wise Dues & Ageing Ledger ({data?.items?.length || 0} items)
+                    Student-wise Dues & Ageing Ledger ({data?.total ?? data?.items?.length ?? 0} items)
                   </h3>
                   <Badge variant="danger" size="xs">Actionable Receivables</Badge>
                 </div>
@@ -1069,33 +1194,15 @@ export default function ReportsHubPage() {
                   </table>
                 </div>
 
-                {/* Pagination */}
-                {((data?.total ?? 0) > PAGE_SIZE || (data?.total_pages ?? 1) > 1 || tablePage > 1) && (
-                  <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100 text-xs">
-                    <span className="text-slate-500">
-                      Showing {(tablePage - 1) * PAGE_SIZE + 1} to {Math.min(tablePage * PAGE_SIZE, data.total ?? data.items?.length ?? 0)} of {data.total ?? data.items?.length ?? 0}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => setTablePage((p) => Math.max(1, p - 1))}
-                        disabled={tablePage === 1}
-                        className="px-2 py-1 rounded border border-slate-200 disabled:opacity-50 font-bold"
-                      >
-                        Prev
-                      </button>
-                      <span className="px-2 font-bold text-slate-800">
-                        {tablePage} / {data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE))}
-                      </span>
-                      <button
-                        onClick={() => setTablePage((p) => p + 1)}
-                        disabled={tablePage >= (data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE)))}
-                        className="px-2 py-1 rounded border border-slate-200 disabled:opacity-50 font-bold"
-                      >
-                        Next
-                      </button>
-                    </div>
-                  </div>
-                )}
+                <ReportPagination
+                  page={tablePage}
+                  pageSize={PAGE_SIZE}
+                  total={data?.total ?? data?.items?.length ?? 0}
+                  totalPages={data?.total_pages}
+                  onPageChange={setTablePage}
+                  loading={loading}
+                  itemLabel="items"
+                />
               </div>
             </div>
           )}
@@ -1130,7 +1237,7 @@ export default function ReportsHubPage() {
                 />
                 <StatCard
                   title="Course Subjects"
-                  value={`${data?.items?.length || 0}`}
+                  value={`${data?.total ?? data?.items?.length ?? 0}`}
                   subtext="Active academic disciplines"
                   icon={GraduationCap}
                   color="indigo"
@@ -1184,33 +1291,15 @@ export default function ReportsHubPage() {
                   </table>
                 </div>
 
-                {/* Pagination */}
-                {((data?.total ?? 0) > PAGE_SIZE || (data?.total_pages ?? 1) > 1 || tablePage > 1) && (
-                  <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100 text-xs">
-                    <span className="text-slate-500">
-                      Showing {(tablePage - 1) * PAGE_SIZE + 1} to {Math.min(tablePage * PAGE_SIZE, data.total ?? data.items?.length ?? 0)} of {data.total ?? data.items?.length ?? 0}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => setTablePage((p) => Math.max(1, p - 1))}
-                        disabled={tablePage === 1}
-                        className="px-2 py-1 rounded border border-slate-200 disabled:opacity-50 font-bold"
-                      >
-                        Prev
-                      </button>
-                      <span className="px-2 font-bold text-slate-800">
-                        {tablePage} / {data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE))}
-                      </span>
-                      <button
-                        onClick={() => setTablePage((p) => p + 1)}
-                        disabled={tablePage >= (data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE)))}
-                        className="px-2 py-1 rounded border border-slate-200 disabled:opacity-50 font-bold"
-                      >
-                        Next
-                      </button>
-                    </div>
-                  </div>
-                )}
+                <ReportPagination
+                  page={tablePage}
+                  pageSize={PAGE_SIZE}
+                  total={data?.total ?? data?.items?.length ?? 0}
+                  totalPages={data?.total_pages}
+                  onPageChange={setTablePage}
+                  loading={loading}
+                  itemLabel="subjects"
+                />
               </div>
             </div>
           )}
@@ -1321,33 +1410,15 @@ export default function ReportsHubPage() {
                   </table>
                 </div>
 
-                {/* Pagination */}
-                {((data?.total ?? 0) > PAGE_SIZE || (data?.total_pages ?? 1) > 1 || tablePage > 1) && (
-                  <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100 text-xs">
-                    <span className="text-slate-500">
-                      Showing {(tablePage - 1) * PAGE_SIZE + 1} to {Math.min(tablePage * PAGE_SIZE, data.total ?? data.items?.length ?? 0)} of {data.total ?? data.items?.length ?? 0}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => setTablePage((p) => Math.max(1, p - 1))}
-                        disabled={tablePage === 1}
-                        className="px-2 py-1 rounded border border-slate-200 disabled:opacity-50 font-bold"
-                      >
-                        Prev
-                      </button>
-                      <span className="px-2 font-bold text-slate-800">
-                        {tablePage} / {data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE))}
-                      </span>
-                      <button
-                        onClick={() => setTablePage((p) => p + 1)}
-                        disabled={tablePage >= (data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE)))}
-                        className="px-2 py-1 rounded border border-slate-200 disabled:opacity-50 font-bold"
-                      >
-                        Next
-                      </button>
-                    </div>
-                  </div>
-                )}
+                <ReportPagination
+                  page={tablePage}
+                  pageSize={PAGE_SIZE}
+                  total={data?.total ?? (Array.isArray(data) ? data.length : data?.items?.length ?? 0)}
+                  totalPages={data?.total_pages}
+                  onPageChange={setTablePage}
+                  loading={loading}
+                  itemLabel="teachers"
+                />
               </div>
             </div>
           )}
@@ -1452,13 +1523,22 @@ export default function ReportsHubPage() {
                       </tbody>
                     </table>
                   </div>
+                  <ReportPagination
+                    page={subjectPage}
+                    pageSize={PAGE_SIZE}
+                    total={data?.by_subject_total ?? data?.by_subject?.length ?? 0}
+                    totalPages={data?.by_subject_total_pages ?? 1}
+                    onPageChange={setSubjectPage}
+                    loading={loading}
+                    itemLabel="subjects"
+                  />
                 </div>
               </div>
 
               {/* Teacher-wise Demo Conversion Table */}
               <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs">
                 <h3 className="text-xs font-black text-black uppercase tracking-wider mb-3 pb-2 border-b border-slate-100 flex items-center justify-between">
-                  <span>Teacher-wise Demo Conversion</span>
+                  <span>Teacher-wise Demo Conversion ({data?.by_teacher_total ?? data?.by_teacher?.length ?? 0})</span>
                   <Badge variant="primary" size="xs">Demo Credit</Badge>
                 </h3>
                 <div className="overflow-x-auto">
@@ -1531,13 +1611,22 @@ export default function ReportsHubPage() {
                     </tbody>
                   </table>
                 </div>
+                <ReportPagination
+                  page={teacherPage}
+                  pageSize={PAGE_SIZE}
+                  total={data?.by_teacher_total ?? data?.by_teacher?.length ?? 0}
+                  totalPages={data?.by_teacher_total_pages ?? 1}
+                  onPageChange={setTeacherPage}
+                  loading={loading}
+                  itemLabel="teachers"
+                />
               </div>
 
               {/* Detailed Enquiries Table */}
               <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
                   <h3 className="text-xs font-black text-black uppercase tracking-wider">
-                    Inquiries Register ({data?.items?.length || 0} Records)
+                    Inquiries Register ({data?.total ?? data?.items?.length ?? 0} Records)
                   </h3>
                   <span className="text-[11px] text-slate-500">Recent enquiries and admission conversion status</span>
                 </div>
@@ -1586,33 +1675,15 @@ export default function ReportsHubPage() {
                   </table>
                 </div>
 
-                {/* Pagination */}
-                {((data?.total ?? 0) > PAGE_SIZE || (data?.total_pages ?? 1) > 1 || tablePage > 1) && (
-                  <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100 text-xs">
-                    <span className="text-slate-500">
-                      Showing {(tablePage - 1) * PAGE_SIZE + 1} to {Math.min(tablePage * PAGE_SIZE, data.total ?? data.items?.length ?? 0)} of {data.total ?? data.items?.length ?? 0}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => setTablePage((p) => Math.max(1, p - 1))}
-                        disabled={tablePage === 1}
-                        className="px-2 py-1 rounded border border-slate-200 disabled:opacity-50 font-bold"
-                      >
-                        Prev
-                      </button>
-                      <span className="px-2 font-bold text-slate-800">
-                        {tablePage} / {data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE))}
-                      </span>
-                      <button
-                        onClick={() => setTablePage((p) => p + 1)}
-                        disabled={tablePage >= (data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE)))}
-                        className="px-2 py-1 rounded border border-slate-200 disabled:opacity-50 font-bold"
-                      >
-                        Next
-                      </button>
-                    </div>
-                  </div>
-                )}
+                <ReportPagination
+                  page={tablePage}
+                  pageSize={PAGE_SIZE}
+                  total={data?.total ?? data?.items?.length ?? 0}
+                  totalPages={data?.total_pages}
+                  onPageChange={setTablePage}
+                  loading={loading}
+                  itemLabel="enquiries"
+                />
               </div>
             </div>
           )}
@@ -1650,7 +1721,7 @@ export default function ReportsHubPage() {
               <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
                   <h3 className="text-xs font-black text-black uppercase tracking-wider">
-                    Authorised Dues Waivers & Audit Trail ({dedupedWaivers.length} Records)
+                    Authorised Dues Waivers & Audit Trail ({data?.total ?? dedupedWaivers.length} Records)
                   </h3>
                   <Badge variant="warning" size="xs">Admin Authorization Audit</Badge>
                 </div>
@@ -1711,33 +1782,15 @@ export default function ReportsHubPage() {
                   </table>
                 </div>
 
-                {/* Pagination */}
-                {((data?.total ?? dedupedWaivers.length) > PAGE_SIZE || (data?.total_pages ?? 1) > 1 || tablePage > 1) && (
-                  <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100 text-xs">
-                    <span className="text-slate-500">
-                      Showing {(tablePage - 1) * PAGE_SIZE + 1} to {Math.min(tablePage * PAGE_SIZE, data?.total ?? dedupedWaivers.length)} of {data?.total ?? dedupedWaivers.length}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => setTablePage((p) => Math.max(1, p - 1))}
-                        disabled={tablePage === 1}
-                        className="px-2 py-1 rounded border border-slate-200 disabled:opacity-50 font-bold"
-                      >
-                        Prev
-                      </button>
-                      <span className="px-2 font-bold text-slate-800">
-                        {tablePage} / {data?.total_pages ?? Math.max(1, Math.ceil((data?.total || dedupedWaivers.length) / PAGE_SIZE))}
-                      </span>
-                      <button
-                        onClick={() => setTablePage((p) => p + 1)}
-                        disabled={tablePage >= (data?.total_pages ?? Math.max(1, Math.ceil((data?.total || dedupedWaivers.length) / PAGE_SIZE)))}
-                        className="px-2 py-1 rounded border border-slate-200 disabled:opacity-50 font-bold"
-                      >
-                        Next
-                      </button>
-                    </div>
-                  </div>
-                )}
+                <ReportPagination
+                  page={tablePage}
+                  pageSize={PAGE_SIZE}
+                  total={data?.total ?? dedupedWaivers.length}
+                  totalPages={data?.total_pages}
+                  onPageChange={setTablePage}
+                  loading={loading}
+                  itemLabel="waivers"
+                />
               </div>
             </div>
           )}
@@ -1781,7 +1834,7 @@ export default function ReportsHubPage() {
               {/* Refunds Table */}
               <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs">
                 <h3 className="text-xs font-black text-black uppercase tracking-wider mb-3 pb-2 border-b border-slate-100 flex items-center justify-between">
-                  <span>Student Fee Refunds Register ({data?.items?.length || 0} Records)</span>
+                  <span>Student Fee Refunds Register ({data?.total ?? data?.items?.length ?? 0} Records)</span>
                   <Badge variant="danger" size="xs">Disbursement Vouchers</Badge>
                 </h3>
                 <div className="overflow-x-auto">
@@ -1831,33 +1884,15 @@ export default function ReportsHubPage() {
                   </table>
                 </div>
 
-                {/* Pagination */}
-                {((data?.total ?? 0) > PAGE_SIZE || (data?.total_pages ?? 1) > 1 || tablePage > 1) && (
-                  <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100 text-xs">
-                    <span className="text-slate-500">
-                      Showing {(tablePage - 1) * PAGE_SIZE + 1} to {Math.min(tablePage * PAGE_SIZE, data.total ?? data.items?.length ?? 0)} of {data.total ?? data.items?.length ?? 0}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => setTablePage((p) => Math.max(1, p - 1))}
-                        disabled={tablePage === 1}
-                        className="px-2 py-1 rounded border border-slate-200 disabled:opacity-50 font-bold"
-                      >
-                        Prev
-                      </button>
-                      <span className="px-2 font-bold text-slate-800">
-                        {tablePage} / {data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE))}
-                      </span>
-                      <button
-                        onClick={() => setTablePage((p) => p + 1)}
-                        disabled={tablePage >= (data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE)))}
-                        className="px-2 py-1 rounded border border-slate-200 disabled:opacity-50 font-bold"
-                      >
-                        Next
-                      </button>
-                    </div>
-                  </div>
-                )}
+                <ReportPagination
+                  page={tablePage}
+                  pageSize={PAGE_SIZE}
+                  total={data?.total ?? data?.items?.length ?? 0}
+                  totalPages={data?.total_pages}
+                  onPageChange={setTablePage}
+                  loading={loading}
+                  itemLabel="refunds"
+                />
               </div>
             </div>
           )}
@@ -1920,7 +1955,7 @@ export default function ReportsHubPage() {
 
                 {/* Items Table */}
                 <h4 className="text-xs font-black text-black uppercase tracking-wider mb-2 pt-2 border-t border-slate-100">
-                  Detailed Expense Ledger ({data?.items?.length || 0} Entries)
+                  Detailed Expense Ledger ({data?.total ?? data?.items?.length ?? 0} Entries)
                 </h4>
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs text-left">
@@ -1959,33 +1994,15 @@ export default function ReportsHubPage() {
                   </table>
                 </div>
 
-                {/* Pagination */}
-                {((data?.total ?? 0) > PAGE_SIZE || (data?.total_pages ?? 1) > 1 || tablePage > 1) && (
-                  <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100 text-xs">
-                    <span className="text-slate-500">
-                      Showing {(tablePage - 1) * PAGE_SIZE + 1} to {Math.min(tablePage * PAGE_SIZE, data.total ?? data.items?.length ?? 0)} of {data.total ?? data.items?.length ?? 0}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => setTablePage((p) => Math.max(1, p - 1))}
-                        disabled={tablePage === 1}
-                        className="px-2 py-1 rounded border border-slate-200 disabled:opacity-50 font-bold"
-                      >
-                        Prev
-                      </button>
-                      <span className="px-2 font-bold text-slate-800">
-                        {tablePage} / {data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE))}
-                      </span>
-                      <button
-                        onClick={() => setTablePage((p) => p + 1)}
-                        disabled={tablePage >= (data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE)))}
-                        className="px-2 py-1 rounded border border-slate-200 disabled:opacity-50 font-bold"
-                      >
-                        Next
-                      </button>
-                    </div>
-                  </div>
-                )}
+                <ReportPagination
+                  page={tablePage}
+                  pageSize={PAGE_SIZE}
+                  total={data?.total ?? data?.items?.length ?? 0}
+                  totalPages={data?.total_pages}
+                  onPageChange={setTablePage}
+                  loading={loading}
+                  itemLabel="entries"
+                />
               </div>
             </div>
           )}
@@ -2041,7 +2058,7 @@ export default function ReportsHubPage() {
                 </h3>
                 <div className="h-64 sm:h-72 w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={data?.intervals || []} margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
+                    <BarChart data={data?.chart_intervals || data?.intervals || []} margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                       <XAxis dataKey="period_label" tick={{ fontSize: 10, fill: '#000000' }} interval="preserveStartEnd" />
                       <YAxis tick={{ fontSize: 10, fill: '#475569' }} tickFormatter={(val) => `₹${val}`} />
@@ -2062,7 +2079,7 @@ export default function ReportsHubPage() {
               {/* Intervals Table */}
               <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs">
                 <h3 className="text-xs font-black text-black uppercase tracking-wider mb-3 pb-2 border-b border-slate-100">
-                  {summaryPeriod === 'daily' ? 'Daily' : 'Monthly'} Breakdown Ledger
+                  {summaryPeriod === 'daily' ? 'Daily' : 'Monthly'} Breakdown Ledger ({data?.total ?? data?.intervals?.length ?? 0} Periods)
                 </h3>
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs text-left">
@@ -2095,33 +2112,15 @@ export default function ReportsHubPage() {
                   </table>
                 </div>
 
-                {/* Pagination */}
-                {((data?.total ?? 0) > PAGE_SIZE || (data?.total_pages ?? 1) > 1 || tablePage > 1) && (
-                  <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100 text-xs">
-                    <span className="text-slate-500">
-                      Showing {(tablePage - 1) * PAGE_SIZE + 1} to {Math.min(tablePage * PAGE_SIZE, data.total ?? data.items?.length ?? 0)} of {data.total ?? data.items?.length ?? 0}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => setTablePage((p) => Math.max(1, p - 1))}
-                        disabled={tablePage === 1}
-                        className="px-2 py-1 rounded border border-slate-200 disabled:opacity-50 font-bold"
-                      >
-                        Prev
-                      </button>
-                      <span className="px-2 font-bold text-slate-800">
-                        {tablePage} / {data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE))}
-                      </span>
-                      <button
-                        onClick={() => setTablePage((p) => p + 1)}
-                        disabled={tablePage >= (data.total_pages ?? Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE)))}
-                        className="px-2 py-1 rounded border border-slate-200 disabled:opacity-50 font-bold"
-                      >
-                        Next
-                      </button>
-                    </div>
-                  </div>
-                )}
+                <ReportPagination
+                  page={tablePage}
+                  pageSize={PAGE_SIZE}
+                  total={data?.total ?? data?.intervals?.length ?? 0}
+                  totalPages={data?.total_pages}
+                  onPageChange={setTablePage}
+                  loading={loading}
+                  itemLabel="periods"
+                />
               </div>
             </div>
           )}

@@ -1485,6 +1485,8 @@ async def get_collections_report(
     search: Optional[str] = Query(None, description="Search student, receipt number, cashier, reference"),
     page: Optional[int] = Query(None, ge=1, description="Page number"),
     page_size: Optional[int] = Query(None, ge=1, le=100, description="Items per page"),
+    cashier_page: Optional[int] = Query(None, ge=1, description="Page number for cashier breakdown"),
+    cashier_page_size: Optional[int] = Query(None, ge=1, le=100, description="Items per page for cashier breakdown"),
     format: Optional[str] = Query(None, description="Set to 'csv' for CSV export"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin)
@@ -1495,7 +1497,8 @@ async def get_collections_report(
     cache_key = make_cache_key(
         "reports", "collections",
         from_date=from_date, to_date=to_date, payment_mode=payment_mode,
-        cashier_id=cashier_id, search=search, page=page, page_size=page_size, format=format,
+        cashier_id=cashier_id, search=search, page=page, page_size=page_size,
+        cashier_page=cashier_page, cashier_page_size=cashier_page_size, format=format,
     )
     hit, cached = await cache_get(cache_key)
     if hit:
@@ -1506,7 +1509,9 @@ async def get_collections_report(
         payment_mode=payment_mode, cashier_id=cashier_id, search=search,
         limit=lim,
         page=page if format != "csv" else None,
-        page_size=page_size if format != "csv" else None
+        page_size=page_size if format != "csv" else None,
+        cashier_page=cashier_page if format != "csv" else None,
+        cashier_page_size=cashier_page_size if format != "csv" else None,
     )
     if format == "csv":
         headers = ["Payment Number", "Date", "Student Name", "Reg No", "Admission Number", "Amount (₹)", "Payment Mode", "Cashier", "Reference", "Notes"]
@@ -1538,7 +1543,9 @@ async def get_collections_csv(
 ):
     return await get_collections_report(
         from_date=from_date, to_date=to_date, payment_mode=payment_mode,
-        cashier_id=cashier_id, search=search, format="csv", db=db, current_user=current_user
+        cashier_id=cashier_id, search=search,
+        page=None, page_size=None, cashier_page=None, cashier_page_size=None,
+        format="csv", db=db, current_user=current_user
     )
 
 
@@ -1741,6 +1748,10 @@ async def get_admissions_conversion_api(
     search: Optional[str] = Query(None),
     page: Optional[int] = Query(None, ge=1, description="Page number"),
     page_size: Optional[int] = Query(None, ge=1, le=100, description="Items per page"),
+    subject_page: Optional[int] = Query(None, ge=1, description="Page number for subject breakdown"),
+    subject_page_size: Optional[int] = Query(None, ge=1, le=100, description="Items per page for subject breakdown"),
+    teacher_page: Optional[int] = Query(None, ge=1, description="Page number for teacher breakdown"),
+    teacher_page_size: Optional[int] = Query(None, ge=1, le=100, description="Items per page for teacher breakdown"),
     format: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin)
@@ -1751,7 +1762,10 @@ async def get_admissions_conversion_api(
     cache_key = make_cache_key(
         "reports", "admissions_conversion",
         from_date=from_date, to_date=to_date, subject_id=subject_id,
-        source=source, search=search, page=page, page_size=page_size, format=format,
+        source=source, search=search, page=page, page_size=page_size,
+        subject_page=subject_page, subject_page_size=subject_page_size,
+        teacher_page=teacher_page, teacher_page_size=teacher_page_size,
+        format=format,
     )
     hit, cached = await cache_get(cache_key)
     if hit:
@@ -1760,7 +1774,11 @@ async def get_admissions_conversion_api(
         db, from_date=from_date, to_date=to_date,
         subject_id=subject_id, source=source, search=search,
         page=page if format != "csv" else None,
-        page_size=page_size if format != "csv" else None
+        page_size=page_size if format != "csv" else None,
+        subject_page=subject_page if format != "csv" else None,
+        subject_page_size=subject_page_size if format != "csv" else None,
+        teacher_page=teacher_page if format != "csv" else None,
+        teacher_page_size=teacher_page_size if format != "csv" else None,
     )
     if format == "csv":
         headers = ["Enquiry Code", "Date", "Student Name", "Mobile", "Interested Subject", "Source", "Status", "Converted Student", "Admission Number"]
@@ -1792,7 +1810,11 @@ async def get_admissions_conversion_csv(
 ):
     return await get_admissions_conversion_api(
         from_date=from_date, to_date=to_date, subject_id=subject_id,
-        source=source, search=search, format="csv", db=db, current_user=current_user
+        source=source, search=search,
+        page=None, page_size=None,
+        subject_page=None, subject_page_size=None,
+        teacher_page=None, teacher_page_size=None,
+        format="csv", db=db, current_user=current_user
     )
 
 
@@ -1988,6 +2010,8 @@ async def get_summary_dashboard_api(
     to_date: Optional[date] = Query(None),
     month: Optional[int] = Query(None, ge=1, le=12),
     year: Optional[int] = Query(None),
+    page: Optional[int] = Query(None, ge=1, description="Page number"),
+    page_size: Optional[int] = Query(None, ge=1, le=100, description="Items per page"),
     format: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin)
@@ -1998,13 +2022,15 @@ async def get_summary_dashboard_api(
     cache_key = make_cache_key(
         "reports", "summary_dashboard",
         period=period, from_date=from_date, to_date=to_date,
-        month=month, year=year, format=format,
+        month=month, year=year, page=page, page_size=page_size, format=format,
     )
     hit, cached = await cache_get(cache_key)
     if hit:
         return cached
     report = await get_summary_dashboard_detailed(
-        db, period=period, from_date=from_date, to_date=to_date, month=month, year=year
+        db, period=period, from_date=from_date, to_date=to_date, month=month, year=year,
+        page=page if format != "csv" else None,
+        page_size=page_size if format != "csv" else None,
     )
     if format == "csv":
         headers = ["Period", "Fees Billed (₹)", "Collected (₹)", "Due (₹)", "Expenses (₹)", "Refunds (₹)", "Net Cash (₹)"]
@@ -2034,6 +2060,7 @@ async def get_summary_dashboard_csv(
 ):
     return await get_summary_dashboard_api(
         period=period, from_date=from_date, to_date=to_date,
-        month=month, year=year, format="csv", db=db, current_user=current_user
+        month=month, year=year, page=None, page_size=None,
+        format="csv", db=db, current_user=current_user
     )
 
