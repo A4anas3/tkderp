@@ -82,6 +82,11 @@ async def lifespan(app: FastAPI):
                     ) THEN
                         ALTER TABLE students ADD CONSTRAINT uq_students_mobile UNIQUE (mobile);
                     END IF;
+                    IF NOT EXISTS (
+                        SELECT 1 FROM pg_constraint WHERE conname = 'uq_students_student_code'
+                    ) THEN
+                        ALTER TABLE students ADD CONSTRAINT uq_students_student_code UNIQUE (student_code);
+                    END IF;
                 END $$;
             """))
             await conn.execute(text("""

@@ -22,6 +22,7 @@ from app.core.cache import (
 from app.database.session import get_db
 from app.core.dependencies import require_staff, require_cashier_or_admin, require_admin
 from app.common.active_student import today_kolkata
+from app.common.numbering import create_student_with_unique_code
 from app.common.teacher_scope import (
     is_teacher_user,
     resolve_teacher_for_user,
@@ -91,19 +92,6 @@ def extract_last_10_mobile(mobile_str: Optional[str]) -> Optional[str]:
     if len(digits) >= 10:
         return digits[-10:]
     return None
-
-
-async def _generate_student_code(db: AsyncSession) -> str:
-    """Generate sequential unique student registration code STU{YYYY}{NNNN}."""
-    year_str = date.today().strftime("%Y")
-    cnt_res = await db.execute(select(func.count(Student.id)))
-    candidate_seq = (cnt_res.scalar_one() or 0) + 1
-    while True:
-        candidate_code = f"STU{year_str}{candidate_seq:04d}"
-        exists = (await db.execute(select(Student.id).where(Student.student_code == candidate_code).limit(1))).scalar_one_or_none()
-        if not exists:
-            return candidate_code
-        candidate_seq += 1
 
 
 async def _find_matching_students_by_mobile(db: AsyncSession, last_10_mobile: str) -> List[Student]:
@@ -177,10 +165,8 @@ async def _create_student_record(
         notes_parts.append(notes.strip())
     combined_notes = " • ".join(notes_parts) if notes_parts else None
 
-    candidate_code = await _generate_student_code(db)
-
-    student = Student(
-        student_code=candidate_code,
+    student = await create_student_with_unique_code(
+        db,
         name=clean_name,
         father_name=(father_name or "").strip() or None,
         mobile=norm_mob,
@@ -190,17 +176,8 @@ async def _create_student_record(
         dob=dob,
         registration_date=date.today(),
         status="ACTIVE",
-        notes=combined_notes
+        notes=combined_notes,
     )
-    db.add(student)
-    try:
-        await db.flush()
-    except IntegrityError:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="This phone number is already registered"
-        )
 
     details = {
         "student_id": str(student.id),

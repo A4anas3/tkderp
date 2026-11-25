@@ -10,6 +10,7 @@ class Student(BaseModel):
     __tablename__ = "students"
     __table_args__ = (
         UniqueConstraint("mobile", name="uq_students_mobile"),
+        UniqueConstraint("student_code", name="uq_students_student_code"),
     )
 
     student_code: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)

@@ -40,7 +40,7 @@ from app.common.calculations import (
     calculate_course_duration_fee,
     compute_rolling_cycle_end,
 )
-from app.common.numbering import next_number
+from app.common.numbering import generate_student_code, next_number
 from app.core.config import settings
 from app.core.redis import delete_cache_pattern
 from app.database.models import (
@@ -525,8 +525,9 @@ async def run_wipe_and_reseed():
             dob_day = rng.randint(1, 28)
 
             email_slug = full_name.lower().replace(" ", ".")
+            student_code = await generate_student_code(db, year=adm_date.year)
             student = Student(
-                student_code=f"STU2026{idx:04d}",
+                student_code=student_code,
                 name=full_name,
                 mobile=mobile,
                 father_name=father_name,
@@ -716,6 +717,9 @@ async def run_wipe_and_reseed():
         ).all()
 
         kk = (await db.execute(select(Teacher).where(Teacher.teacher_code == "TCH001"))).scalar_one()
+        all_codes = list((await db.execute(select(Student.student_code))).scalars().all())
+        assert len(all_codes) == 100 and len(set(all_codes)) == 100, "Student codes must be 100 unique values!"
+        assert all(len(c) == 13 and c.startswith("STU2026") and c[7:].isdigit() for c in all_codes), "Invalid student code format!"
 
         print("\n" + "=" * 60)
         print("RESEED VERIFICATION SUMMARY")
@@ -723,7 +727,7 @@ async def run_wipe_and_reseed():
         print(f"  Subjects            : {sub_cnt}")
         print(f"  Teachers            : {tch_cnt} (K.K. Chauhan user_id={kk.user_id}, mobile={kk.mobile})")
         print(f"  Green Card Products : {gc_cnt}")
-        print(f"  Students            : {stu_cnt}")
+        print(f"  Students            : {stu_cnt} (sample codes: {all_codes[:5]})")
         print(f"  Admissions          : {adm_cnt}")
         print(f"  Payments            : {pay_cnt}")
         print(f"  Payment Status Mix  : {dict(status_breakdown)}")

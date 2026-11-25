@@ -43,6 +43,7 @@ from app.modules.enquiries.router import create_enquiry_with_demos
 from app.modules.admissions.schemas import AdmissionResponse, RenewalsDueItemResponse
 from app.modules.payments.schemas import FinancialTransactionResponse
 from app.common.active_lines import today_kolkata, is_active_line, derive_student_status, compute_days_remaining, compute_days_remaining_for_periods
+from app.common.numbering import create_student_with_unique_code
 from app.common.teacher_scope import (
     is_teacher_user,
     resolve_teacher_for_user,
@@ -872,20 +873,10 @@ async def create_student(
                 detail="This phone number is already registered"
             )
 
-    # Auto-generate unique student code STU<Year><Count:04d>
-    year = req.registration_date.year
-    count = (await db.execute(select(func.count(Student.id)))).scalar() or 0
-    candidate_num = count + 1
-    while True:
-        candidate_code = f"STU{year}{candidate_num:04d}"
-        exists = (await db.execute(select(Student.id).where(Student.student_code == candidate_code).limit(1))).scalar_one_or_none()
-        if not exists:
-            code = candidate_code
-            break
-        candidate_num += 1
-
-    new_student = Student(
-        student_code=code,
+    # Auto-generate cryptographically random, unique student code STU<Year><6 random digits>
+    new_student = await create_student_with_unique_code(
+        db,
+        year=req.registration_date.year,
         name=req.name.strip(),
         mobile=norm_mob,
         father_name=req.father_name.strip() if req.father_name else None,
@@ -895,17 +886,8 @@ async def create_student(
         dob=req.dob,
         registration_date=req.registration_date,
         status=req.status,
-        notes=req.notes
+        notes=req.notes,
     )
-    db.add(new_student)
-    try:
-        await db.flush()
-    except IntegrityError:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="This phone number is already registered"
-        )
 
     audit = AuditLog(
         user_id=user.id,
