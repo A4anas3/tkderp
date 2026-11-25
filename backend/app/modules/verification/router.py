@@ -1,5 +1,6 @@
 from datetime import date, datetime, timezone
 import uuid
+from decimal import Decimal
 from typing import Optional, List, Tuple
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -472,7 +473,7 @@ async def get_public_id_card(
     Returns the student ID card data ONLY if that student has an active subject/enrolment.
     Accepts admission number or student ID (code or UUID for QR verify).
     If the student has no active subject, returns 404 with a clear message and leaks no student data.
-    Equipped with rate limiting and returns only non-sensitive card-visible attributes (no phone numbers or fee/payment data).
+    Equipped with rate limiting and returns only non-sensitive card-visible attributes (no phone numbers or fee/payment history; includes only total active due_balance).
     """
     target_ident = (identifier or admission_no or student_id or ident_param or "").strip()
     if not target_ident:
@@ -504,12 +505,25 @@ async def get_public_id_card(
             detail=PUBLIC_NOT_FOUND_DETAIL,
         )
 
+    # Total outstanding due across the student's active admissions (0 when nothing is due)
+    due_stmt = select(
+        func.coalesce(func.sum(Admission.balance_due), Decimal("0.00"))
+    ).where(
+        Admission.student_id == student.id,
+        Admission.status == "ACTIVE",
+        func.coalesce(Admission.access_status, "ACTIVE") == "ACTIVE",
+        func.coalesce(Admission.document_status, "VALID") == "VALID",
+    )
+    raw_due = (await db.execute(due_stmt)).scalar() or Decimal("0.00")
+    live_due_balance = max(Decimal("0.00"), Decimal(str(raw_due)))
+
     student_data = IDCardStudentData(
         name=student.name,
         student_code=student.student_code,
         admission_number=matched_adm_number or student.student_code,
         photo_url=student.photo_url,
         status=student.status,
+        due_balance=live_due_balance,
     )
 
     course_items = [
@@ -540,6 +554,7 @@ async def get_public_id_card(
         total_active_courses=len(course_items),
         active_demos=active_demos_list,
         total_active_demos=len(active_demos_list),
+        due_balance=live_due_balance,
         institute_name=inst["institute_name"],
         institute_tagline=inst["institute_tagline"],
         institute_address=inst["institute_address"],

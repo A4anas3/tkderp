@@ -160,6 +160,9 @@ export default function PublicIDCardPage() {
       ? `${institute.address}${institute?.phone ? ` • ${institute.phone}` : ''}`
       : 'Civil Lines, Thakurdwara (U.P.)');
 
+  const dueBalance = Number(cardData?.due_balance ?? cardData?.student?.due_balance);
+  const hasDueBalance = Number.isFinite(dueBalance) && dueBalance > 0;
+
   return (
     <div className="min-h-screen bg-slate-50 text-black font-sans py-6 px-3 sm:px-6 flex flex-col justify-between print:block print:min-h-0 print:bg-white print:p-0">
       <div className="max-w-2xl mx-auto w-full space-y-5 print:max-w-none print:space-y-0">
@@ -594,13 +597,15 @@ export default function PublicIDCardPage() {
                   )}
 
                   <div className="space-y-3.5 print:space-y-2 id-card-keep-together">
-                    {/* Live Due Balance (Small, unobtrusive text) */}
-                    <div className="text-[10px] text-slate-500 pt-1 border-t border-slate-200 flex items-center justify-between">
-                      <span>Account Dues:</span>
-                      <span className="font-mono font-semibold text-slate-700">
-                        Due Balance: ₹{Number(cardData.due_balance !== undefined ? cardData.due_balance : (cardData.student?.due_balance || 0)).toFixed(2)}
-                      </span>
-                    </div>
+                    {/* Live Due Balance (only shown when due > 0) */}
+                    {hasDueBalance && (
+                      <div className="text-[10px] text-slate-500 pt-1 border-t border-slate-200 flex items-center justify-between">
+                        <span>Account Dues:</span>
+                        <span className="font-mono font-semibold text-slate-700">
+                          Due Balance: ₹{dueBalance.toFixed(2)}
+                        </span>
+                      </div>
+                    )}
 
                     {/* Card Footer: Verification QR Code & Official Signatory */}
                     <div className="pt-2 border-t-2 border-black flex items-center justify-between gap-3">
