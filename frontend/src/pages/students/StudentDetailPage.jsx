@@ -493,7 +493,7 @@ export default function StudentDetailPage() {
   const handleViewReceipt = async (txn) => {
     if (txn.type === 'PAYMENT') {
       try {
-        const rcpt = await paymentApi.getReceipt(txn.id);
+        const rcpt = await paymentApi.getReceipt(txn.payment_id || txn.id);
         setReceiptToShow(rcpt);
       } catch (e) {
         error(e.message || 'Failed to fetch payment receipt');
@@ -504,9 +504,22 @@ export default function StudentDetailPage() {
         setSelectedAdmissionForSlips(adm || { id: txn.admission_id, admission_number: txn.admission_number });
         setAllSlipsModalOpen(true);
       }
+    } else if (txn.type === 'REVERSAL') {
+      if (txn.payment_id) {
+        try {
+          const rcpt = await paymentApi.getReceipt(txn.payment_id);
+          setReceiptToShow(rcpt);
+        } catch (e) {
+          error(e.message || 'Failed to fetch payment receipt');
+        }
+      } else if (txn.admission_id) {
+        const adm = admissions.find((a) => a.id === txn.admission_id);
+        setSelectedAdmissionForSlips(adm || { id: txn.admission_id, admission_number: txn.admission_number });
+        setAllSlipsModalOpen(true);
+      }
     } else {
       try {
-        const rcpt = await paymentApi.getRefundReceipt(txn.id);
+        const rcpt = await paymentApi.getRefundReceipt(txn.refund_id || txn.id);
         setRefundReceiptToShow(rcpt);
       } catch (e) {
         error(e.message || 'Failed to fetch refund receipt');

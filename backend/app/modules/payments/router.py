@@ -225,7 +225,8 @@ async def list_transactions(
                 admission_number=t.admission.admission_number if t.admission else None,
                 course_name=c_str,
                 fee_period=t.payment.fee_period if t.payment else None,
-                payment_id=t.payment_id
+                payment_id=t.payment_id,
+                refund_id=t.refund_id
             )
         )
 

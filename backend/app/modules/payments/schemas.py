@@ -153,6 +153,7 @@ class TransactionResponse(BaseModel):
     course_name: Optional[str] = None
     fee_period: Optional[str] = None
     payment_id: Optional[uuid.UUID] = None
+    refund_id: Optional[uuid.UUID] = None
 
     model_config = ConfigDict(from_attributes=True)
 
