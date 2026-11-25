@@ -40,7 +40,7 @@ export default function EnquiryDetailPage() {
   const navigate = useNavigate();
   const { success, error } = useToast();
   const { user, role, isAdmin, isCashier, isTeacher } = useAuth();
-  const canEdit = !isTeacher && (isAdmin || isCashier);
+  const canEdit = isAdmin;
 
   const [enquiry, setEnquiry] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -240,8 +240,8 @@ export default function EnquiryDetailPage() {
   if (!enquiry) {
     return (
       <div className="p-6 max-w-4xl mx-auto space-y-4">
-        <Button variant="secondary" icon={ArrowLeft} onClick={() => navigate(isTeacher ? '/demos' : '/enquiries')}>
-          Back to {isTeacher ? 'Demos' : 'Enquiries'}
+        <Button variant="secondary" icon={ArrowLeft} onClick={() => navigate(isAdmin ? '/enquiries' : '/demos')}>
+          Back to {isAdmin ? 'Enquiries' : 'Demos'}
         </Button>
         <div className="bg-white p-8 rounded-xl border border-slate-200 text-center">
           <p className="text-sm font-semibold text-rose-700">Enquiry record not found.</p>
@@ -291,9 +291,9 @@ export default function EnquiryDetailPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-start sm:items-center gap-2.5 min-w-0">
           <button
-            onClick={() => navigate(isTeacher ? '/demos' : '/enquiries')}
+            onClick={() => navigate(isAdmin ? '/enquiries' : '/demos')}
             className="p-2 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 transition-colors shadow-2xs cursor-pointer shrink-0 min-h-[38px] min-w-[38px] flex items-center justify-center"
-            title={isTeacher ? "Back to Demos" : "Back to Enquiries"}
+            title={isAdmin ? "Back to Enquiries" : "Back to Demos"}
           >
             <ArrowLeft className="w-4 h-4" />
           </button>

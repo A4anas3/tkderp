@@ -626,7 +626,7 @@ export default function DemosPage() {
             <div className="bg-amber-50/80 p-2.5 rounded-lg border border-amber-200/80 text-[11px] text-amber-900 flex items-center gap-2">
               <span className="font-semibold">Notice:</span>
               <span>
-                Teachers have read-only access to demo passes. Status changes and student conversions are handled by administrative staff.
+                {isTeacher ? 'Teachers have' : 'Staff have'} read-only access to demo passes here. Status changes and student conversions are handled by administrative staff.
               </span>
             </div>
 
@@ -664,7 +664,7 @@ export default function DemosPage() {
                     icon={ExternalLink}
                     onClick={() => {
                       setDetailItem(null);
-                      navigate(`/enquiries/${detailItem.enquiry_id}`);
+                      navigate(`/demos/${detailItem.enquiry_id}`);
                     }}
                     title="Open full enquiry record"
                   >

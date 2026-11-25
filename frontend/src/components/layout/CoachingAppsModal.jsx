@@ -160,7 +160,7 @@ export default function CoachingAppsModal({ isOpen, onClose }) {
       icon: LifeBuoy,
       route: '/demos',
       color: 'bg-amber-600',
-      roles: ['TEACHER'],
+      roles: ['CASHIER', 'TEACHER'],
     },
     {
       id: 'audit',

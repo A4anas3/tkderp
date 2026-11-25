@@ -200,11 +200,11 @@ export default function AppRoutes() {
           }
         />
 
-        {/* Demos (Admin & Teacher) */}
+        {/* Demos (Admin, Cashier & Teacher) */}
         <Route
           path="demos"
           element={
-            <ProtectedRoute allowedRoles={['ADMIN', 'TEACHER']}>
+            <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER', 'TEACHER']}>
               <DemosPage />
             </ProtectedRoute>
           }
@@ -212,7 +212,7 @@ export default function AppRoutes() {
         <Route
           path="demos/:id"
           element={
-            <ProtectedRoute allowedRoles={['ADMIN', 'TEACHER']}>
+            <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER', 'TEACHER']}>
               <EnquiryDetailPage />
             </ProtectedRoute>
           }
