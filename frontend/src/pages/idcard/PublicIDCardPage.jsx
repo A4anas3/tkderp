@@ -17,8 +17,8 @@ import {
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import axios from 'axios';
-import { formatDemoDates } from '../../utils/idCardHelpers';
-import { computeDaysRemaining } from '../../utils/dateCycleUtils';
+import { formatDemoDates, formatValidityPeriod } from '../../utils/idCardHelpers';
+import { computeDaysRemaining, computeDaysRemainingForPeriods, computeGapDays } from '../../utils/dateCycleUtils';
 import { useInstitute } from '../../context/InstituteContext';
 import InstituteLogo from '../../components/common/InstituteLogo';
 import VerifiedStamp from '../../components/common/VerifiedStamp';
@@ -471,7 +471,14 @@ export default function PublicIDCardPage() {
                         {cardData.active_courses
                           .filter((c) => !['CANCELLED', 'REVOKED', 'DISCONTINUED'].includes((c.status || 'ACTIVE').toUpperCase()))
                           .map((course, idx) => {
-                            const daysRem = computeDaysRemaining(course.valid_to, course.valid_from) ?? course.days_remaining;
+                            const periods =
+                              Array.isArray(course.validity_periods) && course.validity_periods.length > 0
+                                ? course.validity_periods
+                                : [{ valid_from: course.valid_from, valid_to: course.valid_to, validity_period: course.validity_period }];
+                            const daysRem =
+                              computeDaysRemainingForPeriods(periods) ??
+                              computeDaysRemaining(course.valid_to, course.valid_from) ??
+                              course.days_remaining;
                             return (
                           <div
                             key={idx}
@@ -506,16 +513,33 @@ export default function PublicIDCardPage() {
                               </div>
                             )}
 
-                            {/* Validity Period */}
-                            <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] pt-0.5 border-t border-slate-200">
-                              <span className="font-bold text-odoo-900 bg-purple-50 px-2 py-0.5 rounded border border-purple-200 inline-flex items-center gap-1">
-                                <Calendar className="w-3 h-3 text-odoo-700 shrink-0" />
-                                {course.validity_period}
-                              </span>
+                            {/* Validity Period(s) */}
+                            <div className="flex flex-wrap items-start justify-between gap-1 text-[11px] pt-0.5 border-t border-slate-200">
+                              <div className="flex flex-col gap-1">
+                                {periods.map((p, pIdx) => {
+                                  const gapDays =
+                                    pIdx > 0 ? computeGapDays(periods[pIdx - 1].valid_to, p.valid_from) : 0;
+                                  const label =
+                                    p.validity_period || formatValidityPeriod(p.valid_from, p.valid_to);
+                                  return (
+                                    <React.Fragment key={pIdx}>
+                                      {gapDays > 0 && (
+                                        <span className="text-[9px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200 self-start">
+                                          Gap: {gapDays}d inactive
+                                        </span>
+                                      )}
+                                      <span className="font-bold text-odoo-900 bg-purple-50 px-2 py-0.5 rounded border border-purple-200 inline-flex items-center gap-1">
+                                        <Calendar className="w-3 h-3 text-odoo-700 shrink-0" />
+                                        {label}
+                                      </span>
+                                    </React.Fragment>
+                                  );
+                                })}
+                              </div>
 
                               {daysRem !== null && daysRem !== undefined && (
                                 <span
-                                  className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
+                                  className={`text-[10px] font-bold px-1.5 py-0.2 rounded self-center ${
                                     daysRem <= 5
                                       ? 'bg-rose-100 text-rose-900 border border-rose-300'
                                       : 'bg-emerald-100 text-emerald-900 border border-emerald-200'

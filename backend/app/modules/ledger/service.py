@@ -20,6 +20,7 @@ from app.common.calculations import (
     calculate_admission_financials, calculate_course_duration_breakdown, calculate_course_duration_fee
 )
 from app.core.config import settings
+from app.common.active_lines import today_kolkata
 
 async def record_teacher_earning_for_allocation(
     db: AsyncSession,
@@ -1437,7 +1438,7 @@ async def renew_admission_items_service(
     if not target_item_ids:
         raise HTTPException(status_code=400, detail="At least one item must be provided for renewal.")
 
-    today = date.today()
+    today = today_kolkata()
     item_overrides = item_overrides or {}
     default_params = default_params or {}
 

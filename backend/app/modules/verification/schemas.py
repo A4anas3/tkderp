@@ -3,6 +3,16 @@ from typing import Optional, List
 from datetime import date, datetime
 from decimal import Decimal
 
+class CourseValidityPeriod(BaseModel):
+    valid_from: Optional[date] = None
+    valid_to: Optional[date] = None
+    validity_period: str
+    days_remaining: Optional[int] = None
+    status: str = "ACTIVE"
+    admission_number: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
 class VerificationCourseItem(BaseModel):
     course_name: str
     subject_name: Optional[str] = None
@@ -14,6 +24,7 @@ class VerificationCourseItem(BaseModel):
     valid_from: Optional[date] = None
     valid_to: Optional[date] = None
     validity_period: str
+    validity_periods: List[CourseValidityPeriod] = []
     days_remaining: Optional[int] = None
     status: str = "ACTIVE"
     admission_number: Optional[str] = None
@@ -68,6 +79,7 @@ class IDCardCourseItem(BaseModel):
     valid_from: Optional[date] = None
     valid_to: Optional[date] = None
     validity_period: str
+    validity_periods: List[CourseValidityPeriod] = []
     days_remaining: Optional[int] = None
     status: str = "ACTIVE"
     admission_number: Optional[str] = None

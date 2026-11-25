@@ -19,12 +19,13 @@ from app.modules.verification.schemas import (
     PublicVerificationResponse,
     StudentVerificationData,
     VerificationCourseItem,
+    CourseValidityPeriod,
     PublicIDCardResponse,
     IDCardStudentData,
     IDCardCourseItem,
     IDCardDemoItem,
 )
-from app.common.active_lines import today_kolkata, compute_days_remaining
+from app.common.active_lines import today_kolkata, compute_days_remaining, compute_days_remaining_for_periods
 from app.common.validators import normalize_mobile
 from app.core.rate_limit import RateLimiter
 
@@ -221,6 +222,16 @@ async def get_student_and_active_courses(
                     valid_from=v_from,
                     valid_to=v_to,
                     validity_period=format_period(v_from, v_to),
+                    validity_periods=[
+                        CourseValidityPeriod(
+                            valid_from=v_from,
+                            valid_to=v_to,
+                            validity_period=format_period(v_from, v_to),
+                            days_remaining=days_rem,
+                            status="ACTIVE",
+                            admission_number=adm.admission_number,
+                        )
+                    ],
                     days_remaining=days_rem,
                     status="ACTIVE",
                     admission_number=adm.admission_number
@@ -231,7 +242,7 @@ async def get_student_and_active_courses(
                 active_courses_dict[clean_key] = []
             active_courses_dict[clean_key].append((item, adm, raw_name))
 
-    # Consolidate chained active cycles for each subject
+    # Build active course entries with every active validity period preserved (no gap merging)
     active_courses_list: List[VerificationCourseItem] = []
     for clean_key, cycle_list in active_courses_dict.items():
         cycle_list.sort(key=lambda x: (x[0].valid_from or x[1].valid_from or x[1].admission_date or date.min))
@@ -242,8 +253,36 @@ async def get_student_and_active_courses(
         valid_tos = [x[0].valid_to or x[1].valid_to for x in cycle_list if (x[0].valid_to or x[1].valid_to)]
         latest_end = max(valid_tos) if valid_tos else None
 
+        periods_list: List[CourseValidityPeriod] = []
+        period_pairs = []
+        for c_itm, c_adm, _ in cycle_list:
+            c_from = c_itm.valid_from or c_adm.valid_from
+            c_to = c_itm.valid_to or c_adm.valid_to
+            period_pairs.append((c_from, c_to))
+            periods_list.append(
+                CourseValidityPeriod(
+                    valid_from=c_from,
+                    valid_to=c_to,
+                    validity_period=format_period(c_from, c_to),
+                    days_remaining=compute_days_remaining(c_to, c_from, today),
+                    status="ACTIVE",
+                    admission_number=c_adm.admission_number,
+                )
+            )
+
         latest_item, latest_adm, raw_name = cycle_list[-1]
-        days_rem = compute_days_remaining(latest_end, earliest_start, today)
+        days_rem = compute_days_remaining_for_periods(period_pairs, today)
+
+        if len(periods_list) == 1:
+            combined_period_str = periods_list[0].validity_period
+        else:
+            period_parts = [
+                f"{p.valid_from.strftime('%d %b %Y')} to {p.valid_to.strftime('%d %b %Y')}"
+                if (p.valid_from and p.valid_to)
+                else p.validity_period.replace("Valid: ", "")
+                for p in periods_list
+            ]
+            combined_period_str = "Valid: " + " | ".join(period_parts)
 
         b_name = batch_names.get(latest_item.batch_id) if latest_item.batch_id else None
         sub = subjects_map.get(latest_item.subject_id) or (subjects_by_name.get(raw_name.lower().strip()) if raw_name else None)
@@ -263,7 +302,8 @@ async def get_student_and_active_courses(
                 timing=class_sched,
                 valid_from=earliest_start,
                 valid_to=latest_end,
-                validity_period=format_period(earliest_start, latest_end),
+                validity_period=combined_period_str,
+                validity_periods=periods_list,
                 days_remaining=days_rem,
                 status="ACTIVE",
                 admission_number=latest_adm.admission_number
@@ -537,6 +577,7 @@ async def get_public_id_card(
             valid_from=c.valid_from,
             valid_to=c.valid_to,
             validity_period=c.validity_period,
+            validity_periods=c.validity_periods,
             days_remaining=c.days_remaining,
             status=c.status,
             admission_number=c.admission_number,

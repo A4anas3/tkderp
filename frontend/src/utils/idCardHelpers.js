@@ -1,7 +1,7 @@
 /**
  * Helpers for Student ID Card formatting, validity calculations, and WhatsApp sharing.
  */
-import { computeDaysRemaining, parseLocalDate } from './dateCycleUtils';
+import { computeDaysRemaining, computeDaysRemainingForPeriods, parseLocalDate } from './dateCycleUtils';
 
 export function formatDateShort(dateVal) {
   if (!dateVal) return '';
@@ -64,6 +64,29 @@ function isActiveEnrollmentItem(item) {
   return true;
 }
 
+function normalizeValidityPeriods(subj) {
+  if (Array.isArray(subj?.validity_periods) && subj.validity_periods.length > 0) {
+    return subj.validity_periods.map((p) => ({
+      valid_from: p.valid_from,
+      valid_to: p.valid_to,
+      validity_period: p.validity_period || formatValidityPeriod(p.valid_from, p.valid_to),
+      days_remaining: computeDaysRemaining(p.valid_to, p.valid_from) ?? p.days_remaining,
+      admission_number: p.admission_number || subj.admission_number,
+      status: p.status || subj.status || 'ACTIVE',
+    }));
+  }
+  return [
+    {
+      valid_from: subj.valid_from,
+      valid_to: subj.valid_to,
+      validity_period: formatValidityPeriod(subj.valid_from, subj.valid_to),
+      days_remaining: computeDaysRemaining(subj.valid_to, subj.valid_from) ?? subj.days_remaining ?? subj.days_left,
+      admission_number: subj.admission_number || subj.slip_number,
+      status: subj.status || 'ACTIVE',
+    },
+  ];
+}
+
 export function extractActiveCourses(student, enrollmentData) {
   const courses = [];
 
@@ -71,7 +94,8 @@ export function extractActiveCourses(student, enrollmentData) {
   if (enrollmentData) {
     if (enrollmentData.active_green_card && isActiveEnrollmentItem(enrollmentData.active_green_card)) {
       const gc = enrollmentData.active_green_card;
-      const computedDays = computeDaysRemaining(gc.valid_to, gc.valid_from);
+      const gcPeriods = normalizeValidityPeriods(gc);
+      const computedDays = computeDaysRemainingForPeriods(gcPeriods);
       courses.push({
         id: gc.id || 'green-card',
         course_name: gc.subject_name || 'Green Card — All Access Annual Pass',
@@ -83,6 +107,7 @@ export function extractActiveCourses(student, enrollmentData) {
         valid_from: gc.valid_from,
         valid_to: gc.valid_to,
         validity_text: formatValidityPeriod(gc.valid_from, gc.valid_to),
+        validity_periods: gcPeriods,
         days_remaining: computedDays !== null ? computedDays : gc.days_remaining,
         admission_number: gc.admission_number,
         item_type: 'GREEN_CARD',
@@ -91,7 +116,8 @@ export function extractActiveCourses(student, enrollmentData) {
 
     if (Array.isArray(enrollmentData.active_subjects)) {
       enrollmentData.active_subjects.filter(isActiveEnrollmentItem).forEach((subj) => {
-        const computedDays = computeDaysRemaining(subj.valid_to, subj.valid_from);
+        const periods = normalizeValidityPeriods(subj);
+        const computedDays = computeDaysRemainingForPeriods(periods);
         courses.push({
           id: subj.id,
           course_name: subj.subject_name,
@@ -103,6 +129,7 @@ export function extractActiveCourses(student, enrollmentData) {
           valid_from: subj.valid_from,
           valid_to: subj.valid_to,
           validity_text: formatValidityPeriod(subj.valid_from, subj.valid_to),
+          validity_periods: periods,
           days_remaining: computedDays !== null ? computedDays : subj.days_remaining,
           admission_number: subj.admission_number,
           item_type: subj.item_type || 'SUBJECT',
@@ -113,22 +140,44 @@ export function extractActiveCourses(student, enrollmentData) {
 
   // Fallback to student.active if enrollmentData yielded nothing
   if (courses.length === 0 && student && Array.isArray(student.active)) {
+    const grouped = new Map();
     student.active.filter(isActiveEnrollmentItem).forEach((line) => {
-      const computedDays = computeDaysRemaining(line.valid_to, line.valid_from);
-      courses.push({
-        id: line.id,
-        course_name: line.subject_name,
-        subject_name: line.subject_name,
-        teacher_name: line.teacher_name || null,
-        hall_number: line.hall_number || null,
-        schedule: line.schedule || line.timing || null,
-        timing: line.timing || line.schedule || null,
+      const key = line.item_type === 'GREEN_CARD'
+        ? `gc:${line.id}`
+        : (line.subject_id || (line.subject_name || '').trim().toLowerCase() || line.id);
+      if (!grouped.has(key)) {
+        grouped.set(key, []);
+      }
+      grouped.get(key).push(line);
+    });
+
+    grouped.forEach((lines) => {
+      lines.sort((a, b) => String(a.valid_from || '').localeCompare(String(b.valid_from || '')));
+      const latest = lines[lines.length - 1];
+      const periods = lines.map((line) => ({
         valid_from: line.valid_from,
         valid_to: line.valid_to,
-        validity_text: formatValidityPeriod(line.valid_from, line.valid_to),
-        days_remaining: computedDays !== null ? computedDays : line.days_left,
+        validity_period: formatValidityPeriod(line.valid_from, line.valid_to),
+        days_remaining: computeDaysRemaining(line.valid_to, line.valid_from) ?? line.days_left,
         admission_number: line.slip_number,
-        item_type: line.item_type || 'SUBJECT',
+        status: line.status || 'ACTIVE',
+      }));
+      const computedDays = computeDaysRemainingForPeriods(periods);
+      courses.push({
+        id: latest.id,
+        course_name: latest.subject_name,
+        subject_name: latest.subject_name,
+        teacher_name: latest.teacher_name || null,
+        hall_number: latest.hall_number || null,
+        schedule: latest.schedule || latest.timing || null,
+        timing: latest.timing || latest.schedule || null,
+        valid_from: lines[0].valid_from,
+        valid_to: latest.valid_to,
+        validity_text: formatValidityPeriod(lines[0].valid_from, latest.valid_to),
+        validity_periods: periods,
+        days_remaining: computedDays !== null ? computedDays : latest.days_left,
+        admission_number: latest.slip_number,
+        item_type: latest.item_type || 'SUBJECT',
       });
     });
   }
@@ -227,8 +276,11 @@ export function buildWhatsAppShareUrl({ student, admissionNo, activeCourses, act
   msg += `*Enrolled Active Courses & Validity:*\n`;
   if (activeCourses && activeCourses.length > 0) {
     activeCourses.forEach((c, idx) => {
-      const period = formatValidityPeriod(c.valid_from, c.valid_to);
-      msg += `${idx + 1}. *${c.course_name}*\n   ${period}\n`;
+      const periods = Array.isArray(c.validity_periods) && c.validity_periods.length > 0
+        ? c.validity_periods
+        : [{ valid_from: c.valid_from, valid_to: c.valid_to }];
+      const periodLines = periods.map((p) => formatValidityPeriod(p.valid_from, p.valid_to)).join('\n   ');
+      msg += `${idx + 1}. *${c.course_name}*\n   ${periodLines}\n`;
     });
   } else {
     msg += `• No active courses currently.\n`;

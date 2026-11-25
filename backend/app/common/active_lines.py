@@ -1,6 +1,6 @@
 import zoneinfo
-from datetime import date, datetime
-from typing import Optional, Any, List
+from datetime import date, datetime, timedelta
+from typing import Optional, Any, List, Sequence, Tuple
 
 def today_kolkata() -> date:
     tz = zoneinfo.ZoneInfo("Asia/Kolkata")
@@ -20,6 +20,57 @@ def compute_days_remaining(
     t = today or today_kolkata()
     effective_start = max(t, valid_from) if valid_from is not None else t
     return (valid_to - effective_start).days
+
+
+def compute_days_remaining_for_periods(
+    periods: Sequence[Tuple[Optional[date], Optional[date]]],
+    today: Optional[date] = None,
+) -> Optional[int]:
+    """
+    Compute remaining active days across one or more (valid_from, valid_to) validity periods.
+    Only days actually covered by a validity period from `today` onward are counted;
+    gap days between disjoint periods (and days before a future valid_from) are excluded.
+    Contiguous or overlapping periods (next_start <= prev_end + 1 day) merge seamlessly
+    so a single/contiguous span matches compute_days_remaining(latest_end, earliest_start, today).
+    """
+    if not periods:
+        return None
+    if any(v_to is None for _, v_to in periods):
+        return None
+
+    t = today or today_kolkata()
+
+    # Keep only periods that haven't already ended before today
+    non_expired = [(v_from, v_to) for v_from, v_to in periods if v_to is not None and v_to >= t]
+    if not non_expired:
+        # All periods are expired: match single-interval negative days behavior
+        latest_end = max(v_to for _, v_to in periods if v_to is not None)
+        starts = [v_from for v_from, _ in periods if v_from is not None]
+        earliest_start = min(starts) if starts else None
+        return compute_days_remaining(latest_end, earliest_start, t)
+
+    intervals: List[Tuple[date, date]] = []
+    for v_from, v_to in non_expired:
+        eff_start = max(t, v_from) if v_from is not None else t
+        if eff_start <= v_to:
+            intervals.append((eff_start, v_to))
+
+    if not intervals:
+        return 0
+
+    intervals.sort(key=lambda pair: (pair[0], pair[1]))
+
+    merged: List[List[date]] = [[intervals[0][0], intervals[0][1]]]
+    for s, e in intervals[1:]:
+        prev_e = merged[-1][1]
+        if s <= prev_e + timedelta(days=1):
+            if e > prev_e:
+                merged[-1][1] = e
+        else:
+            merged.append([s, e])
+
+    covered_days = sum((e - s).days + 1 for s, e in merged)
+    return max(0, covered_days - 1)
 
 def is_active_line(item: Any, today: Optional[date] = None) -> bool:
     """

@@ -4,7 +4,7 @@ import Button from '../common/Button';
 import { RefreshCw, CalendarDays, CreditCard, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { admissionApi, teacherApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
-import { computeRollingCycle, formatIndianDate } from '../../utils/dateCycleUtils';
+import { computeRollingCycle, formatIndianDate, computeGapDays } from '../../utils/dateCycleUtils';
 
 export default function RenewSubjectModal({
   isOpen,
@@ -190,6 +190,7 @@ export default function RenewSubjectModal({
       fetchBackendCalculation({
         newFrom,
         newTo: validTo,
+        newFee: null,
         updateFeeState: true,
         currentPayOption: paymentOption,
       });
@@ -204,6 +205,7 @@ export default function RenewSubjectModal({
       fetchBackendCalculation({
         newFrom: validFrom,
         newTo,
+        newFee: null,
         updateFeeState: true,
         currentPayOption: paymentOption,
       });
@@ -322,12 +324,20 @@ export default function RenewSubjectModal({
               {student?.name} ({student?.student_code})
             </span>
           </div>
-          {item.valid_to && (
-            <p className="text-slate-600 text-[11px] pt-0.5">
-              Previous Cycle Ended: <strong className="text-black font-mono">{formatIndianDate(item.valid_to)}</strong>
-              {' '}• Suggested renewal starts next day (<strong className="text-emerald-800 font-mono">{formatIndianDate(validFrom)}</strong>)
-            </p>
-          )}
+          {item.valid_to && (() => {
+            const gapDays = computeGapDays(item.valid_to, validFrom);
+            return (
+              <p className="text-slate-600 text-[11px] pt-0.5">
+                Previous Cycle Ended: <strong className="text-black font-mono">{formatIndianDate(item.valid_to)}</strong>
+                {' '}• Renewal starts: <strong className="text-emerald-800 font-mono">{formatIndianDate(validFrom)}</strong>
+                {gapDays > 0 && (
+                  <span className="ml-1.5 inline-block text-amber-800 font-bold bg-amber-100 px-1.5 py-0.2 rounded border border-amber-300">
+                    {gapDays}d gap (not counted as active)
+                  </span>
+                )}
+              </p>
+            );
+          })()}
         </div>
 
         {/* Teacher Assignment */}

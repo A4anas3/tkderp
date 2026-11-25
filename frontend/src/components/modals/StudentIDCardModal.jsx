@@ -16,6 +16,7 @@ import {
   formatValidityPeriod,
   formatDemoDates,
 } from '../../utils/idCardHelpers';
+import { computeGapDays } from '../../utils/dateCycleUtils';
 
 // Official WhatsApp icon
 function WhatsAppIcon({ className = 'w-4 h-4' }) {
@@ -301,25 +302,48 @@ export default function StudentIDCardModal({
                           </div>
                         )}
 
-                        {/* Validity Period */}
-                        <div className="flex flex-wrap items-center justify-between gap-1 text-[11px]">
-                          <span className="font-bold text-odoo-900 bg-purple-50 px-2 py-0.5 rounded border border-purple-200 inline-flex items-center gap-1">
-                            <Calendar className="w-3 h-3 text-odoo-700 shrink-0" />
-                            {formatValidityPeriod(course.valid_from, course.valid_to)}
-                          </span>
+                        {/* Validity Period(s) */}
+                        {(() => {
+                          const periods =
+                            Array.isArray(course.validity_periods) && course.validity_periods.length > 0
+                              ? course.validity_periods
+                              : [{ valid_from: course.valid_from, valid_to: course.valid_to }];
+                          return (
+                            <div className="flex flex-wrap items-start justify-between gap-1 text-[11px]">
+                              <div className="flex flex-col gap-1">
+                                {periods.map((p, pIdx) => {
+                                  const gapDays =
+                                    pIdx > 0 ? computeGapDays(periods[pIdx - 1].valid_to, p.valid_from) : 0;
+                                  return (
+                                    <React.Fragment key={pIdx}>
+                                      {gapDays > 0 && (
+                                        <span className="text-[9px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200 self-start">
+                                          Gap: {gapDays}d inactive
+                                        </span>
+                                      )}
+                                      <span className="font-bold text-odoo-900 bg-purple-50 px-2 py-0.5 rounded border border-purple-200 inline-flex items-center gap-1">
+                                        <Calendar className="w-3 h-3 text-odoo-700 shrink-0" />
+                                        {formatValidityPeriod(p.valid_from, p.valid_to)}
+                                      </span>
+                                    </React.Fragment>
+                                  );
+                                })}
+                              </div>
 
-                          {course.days_remaining !== null && course.days_remaining !== undefined && (
-                            <span
-                              className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
-                                course.days_remaining <= 5
-                                  ? 'bg-rose-100 text-rose-900 border border-rose-300'
-                                  : 'bg-slate-200 text-slate-900'
-                              }`}
-                            >
-                              {course.days_remaining}d remaining
-                            </span>
-                          )}
-                        </div>
+                              {course.days_remaining !== null && course.days_remaining !== undefined && (
+                                <span
+                                  className={`text-[10px] font-bold px-1.5 py-0.2 rounded self-center ${
+                                    course.days_remaining <= 5
+                                      ? 'bg-rose-100 text-rose-900 border border-rose-300'
+                                      : 'bg-slate-200 text-slate-900'
+                                  }`}
+                                >
+                                  {course.days_remaining}d remaining
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     ))}
                   </div>

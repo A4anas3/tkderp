@@ -39,7 +39,7 @@ import {
 import { useToast } from '../../context/ToastContext';
 import QuickStudentModal from '../../components/modals/QuickStudentModal';
 import AdmissionReceiptModal from '../../components/receipts/AdmissionReceiptModal';
-import { computeRollingCycle, formatValidityDuration, computeDaysRemaining } from '../../utils/dateCycleUtils';
+import { computeRollingCycle, formatValidityDuration, computeDaysRemaining, computeDaysRemainingForPeriods } from '../../utils/dateCycleUtils';
 import { cleanMobileInput } from '../../utils/phoneUtils';
 
 export default function NewAdmissionPage() {
@@ -1191,7 +1191,7 @@ export default function NewAdmissionPage() {
                       {activeEnrollment.active_subjects
                         .filter((sub) => (sub.status || 'ACTIVE').toUpperCase() === 'ACTIVE')
                         .map((sub) => {
-                          const daysLeft = computeDaysRemaining(sub.valid_to, sub.valid_from) ?? sub.days_remaining;
+                          const daysLeft = (sub.validity_periods?.length ? computeDaysRemainingForPeriods(sub.validity_periods) : null) ?? computeDaysRemaining(sub.valid_to, sub.valid_from) ?? sub.days_remaining;
                           return (
                         <div key={sub.id} className="p-2 bg-white border border-purple-100 rounded-md flex items-center justify-between text-[11px]">
                           <div>

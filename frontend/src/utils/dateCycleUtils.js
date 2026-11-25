@@ -102,6 +102,75 @@ export function computeDaysRemaining(validToStr, validFromStr = null) {
   return Math.round(diffTime / (1000 * 60 * 60 * 24));
 }
 
+/**
+ * Compute remaining active days across an array of { valid_from, valid_to } periods.
+ * Only days actually covered by a validity period from today onward are counted;
+ * gap days between disjoint periods (and days before a future start) are excluded.
+ */
+export function computeDaysRemainingForPeriods(periods) {
+  if (!Array.isArray(periods) || periods.length === 0) return null;
+  const parsed = periods.map((p) => ({
+    start: parseLocalDate(p?.valid_from),
+    end: parseLocalDate(p?.valid_to),
+  }));
+  if (parsed.some((p) => !p.end)) return null;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const ONE_DAY_MS = 1000 * 60 * 60 * 24;
+
+  const nonExpired = parsed.filter((p) => p.end.getTime() >= today.getTime());
+  if (nonExpired.length === 0) {
+    const maxEnd = new Date(Math.max(...parsed.map((p) => p.end.getTime())));
+    const starts = parsed.map((p) => p.start).filter(Boolean);
+    const minStart = starts.length ? new Date(Math.min(...starts.map((s) => s.getTime()))) : null;
+    const refDate = minStart && minStart > today ? minStart : today;
+    return Math.round((maxEnd.getTime() - refDate.getTime()) / ONE_DAY_MS);
+  }
+
+  const intervals = nonExpired
+    .map((p) => {
+      const effStart = p.start && p.start > today ? p.start : today;
+      return { start: effStart, end: p.end };
+    })
+    .filter((iv) => iv.start.getTime() <= iv.end.getTime())
+    .sort((a, b) => a.start.getTime() - b.start.getTime() || a.end.getTime() - b.end.getTime());
+
+  if (intervals.length === 0) return 0;
+
+  const merged = [{ start: intervals[0].start, end: intervals[0].end }];
+  for (let i = 1; i < intervals.length; i += 1) {
+    const curr = intervals[i];
+    const prev = merged[merged.length - 1];
+    if (curr.start.getTime() <= prev.end.getTime() + ONE_DAY_MS) {
+      if (curr.end.getTime() > prev.end.getTime()) {
+        prev.end = curr.end;
+      }
+    } else {
+      merged.push({ start: curr.start, end: curr.end });
+    }
+  }
+
+  let coveredDays = 0;
+  for (const iv of merged) {
+    coveredDays += Math.round((iv.end.getTime() - iv.start.getTime()) / ONE_DAY_MS) + 1;
+  }
+  return Math.max(0, coveredDays - 1);
+}
+
+/**
+ * Returns the number of uncovered gap days strictly between prevValidTo and nextValidFrom.
+ * Returns 0 if contiguous or overlapping.
+ */
+export function computeGapDays(prevValidTo, nextValidFrom) {
+  const prevEnd = parseLocalDate(prevValidTo);
+  const nextStart = parseLocalDate(nextValidFrom);
+  if (!prevEnd || !nextStart) return 0;
+  const ONE_DAY_MS = 1000 * 60 * 60 * 24;
+  const diffDays = Math.round((nextStart.getTime() - prevEnd.getTime()) / ONE_DAY_MS);
+  return diffDays > 1 ? diffDays - 1 : 0;
+}
+
 export function evaluateCycleStatus(endDateStr, balanceDue = 0, isCancelledOrRevoked = false, startDateStr = null) {
   if (isCancelledOrRevoked) {
     return {

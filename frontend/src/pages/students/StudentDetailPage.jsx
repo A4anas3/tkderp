@@ -68,7 +68,7 @@ import WaiveDueModal from '../../components/modals/WaiveDueModal';
 import StudentIDCardModal from '../../components/modals/StudentIDCardModal';
 import GiveDemoModal from '../../components/modals/GiveDemoModal';
 import DemoPassModal from '../../components/modals/DemoPassModal';
-import { getCleanCancelReason, formatIndianDate, computeDaysRemaining } from '../../utils/dateCycleUtils';
+import { getCleanCancelReason, formatIndianDate, computeDaysRemaining, computeDaysRemainingForPeriods, computeGapDays } from '../../utils/dateCycleUtils';
 
 function getValidityStatus(adm) {
   if (adm.status === 'SUSPENDED') {
@@ -1373,7 +1373,13 @@ export default function StudentDetailPage() {
             {/* Mobile Cards (Phone View) */}
             <div className="block sm:hidden space-y-1.5">
               {activeSubjects.map((item) => {
-                const daysRem = computeDaysRemaining(item.valid_to, item.valid_from) ?? item.days_remaining;
+                const periods = Array.isArray(item.validity_periods) && item.validity_periods.length > 0
+                  ? item.validity_periods
+                  : [{ valid_from: item.valid_from, valid_to: item.valid_to, item_id: item.id }];
+                const daysRem = (item.validity_periods?.length ? computeDaysRemainingForPeriods(periods) : null)
+                  ?? computeDaysRemaining(item.valid_to, item.valid_from)
+                  ?? item.days_remaining;
+                const latestOwnPeriod = periods.find((p) => p.item_id === item.id) || periods[periods.length - 1];
                 return (
                 <div key={item.id} className="bg-slate-50/80 border border-purple-200 rounded-lg p-2 space-y-1.5">
                   <div className="flex items-start justify-between gap-1.5">
@@ -1413,8 +1419,20 @@ export default function StudentDetailPage() {
 
                     <div>
                       <span className="text-[10px] text-slate-700 font-semibold block uppercase">Validity</span>
-                      <div className="font-mono text-black font-semibold text-[11px]">
-                        {item.valid_from} → {item.valid_to}
+                      <div className="font-mono text-black font-semibold text-[11px] space-y-0.5">
+                        {periods.map((p, pIdx) => {
+                          const gapDays = pIdx > 0 ? computeGapDays(periods[pIdx - 1].valid_to, p.valid_from) : 0;
+                          return (
+                            <React.Fragment key={p.item_id || pIdx}>
+                              {gapDays > 0 && (
+                                <div className="text-[9px] font-sans font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded px-1 py-0.2 inline-block">
+                                  Gap: {gapDays}d inactive
+                                </div>
+                              )}
+                              <div>{p.valid_from} → {p.valid_to}</div>
+                            </React.Fragment>
+                          );
+                        })}
                       </div>
                       {daysRem !== null && daysRem !== undefined && !['CANCELLED', 'REVOKED', 'DISCONTINUED'].includes(item.status) && (
                         <span className={`inline-block mt-0.5 px-1.5 py-0.2 rounded font-bold text-[10px] ${
@@ -1487,7 +1505,11 @@ export default function StudentDetailPage() {
                       variant="indigo"
                       icon={Calendar}
                       onClick={() => {
-                        setSelectedItemForValidity(item);
+                        setSelectedItemForValidity(
+                          latestOwnPeriod
+                            ? { ...item, valid_from: latestOwnPeriod.valid_from, valid_to: latestOwnPeriod.valid_to }
+                            : item
+                        );
                         setValidityModalOpen(true);
                       }}
                       className="flex-1 justify-center"
@@ -1529,7 +1551,13 @@ export default function StudentDetailPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
                   {activeSubjects.map((item) => {
-                    const daysRem = computeDaysRemaining(item.valid_to, item.valid_from) ?? item.days_remaining;
+                    const periods = Array.isArray(item.validity_periods) && item.validity_periods.length > 0
+                      ? item.validity_periods
+                      : [{ valid_from: item.valid_from, valid_to: item.valid_to, item_id: item.id }];
+                    const daysRem = (item.validity_periods?.length ? computeDaysRemainingForPeriods(periods) : null)
+                      ?? computeDaysRemaining(item.valid_to, item.valid_from)
+                      ?? item.days_remaining;
+                    const latestOwnPeriod = periods.find((p) => p.item_id === item.id) || periods[periods.length - 1];
                     return (
                     <tr key={item.id} className="hover:bg-purple-50/30 transition">
                       <td className="py-2.5 px-3">
@@ -1562,8 +1590,22 @@ export default function StudentDetailPage() {
                         )}
                       </td>
                       <td className="py-2.5 px-3">
-                        <div className="font-mono text-slate-900 font-bold">
-                          {item.valid_from} → {item.valid_to}
+                        <div className="font-mono text-slate-900 font-bold space-y-0.5">
+                          {periods.map((p, pIdx) => {
+                            const gapDays = pIdx > 0 ? computeGapDays(periods[pIdx - 1].valid_to, p.valid_from) : 0;
+                            return (
+                              <React.Fragment key={p.item_id || pIdx}>
+                                {gapDays > 0 && (
+                                  <div>
+                                    <span className="text-[9px] font-sans font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.2 inline-block">
+                                      Gap: {gapDays}d inactive
+                                    </span>
+                                  </div>
+                                )}
+                                <div>{p.valid_from} → {p.valid_to}</div>
+                              </React.Fragment>
+                            );
+                          })}
                         </div>
                         <div className="text-[10px] mt-0.5">
                           {daysRem !== null && daysRem !== undefined && !['CANCELLED', 'REVOKED', 'DISCONTINUED'].includes(item.status) ? (
@@ -1632,7 +1674,11 @@ export default function StudentDetailPage() {
                             variant="indigo"
                             icon={Calendar}
                             onClick={() => {
-                              setSelectedItemForValidity(item);
+                              setSelectedItemForValidity(
+                                latestOwnPeriod
+                                  ? { ...item, valid_from: latestOwnPeriod.valid_from, valid_to: latestOwnPeriod.valid_to }
+                                  : item
+                              );
                               setValidityModalOpen(true);
                             }}
                             title="Adjust Validity Dates"

@@ -42,7 +42,7 @@ from app.modules.enquiries.schemas import EnquiryResponse, EnquiryDemoItemCreate
 from app.modules.enquiries.router import create_enquiry_with_demos
 from app.modules.admissions.schemas import AdmissionResponse, RenewalsDueItemResponse
 from app.modules.payments.schemas import FinancialTransactionResponse
-from app.common.active_lines import today_kolkata, is_active_line, derive_student_status, compute_days_remaining
+from app.common.active_lines import today_kolkata, is_active_line, derive_student_status, compute_days_remaining, compute_days_remaining_for_periods
 from app.common.teacher_scope import (
     is_teacher_user,
     resolve_teacher_for_user,
@@ -1657,14 +1657,28 @@ async def get_student_active_enrollment(
         # Most recent cycle provides assigned teacher, hall, and admission reference
         latest_item, latest_adm, latest_dict = cycle_list[-1]
 
+        validity_periods = []
+        period_pairs = []
+        for c_itm, c_adm, c_dict in cycle_list:
+            c_from = c_itm.valid_from or c_adm.valid_from
+            c_to = c_itm.valid_to or c_adm.valid_to
+            period_pairs.append((c_from, c_to))
+            validity_periods.append({
+                "item_id": str(c_itm.id),
+                "admission_id": str(c_adm.id),
+                "admission_number": c_adm.admission_number,
+                "valid_from": c_from.isoformat() if c_from else None,
+                "valid_to": c_to.isoformat() if c_to else None,
+                "days_remaining": compute_days_remaining(c_to, c_from, today) if c_to else None,
+                "status": c_dict["status"],
+            })
+
         total_original = sum(Decimal(str(x[0].original_price)) for x in cycle_list)
         total_net = sum(Decimal(str(x[0].net_price)) for x in cycle_list)
         total_paid = sum(Decimal(str(x[0].amount_collected)) for x in cycle_list)
         total_due = sum(Decimal(str(x[0].balance_due)) for x in cycle_list)
 
-        days_remaining = None
-        if latest_end:
-            days_remaining = compute_days_remaining(latest_end, earliest_start, today)
+        days_remaining = compute_days_remaining_for_periods(period_pairs, today)
 
         source_demo_no = next(
             (x[0].source_demo_number for x in cycle_list if x[0].source_demo_number),
@@ -1685,6 +1699,7 @@ async def get_student_active_enrollment(
             "timing": latest_dict.get("timing"),
             "valid_from": earliest_start.isoformat() if earliest_start else latest_dict["valid_from"],
             "valid_to": latest_end.isoformat() if latest_end else latest_dict["valid_to"],
+            "validity_periods": validity_periods,
             "original_price": 0.0 if teacher_mode else float(total_original),
             "net_price": 0.0 if teacher_mode else float(total_net),
             "amount_collected": 0.0 if teacher_mode else float(total_paid),
