@@ -1448,7 +1448,7 @@ async def update_demo_item_status(
     demo_item_id: uuid.UUID,
     payload: EnquiryDemoItemStatusUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_cashier_or_admin)
+    current_user: User = Depends(require_admin)
 ):
     """Update status of individual subject demo item (e.g. ATTENDED, DROPPED with reason)."""
     d_res = await db.execute(select(EnquiryDemoItem).where(EnquiryDemoItem.id == demo_item_id))

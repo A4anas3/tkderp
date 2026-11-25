@@ -45,6 +45,7 @@ import QuickPaymentModal from '../../components/modals/QuickPaymentModal';
 import PaymentReceiptModal from '../../components/receipts/PaymentReceiptModal';
 import { teacherApi, expenseApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 import { formatIndianDate } from '../../utils/dateCycleUtils';
 import { cleanMobileInput } from '../../utils/phoneUtils';
 import { compressImage } from '../../utils/imageCompressor';
@@ -56,6 +57,7 @@ export default function TeacherDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { success, error } = useToast();
+  const { isAdmin } = useAuth();
 
   // 1. Core Profile State
   const [teacher, setTeacher] = useState(null);
@@ -326,8 +328,9 @@ export default function TeacherDetailPage() {
     loadRoster();
   }, [rosterPage, debouncedSearch, statusFilter, subjectFilter, loadRoster]);
 
-  // Mobile check during edit
+  // Mobile check during edit (admin-only; endpoint requires ADMIN)
   useEffect(() => {
+    if (!isAdmin || !editModalOpen) return;
     const cleanMob = cleanMobileInput(formData.mobile);
     if (cleanMob.length === 10) {
       let isCurrent = true;
@@ -350,7 +353,7 @@ export default function TeacherDetailPage() {
     } else {
       setExistingTeacherWithMobile(null);
     }
-  }, [formData.mobile, id]);
+  }, [formData.mobile, id, isAdmin, editModalOpen]);
 
   const handlePhotoSelect = async (e) => {
     const file = e.target.files?.[0];
@@ -492,27 +495,31 @@ export default function TeacherDetailPage() {
             <span>Refresh</span>
           </button>
 
-          <Button
-            size="sm"
-            variant={isActive ? 'danger-soft' : 'success-soft'}
-            icon={isActive ? UserX : UserCheck}
-            onClick={() => {
-              setStatusReason('');
-              setStatusModalOpen(true);
-            }}
-            title={isActive ? 'Deactivate Faculty' : 'Activate Faculty'}
-          >
-            {isActive ? 'Deactivate' : 'Activate'}
-          </Button>
+          {isAdmin && (
+            <>
+              <Button
+                size="sm"
+                variant={isActive ? 'danger-soft' : 'success-soft'}
+                icon={isActive ? UserX : UserCheck}
+                onClick={() => {
+                  setStatusReason('');
+                  setStatusModalOpen(true);
+                }}
+                title={isActive ? 'Deactivate Faculty' : 'Activate Faculty'}
+              >
+                {isActive ? 'Deactivate' : 'Activate'}
+              </Button>
 
-          <Button
-            variant="amber"
-            icon={Edit2}
-            onClick={() => setEditModalOpen(true)}
-            size="sm"
-          >
-            Edit Profile
-          </Button>
+              <Button
+                variant="amber"
+                icon={Edit2}
+                onClick={() => setEditModalOpen(true)}
+                size="sm"
+              >
+                Edit Profile
+              </Button>
+            </>
+          )}
         </div>
       </div>
 

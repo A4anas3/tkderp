@@ -11,12 +11,14 @@ import Avatar from '../../components/common/Avatar';
 import TeacherDetailModal from '../../components/modals/TeacherDetailModal';
 import { teacherApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 import { cleanMobileInput } from '../../utils/phoneUtils';
 import { compressImage } from '../../utils/imageCompressor';
 
 export default function TeachersPage() {
   const navigate = useNavigate();
   const { success, error } = useToast();
+  const { isAdmin } = useAuth();
   const [teachers, setTeachers] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -322,30 +324,34 @@ export default function TeachersPage() {
       className: 'text-right w-56 whitespace-nowrap',
       render: (t) => (
         <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
-          <Button
-            size="xs"
-            variant={t.status === 'ACTIVE' ? 'danger-soft' : 'success-soft'}
-            icon={t.status === 'ACTIVE' ? UserX : UserCheck}
-            onClick={(e) => {
-              e.stopPropagation();
-              handleToggleStatus(t);
-            }}
-            title={t.status === 'ACTIVE' ? 'Deactivate Faculty' : 'Activate Faculty'}
-          >
-            {t.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
-          </Button>
-          <Button
-            size="xs"
-            variant="amber"
-            icon={Edit2}
-            onClick={(e) => {
-              e.stopPropagation();
-              handleOpenEdit(t);
-            }}
-            title="Edit Teacher"
-          >
-            Edit
-          </Button>
+          {isAdmin && (
+            <>
+              <Button
+                size="xs"
+                variant={t.status === 'ACTIVE' ? 'danger-soft' : 'success-soft'}
+                icon={t.status === 'ACTIVE' ? UserX : UserCheck}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleToggleStatus(t);
+                }}
+                title={t.status === 'ACTIVE' ? 'Deactivate Faculty' : 'Activate Faculty'}
+              >
+                {t.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
+              </Button>
+              <Button
+                size="xs"
+                variant="amber"
+                icon={Edit2}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleOpenEdit(t);
+                }}
+                title="Edit Teacher"
+              >
+                Edit
+              </Button>
+            </>
+          )}
           <Button
             size="xs"
             variant="info"
@@ -415,9 +421,11 @@ export default function TeachersPage() {
             <option value="INACTIVE">Inactive Teachers</option>
           </select>
 
-          <Button variant="primary" icon={Plus} onClick={handleOpenAdd} className="w-full sm:w-auto h-9">
-            Add Teacher
-          </Button>
+          {isAdmin && (
+            <Button variant="primary" icon={Plus} onClick={handleOpenAdd} className="w-full sm:w-auto h-9">
+              Add Teacher
+            </Button>
+          )}
         </div>
       </div>
 
@@ -542,31 +550,35 @@ export default function TeachersPage() {
                   </div>
 
                   <div className="mt-3.5 pt-2 border-t border-slate-100 flex items-center gap-1.5">
-                    <Button
-                      size="xs"
-                      variant={t.status === 'ACTIVE' ? 'danger-soft' : 'success-soft'}
-                      icon={t.status === 'ACTIVE' ? UserX : UserCheck}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleToggleStatus(t);
-                      }}
-                      className="flex-1 justify-center"
-                      title={t.status === 'ACTIVE' ? 'Deactivate Faculty' : 'Activate Faculty'}
-                    >
-                      {t.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
-                    </Button>
-                    <Button
-                      size="xs"
-                      variant="amber"
-                      icon={Edit2}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleOpenEdit(t);
-                      }}
-                      className="flex-1 justify-center"
-                    >
-                      Edit
-                    </Button>
+                    {isAdmin && (
+                      <>
+                        <Button
+                          size="xs"
+                          variant={t.status === 'ACTIVE' ? 'danger-soft' : 'success-soft'}
+                          icon={t.status === 'ACTIVE' ? UserX : UserCheck}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleStatus(t);
+                          }}
+                          className="flex-1 justify-center"
+                          title={t.status === 'ACTIVE' ? 'Deactivate Faculty' : 'Activate Faculty'}
+                        >
+                          {t.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
+                        </Button>
+                        <Button
+                          size="xs"
+                          variant="amber"
+                          icon={Edit2}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenEdit(t);
+                          }}
+                          className="flex-1 justify-center"
+                        >
+                          Edit
+                        </Button>
+                      </>
+                    )}
                     <Button
                       size="xs"
                       variant="info"

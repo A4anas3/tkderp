@@ -41,7 +41,7 @@ export default function SubjectDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { success, error } = useToast();
-  const { isTeacher } = useAuth();
+  const { isAdmin, isTeacher } = useAuth();
 
   const [subject, setSubject] = useState(null);
   const [students, setStudents] = useState([]);
@@ -109,7 +109,7 @@ export default function SubjectDetailPage() {
       const [sDataResult, demosResult, convReportResult] = await Promise.allSettled([
         subjectApi.get(id),
         enquiryApi.listDemos({ subject_id: id, page_size: 100 }),
-        isTeacher ? Promise.resolve(null) : reportApi.getAdmissionsConversion({}),
+        isAdmin ? reportApi.getAdmissionsConversion({}) : Promise.resolve(null),
       ]);
 
       if (sDataResult.status === 'rejected' && sDataResult.reason?.response?.status === 403) {
@@ -181,7 +181,7 @@ export default function SubjectDetailPage() {
       }
 
       // 2. Fetch subject revenue report for financials in background (Admin only)
-      if (!isTeacher) {
+      if (isAdmin) {
         try {
           const reportRes = await reportApi.getSubjectRevenue({});
           const items = reportRes?.items || [];
@@ -290,9 +290,9 @@ export default function SubjectDetailPage() {
         <Button
           variant="secondary"
           icon={ArrowLeft}
-          onClick={() => navigate(isTeacher ? '/subjects' : '/reports/subject-revenue')}
+          onClick={() => navigate(isAdmin ? '/reports/subject-revenue' : '/subjects')}
         >
-          {isTeacher ? 'Back to Subjects' : 'Back to Subject Revenue'}
+          {isAdmin ? 'Back to Subject Revenue' : 'Back to Subjects'}
         </Button>
         <div className="bg-white p-8 rounded-xl border border-slate-200 text-center">
           <p className="text-sm font-semibold text-rose-700">
@@ -315,9 +315,9 @@ export default function SubjectDetailPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-start sm:items-center gap-2.5 min-w-0">
           <button
-            onClick={() => navigate(isTeacher ? '/subjects' : '/reports/subject-revenue')}
+            onClick={() => navigate(isAdmin ? '/reports/subject-revenue' : '/subjects')}
             className="p-2 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 transition-colors shadow-2xs cursor-pointer shrink-0 min-h-[38px] min-w-[38px] flex items-center justify-center"
-            title={isTeacher ? 'Back to Subjects' : 'Back to Subject Revenue'}
+            title={isAdmin ? 'Back to Subject Revenue' : 'Back to Subjects'}
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
@@ -352,15 +352,17 @@ export default function SubjectDetailPage() {
             Send Due Reminders
           </Button>
 
-          <Button
-            variant="secondary"
-            icon={Layers}
-            onClick={() => navigate('/reports/subject-revenue')}
-            size="sm"
-            className="w-full sm:w-auto"
-          >
-            View All Ledgers
-          </Button>
+          {isAdmin && (
+            <Button
+              variant="secondary"
+              icon={Layers}
+              onClick={() => navigate('/reports/subject-revenue')}
+              size="sm"
+              className="w-full sm:w-auto"
+            >
+              View All Ledgers
+            </Button>
+          )}
         </div>
         )}
       </div>
@@ -400,7 +402,7 @@ export default function SubjectDetailPage() {
       </div>
 
       {/* Financial & Conversion KPI Summary Cards */}
-      {!isTeacher && (
+      {isAdmin && (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 text-xs">
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
           <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Total Billed</span>
@@ -478,7 +480,7 @@ export default function SubjectDetailPage() {
           <span>{isTeacher ? `Active Roster (${activeCount})` : `Course History & Roster (${totalEnrollments})`}</span>
         </button>
 
-        {!isTeacher && (
+        {isAdmin && (
           <button
             type="button"
             onClick={() => setActiveTab('BREAKUP')}
@@ -1011,13 +1013,15 @@ export default function SubjectDetailPage() {
                 Prospective student enquiries, trial demo passes and admission conversion metrics
               </p>
             </div>
-            <Link
-              to="/enquiries"
-              className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-2xs self-start sm:self-auto"
-            >
-              <ExternalLink className="w-3.5 h-3.5 text-slate-600" />
-              <span>Open Enquiries Desk</span>
-            </Link>
+            {isAdmin && (
+              <Link
+                to="/enquiries"
+                className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-2xs self-start sm:self-auto"
+              >
+                <ExternalLink className="w-3.5 h-3.5 text-slate-600" />
+                <span>Open Enquiries Desk</span>
+              </Link>
+            )}
           </div>
 
           {/* Conversion Metrics Banner */}

@@ -245,7 +245,7 @@ async def list_teacher_attendance_monthly(
     return summary_list
 
 @router.get("/{teacher_id}", response_model=TeacherResponse)
-async def get_teacher(teacher_id: uuid.UUID, db: AsyncSession = Depends(get_db), user = Depends(require_admin)):
+async def get_teacher(teacher_id: uuid.UUID, db: AsyncSession = Depends(get_db), user = Depends(require_cashier_or_admin)):
     cache_key = make_cache_key("teachers", "detail", teacher_id)
     hit, cached = await cache_get(cache_key)
     if hit:
@@ -516,7 +516,7 @@ async def get_teacher_roster(
     status_filter: Optional[str] = Query("ALL"),
     subject_id: Optional[uuid.UUID] = Query(None),
     db: AsyncSession = Depends(get_db),
-    user = Depends(require_admin)
+    user = Depends(require_cashier_or_admin)
 ):
     """
     Returns complete assigned course enrollment cohort roster for a teacher with
@@ -950,7 +950,7 @@ async def create_teacher_payout(
 async def get_teacher_breakup(
     teacher_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    user = Depends(require_admin)
+    user = Depends(require_cashier_or_admin)
 ):
     """
     Teacher-wise financial breakup mirroring Subject module (G3):
@@ -1170,7 +1170,7 @@ async def get_teacher_history(
     page: Optional[int] = Query(None, ge=1, description="Page number"),
     page_size: Optional[int] = Query(None, ge=1, le=100, description="Page size"),
     db: AsyncSession = Depends(get_db),
-    user = Depends(require_admin)
+    user = Depends(require_cashier_or_admin)
 ):
     """
     Chronological history of every admission, renewal, expiry, change and cancellation
@@ -1428,7 +1428,7 @@ async def get_teacher_history(
 async def get_teacher_collections(
     teacher_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    user = Depends(require_admin)
+    user = Depends(require_cashier_or_admin)
 ):
     """
     Fee collections handled by this teacher where the ledger records it.
@@ -1514,7 +1514,7 @@ async def get_teacher_collections(
 async def get_teacher_demo_conversion_endpoint(
     teacher_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    user = Depends(require_admin)
+    user = Depends(require_cashier_or_admin)
 ):
     """
     Demo conversion metrics credited to this teacher as the demo giver,
@@ -1671,7 +1671,7 @@ async def bulk_set_teacher_attendance(
 async def get_teacher_salary_history(
     teacher_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    user = Depends(require_admin)
+    user = Depends(require_cashier_or_admin)
 ):
     cache_key = make_cache_key("teachers", "salaries", teacher_id)
     hit, cached = await cache_get(cache_key)

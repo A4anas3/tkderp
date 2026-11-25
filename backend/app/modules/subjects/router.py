@@ -10,7 +10,7 @@ from sqlalchemy import select, func, or_, and_, desc, case
 
 from app.core.cache import TTL_LONG, TTL_MEDIUM, cache_get, cache_set, invalidate_subject_cache, make_cache_key, user_scope
 from app.database.session import get_db
-from app.core.dependencies import require_staff, require_admin, require_teacher_or_admin
+from app.core.dependencies import require_staff, require_admin
 from app.database.models import Subject, User, Teacher, Batch
 from app.modules.admissions.models import Admission, AdmissionItem
 from app.modules.students.models import Student
@@ -193,7 +193,7 @@ async def get_subject_roster(
     search: Optional[str] = Query(None),
     status_filter: Optional[str] = Query("ALL"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_teacher_or_admin)
+    current_user: User = Depends(require_staff)
 ):
     cache_key = make_cache_key(
         "subjects", "roster", subject_id, user_scope(current_user),
@@ -363,7 +363,7 @@ async def get_subject_roster(
 async def get_subject(
     subject_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_teacher_or_admin)
+    current_user: User = Depends(require_staff)
 ):
     cache_key = make_cache_key("subjects", "detail", subject_id, user_scope(current_user))
     hit, cached = await cache_get(cache_key)

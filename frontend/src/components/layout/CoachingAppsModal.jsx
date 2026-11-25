@@ -52,7 +52,7 @@ export default function CoachingAppsModal({ isOpen, onClose }) {
       icon: BookOpen,
       route: '/subjects',
       color: 'bg-blue-600',
-      roles: ['ADMIN', 'TEACHER'],
+      roles: ['ADMIN', 'CASHIER', 'TEACHER'],
     },
     {
       id: 'admissions',
@@ -124,7 +124,7 @@ export default function CoachingAppsModal({ isOpen, onClose }) {
       icon: UserCheck,
       route: '/teachers',
       color: 'bg-emerald-600',
-      roles: ['ADMIN'],
+      roles: ['ADMIN', 'CASHIER'],
     },
     {
       id: 'teacher-attendance',
