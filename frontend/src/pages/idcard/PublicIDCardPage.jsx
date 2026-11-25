@@ -161,8 +161,8 @@ export default function PublicIDCardPage() {
       : 'Civil Lines, Thakurdwara (U.P.)');
 
   return (
-    <div className="min-h-screen bg-slate-50 text-black font-sans py-6 px-3 sm:px-6 flex flex-col justify-between">
-      <div className="max-w-2xl mx-auto w-full space-y-5">
+    <div className="min-h-screen bg-slate-50 text-black font-sans py-6 px-3 sm:px-6 flex flex-col justify-between print:block print:min-h-0 print:bg-white print:p-0">
+      <div className="max-w-2xl mx-auto w-full space-y-5 print:max-w-none print:space-y-0">
         {/* Top Institute Header Banner (no-print) */}
         <div className="bg-white border-2 border-black rounded-xl p-4 sm:p-5 shadow-xs text-center relative overflow-hidden no-print">
           <div className="flex items-center justify-center gap-3 mb-1">
@@ -330,7 +330,7 @@ export default function PublicIDCardPage() {
 
         {/* ACTIVE UPDATED ID CARD SECTION (ONLY when active subjects or demos exist) */}
         {!loading && cardData && cardData.student && (cardData.active_courses?.length > 0 || cardData.active_demos?.length > 0) && (
-          <div className="space-y-4">
+          <div className="space-y-4 print:space-y-0">
             {/* Top Card Controls Bar (no-print) */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 bg-white border border-slate-300 rounded-xl shadow-2xs no-print">
               <div className="flex items-center gap-2">
@@ -357,13 +357,13 @@ export default function PublicIDCardPage() {
             </div>
 
             {/* Printable ID Card Container */}
-            <div className="printable-id-card-wrapper py-2 flex justify-center">
+            <div className="printable-id-card-wrapper py-2 flex justify-center print:block print:py-0">
               <div
                 id="printable-id-card"
-                className="printable-id-card w-full max-w-[440px] bg-white border-2 border-black rounded-xl overflow-hidden shadow-md text-black"
+                className="printable-id-card w-full max-w-[440px] bg-white border-2 border-black rounded-xl overflow-hidden shadow-md text-black print:overflow-visible print:shadow-none"
               >
                 {/* Card Header: Institute Emblem & Details */}
-                <div className="bg-slate-900 text-white px-4 py-3.5 relative border-b-2 border-amber-500">
+                <div className="bg-slate-900 text-white px-4 py-3.5 relative border-b-2 border-amber-500 print:rounded-t-[10px] print:py-3 id-card-keep-together">
                   <div className="flex items-center justify-center gap-3">
                     <div className="w-11 h-11 rounded-lg bg-white border border-amber-400/80 flex items-center justify-center overflow-hidden shrink-0 p-0.5 shadow-2xs">
                       <InstituteLogo
@@ -390,9 +390,9 @@ export default function PublicIDCardPage() {
                 </div>
 
                 {/* Card Body */}
-                <div className="p-4 space-y-3.5 bg-white">
+                <div className="p-4 space-y-3.5 bg-white print:p-3 print:space-y-2.5">
                   {/* Student Identification Row: Photo + Primary Metadata */}
-                  <div className="flex items-start gap-3.5 border-b border-slate-200 pb-3">
+                  <div className="flex items-start gap-3.5 border-b border-slate-200 pb-3 print:pb-2.5 id-card-keep-together">
                     {/* Photo Frame */}
                     <div className="w-24 h-28 sm:w-28 sm:h-32 border-2 border-black rounded-lg overflow-hidden bg-slate-100 shrink-0 shadow-xs flex items-center justify-center">
                       {cardData.student.photo_url ? (
@@ -447,7 +447,7 @@ export default function PublicIDCardPage() {
 
                   {/* Enrolled Active Courses Section */}
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between border-b border-slate-300 pb-1">
+                    <div className="flex items-center justify-between border-b border-slate-300 pb-1 id-card-section-heading">
                       <span className="text-[11px] font-black uppercase tracking-wider text-black flex items-center gap-1.5">
                         <BookOpen className="w-3.5 h-3.5 text-odoo-800 shrink-0" />
                         Enrolled Active Courses ({cardData.active_courses?.length || 0})
@@ -464,7 +464,7 @@ export default function PublicIDCardPage() {
                         </p>
                       </div>
                     ) : (
-                      <div className="space-y-2 max-h-[220px] overflow-y-auto pr-0.5">
+                      <div className="space-y-2 max-h-[220px] overflow-y-auto pr-0.5 print:max-h-none print:overflow-visible print:pr-0 print:space-y-1.5 id-card-scroll-list">
                         {cardData.active_courses
                           .filter((c) => !['CANCELLED', 'REVOKED', 'DISCONTINUED'].includes((c.status || 'ACTIVE').toUpperCase()))
                           .map((course, idx) => {
@@ -472,7 +472,7 @@ export default function PublicIDCardPage() {
                             return (
                           <div
                             key={idx}
-                            className="p-2 bg-slate-50 rounded-lg border border-slate-300 text-xs space-y-1"
+                            className="p-2 bg-slate-50 rounded-lg border border-slate-300 text-xs space-y-1 print:p-1.5 id-card-keep-together"
                           >
                             <div className="flex items-start justify-between gap-1.5">
                               <span className="font-bold text-black leading-tight flex-1">
@@ -532,7 +532,7 @@ export default function PublicIDCardPage() {
                   {/* Active Demos Section (Hidden completely if no active demos) */}
                   {cardData.active_demos && cardData.active_demos.length > 0 && (
                     <div className="space-y-2 pt-1 border-t border-slate-200">
-                      <div className="flex items-center justify-between border-b border-amber-300 pb-1">
+                      <div className="flex items-center justify-between border-b border-amber-300 pb-1 id-card-section-heading">
                         <span className="text-[11px] font-black uppercase tracking-wider text-black flex items-center gap-1.5">
                           <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                           Active Trial Demos ({cardData.active_demos.length})
@@ -542,11 +542,11 @@ export default function PublicIDCardPage() {
                         </span>
                       </div>
 
-                      <div className="space-y-2 max-h-[180px] overflow-y-auto pr-0.5">
+                      <div className="space-y-2 max-h-[180px] overflow-y-auto pr-0.5 print:max-h-none print:overflow-visible print:pr-0 print:space-y-1.5 id-card-scroll-list">
                         {cardData.active_demos.map((demo, idx) => (
                           <div
                             key={demo.demo_reference_number || idx}
-                            className="p-2 bg-amber-50/50 rounded-lg border border-amber-200 text-xs space-y-1"
+                            className="p-2 bg-amber-50/50 rounded-lg border border-amber-200 text-xs space-y-1 print:p-1.5 id-card-keep-together"
                           >
                             {/* Subject & Demo Reference Number */}
                             <div className="flex items-start justify-between gap-1.5">
@@ -593,50 +593,52 @@ export default function PublicIDCardPage() {
                     </div>
                   )}
 
-                  {/* Live Due Balance (Small, unobtrusive text) */}
-                  <div className="text-[10px] text-slate-500 pt-1 border-t border-slate-200 flex items-center justify-between">
-                    <span>Account Dues:</span>
-                    <span className="font-mono font-semibold text-slate-700">
-                      Due Balance: ₹{Number(cardData.due_balance !== undefined ? cardData.due_balance : (cardData.student?.due_balance || 0)).toFixed(2)}
-                    </span>
-                  </div>
+                  <div className="space-y-3.5 print:space-y-2 id-card-keep-together">
+                    {/* Live Due Balance (Small, unobtrusive text) */}
+                    <div className="text-[10px] text-slate-500 pt-1 border-t border-slate-200 flex items-center justify-between">
+                      <span>Account Dues:</span>
+                      <span className="font-mono font-semibold text-slate-700">
+                        Due Balance: ₹{Number(cardData.due_balance !== undefined ? cardData.due_balance : (cardData.student?.due_balance || 0)).toFixed(2)}
+                      </span>
+                    </div>
 
-                  {/* Card Footer: Verification QR Code & Official Signatory */}
-                  <div className="pt-2 border-t-2 border-black flex items-center justify-between gap-3">
-                    {/* QR Code Verifier pre-filled with admission number */}
-                    <div className="flex items-center gap-2.5">
-                      <div className="p-1 bg-white border border-black rounded shadow-2xs shrink-0">
-                        <QRCodeSVG
-                          value={qrTargetUrl}
-                          size={76}
-                          level="M"
-                          includeMargin={false}
-                        />
+                    {/* Card Footer: Verification QR Code & Official Signatory */}
+                    <div className="pt-2 border-t-2 border-black flex items-center justify-between gap-3">
+                      {/* QR Code Verifier pre-filled with admission number */}
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-1 bg-white border border-black rounded shadow-2xs shrink-0">
+                          <QRCodeSVG
+                            value={qrTargetUrl}
+                            size={76}
+                            level="M"
+                            includeMargin={false}
+                          />
+                        </div>
+                        <div className="space-y-0.5 text-[9px] sm:text-[10px] leading-tight">
+                          <p className="font-black text-black uppercase">SCAN FOR ID CARD</p>
+                          <p className="text-slate-700 font-medium">Instant Authenticity</p>
+                          <p className="font-mono text-[8px] text-slate-600 break-all max-w-[130px]">
+                            /id-card/{qrCodeIdent}
+                          </p>
+                        </div>
                       </div>
-                      <div className="space-y-0.5 text-[9px] sm:text-[10px] leading-tight">
-                        <p className="font-black text-black uppercase">SCAN FOR ID CARD</p>
-                        <p className="text-slate-700 font-medium">Instant Authenticity</p>
-                        <p className="font-mono text-[8px] text-slate-600 break-all max-w-[130px]">
-                          /id-card/{qrCodeIdent}
+
+                      {/* Signatory & Seal */}
+                      <div className="flex flex-col items-end text-right space-y-1 shrink-0">
+                        <div className="w-24 border-b border-black inline-block pb-0.5">
+                          <span className="font-serif italic text-[11px] text-slate-700">Auth Sign</span>
+                        </div>
+                        <p className="text-[9px] font-black uppercase text-black tracking-wider">
+                          Authorized Signatory
                         </p>
+                        <VerifiedStamp instituteName={instituteName} />
                       </div>
                     </div>
 
-                    {/* Signatory & Seal */}
-                    <div className="flex flex-col items-end text-right space-y-1 shrink-0">
-                      <div className="w-24 border-b border-black inline-block pb-0.5">
-                        <span className="font-serif italic text-[11px] text-slate-700">Auth Sign</span>
-                      </div>
-                      <p className="text-[9px] font-black uppercase text-black tracking-wider">
-                        Authorized Signatory
-                      </p>
-                      <VerifiedStamp instituteName={instituteName} />
+                    {/* Bottom Instructions Notice */}
+                    <div className="text-[8px] sm:text-[9px] text-center text-slate-600 border-t border-slate-200 pt-1">
+                      Property of {instituteName} • Non-Transferable • Carry daily for class entry
                     </div>
-                  </div>
-
-                  {/* Bottom Instructions Notice */}
-                  <div className="text-[8px] sm:text-[9px] text-center text-slate-600 border-t border-slate-200 pt-1">
-                    Property of {instituteName} • Non-Transferable • Carry daily for class entry
                   </div>
                 </div>
               </div>
