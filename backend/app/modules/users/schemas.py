@@ -20,9 +20,15 @@ class CreateUserRequest(BaseModel):
 class UpdateUserRequest(BaseModel):
     full_name: Optional[str] = None
     email: Optional[EmailStr] = None
+    phone: Optional[str] = None
     role: Optional[str] = Field(default=None, pattern="^(ADMIN|CASHIER|TEACHER)$")
     status: Optional[str] = Field(default=None, pattern="^(ACTIVE|INACTIVE)$")
     new_password: Optional[str] = Field(default=None, min_length=6)
+
+    @field_validator("phone", mode="before")
+    @classmethod
+    def validate_phone(cls, v):
+        return validate_mobile_10_digits(v, required=False)
 
     @field_validator("email", mode="before")
     @classmethod

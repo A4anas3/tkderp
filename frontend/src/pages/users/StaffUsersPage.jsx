@@ -38,6 +38,7 @@ export default function StaffUsersPage() {
 
   const [editForm, setEditForm] = useState({
     full_name: '',
+    phone: '',
     email: '',
     role: 'CASHIER',
     status: 'ACTIVE',
@@ -123,6 +124,7 @@ export default function StaffUsersPage() {
     setSelectedUser(u);
     setEditForm({
       full_name: u.full_name,
+      phone: cleanMobileInput(u.phone || ''),
       email: u.email || '',
       role: u.role,
       status: u.status,
@@ -170,6 +172,11 @@ export default function StaffUsersPage() {
       error('Staff email is required');
       return;
     }
+    const cleanPhone = cleanMobileInput(editForm.phone);
+    if ((cleanPhone || selectedUser.phone) && cleanPhone.length !== 10) {
+      error('Phone number must be exactly 10 numeric digits');
+      return;
+    }
     if (editForm.new_password) {
       if (!editForm.new_password.trim()) {
         error('New password cannot be blank spaces');
@@ -188,6 +195,9 @@ export default function StaffUsersPage() {
         role: editForm.role,
         status: editForm.status,
       };
+      if (cleanPhone) {
+        payload.phone = cleanPhone;
+      }
       if (editForm.new_password) {
         payload.new_password = editForm.new_password;
       }
@@ -440,6 +450,28 @@ export default function StaffUsersPage() {
             onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
             required
             autoFocus
+          />
+
+          <Input
+            label="Phone Number"
+            type="tel"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={10}
+            value={editForm.phone}
+            onChange={(e) => setEditForm({ ...editForm, phone: cleanMobileInput(e.target.value) })}
+            placeholder="10-digit mobile number"
+            required={Boolean(selectedUser?.phone)}
+            error={
+              editForm.phone && editForm.phone.length < 10
+                ? `Must be 10 digits (${editForm.phone.length}/10)`
+                : null
+            }
+            helperText={
+              editForm.phone && editForm.phone.length === 10
+                ? '✓ Valid 10-digit phone number'
+                : '10-digit mobile number'
+            }
           />
 
           <Input

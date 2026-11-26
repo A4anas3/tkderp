@@ -109,12 +109,14 @@ async def list_users(
     search: Optional[str] = None,
     role: Optional[str] = None,
     status: Optional[str] = None,
+    unlinked_only: bool = Query(False),
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(require_admin)
 ):
     cache_key = make_cache_key(
         "users", "list",
         page=page, page_size=page_size, search=search, role=role, status=status,
+        unlinked_only=unlinked_only,
     )
     hit, cached = await cache_get(cache_key)
     if hit:
@@ -132,6 +134,20 @@ async def list_users(
         status_val = status.strip().upper()
         query = query.where(func.upper(User.status) == status_val)
         count_query = count_query.where(func.upper(User.status) == status_val)
+
+    if unlinked_only:
+        linked_exists = (
+            select(Teacher.id)
+            .where(
+                or_(
+                    Teacher.user_id == User.id,
+                    func.upper(Teacher.teacher_code) == func.upper(User.employee_id),
+                )
+            )
+            .exists()
+        )
+        query = query.where(~linked_exists)
+        count_query = count_query.where(~linked_exists)
 
     if search:
         search_filter = or_(
@@ -296,6 +312,21 @@ async def update_user(
 
     if req.full_name is not None:
         user.full_name = req.full_name.strip()
+    if req.phone is not None:
+        clean_phone = normalize_mobile(req.phone)
+        if not clean_phone or len(clean_phone) != 10:
+            raise HTTPException(
+                status_code=400,
+                detail="Phone number must be exactly 10 numeric digits",
+            )
+        if clean_phone != (normalize_mobile(user.phone) or ""):
+            existing_phone = await _find_user_by_phone(db, clean_phone)
+            if existing_phone and existing_phone.id != user.id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Phone number already in use by another staff account",
+                )
+        user.phone = clean_phone
     if req.email is not None:
         clean_email = req.email.strip().lower()
         if clean_email != (user.email or "").strip().lower():
@@ -356,7 +387,10 @@ async def update_user(
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
-        if "email" in str(exc).lower():
+        err_msg = str(exc).lower()
+        if "phone" in err_msg:
+            raise HTTPException(status_code=400, detail="Phone number already in use by another staff account")
+        if "email" in err_msg:
             raise HTTPException(status_code=400, detail="Email already in use by another staff account")
         raise HTTPException(status_code=400, detail="Could not update staff account")
     await db.refresh(user)

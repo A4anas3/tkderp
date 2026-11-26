@@ -45,9 +45,17 @@ export default function TeachersPage() {
 
   // Staff Account Link State (for Add Teacher)
   const [teacherStaffAccounts, setTeacherStaffAccounts] = useState([]);
-  const [linkedTeacherCodes, setLinkedTeacherCodes] = useState(new Set());
   const [loadingStaffAccounts, setLoadingStaffAccounts] = useState(false);
   const [staffSearch, setStaffSearch] = useState('');
+  const [inlineStaffOpen, setInlineStaffOpen] = useState(false);
+  const [creatingStaff, setCreatingStaff] = useState(false);
+  const [inlineStaffError, setInlineStaffError] = useState('');
+  const [inlineStaffForm, setInlineStaffForm] = useState({
+    full_name: '',
+    phone: '',
+    email: '',
+    password: '',
+  });
 
   const [formData, setFormData] = useState({
     employee_id: '',
@@ -128,17 +136,14 @@ export default function TeachersPage() {
   const loadTeacherStaffAccounts = useCallback(async () => {
     setLoadingStaffAccounts(true);
     try {
-      const [staffRes, allTeachersRes] = await Promise.all([
-        userApi.list({ role: 'TEACHER', status: 'ACTIVE', page: 1, page_size: 100 }),
-        teacherApi.list({ page: 1, page_size: 100 }),
-      ]);
+      const staffRes = await userApi.list({
+        role: 'TEACHER',
+        status: 'ACTIVE',
+        unlinked_only: true,
+        page: 1,
+        page_size: 100,
+      });
       setTeacherStaffAccounts(staffRes?.items || []);
-      const linkedCodes = new Set(
-        (allTeachersRes?.items || [])
-          .map((t) => (t.teacher_code || '').trim().toUpperCase())
-          .filter(Boolean)
-      );
-      setLinkedTeacherCodes(linkedCodes);
     } catch (err) {
       error(err.message || 'Failed to load teacher staff accounts');
       setTeacherStaffAccounts([]);
@@ -154,6 +159,14 @@ export default function TeachersPage() {
     setPhotoSizeKb(null);
     setExistingTeacherWithMobile(null);
     setStaffSearch('');
+    setInlineStaffOpen(false);
+    setInlineStaffError('');
+    setInlineStaffForm({
+      full_name: '',
+      phone: '',
+      email: '',
+      password: '',
+    });
     setFormData({
       employee_id: '',
       name: '',
@@ -190,8 +203,7 @@ export default function TeachersPage() {
     setModalOpen(true);
   };
 
-  const handleSelectStaffAccount = (empId) => {
-    const selected = teacherStaffAccounts.find((u) => u.employee_id === empId);
+  const applySelectedStaffAccount = (selected) => {
     if (!selected) {
       setFormData((prev) => ({
         ...prev,
@@ -209,6 +221,76 @@ export default function TeachersPage() {
       mobile: cleanMobileInput(selected.phone || ''),
       email: selected.email || '',
     }));
+  };
+
+  const handleSelectStaffAccount = (empId) => {
+    const selected = teacherStaffAccounts.find((u) => u.employee_id === empId);
+    applySelectedStaffAccount(selected);
+  };
+
+  const handleInlineCreateStaff = async () => {
+    setInlineStaffError('');
+    const trimmedName = inlineStaffForm.full_name.trim();
+    const cleanPhone = cleanMobileInput(inlineStaffForm.phone);
+    const trimmedEmail = inlineStaffForm.email.trim().toLowerCase();
+    const pwd = inlineStaffForm.password;
+
+    if (trimmedName.length < 2) {
+      const msg = 'Staff Full Name must be at least 2 characters';
+      setInlineStaffError(msg);
+      error(msg);
+      return;
+    }
+    if (!cleanPhone || cleanPhone.length !== 10) {
+      const msg = 'Phone number must be exactly 10 numeric digits';
+      setInlineStaffError(msg);
+      error(msg);
+      return;
+    }
+    if (!trimmedEmail || !trimmedEmail.includes('@')) {
+      const msg = 'Please enter a valid staff email address';
+      setInlineStaffError(msg);
+      error(msg);
+      return;
+    }
+    if (!pwd || !pwd.trim() || pwd.length < 6) {
+      const msg = 'Password must be at least 6 characters';
+      setInlineStaffError(msg);
+      error(msg);
+      return;
+    }
+
+    setCreatingStaff(true);
+    try {
+      const created = await userApi.create({
+        full_name: trimmedName,
+        phone: cleanPhone,
+        email: trimmedEmail,
+        password: pwd,
+        role: 'TEACHER',
+      });
+      success(`Staff account created: ${created.employee_id}`);
+      setTeacherStaffAccounts((prev) => [
+        created,
+        ...prev.filter((u) => u.id !== created.id && u.employee_id !== created.employee_id),
+      ]);
+      setStaffSearch('');
+      applySelectedStaffAccount(created);
+      setInlineStaffOpen(false);
+      setInlineStaffError('');
+      setInlineStaffForm({
+        full_name: '',
+        phone: '',
+        email: '',
+        password: '',
+      });
+    } catch (err) {
+      const msg = err.message || 'Failed to create staff account';
+      setInlineStaffError(msg);
+      error(msg);
+    } finally {
+      setCreatingStaff(false);
+    }
   };
 
   const handlePhotoSelect = async (e) => {
@@ -750,19 +832,132 @@ export default function TeachersPage() {
             });
             return (
               <div className="p-3 bg-purple-50/60 border border-odoo-200 rounded-lg space-y-2">
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
                   <label
                     htmlFor="link-staff-account-select"
                     className="block text-xs font-bold text-black"
                   >
                     Link Staff Account <span className="text-rose-600">*</span>
                   </label>
-                  {formData.employee_id && (
-                    <span className="font-mono text-[11px] font-bold text-odoo-800 bg-white border border-odoo-300 px-2 py-0.5 rounded">
-                      Code: {formData.employee_id}
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {formData.employee_id && (
+                      <span className="font-mono text-[11px] font-bold text-odoo-800 bg-white border border-odoo-300 px-2 py-0.5 rounded">
+                        Code: {formData.employee_id}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInlineStaffError('');
+                        setInlineStaffOpen((prev) => !prev);
+                      }}
+                      className="inline-flex items-center gap-1 rounded border border-odoo-300 bg-white px-2 py-0.5 text-[11px] font-bold text-odoo-700 hover:bg-odoo-50 transition-colors shadow-2xs"
+                    >
+                      {inlineStaffOpen ? 'Close' : '+ Create new staff account'}
+                    </button>
+                  </div>
                 </div>
+
+                {inlineStaffOpen && (
+                  <div className="rounded-md border border-odoo-300 bg-white p-3 space-y-2.5 shadow-2xs">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                      <span className="text-xs font-bold text-black">
+                        New Teacher Staff Account
+                      </span>
+                      <span className="rounded bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
+                        Role: Teacher
+                      </span>
+                    </div>
+
+                    {inlineStaffError && (
+                      <div className="rounded border border-rose-300 bg-rose-50 px-2.5 py-1.5 text-[11px] font-semibold text-rose-800">
+                        {inlineStaffError}
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <Input
+                        label="Full Name *"
+                        value={inlineStaffForm.full_name}
+                        onChange={(e) => {
+                          setInlineStaffError('');
+                          setInlineStaffForm({ ...inlineStaffForm, full_name: e.target.value });
+                        }}
+                        placeholder="e.g. Ramesh Kumar"
+                      />
+                      <Input
+                        label="Phone Number *"
+                        type="tel"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        maxLength={10}
+                        value={inlineStaffForm.phone}
+                        onChange={(e) => {
+                          setInlineStaffError('');
+                          setInlineStaffForm({
+                            ...inlineStaffForm,
+                            phone: cleanMobileInput(e.target.value),
+                          });
+                        }}
+                        placeholder="10-digit mobile"
+                        error={
+                          inlineStaffForm.phone && inlineStaffForm.phone.length < 10
+                            ? `Must be 10 digits (${inlineStaffForm.phone.length}/10)`
+                            : null
+                        }
+                        helperText={
+                          inlineStaffForm.phone && inlineStaffForm.phone.length === 10
+                            ? '✓ Valid 10-digit phone'
+                            : null
+                        }
+                      />
+                      <Input
+                        label="Email *"
+                        type="email"
+                        value={inlineStaffForm.email}
+                        onChange={(e) => {
+                          setInlineStaffError('');
+                          setInlineStaffForm({ ...inlineStaffForm, email: e.target.value });
+                        }}
+                        placeholder="e.g. ramesh@thakurdwara.local"
+                      />
+                      <Input
+                        label="Password *"
+                        type="password"
+                        value={inlineStaffForm.password}
+                        onChange={(e) => {
+                          setInlineStaffError('');
+                          setInlineStaffForm({ ...inlineStaffForm, password: e.target.value });
+                        }}
+                        placeholder="Min 6 characters"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 pt-1">
+                      <Button
+                        type="button"
+                        size="xs"
+                        variant="secondary"
+                        disabled={creatingStaff}
+                        onClick={() => {
+                          setInlineStaffOpen(false);
+                          setInlineStaffError('');
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="button"
+                        size="xs"
+                        variant="primary"
+                        loading={creatingStaff}
+                        onClick={handleInlineCreateStaff}
+                      >
+                        Create &amp; Select Staff
+                      </Button>
+                    </div>
+                  </div>
+                )}
 
                 <input
                   type="text"
@@ -785,21 +980,17 @@ export default function TeachersPage() {
                       ? 'Loading active Teacher staff accounts...'
                       : '-- Select Active Teacher Staff Account --'}
                   </option>
-                  {filteredStaff.map((u) => {
-                    const alreadyLinked = linkedTeacherCodes.has((u.employee_id || '').trim().toUpperCase());
-                    return (
-                      <option key={u.id} value={u.employee_id} disabled={alreadyLinked}>
-                        {u.employee_id} — {u.full_name}
-                        {u.phone ? ` (${u.phone})` : ''}
-                        {alreadyLinked ? ' [Already linked]' : ''}
-                      </option>
-                    );
-                  })}
+                  {filteredStaff.map((u) => (
+                    <option key={u.id} value={u.employee_id}>
+                      {u.employee_id} — {u.full_name}
+                      {u.phone ? ` (${u.phone})` : ''}
+                    </option>
+                  ))}
                 </select>
 
                 {!loadingStaffAccounts && teacherStaffAccounts.length === 0 ? (
                   <p className="text-[11px] font-semibold text-amber-800">
-                    No active Teacher staff accounts found. Create a TEACHER account in Staff &amp; Roles first.
+                    No unlinked active Teacher staff accounts found. Click &ldquo;+ Create new staff account&rdquo; above to create one.
                   </p>
                 ) : (
                   <p className="text-[11px] text-slate-600 font-medium">
