@@ -329,6 +329,10 @@ class TeacherAttendanceRecordResponse(BaseModel):
     month_year: str
     status: str = "ABSENT"
     reason: Optional[str] = None
+    created_by: Optional[uuid.UUID] = None
+    marked_by: Optional[str] = None
+    marked_by_employee_id: Optional[str] = None
+    created_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 

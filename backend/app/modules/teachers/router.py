@@ -1648,14 +1648,15 @@ async def get_teacher_attendance_detail(
     if not teacher:
         raise HTTPException(status_code=404, detail="Teacher not found")
         
-    records = (await db.execute(
-        select(TeacherAttendance)
+    rows = (await db.execute(
+        select(TeacherAttendance, User)
+        .outerjoin(User, TeacherAttendance.created_by == User.id)
         .where(TeacherAttendance.teacher_id == teacher_id, TeacherAttendance.month_year == m_year)
         .order_by(TeacherAttendance.date.asc())
-    )).scalars().all()
+    )).all()
     
-    abs_dates = [r.date for r in records]
-    abs_days = [r.date.isoformat() for r in records]
+    abs_dates = [r.date for r, _ in rows]
+    abs_days = [r.date.isoformat() for r, _ in rows]
     days_in_m = get_days_in_month(m_year)
     abs_cnt = len(abs_dates)
     pres_cnt = max(0, days_in_m - abs_cnt)
@@ -1676,8 +1677,12 @@ async def get_teacher_attendance_detail(
                 date=r.date,
                 month_year=r.month_year,
                 status=r.status,
-                reason=r.reason
-            ) for r in records
+                reason=r.reason,
+                created_by=r.created_by,
+                marked_by=(marked_user.full_name or marked_user.email) if marked_user else None,
+                marked_by_employee_id=marked_user.employee_id if marked_user else None,
+                created_at=r.created_at,
+            ) for r, marked_user in rows
         ]
     )
     await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=TeacherMonthlyAttendanceResponse)
@@ -1700,19 +1705,61 @@ async def toggle_teacher_absent_day(
         select(TeacherAttendance)
         .where(TeacherAttendance.teacher_id == teacher_id, TeacherAttendance.date == payload.date)
     )).scalar_one_or_none()
-    
+
+    actor_id = user.id if hasattr(user, 'id') else None
+    actor_name = (getattr(user, "full_name", None) or getattr(user, "email", None) or "Unknown")
+    actor_emp_id = getattr(user, "employee_id", None)
+
     if existing:
+        existing_id = existing.id
+        prev_reason = existing.reason
         await db.delete(existing)
+        db.add(AuditLog(
+            user_id=actor_id,
+            action="TEACHER_ABSENT_CLEARED",
+            entity_type="TEACHER_ATTENDANCE",
+            entity_id=existing_id,
+            details=json.dumps({
+                "teacher_id": str(teacher.id),
+                "teacher_code": teacher.teacher_code,
+                "teacher_name": teacher.name,
+                "date": payload.date.isoformat(),
+                "month_year": m_year,
+                "status": "PRESENT",
+                "previous_reason": prev_reason,
+                "marked_by": actor_name,
+                "marked_by_employee_id": actor_emp_id,
+            })
+        ))
     else:
+        clean_reason = payload.reason.strip() if payload.reason and payload.reason.strip() else None
         new_rec = TeacherAttendance(
             teacher_id=teacher_id,
             date=payload.date,
             month_year=m_year,
             status="ABSENT",
-            reason=payload.reason,
-            created_by=user.id if hasattr(user, 'id') else None
+            reason=clean_reason,
+            created_by=actor_id
         )
         db.add(new_rec)
+        await db.flush()
+        db.add(AuditLog(
+            user_id=actor_id,
+            action="TEACHER_ABSENT_MARKED",
+            entity_type="TEACHER_ATTENDANCE",
+            entity_id=new_rec.id,
+            details=json.dumps({
+                "teacher_id": str(teacher.id),
+                "teacher_code": teacher.teacher_code,
+                "teacher_name": teacher.name,
+                "date": payload.date.isoformat(),
+                "month_year": m_year,
+                "status": "ABSENT",
+                "reason": clean_reason,
+                "marked_by": actor_name,
+                "marked_by_employee_id": actor_emp_id,
+            })
+        ))
         
     await db.commit()
     await invalidate_expense_and_salary_cache()

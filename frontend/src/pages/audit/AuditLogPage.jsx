@@ -90,6 +90,10 @@ export function getActionMeta(action) {
       return { label: 'Fee Due Waived', variant: 'warning', icon: Sparkles };
     case 'TEACHER_STATUS_UPDATED':
       return { label: 'Teacher Status Updated', variant: 'primary', icon: RefreshCw };
+    case 'TEACHER_ABSENT_MARKED':
+      return { label: 'Teacher Marked Absent', variant: 'danger', icon: XCircle };
+    case 'TEACHER_ABSENT_CLEARED':
+      return { label: 'Teacher Absence Cleared', variant: 'success', icon: RotateCcw };
     case 'DEMO_CREATED':
     case 'STUDENT_DEMO_CREATED':
       return { label: 'Demo Created', variant: 'info', icon: BookOpen };
@@ -133,6 +137,31 @@ export function AuditDetailsSummary({ audit }) {
           Status changed: <span className="font-bold text-slate-800">{parsed.old_status}</span> → <span className="font-bold text-slate-800">{parsed.new_status}</span>
           {parsed.reason && <span className="italic ml-1 text-slate-500">({parsed.reason})</span>}
         </div>
+      </div>
+    );
+  }
+
+  if (audit.action === 'TEACHER_ABSENT_MARKED' || audit.action === 'TEACHER_ABSENT_CLEARED') {
+    const reasonText = parsed.reason || parsed.previous_reason;
+    return (
+      <div className="text-xs space-y-0.5">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="font-semibold text-black">
+            {parsed.teacher_name || parsed.teacher_code}
+          </span>
+          {parsed.date && (
+            <span className="font-mono text-[10px] text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 font-bold">
+              {parsed.date}
+            </span>
+          )}
+        </div>
+        {(reasonText || parsed.marked_by) && (
+          <div className="text-[11px] text-slate-600">
+            {reasonText && <span className="font-medium text-rose-700">{reasonText}</span>}
+            {reasonText && parsed.marked_by && <span className="mx-1">•</span>}
+            {parsed.marked_by && <span>By {parsed.marked_by}</span>}
+          </div>
+        )}
       </div>
     );
   }
