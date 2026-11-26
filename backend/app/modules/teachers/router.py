@@ -16,11 +16,14 @@ from app.core.cache import (
     cache_set,
     invalidate_expense_and_salary_cache,
     invalidate_teacher_cache,
+    invalidate_user_cache,
     make_cache_key,
 )
 from app.database.session import get_db
 from app.core.config import settings
 from app.modules.students.router import compress_avatar_image
+from app.modules.users.models import User
+from app.modules.auth.router import revoke_all_user_refresh_tokens
 from app.modules.teachers.models import Teacher, TeacherEarning, TeacherAttendance
 from app.modules.teachers.schemas import (
     TeacherCreate, TeacherUpdate, TeacherResponse, TeacherStatusUpdate,
@@ -339,6 +342,34 @@ async def create_teacher(
     await invalidate_teacher_cache()
     return TeacherResponse.model_validate(new_teacher)
 
+async def _sync_linked_teacher_user_status(
+    db: AsyncSession,
+    teacher: Teacher,
+    new_status: str,
+) -> bool:
+    """
+    Keep the linked TEACHER staff user account status in sync with the Teacher record.
+    Matches by Teacher.teacher_code == User.employee_id for TEACHER role accounts.
+    """
+    code = (teacher.teacher_code or "").strip().upper()
+    if not code:
+        return False
+    linked_user = (
+        await db.execute(
+            select(User).where(
+                func.upper(User.employee_id) == code,
+                func.upper(User.role) == "TEACHER",
+            )
+        )
+    ).scalar_one_or_none()
+    if not linked_user or linked_user.status == new_status:
+        return False
+    linked_user.status = new_status
+    if new_status != "ACTIVE":
+        await revoke_all_user_refresh_tokens(db, linked_user.id)
+    return True
+
+
 @router.put("/{teacher_id}", response_model=TeacherResponse)
 async def update_teacher(
     teacher_id: uuid.UUID,
@@ -378,6 +409,7 @@ async def update_teacher(
     if req.photo_url is not None: teacher.photo_url = req.photo_url
     if req.joining_date is not None: teacher.joining_date = req.joining_date
     old_status = teacher.status
+    user_synced = False
     if req.status is not None:
         teacher.status = req.status
         if old_status != req.status:
@@ -395,12 +427,15 @@ async def update_teacher(
                 })
             )
             db.add(audit)
+        user_synced = await _sync_linked_teacher_user_status(db, teacher, req.status)
     if req.share_type is not None: teacher.share_type = req.share_type
     if req.share_value is not None: teacher.share_value = req.share_value
 
     await db.commit()
     await db.refresh(teacher)
     await invalidate_teacher_cache()
+    if user_synced:
+        await invalidate_user_cache()
     return TeacherResponse.model_validate(teacher)
 
 @router.patch("/{teacher_id}/status", response_model=TeacherResponse)
@@ -433,9 +468,15 @@ async def update_teacher_status(
             })
         )
         db.add(audit)
+
+    user_synced = await _sync_linked_teacher_user_status(db, teacher, new_status)
+
+    if old_status != new_status or user_synced:
         await db.commit()
         await db.refresh(teacher)
         await invalidate_teacher_cache()
+        if user_synced:
+            await invalidate_user_cache()
 
     return TeacherResponse.model_validate(teacher)
 

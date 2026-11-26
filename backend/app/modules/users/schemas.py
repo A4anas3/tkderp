@@ -1,4 +1,5 @@
-from pydantic import BaseModel, EmailStr, Field
+from datetime import date
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
 from typing import Optional, List
 import uuid
 
@@ -13,6 +14,39 @@ class UpdateUserRequest(BaseModel):
     full_name: Optional[str] = None
     role: Optional[str] = Field(default=None, pattern="^(ADMIN|CASHIER|TEACHER)$")
     status: Optional[str] = Field(default=None, pattern="^(ACTIVE|INACTIVE)$")
+    new_password: Optional[str] = Field(default=None, min_length=6)
+
+    @field_validator("new_password", mode="before")
+    @classmethod
+    def empty_password_to_none(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
 
 class ResetPasswordRequest(BaseModel):
     new_password: str = Field(..., min_length=6)
+
+
+class LinkedTeacherDetail(BaseModel):
+    id: uuid.UUID
+    teacher_code: str
+    name: str
+    specialization: Optional[str] = None
+    qualification: Optional[str] = None
+    email: Optional[str] = None
+    mobile: Optional[str] = None
+    assigned_subjects: List[str] = []
+    joining_date: Optional[date] = None
+    monthly_salary: Optional[float] = None
+    share_type: Optional[str] = None
+    share_value: Optional[float] = None
+    status: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class LinkedTeacherLookupResponse(BaseModel):
+    found: bool
+    teacher: Optional[LinkedTeacherDetail] = None

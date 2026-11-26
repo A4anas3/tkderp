@@ -514,6 +514,10 @@ export const userApi = {
     const res = await api.get('/users', { params });
     return res.data;
   },
+  getLinkedTeacher: async (employeeId) => {
+    const res = await api.get(`/users/linked-teacher/${encodeURIComponent(employeeId)}`);
+    return res.data;
+  },
   create: async (data) => {
     const res = await api.post('/users', data);
     return res.data;

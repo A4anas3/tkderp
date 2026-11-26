@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Edit2, KeyRound, ShieldCheck, UserCheck } from 'lucide-react';
+import { Plus, Edit2, KeyRound, Eye, EyeOff, GraduationCap } from 'lucide-react';
 import DataTable from '../../components/common/DataTable';
 import Modal from '../../components/common/Modal';
 import Input from '../../components/common/Input';
@@ -8,6 +8,7 @@ import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
 import { userApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
+import { formatIndianDate } from '../../utils/dateCycleUtils';
 
 export default function StaffUsersPage() {
   const { success, error } = useToast();
@@ -37,7 +38,11 @@ export default function StaffUsersPage() {
     full_name: '',
     role: 'CASHIER',
     status: 'ACTIVE',
+    new_password: '',
   });
+  const [showEditPassword, setShowEditPassword] = useState(false);
+  const [linkedTeacher, setLinkedTeacher] = useState(null);
+  const [linkedTeacherLoading, setLinkedTeacherLoading] = useState(false);
 
   const [newPassword, setNewPassword] = useState('');
 
@@ -104,20 +109,67 @@ export default function StaffUsersPage() {
       full_name: u.full_name,
       role: u.role,
       status: u.status,
+      new_password: '',
     });
+    setShowEditPassword(false);
+    setLinkedTeacher(null);
     setEditModalOpen(true);
   };
+
+  useEffect(() => {
+    if (!editModalOpen || !selectedUser?.employee_id || editForm.role !== 'TEACHER') {
+      setLinkedTeacher(null);
+      setLinkedTeacherLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLinkedTeacherLoading(true);
+    userApi
+      .getLinkedTeacher(selectedUser.employee_id)
+      .then((res) => {
+        if (!cancelled) {
+          setLinkedTeacher(res?.found ? res.teacher : null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLinkedTeacher(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLinkedTeacherLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [editModalOpen, selectedUser?.employee_id, editForm.role]);
 
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     if (!selectedUser) return;
+    if (editForm.new_password) {
+      if (!editForm.new_password.trim()) {
+        error('New password cannot be blank spaces');
+        return;
+      }
+      if (editForm.new_password.length < 6) {
+        error('New password must be at least 6 characters');
+        return;
+      }
+    }
     setSubmitting(true);
     try {
-      await userApi.update(selectedUser.id, {
+      const payload = {
         full_name: editForm.full_name.trim(),
         role: editForm.role,
         status: editForm.status,
-      });
+      };
+      if (editForm.new_password) {
+        payload.new_password = editForm.new_password;
+      }
+      await userApi.update(selectedUser.id, payload);
       success(`Updated staff account: ${selectedUser.employee_id}`);
       setEditModalOpen(false);
       loadUsers();
@@ -322,8 +374,8 @@ export default function StaffUsersPage() {
         isOpen={editModalOpen}
         onClose={() => setEditModalOpen(false)}
         title={`Edit Staff — ${selectedUser?.employee_id}`}
-        subtitle="Update employee role or toggle account active/inactive status"
-        maxWidth="max-w-md"
+        subtitle="Update employee role, password, or toggle account active/inactive status"
+        maxWidth={editForm.role === 'TEACHER' ? 'max-w-lg' : 'max-w-md'}
       >
         <form onSubmit={handleEditSubmit} className="space-y-3">
           <Input
@@ -356,6 +408,106 @@ export default function StaffUsersPage() {
               ]}
             />
           </div>
+
+          <div className="w-full">
+            <label
+              htmlFor="edit-staff-new-password"
+              className="block text-xs font-bold text-black mb-1.5"
+            >
+              New Password
+            </label>
+            <div className="relative">
+              <input
+                id="edit-staff-new-password"
+                type={showEditPassword ? 'text' : 'password'}
+                value={editForm.new_password}
+                onChange={(e) => setEditForm({ ...editForm, new_password: e.target.value })}
+                placeholder="Leave blank to keep current password"
+                autoComplete="new-password"
+                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 pr-10 text-xs sm:text-sm min-h-[38px] sm:min-h-[34px] text-black font-medium placeholder:text-slate-500 focus:outline-none focus:border-odoo-600 focus:ring-1 focus:ring-odoo-600 shadow-2xs transition-colors"
+              />
+              <button
+                type="button"
+                onClick={() => setShowEditPassword((prev) => !prev)}
+                aria-label={showEditPassword ? 'Hide password' : 'Show password'}
+                className="absolute inset-y-0 right-0 flex items-center px-2.5 text-slate-500 hover:text-black transition-colors"
+              >
+                {showEditPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <p className="mt-1 text-[11px] text-slate-600 font-medium">
+              Leave blank to keep the current password (min 6 characters if changing).
+            </p>
+          </div>
+
+          {editForm.role === 'TEACHER' && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2.5">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                <div className="flex items-center gap-1.5">
+                  <GraduationCap className="w-4 h-4 text-odoo-700" />
+                  <h4 className="text-xs font-bold text-black uppercase tracking-wide">
+                    Linked Teacher
+                  </h4>
+                </div>
+                {linkedTeacher && (
+                  <Badge size="xs" variant={linkedTeacher.status === 'ACTIVE' ? 'success' : 'danger'}>
+                    {linkedTeacher.teacher_code} • {linkedTeacher.status}
+                  </Badge>
+                )}
+              </div>
+
+              {linkedTeacherLoading ? (
+                <p className="text-xs text-slate-500 py-2">Loading linked teacher details...</p>
+              ) : !linkedTeacher ? (
+                <p className="text-xs text-slate-600 font-medium py-1">No linked teacher record</p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                  <div>
+                    <span className="block text-[11px] text-slate-500 font-medium">Full Name</span>
+                    <span className="font-semibold text-black">{linkedTeacher.name}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[11px] text-slate-500 font-medium">Designation / Specialization</span>
+                    <span className="font-semibold text-black">{linkedTeacher.specialization || '—'}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[11px] text-slate-500 font-medium">Qualification</span>
+                    <span className="font-semibold text-black">{linkedTeacher.qualification || '—'}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[11px] text-slate-500 font-medium">Email</span>
+                    <span className="font-medium text-black break-all">{linkedTeacher.email || '—'}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[11px] text-slate-500 font-medium">Phone Number</span>
+                    <span className="font-mono font-semibold text-black">{linkedTeacher.mobile || '—'}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[11px] text-slate-500 font-medium">Joining Date</span>
+                    <span className="font-mono font-semibold text-black">
+                      {linkedTeacher.joining_date ? formatIndianDate(linkedTeacher.joining_date) : '—'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="block text-[11px] text-slate-500 font-medium">Monthly Salary</span>
+                    <span className="font-mono font-semibold text-black">
+                      {linkedTeacher.monthly_salary !== null && linkedTeacher.monthly_salary !== undefined
+                        ? `₹${Number(linkedTeacher.monthly_salary).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                        : 'Not set'}
+                    </span>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <span className="block text-[11px] text-slate-500 font-medium">Assigned Subjects</span>
+                    <span className="font-semibold text-black">
+                      {linkedTeacher.assigned_subjects && linkedTeacher.assigned_subjects.length > 0
+                        ? linkedTeacher.assigned_subjects.join(', ')
+                        : 'None assigned'}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="pt-3 flex flex-col-reverse sm:flex-row sm:justify-end gap-2 border-t border-slate-100">
             <Button variant="secondary" onClick={() => setEditModalOpen(false)} disabled={submitting} className="w-full sm:w-auto">
