@@ -296,6 +296,23 @@ async def update_user(
 
     if req.full_name is not None:
         user.full_name = req.full_name.strip()
+    if req.email is not None:
+        clean_email = req.email.strip().lower()
+        if clean_email != (user.email or "").strip().lower():
+            existing_email = (
+                await db.execute(
+                    select(User).where(
+                        func.lower(User.email) == clean_email,
+                        User.id != user.id,
+                    )
+                )
+            ).scalar_one_or_none()
+            if existing_email:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Email already in use by another staff account",
+                )
+            user.email = clean_email
     if req.role is not None:
         user.role = req.role
     if req.status is not None:
@@ -335,7 +352,13 @@ async def update_user(
                 )
                 teacher_synced = True
 
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        if "email" in str(exc).lower():
+            raise HTTPException(status_code=400, detail="Email already in use by another staff account")
+        raise HTTPException(status_code=400, detail="Could not update staff account")
     await db.refresh(user)
     await invalidate_user_cache()
     if teacher_synced:

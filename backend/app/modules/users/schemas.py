@@ -19,9 +19,19 @@ class CreateUserRequest(BaseModel):
 
 class UpdateUserRequest(BaseModel):
     full_name: Optional[str] = None
+    email: Optional[EmailStr] = None
     role: Optional[str] = Field(default=None, pattern="^(ADMIN|CASHIER|TEACHER)$")
     status: Optional[str] = Field(default=None, pattern="^(ACTIVE|INACTIVE)$")
     new_password: Optional[str] = Field(default=None, min_length=6)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, str):
+            return v.strip().lower()
+        return v
 
     @field_validator("new_password", mode="before")
     @classmethod

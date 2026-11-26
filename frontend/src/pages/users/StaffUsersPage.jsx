@@ -38,6 +38,7 @@ export default function StaffUsersPage() {
 
   const [editForm, setEditForm] = useState({
     full_name: '',
+    email: '',
     role: 'CASHIER',
     status: 'ACTIVE',
     new_password: '',
@@ -122,6 +123,7 @@ export default function StaffUsersPage() {
     setSelectedUser(u);
     setEditForm({
       full_name: u.full_name,
+      email: u.email || '',
       role: u.role,
       status: u.status,
       new_password: '',
@@ -164,6 +166,10 @@ export default function StaffUsersPage() {
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     if (!selectedUser) return;
+    if (!editForm.email.trim()) {
+      error('Staff email is required');
+      return;
+    }
     if (editForm.new_password) {
       if (!editForm.new_password.trim()) {
         error('New password cannot be blank spaces');
@@ -178,6 +184,7 @@ export default function StaffUsersPage() {
     try {
       const payload = {
         full_name: editForm.full_name.trim(),
+        email: editForm.email.trim().toLowerCase(),
         role: editForm.role,
         status: editForm.status,
       };
@@ -433,6 +440,15 @@ export default function StaffUsersPage() {
             onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
             required
             autoFocus
+          />
+
+          <Input
+            label="Staff Email"
+            type="email"
+            value={editForm.email}
+            onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+            placeholder="e.g. ramesh@thakurdwara.local"
+            required
           />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
