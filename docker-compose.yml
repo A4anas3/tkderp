@@ -57,6 +57,18 @@ services:
     volumes:
       - ./backend/uploads:/app/uploads
 
+  erp-thakurdwara-cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: erp-thakurdwara-cloudflared
+    restart: unless-stopped
+    mem_limit: 64m
+    env_file:
+      - .env.production
+    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN}
+    depends_on:
+      erp-thakurdwara-backend:
+        condition: service_started
+
 volumes:
   erp_thakurdwara_pgdata:
   erp_thakurdwara_redisdata:
