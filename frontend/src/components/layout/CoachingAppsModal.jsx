@@ -19,6 +19,7 @@ import {
   CalendarCheck,
   RotateCcw,
   UserCog,
+  Award,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -187,6 +188,15 @@ export default function CoachingAppsModal({ isOpen, onClose }) {
       icon: UserCog,
       route: '/users',
       color: 'bg-indigo-700',
+      roles: ['ADMIN'],
+    },
+    {
+      id: 'green-card',
+      name: 'Green Card',
+      desc: 'Membership Passes',
+      icon: Award,
+      route: '/green-card',
+      color: 'bg-green-600',
       roles: ['ADMIN'],
     },
   ];
