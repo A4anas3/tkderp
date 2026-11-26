@@ -1,4 +1,5 @@
 from datetime import date, datetime, timezone
+import re
 import uuid
 from decimal import Decimal
 from typing import Optional, List, Tuple
@@ -72,7 +73,7 @@ async def get_student_and_active_courses(
     db: AsyncSession
 ) -> Tuple[Optional[Student], Optional[str], List[VerificationCourseItem], bool]:
     """
-    Look up student by admission number, student code/ID (QR verify), or UUID,
+    Look up student by admission number, student ID code (QR verify), phone number, or UUID,
     and resolve active enrolled course items.
     Returns: (student, matched_adm_number, active_courses_list, is_overall_valid)
     """
@@ -113,7 +114,37 @@ async def get_student_and_active_courses(
         stu_res = await db.execute(stu_stmt)
         student = stu_res.scalar_one_or_none()
 
-    # 3. Lookup by UUID if identifier is valid UUID
+    # 3. Lookup by Phone Number (strip non-digits, match last 10 digits)
+    if not student and not re.search(r"[a-zA-Z]", ident):
+        digits = re.sub(r"\D", "", ident)
+        if 10 <= len(digits) <= 15:
+            last10 = digits[-10:]
+            try:
+                phone_stmt = (
+                    select(Student)
+                    .where(
+                        Student.mobile.isnot(None),
+                        func.right(func.regexp_replace(Student.mobile, r"[^0-9]", "", "g"), 10) == last10,
+                    )
+                    .order_by(Student.registration_date.asc(), Student.created_at.asc())
+                    .limit(1)
+                )
+                student = (await db.execute(phone_stmt)).scalars().first()
+            except Exception:
+                candidates = (
+                    await db.execute(
+                        select(Student)
+                        .where(Student.mobile.isnot(None))
+                        .order_by(Student.registration_date.asc(), Student.created_at.asc())
+                    )
+                ).scalars().all()
+                for cand in candidates:
+                    cand_digits = re.sub(r"\D", "", cand.mobile or "")
+                    if len(cand_digits) >= 10 and cand_digits[-10:] == last10:
+                        student = cand
+                        break
+
+    # 4. Lookup by UUID if identifier is valid UUID
     if not student:
         try:
             val_uuid = uuid.UUID(ident)
@@ -337,6 +368,7 @@ async def verify_student_credential(
     identifier: Optional[str] = None,
     admission_no: Optional[str] = Query(None),
     student_id: Optional[str] = Query(None),
+    phone: Optional[str] = Query(None),
     ident_param: Optional[str] = Query(None, alias="identifier"),
     request: Request = None,
     db: AsyncSession = Depends(get_db)
@@ -344,14 +376,14 @@ async def verify_student_credential(
     """
     Public verification endpoint (no authentication required).
     Verifies a student identity card and returns active course validity.
-    Supports lookup by admission number, student ID code (QR), or UUID.
+    Supports lookup by admission number, student ID code (QR), phone number, or UUID.
     Protected with sliding-window rate limiting.
     Only returns verification data when student has active enrolment or active demo.
     """
     if request:
         await id_card_rate_limiter(request)
 
-    target_ident = identifier or admission_no or student_id or ident_param
+    target_ident = identifier or admission_no or student_id or phone or ident_param
     if not target_ident or not target_ident.strip():
         raise HTTPException(status_code=400, detail="Identifier cannot be empty")
 
@@ -504,6 +536,7 @@ async def get_public_id_card(
     identifier: Optional[str] = None,
     admission_no: Optional[str] = Query(None),
     student_id: Optional[str] = Query(None),
+    phone: Optional[str] = Query(None),
     ident_param: Optional[str] = Query(None, alias="identifier"),
     db: AsyncSession = Depends(get_db),
     _limiter: None = Depends(id_card_rate_limiter),
@@ -511,11 +544,11 @@ async def get_public_id_card(
     """
     Public student ID card endpoint (no authentication required).
     Returns the student ID card data ONLY if that student has an active subject/enrolment.
-    Accepts admission number or student ID (code or UUID for QR verify).
+    Supports lookup by admission number, student ID code, phone number, or UUID (QR verify).
     If the student has no active subject, returns 404 with a clear message and leaks no student data.
     Equipped with rate limiting and returns only non-sensitive card-visible attributes (no phone numbers or fee/payment history; includes only total active due_balance).
     """
-    target_ident = (identifier or admission_no or student_id or ident_param or "").strip()
+    target_ident = (identifier or admission_no or student_id or phone or ident_param or "").strip()
     if not target_ident:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
