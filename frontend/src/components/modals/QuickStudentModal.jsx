@@ -10,6 +10,15 @@ import { useToast } from '../../context/ToastContext';
 import { compressImage } from '../../utils/imageCompressor';
 import { cleanMobileInput, isValid10DigitMobile } from '../../utils/phoneUtils';
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const getEmailValidationError = (email) => {
+  const trimmed = (email || '').trim();
+  return trimmed && !EMAIL_REGEX.test(trimmed)
+    ? 'Please enter a valid email address'
+    : null;
+};
+
 export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialData = null }) {
   const navigate = useNavigate();
   const { success, error } = useToast();
@@ -136,6 +145,12 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
       return;
     }
 
+    const emailValidationError = getEmailValidationError(formData.email);
+    if (emailValidationError) {
+      error(emailValidationError);
+      return;
+    }
+
     setLoading(true);
     try {
       let uploadedPhotoUrl = null;
@@ -180,6 +195,8 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
       setLoading(false);
     }
   };
+
+  const emailError = getEmailValidationError(formData.email);
 
   return (
     <Modal
@@ -373,6 +390,7 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
             value={formData.email}
             onChange={handleChange}
             placeholder="Optional email"
+            error={emailError}
           />
           <Input
             label="Date of Birth (Optional)"
