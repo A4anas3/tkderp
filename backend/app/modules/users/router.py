@@ -299,6 +299,23 @@ async def get_linked_teacher_by_employee_id(
     return LinkedTeacherLookupResponse(found=True, teacher=detail)
 
 
+async def _find_linked_teacher(db: AsyncSession, user: User) -> Optional[Teacher]:
+    """Find the Teacher record linked to a staff account by user_id, falling back to teacher_code."""
+    linked_teacher = (
+        await db.execute(select(Teacher).where(Teacher.user_id == user.id))
+    ).scalars().first()
+    if linked_teacher:
+        return linked_teacher
+    emp_id = (user.employee_id or "").strip().upper()
+    if emp_id:
+        return (
+            await db.execute(
+                select(Teacher).where(func.upper(Teacher.teacher_code) == emp_id)
+            )
+        ).scalars().first()
+    return None
+
+
 @router.put("/{user_id}", response_model=UserResponse)
 async def update_user(
     user_id: uuid.UUID,
@@ -312,6 +329,7 @@ async def update_user(
 
     if req.full_name is not None:
         user.full_name = req.full_name.strip()
+    new_clean_phone: Optional[str] = None
     if req.phone is not None:
         clean_phone = normalize_mobile(req.phone)
         if not clean_phone or len(clean_phone) != 10:
@@ -327,6 +345,7 @@ async def update_user(
                     detail="Phone number already in use by another staff account",
                 )
         user.phone = clean_phone
+        new_clean_phone = clean_phone
     if req.email is not None:
         clean_email = req.email.strip().lower()
         if clean_email != (user.email or "").strip().lower():
@@ -355,33 +374,35 @@ async def update_user(
         await revoke_all_user_refresh_tokens(db, user.id)
 
     teacher_synced = False
+    linked_teacher: Optional[Teacher] = None
+    if new_clean_phone is not None:
+        linked_teacher = await _find_linked_teacher(db, user)
+        if linked_teacher and linked_teacher.mobile != new_clean_phone:
+            linked_teacher.mobile = new_clean_phone
+            teacher_synced = True
+
     if req.status is not None and (user.role or "").strip().upper() == "TEACHER":
-        emp_id = (user.employee_id or "").strip().upper()
-        if emp_id:
-            linked_teacher = (
-                await db.execute(
-                    select(Teacher).where(func.upper(Teacher.teacher_code) == emp_id)
+        if linked_teacher is None:
+            linked_teacher = await _find_linked_teacher(db, user)
+        if linked_teacher and linked_teacher.status != user.status:
+            old_teacher_status = linked_teacher.status
+            linked_teacher.status = user.status
+            db.add(
+                AuditLog(
+                    user_id=admin.id,
+                    action="TEACHER_STATUS_UPDATED",
+                    entity_type="TEACHER",
+                    entity_id=linked_teacher.id,
+                    details=json.dumps({
+                        "teacher_code": linked_teacher.teacher_code,
+                        "teacher_name": linked_teacher.name,
+                        "old_status": old_teacher_status,
+                        "new_status": user.status,
+                        "reason": f"Synced from staff account ({user.employee_id}) status change",
+                    }),
                 )
-            ).scalar_one_or_none()
-            if linked_teacher and linked_teacher.status != user.status:
-                old_teacher_status = linked_teacher.status
-                linked_teacher.status = user.status
-                db.add(
-                    AuditLog(
-                        user_id=admin.id,
-                        action="TEACHER_STATUS_UPDATED",
-                        entity_type="TEACHER",
-                        entity_id=linked_teacher.id,
-                        details=json.dumps({
-                            "teacher_code": linked_teacher.teacher_code,
-                            "teacher_name": linked_teacher.name,
-                            "old_status": old_teacher_status,
-                            "new_status": user.status,
-                            "reason": f"Synced from staff account ({user.employee_id}) status change",
-                        }),
-                    )
-                )
-                teacher_synced = True
+            )
+            teacher_synced = True
 
     try:
         await db.commit()
