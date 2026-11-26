@@ -110,6 +110,8 @@ async def lifespan(app: FastAPI):
             await conn.execute(text("ALTER TABLE institute_settings ADD COLUMN IF NOT EXISTS logo_url VARCHAR(500);"))
             await conn.execute(text("ALTER TABLE institute_settings ADD COLUMN IF NOT EXISTS govt_regd_no VARCHAR(100);"))
             await conn.execute(text("ALTER TABLE institute_settings ADD COLUMN IF NOT EXISTS iso_certification VARCHAR(150);"))
+            await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(30);"))
+            await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_phone ON users(phone);"))
         except Exception:
             pass
     

@@ -9,7 +9,7 @@ import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
 import Avatar from '../../components/common/Avatar';
 import TeacherDetailModal from '../../components/modals/TeacherDetailModal';
-import { teacherApi } from '../../services/allApis';
+import { teacherApi, userApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
 import { cleanMobileInput } from '../../utils/phoneUtils';
@@ -43,7 +43,14 @@ export default function TeachersPage() {
   const [existingTeacherWithMobile, setExistingTeacherWithMobile] = useState(null);
   const [checkingMobile, setCheckingMobile] = useState(false);
 
+  // Staff Account Link State (for Add Teacher)
+  const [teacherStaffAccounts, setTeacherStaffAccounts] = useState([]);
+  const [linkedTeacherCodes, setLinkedTeacherCodes] = useState(new Set());
+  const [loadingStaffAccounts, setLoadingStaffAccounts] = useState(false);
+  const [staffSearch, setStaffSearch] = useState('');
+
   const [formData, setFormData] = useState({
+    employee_id: '',
     name: '',
     mobile: '',
     email: '',
@@ -118,13 +125,37 @@ export default function TeachersPage() {
     }
   }, [formData.mobile, editingTeacher]);
 
+  const loadTeacherStaffAccounts = useCallback(async () => {
+    setLoadingStaffAccounts(true);
+    try {
+      const [staffRes, allTeachersRes] = await Promise.all([
+        userApi.list({ role: 'TEACHER', status: 'ACTIVE', page: 1, page_size: 100 }),
+        teacherApi.list({ page: 1, page_size: 100 }),
+      ]);
+      setTeacherStaffAccounts(staffRes?.items || []);
+      const linkedCodes = new Set(
+        (allTeachersRes?.items || [])
+          .map((t) => (t.teacher_code || '').trim().toUpperCase())
+          .filter(Boolean)
+      );
+      setLinkedTeacherCodes(linkedCodes);
+    } catch (err) {
+      error(err.message || 'Failed to load teacher staff accounts');
+      setTeacherStaffAccounts([]);
+    } finally {
+      setLoadingStaffAccounts(false);
+    }
+  }, []);
+
   const handleOpenAdd = () => {
     setEditingTeacher(null);
     setPhotoPreview(null);
     setPhotoFile(null);
     setPhotoSizeKb(null);
     setExistingTeacherWithMobile(null);
+    setStaffSearch('');
     setFormData({
+      employee_id: '',
       name: '',
       mobile: '',
       email: '',
@@ -134,6 +165,7 @@ export default function TeachersPage() {
       joining_date: new Date().toISOString().split('T')[0],
       status: 'ACTIVE',
     });
+    loadTeacherStaffAccounts();
     setModalOpen(true);
   };
 
@@ -143,7 +175,9 @@ export default function TeachersPage() {
     setPhotoFile(null);
     setPhotoSizeKb(null);
     setExistingTeacherWithMobile(null);
+    setStaffSearch('');
     setFormData({
+      employee_id: t.teacher_code || '',
       name: t.name,
       mobile: t.mobile,
       email: t.email || '',
@@ -154,6 +188,27 @@ export default function TeachersPage() {
       status: t.status,
     });
     setModalOpen(true);
+  };
+
+  const handleSelectStaffAccount = (empId) => {
+    const selected = teacherStaffAccounts.find((u) => u.employee_id === empId);
+    if (!selected) {
+      setFormData((prev) => ({
+        ...prev,
+        employee_id: '',
+        name: '',
+        mobile: '',
+        email: '',
+      }));
+      return;
+    }
+    setFormData((prev) => ({
+      ...prev,
+      employee_id: selected.employee_id,
+      name: selected.full_name || '',
+      mobile: cleanMobileInput(selected.phone || ''),
+      email: selected.email || '',
+    }));
   };
 
   const handlePhotoSelect = async (e) => {
@@ -183,6 +238,10 @@ export default function TeachersPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!editingTeacher && !formData.employee_id) {
+      error('Please select a Teacher Staff Account to link');
+      return;
+    }
     if (!formData.name.trim()) {
       error('Teacher full name is required');
       return;
@@ -232,6 +291,7 @@ export default function TeachersPage() {
       }
 
       const payload = {
+        ...(editingTeacher ? {} : { employee_id: formData.employee_id }),
         name: formData.name.trim(),
         mobile: cleanMob,
         email: formData.email.trim() || null,
@@ -678,49 +738,135 @@ export default function TeachersPage() {
             </div>
           </div>
 
-          <Input
-            label="Teacher Full Name *"
-            value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            placeholder="e.g. K.K. Chauhan"
-            required
-            autoFocus
-          />
+          {!editingTeacher && (() => {
+            const q = staffSearch.trim().toLowerCase();
+            const filteredStaff = teacherStaffAccounts.filter((u) => {
+              if (!q) return true;
+              return (
+                (u.employee_id || '').toLowerCase().includes(q) ||
+                (u.full_name || '').toLowerCase().includes(q) ||
+                (u.phone || '').toLowerCase().includes(q)
+              );
+            });
+            return (
+              <div className="p-3 bg-purple-50/60 border border-odoo-200 rounded-lg space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <label
+                    htmlFor="link-staff-account-select"
+                    className="block text-xs font-bold text-black"
+                  >
+                    Link Staff Account <span className="text-rose-600">*</span>
+                  </label>
+                  {formData.employee_id && (
+                    <span className="font-mono text-[11px] font-bold text-odoo-800 bg-white border border-odoo-300 px-2 py-0.5 rounded">
+                      Code: {formData.employee_id}
+                    </span>
+                  )}
+                </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Input
-              label="Mobile Number *"
-              type="tel"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              maxLength={10}
-              value={formData.mobile}
-              onChange={(e) => setFormData({ ...formData, mobile: cleanMobileInput(e.target.value) })}
-              placeholder="10-digit mobile"
-              required
-              error={
-                existingTeacherWithMobile
-                  ? `Already registered to ${existingTeacherWithMobile.name} (${existingTeacherWithMobile.teacher_code})`
-                  : formData.mobile && formData.mobile.length < 10
-                  ? `Must be 10 digits (${formData.mobile.length}/10)`
-                  : null
-              }
-              helperText={
-                existingTeacherWithMobile
-                  ? null
-                  : formData.mobile && formData.mobile.length === 10
-                  ? '✓ Valid 10-digit mobile'
-                  : '10-digit mobile number'
-              }
-            />
-            <Input
-              label="Email (Optional)"
-              type="email"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              placeholder="e.g. teacher@gmail.com"
-            />
-          </div>
+                <input
+                  type="text"
+                  value={staffSearch}
+                  onChange={(e) => setStaffSearch(e.target.value)}
+                  placeholder="Search staff by Employee ID or name..."
+                  className="w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs text-black font-medium placeholder:text-slate-500 focus:outline-none focus:border-odoo-600 focus:ring-1 focus:ring-odoo-600 shadow-2xs"
+                />
+
+                <select
+                  id="link-staff-account-select"
+                  value={formData.employee_id}
+                  onChange={(e) => handleSelectStaffAccount(e.target.value)}
+                  required
+                  disabled={loadingStaffAccounts}
+                  className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs sm:text-sm min-h-[38px] sm:min-h-[34px] text-black font-medium focus:outline-none focus:border-odoo-600 focus:ring-1 focus:ring-odoo-600 disabled:bg-slate-100 disabled:text-slate-600 shadow-2xs transition-colors"
+                >
+                  <option value="">
+                    {loadingStaffAccounts
+                      ? 'Loading active Teacher staff accounts...'
+                      : '-- Select Active Teacher Staff Account --'}
+                  </option>
+                  {filteredStaff.map((u) => {
+                    const alreadyLinked = linkedTeacherCodes.has((u.employee_id || '').trim().toUpperCase());
+                    return (
+                      <option key={u.id} value={u.employee_id} disabled={alreadyLinked}>
+                        {u.employee_id} — {u.full_name}
+                        {u.phone ? ` (${u.phone})` : ''}
+                        {alreadyLinked ? ' [Already linked]' : ''}
+                      </option>
+                    );
+                  })}
+                </select>
+
+                {!loadingStaffAccounts && teacherStaffAccounts.length === 0 ? (
+                  <p className="text-[11px] font-semibold text-amber-800">
+                    No active Teacher staff accounts found. Create a TEACHER account in Staff &amp; Roles first.
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-slate-600 font-medium">
+                    Teacher code, name, phone, and email are linked from the selected staff account.
+                  </p>
+                )}
+              </div>
+            );
+          })()}
+
+          {(() => {
+            const selectedStaff = !editingTeacher
+              ? teacherStaffAccounts.find((u) => u.employee_id === formData.employee_id)
+              : null;
+            const lockStaffFields = !editingTeacher;
+            const lockMobileField = !editingTeacher && Boolean(selectedStaff?.phone);
+            return (
+              <>
+                <Input
+                  label="Teacher Full Name *"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder={lockStaffFields ? 'Auto-filled from linked staff account' : 'e.g. K.K. Chauhan'}
+                  readOnly={lockStaffFields}
+                  required
+                  autoFocus={Boolean(editingTeacher)}
+                />
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Input
+                    label="Mobile Number *"
+                    type="tel"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={10}
+                    value={formData.mobile}
+                    onChange={(e) => setFormData({ ...formData, mobile: cleanMobileInput(e.target.value) })}
+                    placeholder={lockMobileField ? 'Auto-filled from staff' : '10-digit mobile'}
+                    readOnly={lockMobileField}
+                    required
+                    error={
+                      existingTeacherWithMobile
+                        ? `Already registered to ${existingTeacherWithMobile.name} (${existingTeacherWithMobile.teacher_code})`
+                        : formData.mobile && formData.mobile.length < 10
+                        ? `Must be 10 digits (${formData.mobile.length}/10)`
+                        : null
+                    }
+                    helperText={
+                      existingTeacherWithMobile
+                        ? null
+                        : formData.mobile && formData.mobile.length === 10
+                        ? '✓ Valid 10-digit mobile'
+                        : '10-digit mobile number'
+                    }
+                  />
+                  <Input
+                    label={lockStaffFields ? 'Email (From Staff Account)' : 'Email (Optional)'}
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    placeholder={lockStaffFields ? 'Auto-filled from staff' : 'e.g. teacher@gmail.com'}
+                    readOnly={lockStaffFields}
+                  />
+                </div>
+              </>
+            );
+          })()}
 
           {/* Existing Teacher Profile Card if Mobile Already Exists */}
           {existingTeacherWithMobile && (
@@ -808,7 +954,9 @@ export default function TeachersPage() {
             </Button>
             {(() => {
               const cleanMob = cleanMobileInput(formData.mobile);
+              const hasStaffLink = Boolean(editingTeacher) || Boolean(formData.employee_id);
               const isFormValid =
+                hasStaffLink &&
                 formData.name.trim().length >= 2 &&
                 cleanMob.length === 10 &&
                 !existingTeacherWithMobile &&
@@ -817,7 +965,8 @@ export default function TeachersPage() {
                 Boolean(formData.joining_date);
 
               let buttonLabel = editingTeacher ? 'Save Changes' : 'Register Faculty';
-              if (!formData.name.trim()) buttonLabel = 'Enter Teacher Name';
+              if (!editingTeacher && !formData.employee_id) buttonLabel = 'Select Staff Account';
+              else if (!formData.name.trim()) buttonLabel = 'Enter Teacher Name';
               else if (cleanMob.length !== 10) buttonLabel = 'Enter 10-Digit Mobile';
               else if (existingTeacherWithMobile) buttonLabel = 'Mobile Already Registered';
               else if (!formData.qualification.trim()) buttonLabel = 'Enter Qualification';

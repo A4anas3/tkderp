@@ -54,6 +54,7 @@ from app.common.active_lines import compute_days_remaining
 from app.core.dependencies import require_cashier_or_admin, require_admin
 from app.storage.base import get_storage_provider
 from app.common.pagination import PageResponse
+from app.common.validators import normalize_mobile, validate_mobile_10_digits
 
 router = APIRouter(prefix="/api/teachers", tags=["Teachers"])
 
@@ -304,7 +305,63 @@ async def create_teacher(
     db: AsyncSession = Depends(get_db),
     admin = Depends(require_admin)
 ):
-    clean_mob = req.mobile.strip()
+    emp_id = (req.employee_id or req.staff_employee_id or "").strip().upper()
+    if not emp_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Staff employee_id is required to link a teacher account"
+        )
+
+    staff_user = (
+        await db.execute(select(User).where(func.upper(User.employee_id) == emp_id))
+    ).scalar_one_or_none()
+    if not staff_user:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Staff account '{emp_id}' not found. Create the staff account first."
+        )
+    if (staff_user.role or "").strip().upper() != "TEACHER":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Staff account '{staff_user.employee_id}' has role {staff_user.role}; only TEACHER staff accounts can be linked."
+        )
+    if (staff_user.status or "").strip().upper() != "ACTIVE":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Staff account '{staff_user.employee_id}' is {staff_user.status}; only ACTIVE staff accounts can be linked."
+        )
+
+    staff_emp_id = staff_user.employee_id.strip().upper()
+    existing_linked = (
+        await db.execute(
+            select(Teacher).where(
+                or_(
+                    func.upper(Teacher.teacher_code) == staff_emp_id,
+                    Teacher.user_id == staff_user.id,
+                )
+            )
+        )
+    ).scalar_one_or_none()
+    if existing_linked:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Staff account '{staff_emp_id}' is already linked to teacher {existing_linked.name} ({existing_linked.teacher_code})"
+        )
+
+    clean_mob = None
+    if staff_user.phone:
+        try:
+            clean_mob = validate_mobile_10_digits(staff_user.phone, required=True)
+        except ValueError:
+            clean_mob = normalize_mobile(staff_user.phone)
+    if not clean_mob and req.mobile:
+        clean_mob = req.mobile.strip()
+    if not clean_mob or len(clean_mob) != 10:
+        raise HTTPException(
+            status_code=400,
+            detail="Staff account does not have a valid 10-digit phone number"
+        )
+
     existing_teacher = (await db.execute(select(Teacher).where(Teacher.mobile == clean_mob))).scalar_one_or_none()
     if existing_teacher:
         raise HTTPException(
@@ -312,22 +369,17 @@ async def create_teacher(
             detail=f"Faculty member already registered with mobile {clean_mob}: {existing_teacher.name} ({existing_teacher.teacher_code})"
         )
 
-    if not req.name or not req.name.strip():
-        raise HTTPException(status_code=400, detail="Teacher name is required")
     if req.qualification is not None and not req.qualification.strip():
         raise HTTPException(status_code=400, detail="Qualification cannot be blank")
     if req.specialization is not None and not req.specialization.strip():
         raise HTTPException(status_code=400, detail="Specialization cannot be blank")
 
-    # Auto-generate teacher code
-    count = (await db.execute(select(func.count(Teacher.id)))).scalar() or 0
-    code = f"TCH{count + 1:03d}"
-
     new_teacher = Teacher(
-        teacher_code=code,
-        name=req.name.strip(),
+        teacher_code=staff_emp_id,
+        user_id=staff_user.id,
+        name=staff_user.full_name.strip(),
         mobile=clean_mob,
-        email=req.email.strip().lower() if req.email else None,
+        email=staff_user.email.strip().lower() if staff_user.email else (req.email.strip().lower() if req.email else None),
         qualification=req.qualification.strip() if req.qualification else "Faculty Educator",
         specialization=req.specialization.strip() if req.specialization else "General Faculty",
         photo_url=req.photo_url,
@@ -340,6 +392,7 @@ async def create_teacher(
     await db.commit()
     await db.refresh(new_teacher)
     await invalidate_teacher_cache()
+    await invalidate_user_cache()
     return TeacherResponse.model_validate(new_teacher)
 
 async def _sync_linked_teacher_user_status(

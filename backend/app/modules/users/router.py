@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select, func, or_, desc
-from typing import List
+from typing import List, Optional
 import json
+import re
 import uuid
 
 from app.core.cache import (
@@ -31,18 +33,89 @@ from app.modules.users.schemas import (
 from app.core.security import get_password_hash
 from app.core.dependencies import require_admin
 from app.common.pagination import PageResponse
+from app.common.validators import normalize_mobile
 
 router = APIRouter(prefix="/api/users", tags=["Users & Staff Management"])
+
+ROLE_PREFIX_MAP = {
+    "TEACHER": "TCH",
+    "CASHIER": "CSH",
+    "ADMIN": "ADM",
+}
+
+
+async def _find_user_by_phone(db: AsyncSession, norm_phone: str) -> Optional[User]:
+    """Find a staff user matching a normalized 10-digit phone number."""
+    clauses = [
+        User.phone == norm_phone,
+        User.phone == f"0{norm_phone}",
+        User.phone == f"+91{norm_phone}",
+    ]
+    try:
+        clauses.append(
+            func.right(func.regexp_replace(User.phone, r"[^0-9]", "", "g"), 10) == norm_phone
+        )
+    except Exception:
+        pass
+    stmt = select(User).where(User.phone.isnot(None), or_(*clauses)).limit(1)
+    return (await db.execute(stmt)).scalars().first()
+
+
+async def _generate_next_employee_id(db: AsyncSession, role: str) -> str:
+    """Auto-generate next 3-digit Employee ID for the role prefix (TCH/CSH/ADM)."""
+    prefix = ROLE_PREFIX_MAP.get((role or "").strip().upper())
+    if not prefix:
+        raise HTTPException(status_code=400, detail=f"Unsupported staff role: {role}")
+
+    pattern = re.compile(rf"^{prefix}(\d+)$", re.IGNORECASE)
+    user_codes = (
+        await db.execute(
+            select(User.employee_id).where(func.upper(User.employee_id).like(f"{prefix}%"))
+        )
+    ).scalars().all()
+
+    max_num = 0
+    for code in user_codes:
+        if not code:
+            continue
+        match = pattern.match(code.strip())
+        if match:
+            num = int(match.group(1))
+            if num > max_num:
+                max_num = num
+
+    if prefix == "TCH":
+        teacher_codes = (
+            await db.execute(
+                select(Teacher.teacher_code).where(func.upper(Teacher.teacher_code).like(f"{prefix}%"))
+            )
+        ).scalars().all()
+        for code in teacher_codes:
+            if not code:
+                continue
+            match = pattern.match(code.strip())
+            if match:
+                num = int(match.group(1))
+                if num > max_num:
+                    max_num = num
+
+    return f"{prefix}{max_num + 1:03d}"
+
 
 @router.get("", response_model=PageResponse[UserResponse])
 async def list_users(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    search: str = None,
+    search: Optional[str] = None,
+    role: Optional[str] = None,
+    status: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(require_admin)
 ):
-    cache_key = make_cache_key("users", "list", page=page, page_size=page_size, search=search)
+    cache_key = make_cache_key(
+        "users", "list",
+        page=page, page_size=page_size, search=search, role=role, status=status,
+    )
     hit, cached = await cache_get(cache_key)
     if hit:
         return cached
@@ -50,11 +123,22 @@ async def list_users(
     query = select(User)
     count_query = select(func.count(User.id))
 
+    if role:
+        role_val = role.strip().upper()
+        query = query.where(func.upper(User.role) == role_val)
+        count_query = count_query.where(func.upper(User.role) == role_val)
+
+    if status:
+        status_val = status.strip().upper()
+        query = query.where(func.upper(User.status) == status_val)
+        count_query = count_query.where(func.upper(User.status) == status_val)
+
     if search:
         search_filter = or_(
             User.full_name.ilike(f"%{search}%"),
             User.employee_id.ilike(f"%{search}%"),
-            User.email.ilike(f"%{search}%")
+            User.email.ilike(f"%{search}%"),
+            User.phone.ilike(f"%{search}%"),
         )
         query = query.where(search_filter)
         count_query = count_query.where(search_filter)
@@ -81,21 +165,51 @@ async def create_user(
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(require_admin)
 ):
-    # Check duplicate
-    stmt = select(User).where(or_(User.employee_id == req.employee_id, User.email == req.email))
-    existing = (await db.execute(stmt)).scalar_one_or_none()
-    if existing:
-        raise HTTPException(status_code=400, detail="Employee ID or Email already exists")
+    clean_email = req.email.strip().lower()
+    clean_phone = normalize_mobile(req.phone)
+    if not clean_phone or len(clean_phone) != 10:
+        raise HTTPException(status_code=400, detail="Phone number must be exactly 10 numeric digits")
 
-    new_user = User(
-        employee_id=req.employee_id.strip().upper(),
-        full_name=req.full_name.strip(),
-        email=req.email.strip().lower(),
-        password_hash=get_password_hash(req.password),
-        role=req.role,
-        status="ACTIVE"
-    )
-    db.add(new_user)
+    existing_email = (
+        await db.execute(select(User).where(func.lower(User.email) == clean_email))
+    ).scalar_one_or_none()
+    if existing_email:
+        raise HTTPException(status_code=400, detail="Email already exists")
+
+    existing_phone = await _find_user_by_phone(db, clean_phone)
+    if existing_phone:
+        raise HTTPException(status_code=400, detail="Staff with this phone number already exists")
+
+    new_user = None
+    password_hash = get_password_hash(req.password)
+    for attempt in range(3):
+        employee_id = await _generate_next_employee_id(db, req.role)
+        candidate = User(
+            employee_id=employee_id,
+            full_name=req.full_name.strip(),
+            email=clean_email,
+            phone=clean_phone,
+            password_hash=password_hash,
+            role=req.role,
+            status="ACTIVE"
+        )
+        try:
+            async with db.begin_nested():
+                db.add(candidate)
+                await db.flush()
+            new_user = candidate
+            break
+        except IntegrityError as exc:
+            err_msg = str(exc).lower()
+            if "employee_id" in err_msg and attempt < 2:
+                continue
+            await db.rollback()
+            if "phone" in err_msg:
+                raise HTTPException(status_code=400, detail="Staff with this phone number already exists")
+            if "email" in err_msg:
+                raise HTTPException(status_code=400, detail="Email already exists")
+            raise HTTPException(status_code=400, detail="Could not create staff account")
+
     await db.commit()
     await db.refresh(new_user)
     await invalidate_user_cache()

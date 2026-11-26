@@ -9,6 +9,7 @@ import Badge from '../../components/common/Badge';
 import { userApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 import { formatIndianDate } from '../../utils/dateCycleUtils';
+import { cleanMobileInput } from '../../utils/phoneUtils';
 
 export default function StaffUsersPage() {
   const { success, error } = useToast();
@@ -27,12 +28,13 @@ export default function StaffUsersPage() {
 
   // Forms
   const [addForm, setAddForm] = useState({
-    employee_id: '',
     full_name: '',
     email: '',
+    phone: '',
     password: '',
     role: 'CASHIER',
   });
+  const [addError, setAddError] = useState('');
 
   const [editForm, setEditForm] = useState({
     full_name: '',
@@ -69,35 +71,48 @@ export default function StaffUsersPage() {
 
   const handleOpenAdd = () => {
     setAddForm({
-      employee_id: '',
       full_name: '',
       email: '',
+      phone: '',
       password: '',
       role: 'CASHIER',
     });
+    setAddError('');
     setAddModalOpen(true);
   };
 
   const handleCreateSubmit = async (e) => {
     e.preventDefault();
-    if (!addForm.employee_id.trim() || !addForm.full_name.trim() || !addForm.password) {
-      error('Employee ID, Name and Password are required');
+    setAddError('');
+    if (!addForm.full_name.trim() || !addForm.email.trim() || !addForm.password) {
+      const msg = 'Full Name, Email and Password are required';
+      setAddError(msg);
+      error(msg);
+      return;
+    }
+    const cleanPhone = cleanMobileInput(addForm.phone);
+    if (!cleanPhone || cleanPhone.length !== 10) {
+      const msg = 'Phone number must be exactly 10 numeric digits';
+      setAddError(msg);
+      error(msg);
       return;
     }
     setSubmitting(true);
     try {
-      await userApi.create({
-        employee_id: addForm.employee_id.trim().toUpperCase(),
+      const created = await userApi.create({
         full_name: addForm.full_name.trim(),
         email: addForm.email.trim().toLowerCase(),
+        phone: cleanPhone,
         password: addForm.password,
         role: addForm.role,
       });
-      success(`Staff account created: ${addForm.employee_id}`);
+      success(`Staff account created: ${created.employee_id}`);
       setAddModalOpen(false);
       loadUsers();
     } catch (err) {
-      error(err.message || 'Failed to create staff account');
+      const msg = err.message || 'Failed to create staff account';
+      setAddError(msg);
+      error(msg);
     } finally {
       setSubmitting(false);
     }
@@ -310,14 +325,19 @@ export default function StaffUsersPage() {
         maxWidth="max-w-md"
       >
         <form onSubmit={handleCreateSubmit} className="space-y-3">
+          {addError && (
+            <div className="rounded-md border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-800">
+              {addError}
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               label="Employee ID"
-              value={addForm.employee_id}
-              onChange={(e) => setAddForm({ ...addForm, employee_id: e.target.value })}
-              placeholder="e.g. CSH002 or TCH004"
-              required
-              autoFocus
+              value={`Auto-generated (${addForm.role === 'TEACHER' ? 'TCH' : addForm.role === 'ADMIN' ? 'ADM' : 'CSH'}###)`}
+              readOnly
+              disabled
+              helperText="Assigned automatically by backend"
             />
 
             <Select
@@ -338,13 +358,42 @@ export default function StaffUsersPage() {
             onChange={(e) => setAddForm({ ...addForm, full_name: e.target.value })}
             placeholder="e.g. Ramesh Kumar"
             required
+            autoFocus
+          />
+
+          <Input
+            label="Phone Number"
+            type="tel"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={10}
+            value={addForm.phone}
+            onChange={(e) => {
+              setAddError('');
+              setAddForm({ ...addForm, phone: cleanMobileInput(e.target.value) });
+            }}
+            placeholder="10-digit mobile number"
+            required
+            error={
+              addForm.phone && addForm.phone.length < 10
+                ? `Must be 10 digits (${addForm.phone.length}/10)`
+                : null
+            }
+            helperText={
+              addForm.phone && addForm.phone.length === 10
+                ? '✓ Valid 10-digit phone number'
+                : 'Required 10-digit phone number'
+            }
           />
 
           <Input
             label="Staff Email"
             type="email"
             value={addForm.email}
-            onChange={(e) => setAddForm({ ...addForm, email: e.target.value })}
+            onChange={(e) => {
+              setAddError('');
+              setAddForm({ ...addForm, email: e.target.value });
+            }}
             placeholder="e.g. ramesh@thakurdwara.local"
             required
           />

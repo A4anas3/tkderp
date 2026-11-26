@@ -29,8 +29,31 @@ class TeacherBase(BaseModel):
     def validate_mobile(cls, v):
         return validate_mobile_10_digits(v, required=True)
 
-class TeacherCreate(TeacherBase):
-    pass
+class TeacherCreate(BaseModel):
+    employee_id: Optional[str] = None
+    staff_employee_id: Optional[str] = None
+    name: Optional[str] = Field(default=None, min_length=2, max_length=150)
+    mobile: Optional[str] = None
+    email: Optional[str] = None
+    qualification: Optional[str] = None
+    specialization: Optional[str] = None
+    photo_url: Optional[str] = None
+    joining_date: date = Field(default_factory=date.today)
+    status: str = Field(default="ACTIVE", pattern="^(ACTIVE|INACTIVE)$")
+    share_type: str = Field(default="PERCENT", pattern="^(PERCENT|FIXED_MONTHLY|PER_STUDENT)$")
+    share_value: Decimal = Field(default=Decimal("0.00"), ge=0)
+
+    @field_validator("employee_id", "staff_employee_id", "name", "email", "qualification", "specialization", mode="before")
+    @classmethod
+    def sanitize_empty_strings(cls, v):
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
+    @field_validator("mobile", mode="before")
+    @classmethod
+    def validate_mobile(cls, v):
+        return validate_mobile_10_digits(v, required=False)
 
 class TeacherUpdate(BaseModel):
     name: Optional[str] = None

@@ -2,13 +2,20 @@ from datetime import date
 from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
 from typing import Optional, List
 import uuid
+from app.common.validators import validate_mobile_10_digits
 
 class CreateUserRequest(BaseModel):
-    employee_id: str = Field(..., min_length=2, max_length=50)
+    employee_id: Optional[str] = None
     full_name: str = Field(..., min_length=2, max_length=150)
     email: EmailStr
+    phone: str = Field(...)
     password: str = Field(..., min_length=6)
     role: str = Field(default="CASHIER", pattern="^(ADMIN|CASHIER|TEACHER)$")
+
+    @field_validator("phone", mode="before")
+    @classmethod
+    def validate_phone(cls, v):
+        return validate_mobile_10_digits(v, required=True)
 
 class UpdateUserRequest(BaseModel):
     full_name: Optional[str] = None

@@ -11,6 +11,7 @@ class UserResponse(BaseModel):
     employee_id: str
     full_name: str
     email: str
+    phone: Optional[str] = None
     role: str
     status: str
 
