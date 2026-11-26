@@ -138,31 +138,37 @@ class CloudinaryStorageProvider(StorageProvider):
         if not public_id:
             return None
 
-        timestamp = str(int(time.time()))
-        sign_params = {
-            "public_id": public_id,
-            "timestamp": timestamp,
-            "type": "private",
-        }
-        signature = self._sign_params(sign_params)
+        candidates = [public_id]
+        stem, ext = os.path.splitext(public_id)
+        if ext.lower() in (".jpg", ".jpeg", ".png", ".webp", ".gif") and stem:
+            candidates.append(stem)
 
         download_url = f"https://api.cloudinary.com/v1_1/{self.cloud_name}/image/download"
-        query_params = {
-            **sign_params,
-            "api_key": self.api_key,
-            "signature": signature,
-        }
 
         async with httpx.AsyncClient(timeout=25.0, follow_redirects=True) as client:
-            resp = await client.get(download_url, params=query_params)
+            for candidate_id in candidates:
+                timestamp = str(int(time.time()))
+                sign_params = {
+                    "public_id": candidate_id,
+                    "timestamp": timestamp,
+                    "type": "private",
+                }
+                signature = self._sign_params(sign_params)
+                query_params = {
+                    **sign_params,
+                    "api_key": self.api_key,
+                    "signature": signature,
+                }
+                resp = await client.get(download_url, params=query_params)
+                if resp.status_code == 200:
+                    mime_type = resp.headers.get("content-type", "image/jpeg").split(";")[0].strip()
+                    return resp.content, mime_type
+                if resp.status_code != 404:
+                    raise RuntimeError(
+                        f"Cloudinary download failed ({resp.status_code}): {resp.text[:200]}"
+                    )
 
-        if resp.status_code == 200:
-            mime_type = resp.headers.get("content-type", "image/jpeg").split(";")[0].strip()
-            return resp.content, mime_type
-        if resp.status_code == 404:
-            return None
-
-        raise RuntimeError(f"Cloudinary download failed ({resp.status_code}): {resp.text[:200]}")
+        return None
 
     def get_url(self, storage_key: str) -> Optional[str]:
         """Always return a backend-served protected URL, never a direct Cloudinary URL."""

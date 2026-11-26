@@ -16,8 +16,9 @@ def _safe_stem(filename: str) -> str:
 
 
 class LocalStorageProvider(StorageProvider):
-    def __init__(self, base_dir: str = settings.UPLOAD_DIR):
-        self.base_dir = os.path.abspath(base_dir)
+    def __init__(self, base_dir: Optional[str] = None):
+        resolved_dir = base_dir if base_dir is not None else settings.UPLOAD_DIR
+        self.base_dir = os.path.abspath(resolved_dir)
         os.makedirs(self.base_dir, exist_ok=True)
 
     def _resolve_safe_path(self, storage_key: str) -> Optional[str]:

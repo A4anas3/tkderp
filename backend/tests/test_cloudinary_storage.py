@@ -51,6 +51,8 @@ async def test_cloudinary_provider_signed_private_upload_download_delete(monkeyp
         async def get(self, url, params=None):
             captured.setdefault("gets", []).append((url, params))
             if url.endswith("/image/download"):
+                if params and params.get("public_id", "").endswith(".jpg"):
+                    return HttpxResponse(404)
                 return HttpxResponse(
                     200,
                     content=b"private-image-bytes",
@@ -85,15 +87,23 @@ async def test_cloudinary_provider_signed_private_upload_download_delete(monkeyp
     assert dl_url == "https://api.cloudinary.com/v1_1/demo_cloud/image/download"
     assert dl_params["type"] == "private"
 
+    # Legacy key with .jpg extension falls back to extensionless public_id
+    downloaded_ext = await provider.download(f"{key}.jpg")
+    assert downloaded_ext == (b"private-image-bytes", "image/jpeg")
+
     deleted = await provider.delete(key)
     assert deleted is True
     destroy_url, destroy_data, _ = captured["posts"][1]
     assert destroy_url == "https://api.cloudinary.com/v1_1/demo_cloud/image/destroy"
     assert destroy_data["type"] == "private"
 
+    # Delete returns False if Cloudinary does not confirm "ok"
+    assert await provider.delete("") is False
+
 
 @pytest.mark.asyncio
-async def test_uploads_endpoint_requires_jwt_and_serves_local_and_cloud(monkeypatch):
+async def test_uploads_endpoint_requires_jwt_and_serves_local_and_cloud(monkeypatch, tmp_path):
+    monkeypatch.setattr(settings, "UPLOAD_DIR", str(tmp_path))
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         login_res = await client.post("/api/auth/login", json={"username": "ADM001", "password": "Admin@1234"})
         assert login_res.status_code == 200
