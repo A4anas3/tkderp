@@ -265,19 +265,19 @@ export default function PublicVerifyPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 text-xs">
                     <div className="bg-white p-2 rounded border border-slate-200">
                       <span className="text-[10px] font-bold text-slate-600 uppercase block">
-                        Admission Number
+                        Student ID Code
                       </span>
                       <span className="font-mono text-sm font-black text-black">
-                        {data.student.admission_number}
+                        {data.student.student_code}
                       </span>
                     </div>
 
                     <div className="bg-white p-2 rounded border border-slate-200">
                       <span className="text-[10px] font-bold text-slate-600 uppercase block">
-                        Student ID Code
+                        Phone Number
                       </span>
                       <span className="font-mono text-sm font-black text-black">
-                        {data.student.student_code}
+                        {data.student.mobile || '—'}
                       </span>
                     </div>
                   </div>
@@ -353,9 +353,6 @@ export default function PublicVerifyPage() {
                         {course.hall_number && (
                           <span>Hall: <strong className="text-black">{course.hall_number}</strong></span>
                         )}
-                        {course.admission_number && (
-                          <span>Ref: <strong className="font-mono text-black">{course.admission_number}</strong></span>
-                        )}
                       </div>
 
                       {/* Prominent Validity Period(s) */}
@@ -409,13 +406,13 @@ export default function PublicVerifyPage() {
                   Verified on: {formatTimestamp(data.verified_at)}
                 </p>
                 <p className="text-slate-500">
-                  System Reference ID: <span className="font-mono">{data.student.admission_number}</span>
+                  System Reference ID: <span className="font-mono">{data.student.student_code}</span>
                 </p>
               </div>
 
               <div className="flex items-center gap-2 no-print">
                 <Link
-                  to={`/id-card/${encodeURIComponent(data.student.admission_number || identifier)}`}
+                  to={`/id-card/${encodeURIComponent(data.student.student_code || identifier)}`}
                   className="px-3 py-1.5 rounded-lg bg-odoo-700 hover:bg-odoo-800 text-white font-bold text-xs inline-flex items-center gap-1.5 transition shadow-2xs"
                 >
                   <ShieldCheck className="w-3.5 h-3.5" />

@@ -388,7 +388,7 @@ async def verify_student_credential(
         raise HTTPException(status_code=400, detail="Identifier cannot be empty")
 
     target_ident = target_ident.strip()
-    cache_key = make_cache_key("verify", target_ident.lower())
+    cache_key = make_cache_key("verify", "v2", target_ident.lower())
     hit, cached = await cache_get(cache_key)
     if hit:
         return cached
@@ -414,6 +414,7 @@ async def verify_student_credential(
         name=student.name,
         student_code=student.student_code,
         admission_number=matched_adm_number,
+        mobile=student.mobile,
         photo_url=student.photo_url,
         status=student.status,
     )

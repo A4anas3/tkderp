@@ -35,6 +35,7 @@ class StudentVerificationData(BaseModel):
     name: str
     student_code: str
     admission_number: str
+    mobile: Optional[str] = None
     photo_url: Optional[str] = None
     status: str
 
