@@ -1,7 +1,8 @@
 export async function onRequest(context) {
   const { request } = context;
   const url = new URL(request.url);
-  const target = "https://nalanda-api.ssbmentorai.in" + url.pathname + url.search;
+  const backendPath = url.pathname === "/api/health" ? "/health" : url.pathname;
+  const target = "https://nalanda-api.ssbmentorai.in" + backendPath + url.search;
   const headers = new Headers(request.headers);
   headers.delete("host");
   const init = { method: request.method, headers, redirect: "manual" };
