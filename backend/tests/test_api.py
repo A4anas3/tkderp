@@ -923,7 +923,7 @@ async def test_student_photo_compression_and_last_batch_period():
         assert upload_res.status_code == 200
         u_data = upload_res.json()
         assert u_data["size_kb"] <= 20.0
-        assert u_data["photo_url"].startswith("/uploads/students/")
+        assert u_data["photo_url"].startswith("/api/v1/uploads/students/")
 
         # 2. Create student and attach photo
         stu_res = await client.post("/api/students", json={
@@ -945,7 +945,7 @@ async def test_student_photo_compression_and_last_batch_period():
         )
         assert attach_res.status_code == 200
         updated_stu = attach_res.json()
-        assert updated_stu["photo_url"].startswith("/uploads/students/stu_")
+        assert updated_stu["photo_url"].startswith("/api/v1/uploads/students/stu_")
 
         # 4. Enroll student in a batch with date-to-date validity (2026-11-01 to 2026-11-30)
         subj_code_ptp = f"PTP_{uuid.uuid4().hex[:4].upper()}"

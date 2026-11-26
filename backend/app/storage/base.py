@@ -19,9 +19,15 @@ class StorageProvider(ABC):
     @abstractmethod
     def get_url(self, storage_key: str) -> Optional[str]:
         """
-        Returns URL for storage key
+        Returns backend-served URL for storage key
         """
         pass
+
+    async def download(self, storage_key: str) -> Optional[Tuple[bytes, str]]:
+        """
+        Retrieves file bytes and MIME content type for storage_key, or None if not found.
+        """
+        return None
 
 def get_storage_provider() -> StorageProvider:
     from app.core.config import settings

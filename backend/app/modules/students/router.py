@@ -55,6 +55,7 @@ from app.common.teacher_scope import (
     active_demo_filter,
 )
 from app.core.dependencies import require_cashier_or_admin, require_staff, require_admin
+from app.storage.base import get_storage_provider
 from app.common.pagination import PageResponse
 from app.modules.verification.router import _get_active_demos_for_student
 from app.modules.verification.schemas import IDCardDemoItem
@@ -1174,6 +1175,31 @@ async def restore_student(
     await invalidate_enrollment_and_admission_cache(student_id=student.id)
     return StudentResponse.model_validate(student)
 
+async def _compress_and_store_student_photo(file: UploadFile, filename: str) -> tuple[str, int]:
+    """Read, validate, compress to <= 20 KB, and upload a student photo via the active storage provider."""
+    raw_bytes = await file.read()
+    if not raw_bytes:
+        raise HTTPException(status_code=400, detail="Empty file uploaded")
+
+    try:
+        compressed_bytes = compress_avatar_image(raw_bytes, max_kb=20)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid image format: {str(e)}")
+
+    provider = get_storage_provider()
+    try:
+        _, photo_url = await provider.upload(
+            compressed_bytes,
+            filename,
+            content_type="image/jpeg",
+            folder="students",
+        )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to store image: {str(e)}")
+
+    return photo_url, len(compressed_bytes)
+
+
 @router.post("/upload-photo")
 async def upload_student_photo_standalone(
     file: UploadFile = File(...),
@@ -1183,27 +1209,11 @@ async def upload_student_photo_standalone(
     Upload and compress a student photo to <= 20 KB.
     Used during quick student registration before record exists.
     """
-    raw_bytes = await file.read()
-    if not raw_bytes:
-        raise HTTPException(status_code=400, detail="Empty file uploaded")
-    
-    try:
-        compressed_bytes = compress_avatar_image(raw_bytes, max_kb=20)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid image format: {str(e)}")
-
-    upload_dir = os.path.join(os.path.abspath(settings.UPLOAD_DIR), "students")
-    os.makedirs(upload_dir, exist_ok=True)
-    
     filename = f"temp_{uuid.uuid4().hex[:12]}.jpg"
-    filepath = os.path.join(upload_dir, filename)
-    with open(filepath, "wb") as f:
-        f.write(compressed_bytes)
-
-    photo_url = f"/uploads/students/{filename}"
+    photo_url, size_bytes = await _compress_and_store_student_photo(file, filename)
     return {
         "photo_url": photo_url,
-        "size_kb": round(len(compressed_bytes) / 1024, 2)
+        "size_kb": round(size_bytes / 1024, 2)
     }
 
 @router.post("/{student_id}/photo", response_model=StudentResponse)
@@ -1220,24 +1230,10 @@ async def upload_student_photo(
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
 
-    raw_bytes = await file.read()
-    if not raw_bytes:
-        raise HTTPException(status_code=400, detail="Empty file uploaded")
-
-    try:
-        compressed_bytes = compress_avatar_image(raw_bytes, max_kb=20)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid image format: {str(e)}")
-
-    upload_dir = os.path.join(os.path.abspath(settings.UPLOAD_DIR), "students")
-    os.makedirs(upload_dir, exist_ok=True)
-
     filename = f"stu_{student.student_code.lower()}_{uuid.uuid4().hex[:8]}.jpg"
-    filepath = os.path.join(upload_dir, filename)
-    with open(filepath, "wb") as f:
-        f.write(compressed_bytes)
+    photo_url, _ = await _compress_and_store_student_photo(file, filename)
 
-    student.photo_url = f"/uploads/students/{filename}"
+    student.photo_url = photo_url
     await db.commit()
     await db.refresh(student)
     await invalidate_student_cache(student.id)

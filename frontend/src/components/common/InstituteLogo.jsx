@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useProtectedImageSrc } from '../../utils/protectedImage';
 
 /**
  * Displays the institute's saved logo image with automatic fallback
@@ -10,16 +11,17 @@ export default function InstituteLogo({
   className = 'w-8 h-8 object-contain',
   fallback = null,
 }) {
+  const { resolvedSrc, failed } = useProtectedImageSrc(src);
   const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
     setHasError(false);
-  }, [src]);
+  }, [resolvedSrc]);
 
-  if (src && !hasError) {
+  if (resolvedSrc && !failed && !hasError) {
     return (
       <img
-        src={src}
+        src={resolvedSrc}
         alt={alt}
         onError={() => setHasError(true)}
         className={className}

@@ -12,6 +12,7 @@ from app.core.cache import TTL_LONG, cache_get, cache_set, invalidate_settings_c
 from app.database.session import get_db
 from app.modules.users.models import User
 from app.core.dependencies import require_cashier_or_admin, require_admin
+from app.storage.base import get_storage_provider
 from app.modules.settings.models import InstituteSetting
 from app.modules.settings.schemas import (
     InstituteSettingsResponse,
@@ -175,16 +176,24 @@ async def upload_institute_logo(
             detail=f"Invalid image format: {str(exc)}",
         )
 
-    upload_dir = os.path.join(os.path.abspath(app_settings.UPLOAD_DIR), "institute")
-    os.makedirs(upload_dir, exist_ok=True)
-
+    content_type = "image/png" if ext == "png" else "image/jpeg"
     filename = f"institute_logo_{uuid.uuid4().hex[:12]}.{ext}"
-    filepath = os.path.join(upload_dir, filename)
-    with open(filepath, "wb") as f:
-        f.write(processed_bytes)
+    provider = get_storage_provider()
+    try:
+        _, logo_url = await provider.upload(
+            processed_bytes,
+            filename,
+            content_type=content_type,
+            folder="institute",
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to store institute logo: {str(exc)}",
+        )
 
     setting = await _get_or_create_settings(db)
-    setting.logo_url = f"/uploads/institute/{filename}"
+    setting.logo_url = logo_url
     setting.updated_by = current_user.id
     db.add(setting)
     await db.commit()

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import ProtectedImage from '../../components/common/ProtectedImage';
 import {
   ArrowLeft,
   BookOpen,
@@ -684,17 +685,16 @@ export default function SubjectDetailPage() {
                       {/* Student Info */}
                       <td className="p-3">
                         <div className="flex items-center gap-2.5">
-                          {s.photo_url ? (
-                            <img
-                              src={s.photo_url}
-                              alt={s.student_name}
-                              className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0"
-                            />
-                          ) : (
-                            <div className="w-8 h-8 rounded-full bg-purple-100 text-odoo-700 font-bold flex items-center justify-center text-xs shrink-0 border border-purple-200">
-                              {s.student_name ? s.student_name.slice(0, 2).toUpperCase() : 'ST'}
-                            </div>
-                          )}
+                          <ProtectedImage
+                            src={s.photo_url}
+                            alt={s.student_name}
+                            className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0"
+                            fallback={
+                              <div className="w-8 h-8 rounded-full bg-purple-100 text-odoo-700 font-bold flex items-center justify-center text-xs shrink-0 border border-purple-200">
+                                {s.student_name ? s.student_name.slice(0, 2).toUpperCase() : 'ST'}
+                              </div>
+                            }
+                          />
                           <div>
                             <div className="font-bold text-black hover:text-odoo-600 transition">
                               {s.student_name}

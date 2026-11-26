@@ -7,6 +7,7 @@ import Button from '../common/Button';
 import Badge from '../common/Badge';
 import Avatar from '../common/Avatar';
 import InstituteLogo from '../common/InstituteLogo';
+import ProtectedImage from '../common/ProtectedImage';
 import VerifiedStamp from '../common/VerifiedStamp';
 import { useInstitute } from '../../context/InstituteContext';
 import {
@@ -191,20 +192,19 @@ export default function StudentIDCardModal({
               <div className="flex items-start gap-3.5 border-b border-slate-200 pb-3 print:pb-2.5 id-card-keep-together">
                 {/* Photo Frame */}
                 <div className="w-24 h-28 sm:w-28 sm:h-32 border-2 border-black rounded-lg overflow-hidden bg-slate-100 shrink-0 shadow-xs flex items-center justify-center">
-                  {hasPhoto ? (
-                    <img
-                      src={student.photo_url}
-                      alt={student.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex flex-col items-center justify-center text-slate-700 p-2 text-center h-full">
-                      <User className="w-8 h-8 text-slate-500 mb-1" />
-                      <span className="text-[10px] font-bold uppercase leading-tight text-black">
-                        {student.name}
-                      </span>
-                    </div>
-                  )}
+                  <ProtectedImage
+                    src={hasPhoto ? student.photo_url : null}
+                    alt={student.name}
+                    className="w-full h-full object-cover"
+                    fallback={
+                      <div className="flex flex-col items-center justify-center text-slate-700 p-2 text-center h-full">
+                        <User className="w-8 h-8 text-slate-500 mb-1" />
+                        <span className="text-[10px] font-bold uppercase leading-tight text-black">
+                          {student.name}
+                        </span>
+                      </div>
+                    }
+                  />
                 </div>
 
                 {/* Info Column */}

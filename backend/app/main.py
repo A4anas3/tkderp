@@ -5,7 +5,6 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -34,6 +33,7 @@ from app.modules.verification.router import router as verification_router
 from app.modules.reminders.router import router as reminders_router
 from app.modules.renewals.router import router as renewals_router
 from app.modules.settings.router import router as settings_router, public_router as settings_public_router
+from app.modules.uploads.router import router as uploads_router
 from app.database.session import engine
 from app.database.models import Base
 
@@ -241,15 +241,15 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         content={"detail": jsonable_encoder(sanitized_errors)},
     )
 
-# Mount local uploads for static serving
+# Ensure local uploads directories exist for local fallback
 uploads_path = os.path.abspath(settings.UPLOAD_DIR)
 os.makedirs(uploads_path, exist_ok=True)
 os.makedirs(os.path.join(uploads_path, "students"), exist_ok=True)
+os.makedirs(os.path.join(uploads_path, "teachers"), exist_ok=True)
 os.makedirs(os.path.join(uploads_path, "institute"), exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=uploads_path), name="uploads")
-app.mount("/api/v1/uploads", StaticFiles(directory=uploads_path), name="api_uploads")
 
 # Include API Routers
+app.include_router(uploads_router)
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(teachers_router)

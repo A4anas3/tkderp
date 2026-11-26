@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User } from 'lucide-react';
+import { useProtectedImageSrc } from '../../utils/protectedImage';
 
 export default function Avatar({
   src,
@@ -8,7 +9,12 @@ export default function Avatar({
   className = '',
   status = null, // 'ACTIVE' | 'REVOKED' | 'WARNING'
 }) {
+  const { resolvedSrc, failed } = useProtectedImageSrc(src);
   const [imgError, setImgError] = useState(false);
+
+  useEffect(() => {
+    setImgError(false);
+  }, [resolvedSrc]);
 
   const sizeClasses = {
     xs: 'w-6 h-6 text-[10px]',
@@ -31,19 +37,14 @@ export default function Avatar({
     WARNING: 'bg-amber-500 ring-white',
   };
 
-  // Construct valid URL (handles relative /uploads/ and full URLs)
-  const fullSrc = src && !src.startsWith('http') && !src.startsWith('data:')
-    ? src
-    : src;
-
   return (
     <div className={`relative inline-block shrink-0 ${className}`}>
       <div
         className={`${sizeClasses[size] || sizeClasses.md} rounded-full overflow-hidden flex items-center justify-center bg-slate-100 border border-slate-300 text-slate-800 shadow-2xs select-none`}
       >
-        {fullSrc && !imgError ? (
+        {resolvedSrc && !failed && !imgError ? (
           <img
-            src={fullSrc}
+            src={resolvedSrc}
             alt={name}
             onError={() => setImgError(true)}
             className="w-full h-full object-cover"

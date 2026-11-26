@@ -98,7 +98,7 @@ const B_WORD = [98, 97, 116, 99, 104].map((c) => String.fromCharCode(c)).join(''
 const B_REGEX = new RegExp('\\b(' + B_WORD + '|' + B_WORD + 'es)\\b', 'gi');
 
 function sanitizeData(obj) {
-  if (!obj) return obj;
+  if (!obj || obj instanceof Blob || obj instanceof ArrayBuffer) return obj;
   if (typeof obj === 'string') {
     return obj.replace(B_REGEX, 'Subject');
   }

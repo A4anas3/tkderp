@@ -21,6 +21,7 @@ import { formatValidityPeriod } from '../../utils/idCardHelpers';
 import { computeDaysRemaining, computeDaysRemainingForPeriods, computeGapDays } from '../../utils/dateCycleUtils';
 import { useInstitute } from '../../context/InstituteContext';
 import InstituteLogo from '../../components/common/InstituteLogo';
+import ProtectedImage from '../../components/common/ProtectedImage';
 
 export default function PublicVerifyPage() {
   const { institute } = useInstitute();
@@ -231,20 +232,19 @@ export default function PublicVerifyPage() {
               <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
                 {/* Photo or Avatar */}
                 <div className="w-24 h-28 sm:w-28 sm:h-32 border-2 border-black rounded-lg overflow-hidden bg-white shrink-0 shadow-xs flex items-center justify-center">
-                  {data.student.photo_url ? (
-                    <img
-                      src={data.student.photo_url}
-                      alt={data.student.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex flex-col items-center justify-center text-slate-700 p-2 text-center h-full">
-                      <User className="w-10 h-10 text-slate-400 mb-1" />
-                      <span className="text-[10px] font-bold uppercase leading-tight text-black">
-                        {data.student.name}
-                      </span>
-                    </div>
-                  )}
+                  <ProtectedImage
+                    src={data.student.photo_url}
+                    alt={data.student.name}
+                    className="w-full h-full object-cover"
+                    fallback={
+                      <div className="flex flex-col items-center justify-center text-slate-700 p-2 text-center h-full">
+                        <User className="w-10 h-10 text-slate-400 mb-1" />
+                        <span className="text-[10px] font-bold uppercase leading-tight text-black">
+                          {data.student.name}
+                        </span>
+                      </div>
+                    }
+                  />
                 </div>
 
                 {/* Details Grid */}
