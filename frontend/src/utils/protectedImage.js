@@ -18,9 +18,34 @@ if (typeof window !== 'undefined') {
   });
 }
 
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/+$/, '');
+export const PUBLIC_INSTITUTE_LOGO_URL = `${API_BASE_URL}/public/institute-logo`;
+
+/**
+ * Resolve an institute logo reference for unauthenticated public pages
+ * (login, public ID card, public verification) to the dedicated public
+ * backend logo endpoint, returning null when no logo is configured.
+ */
+export function resolvePublicInstituteLogoUrl(src) {
+  if (!src || typeof src !== 'string') return null;
+  const trimmed = src.trim();
+  if (!trimmed) return null;
+  if (
+    trimmed.startsWith('data:') ||
+    trimmed.startsWith('blob:') ||
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://') ||
+    trimmed === PUBLIC_INSTITUTE_LOGO_URL ||
+    trimmed.startsWith('/api/public/institute-logo')
+  ) {
+    return trimmed;
+  }
+  return PUBLIC_INSTITUTE_LOGO_URL;
+}
+
 /**
  * Normalize an image reference (storage key, legacy /uploads/..., or /api/v1/uploads/...)
- * into a backend-served /api/v1/uploads/... path, preserving data:/blob:/http(s): URLs.
+ * into a backend-served /api/v1/uploads/... path, preserving data:/blob:/http(s): and public API URLs.
  */
 export function normalizeProtectedImageUrl(src) {
   if (!src || typeof src !== 'string') return null;
@@ -30,7 +55,9 @@ export function normalizeProtectedImageUrl(src) {
     trimmed.startsWith('data:') ||
     trimmed.startsWith('blob:') ||
     trimmed.startsWith('http://') ||
-    trimmed.startsWith('https://')
+    trimmed.startsWith('https://') ||
+    trimmed === PUBLIC_INSTITUTE_LOGO_URL ||
+    trimmed.startsWith('/api/public/')
   ) {
     return trimmed;
   }

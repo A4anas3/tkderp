@@ -175,3 +175,96 @@ async def test_uploads_endpoint_requires_jwt_and_serves_local_and_cloud(monkeypa
         assert cloud_auth.status_code == 200
         assert cloud_auth.content == b"cloud-jpeg-bytes"
         assert cloud_auth.headers["content-type"].startswith("image/jpeg")
+
+        # 7. Teacher upload path also stays JWT-only (401 without token)
+        t_photo_url = t_res.json()["photo_url"]
+        assert (await client.get(t_photo_url)).status_code == 401
+        assert (await client.get(t_photo_url, headers=headers)).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_public_institute_logo_endpoint_behavior(monkeypatch, tmp_path):
+    monkeypatch.setattr(settings, "UPLOAD_DIR", str(tmp_path))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        login_res = await client.post("/api/auth/login", json={"username": "ADM001", "password": "Admin@1234"})
+        assert login_res.status_code == 200
+        headers = {"Authorization": f"Bearer {login_res.json()['access_token']}"}
+
+        # Preserve original logo_url so we restore cleanly
+        orig_res = await client.get("/api/settings/institute", headers=headers)
+        assert orig_res.status_code == 200
+        orig_logo_url = orig_res.json().get("logo_url")
+
+        try:
+            # 1. No logo configured -> 404
+            del_res = await client.delete("/api/settings/institute/logo", headers=headers)
+            assert del_res.status_code == 200
+            no_logo_res = await client.get("/api/public/institute-logo")
+            assert no_logo_res.status_code == 404
+
+            # 2. Upload logo in local mode -> unauthenticated GET returns 200 + bytes
+            raw_img = _make_sample_jpeg()
+            up_res = await client.post(
+                "/api/settings/institute/logo",
+                files={"file": ("coaching_logo.jpg", raw_img, "image/jpeg")},
+                headers=headers,
+            )
+            assert up_res.status_code == 200
+            saved_logo_url = up_res.json()["logo_url"]
+            assert saved_logo_url.startswith("/api/v1/uploads/institute/")
+
+            pub_res = await client.get("/api/public/institute-logo")
+            assert pub_res.status_code == 200
+            assert pub_res.headers["content-type"].startswith("image/jpeg")
+            assert len(pub_res.content) > 0
+
+            # Matches authenticated protected fetch bytes
+            prot_res = await client.get(saved_logo_url, headers=headers)
+            assert prot_res.status_code == 200
+            assert pub_res.content == prot_res.content
+
+            # 3. Subpaths or query params cannot serve other files
+            subpath_res = await client.get("/api/public/institute-logo/students/secret.jpg")
+            assert subpath_res.status_code == 404
+            query_res = await client.get("/api/public/institute-logo?path=students/secret.jpg")
+            assert query_res.status_code == 200
+            assert query_res.content == pub_res.content
+
+            # 4. Cloudinary storage mode serves private asset server-side without auth
+            monkeypatch.setattr(settings, "STORAGE_PROVIDER", "cloudinary")
+            monkeypatch.setattr(settings, "CLOUDINARY_CLOUD_NAME", "demo_cloud")
+            monkeypatch.setattr(settings, "CLOUDINARY_API_KEY", "demo_key")
+            monkeypatch.setattr(settings, "CLOUDINARY_API_SECRET", "demo_secret")
+
+            async def fake_cloud_download(self, storage_key: str):
+                if storage_key == "institute/cloud_logo_123":
+                    return b"cloud-logo-png-bytes", "image/png"
+                return None
+
+            monkeypatch.setattr(CloudinaryStorageProvider, "download", fake_cloud_download)
+
+            put_cloud = await client.put(
+                "/api/settings/institute",
+                json={"logo_url": "/api/v1/uploads/institute/cloud_logo_123"},
+                headers=headers,
+            )
+            assert put_cloud.status_code == 200
+
+            cloud_logo_res = await client.get("/api/public/institute-logo")
+            assert cloud_logo_res.status_code == 200
+            assert cloud_logo_res.headers["content-type"].startswith("image/png")
+            assert cloud_logo_res.content == b"cloud-logo-png-bytes"
+
+            # 5. Refuses to serve non-institute paths or external URLs even if stored in logo_url
+            for bad_url in (
+                "/api/v1/uploads/students/stu_1.jpg",
+                "https://res.cloudinary.com/demo/image/upload/v1/x.png",
+            ):
+                await client.put("/api/settings/institute", json={"logo_url": bad_url}, headers=headers)
+                assert (await client.get("/api/public/institute-logo")).status_code == 404
+        finally:
+            await client.put(
+                "/api/settings/institute",
+                json={"logo_url": orig_logo_url or ""},
+                headers=headers,
+            )

@@ -6,6 +6,7 @@ import { useInstitute } from '../../context/InstituteContext';
 import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import InstituteLogo from '../../components/common/InstituteLogo';
+import { resolvePublicInstituteLogoUrl } from '../../utils/protectedImage';
 
 const DEMO_ACCOUNTS = [
   {
@@ -74,7 +75,7 @@ export default function LoginPage() {
         <div className="bg-gradient-to-r from-odoo-700 via-odoo-600 to-odoo-800 p-6 text-white text-center">
           <div className="w-16 h-16 bg-white text-odoo-700 font-black text-2xl rounded-xl mx-auto flex items-center justify-center shadow-md mb-2.5 overflow-hidden p-1">
             <InstituteLogo
-              src={institute?.logo_url}
+              src={resolvePublicInstituteLogoUrl(institute?.logo_url)}
               alt={instituteName}
               className="w-full h-full object-contain"
               fallback={<span>{instituteName.charAt(0)}</span>}

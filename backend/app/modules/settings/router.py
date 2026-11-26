@@ -12,6 +12,7 @@ from app.core.cache import TTL_LONG, cache_get, cache_set, invalidate_settings_c
 from app.database.session import get_db
 from app.modules.users.models import User
 from app.core.dependencies import require_cashier_or_admin, require_admin
+from app.modules.uploads.router import extract_storage_key, serve_storage_file
 from app.storage.base import get_storage_provider
 from app.modules.settings.models import InstituteSetting
 from app.modules.settings.schemas import (
@@ -88,6 +89,44 @@ async def get_public_institute_profile(db: AsyncSession = Depends(get_db)):
     setting = await _get_or_create_settings(db)
     await cache_set(cache_key, setting, ttl=TTL_LONG, model=PublicInstituteProfileResponse)
     return setting
+
+
+@public_router.get("/api/public/institute-logo")
+async def get_public_institute_logo(db: AsyncSession = Depends(get_db)):
+    """
+    Publicly accessible endpoint serving ONLY the currently configured institute logo.
+    Accepts no path, key, or filename from the request.
+    """
+    setting = await _get_or_create_settings(db)
+    raw_logo_url = (setting.logo_url or "").strip()
+    if not raw_logo_url:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Institute logo not configured",
+        )
+
+    lower_url = raw_logo_url.lower()
+    if lower_url.startswith(("http://", "https://", "data:", "blob:", "//")):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Institute logo not available",
+        )
+
+    try:
+        storage_key = extract_storage_key(raw_logo_url)
+    except HTTPException:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Institute logo not found",
+        )
+
+    if not storage_key.startswith("institute/"):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Institute logo not found",
+        )
+
+    return await serve_storage_file(storage_key, cache_control="public, max-age=60")
 
 
 @router.get("/institute", response_model=InstituteSettingsResponse)

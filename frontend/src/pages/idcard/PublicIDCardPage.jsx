@@ -22,6 +22,7 @@ import { computeDaysRemaining, computeDaysRemainingForPeriods, computeGapDays } 
 import { useInstitute } from '../../context/InstituteContext';
 import InstituteLogo from '../../components/common/InstituteLogo';
 import ProtectedImage from '../../components/common/ProtectedImage';
+import { resolvePublicInstituteLogoUrl } from '../../utils/protectedImage';
 import VerifiedStamp from '../../components/common/VerifiedStamp';
 
 export default function PublicIDCardPage() {
@@ -153,8 +154,9 @@ export default function PublicIDCardPage() {
 
   const instituteName =
     cardData?.institute_name || institute?.institute_name || 'THAKURDWARA COACHING INSTITUTE';
-  const instituteLogoUrl =
-    cardData?.institute_logo_url || institute?.logo_url || null;
+  const instituteLogoUrl = resolvePublicInstituteLogoUrl(
+    cardData?.institute_logo_url || institute?.logo_url || null
+  );
   const instituteTagline =
     cardData?.institute_tagline ||
     (institute?.address

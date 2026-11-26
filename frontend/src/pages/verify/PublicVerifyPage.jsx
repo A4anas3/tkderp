@@ -22,6 +22,7 @@ import { computeDaysRemaining, computeDaysRemainingForPeriods, computeGapDays } 
 import { useInstitute } from '../../context/InstituteContext';
 import InstituteLogo from '../../components/common/InstituteLogo';
 import ProtectedImage from '../../components/common/ProtectedImage';
+import { resolvePublicInstituteLogoUrl } from '../../utils/protectedImage';
 
 export default function PublicVerifyPage() {
   const { institute } = useInstitute();
@@ -103,8 +104,9 @@ export default function PublicVerifyPage() {
 
   const instituteName =
     data?.institute_name || institute?.institute_name || 'THAKURDWARA COACHING INSTITUTE';
-  const instituteLogoUrl =
-    data?.institute_logo_url || institute?.logo_url || null;
+  const instituteLogoUrl = resolvePublicInstituteLogoUrl(
+    data?.institute_logo_url || institute?.logo_url || null
+  );
   const instituteAddress =
     data?.institute_address || institute?.address || 'Civil Lines, Thakurdwara (U.P.)';
   const institutePhone =
