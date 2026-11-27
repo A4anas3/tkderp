@@ -40,9 +40,9 @@ export default function StudentsPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [viewMode, setViewMode] = useState(() => {
     try {
-      return localStorage.getItem('students_view_mode') || 'table';
+      return localStorage.getItem('students_view_mode') || 'kanban';
     } catch (_) {
-      return 'table';
+      return 'kanban';
     }
   });
 

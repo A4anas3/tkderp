@@ -28,7 +28,7 @@ export default function TeachersPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState('table');
+  const [viewMode, setViewMode] = useState('kanban');
 
   // Modal State
   const [modalOpen, setModalOpen] = useState(false);
