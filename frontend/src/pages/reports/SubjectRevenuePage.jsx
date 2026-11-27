@@ -40,37 +40,60 @@ import TeacherDetailModal from '../../components/modals/TeacherDetailModal';
 import { reportApi } from '../../services/allApis';
 import { formatIndianDate, formatCycleLabel, evaluateCycleStatus } from '../../utils/dateCycleUtils';
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 50;
 
 /**
  * Sub-table displaying enrolled students with rolling date-to-date billing cycles.
- * Equipped with dedicated search, pagination, and clickable rows to student profile.
+ * Equipped with dedicated server-side search, pagination, and clickable rows to student profile.
  */
-function StudentRosterSubtable({ students = [], contextType = 'subject', onCollectFee }) {
+function StudentRosterSubtable({ entityId, filters = {}, contextType = 'subject', onCollectFee }) {
   const navigate = useNavigate();
   const [filterText, setFilterText] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [students, setStudents] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [totalAll, setTotalAll] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [loadingRoster, setLoadingRoster] = useState(true);
 
-  const filtered = useMemo(() => {
-    if (!students) return [];
-    if (!filterText.trim()) return students;
-    const q = filterText.toLowerCase().trim();
-    return students.filter((s) => (
-      s.student_name?.toLowerCase().includes(q) ||
-      s.student_code?.toLowerCase().includes(q) ||
-      s.mobile?.includes(q) ||
-      s.admission_number?.toLowerCase().includes(q)
-    ));
-  }, [students, filterText]);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(filterText);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [filterText]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const currentPage = Math.min(page, totalPages);
-  const pagedStudents = useMemo(() => {
-    const start = (currentPage - 1) * PAGE_SIZE;
-    return filtered.slice(start, start + PAGE_SIZE);
-  }, [filtered, currentPage]);
+  const loadRoster = useCallback(async () => {
+    if (!entityId) return;
+    setLoadingRoster(true);
+    try {
+      const params = {
+        ...filters,
+        page,
+        page_size: PAGE_SIZE,
+        search: debouncedSearch.trim() || undefined,
+      };
+      const res =
+        contextType === 'teacher'
+          ? await reportApi.getTeacherRevenueStudents(entityId, params)
+          : await reportApi.getSubjectRevenueStudents(entityId, params);
+      setStudents(res?.items || []);
+      setTotal(res?.total ?? 0);
+      setTotalAll(res?.total_all ?? (res?.total ?? 0));
+      setTotalPages(Math.max(1, res?.total_pages || 1));
+    } catch (err) {
+      console.error('Failed to load student roster subtable:', err);
+    } finally {
+      setLoadingRoster(false);
+    }
+  }, [entityId, filters, contextType, page, debouncedSearch]);
 
-  if (!students || students.length === 0) {
+  useEffect(() => {
+    loadRoster();
+  }, [loadRoster]);
+
+  if (!loadingRoster && totalAll === 0) {
     return (
       <div className="py-4 px-6 text-center text-xs text-slate-600 bg-white rounded-lg border border-dashed border-slate-300">
         No active students enrolled in this selection for the chosen date period.
@@ -78,13 +101,16 @@ function StudentRosterSubtable({ students = [], contextType = 'subject', onColle
     );
   }
 
+  const currentPage = Math.min(page, totalPages);
+  const pagedStudents = students;
+
   return (
     <div className="bg-slate-50/90 p-3 sm:p-4 rounded-lg border border-slate-200 space-y-3 shadow-inner">
       {/* Search and count header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-2.5">
         <div className="flex items-center gap-2">
           <span className="text-xs font-bold text-black uppercase tracking-wider">
-            Enrolled Students ({filtered.length} of {students.length})
+            Enrolled Students ({total} of {totalAll})
           </span>
           <span className="text-[11px] text-slate-600 hidden sm:inline font-medium">
             · Date-to-date rolling monthly cycle roster (click any student row for profile)
@@ -260,52 +286,50 @@ function StudentRosterSubtable({ students = [], contextType = 'subject', onColle
       </div>
 
       {/* Subtable Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between text-xs text-slate-600 pt-1 px-1">
-          <span>
-            Showing <strong className="text-black">{(currentPage - 1) * PAGE_SIZE + 1}</strong> to{' '}
-            <strong className="text-black">{Math.min(currentPage * PAGE_SIZE, filtered.length)}</strong> of{' '}
-            <strong className="text-black">{filtered.length}</strong> students
+      <div className="flex items-center justify-between text-xs text-slate-600 pt-1 px-1">
+        <span>
+          Showing <strong className="text-black">{total === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1}</strong> to{' '}
+          <strong className="text-black">{Math.min(currentPage * PAGE_SIZE, total)}</strong> of{' '}
+          <strong className="text-black">{total}</strong> students
+        </span>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setPage(1)}
+            disabled={currentPage <= 1 || loadingRoster}
+            className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            title="First Page"
+          >
+            <ChevronsLeft className="w-3.5 h-3.5 text-black" />
+          </button>
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={currentPage <= 1 || loadingRoster}
+            className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Previous Page"
+          >
+            <ChevronLeft className="w-3.5 h-3.5 text-black" />
+          </button>
+          <span className="px-2 py-0.5 font-medium text-black">
+            Page {currentPage} of {totalPages}
           </span>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setPage(1)}
-              disabled={currentPage <= 1}
-              className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-              title="First Page"
-            >
-              <ChevronsLeft className="w-3.5 h-3.5 text-black" />
-            </button>
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage <= 1}
-              className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-              title="Previous Page"
-            >
-              <ChevronLeft className="w-3.5 h-3.5 text-black" />
-            </button>
-            <span className="px-2 py-0.5 font-medium text-black">
-              Page {currentPage} of {totalPages}
-            </span>
-            <button
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage >= totalPages}
-              className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-              title="Next Page"
-            >
-              <ChevronRight className="w-3.5 h-3.5 text-black" />
-            </button>
-            <button
-              onClick={() => setPage(totalPages)}
-              disabled={currentPage >= totalPages}
-              className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-              title="Last Page"
-            >
-              <ChevronsRight className="w-3.5 h-3.5 text-black" />
-            </button>
-          </div>
+          <button
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={currentPage >= totalPages || loadingRoster}
+            className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Next Page"
+          >
+            <ChevronRight className="w-3.5 h-3.5 text-black" />
+          </button>
+          <button
+            onClick={() => setPage(totalPages)}
+            disabled={currentPage >= totalPages || loadingRoster}
+            className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Last Page"
+          >
+            <ChevronsRight className="w-3.5 h-3.5 text-black" />
+          </button>
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -527,7 +551,11 @@ export default function SubjectRevenuePage() {
           {/* Section Navigation Tabs */}
           <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 pb-1">
             <button
-              onClick={() => setActiveTab('all')}
+              onClick={() => {
+                setActiveTab('all');
+                setSubjectPage(1);
+                setTeacherPage(1);
+              }}
               className={`min-h-[36px] px-3 py-2 text-xs font-bold rounded-t-lg transition-colors cursor-pointer ${
                 activeTab === 'all'
                   ? 'bg-odoo-600 text-white shadow-xs'
@@ -537,7 +565,10 @@ export default function SubjectRevenuePage() {
               All Ledgers
             </button>
             <button
-              onClick={() => setActiveTab('subjects')}
+              onClick={() => {
+                setActiveTab('subjects');
+                setSubjectPage(1);
+              }}
               className={`min-h-[36px] px-3 py-2 text-xs font-bold rounded-t-lg transition-colors cursor-pointer flex items-center gap-1.5 ${
                 activeTab === 'subjects'
                   ? 'bg-odoo-600 text-white shadow-xs'
@@ -548,7 +579,10 @@ export default function SubjectRevenuePage() {
               <span>Subject Ledgers ({subjectTotal})</span>
             </button>
             <button
-              onClick={() => setActiveTab('teachers')}
+              onClick={() => {
+                setActiveTab('teachers');
+                setTeacherPage(1);
+              }}
               className={`min-h-[36px] px-3 py-2 text-xs font-bold rounded-t-lg transition-colors cursor-pointer flex items-center gap-1.5 ${
                 activeTab === 'teachers'
                   ? 'bg-odoo-600 text-white shadow-xs'
@@ -688,7 +722,8 @@ export default function SubjectRevenuePage() {
                                 <td colSpan={8} className="p-0 border-b border-odoo-200 bg-purple-50/20">
                                   <div className="p-3 border-l-4 border-odoo-600">
                                     <StudentRosterSubtable
-                                      students={s.students}
+                                      entityId={s.subject_id}
+                                      filters={currentFilters}
                                       contextType="subject"
                                       onCollectFee={handleOpenFeeModal}
                                     />
@@ -705,52 +740,50 @@ export default function SubjectRevenuePage() {
               </div>
 
               {/* Subject Ledger Pagination */}
-              {subjectTotalPages > 1 && (
-                <div className="flex items-center justify-between text-xs text-slate-600 pt-2 border-t border-slate-100">
-                  <span>
-                    Showing <strong className="text-black">{(subjectPage - 1) * PAGE_SIZE + 1}</strong> to{' '}
-                    <strong className="text-black">{Math.min(subjectPage * PAGE_SIZE, subjectTotal)}</strong> of{' '}
-                    <strong className="text-black">{subjectTotal}</strong> subjects
+              <div className="flex items-center justify-between text-xs text-slate-600 pt-2 border-t border-slate-100">
+                <span>
+                  Showing <strong className="text-black">{subjectTotal === 0 ? 0 : (subjectPage - 1) * PAGE_SIZE + 1}</strong> to{' '}
+                  <strong className="text-black">{Math.min(subjectPage * PAGE_SIZE, subjectTotal)}</strong> of{' '}
+                  <strong className="text-black">{subjectTotal}</strong> subjects
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setSubjectPage(1)}
+                    disabled={subjectPage <= 1}
+                    className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="First Page"
+                  >
+                    <ChevronsLeft className="w-3.5 h-3.5 text-black" />
+                  </button>
+                  <button
+                    onClick={() => setSubjectPage((p) => Math.max(1, p - 1))}
+                    disabled={subjectPage <= 1}
+                    className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Previous Page"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5 text-black" />
+                  </button>
+                  <span className="px-2 py-0.5 font-medium text-black">
+                    Page {subjectPage} of {Math.max(1, subjectTotalPages)}
                   </span>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => setSubjectPage(1)}
-                      disabled={subjectPage <= 1}
-                      className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                      title="First Page"
-                    >
-                      <ChevronsLeft className="w-3.5 h-3.5 text-black" />
-                    </button>
-                    <button
-                      onClick={() => setSubjectPage((p) => Math.max(1, p - 1))}
-                      disabled={subjectPage <= 1}
-                      className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                      title="Previous Page"
-                    >
-                      <ChevronLeft className="w-3.5 h-3.5 text-black" />
-                    </button>
-                    <span className="px-2 py-0.5 font-medium text-black">
-                      Page {subjectPage} of {subjectTotalPages}
-                    </span>
-                    <button
-                      onClick={() => setSubjectPage((p) => Math.min(subjectTotalPages, p + 1))}
-                      disabled={subjectPage >= subjectTotalPages}
-                      className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                      title="Next Page"
-                    >
-                      <ChevronRight className="w-3.5 h-3.5 text-black" />
-                    </button>
-                    <button
-                      onClick={() => setSubjectPage(subjectTotalPages)}
-                      disabled={subjectPage >= subjectTotalPages}
-                      className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                      title="Last Page"
-                    >
-                      <ChevronsRight className="w-3.5 h-3.5 text-black" />
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => setSubjectPage((p) => Math.min(Math.max(1, subjectTotalPages), p + 1))}
+                    disabled={subjectPage >= Math.max(1, subjectTotalPages)}
+                    className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Next Page"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5 text-black" />
+                  </button>
+                  <button
+                    onClick={() => setSubjectPage(Math.max(1, subjectTotalPages))}
+                    disabled={subjectPage >= Math.max(1, subjectTotalPages)}
+                    className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Last Page"
+                  >
+                    <ChevronsRight className="w-3.5 h-3.5 text-black" />
+                  </button>
                 </div>
-              )}
+              </div>
             </div>
           )}
 
@@ -877,7 +910,8 @@ export default function SubjectRevenuePage() {
                                 <td colSpan={9} className="p-0 border-b border-odoo-200 bg-purple-50/20">
                                   <div className="p-3 border-l-4 border-odoo-600">
                                     <StudentRosterSubtable
-                                      students={t.students}
+                                      entityId={t.teacher_id}
+                                      filters={currentFilters}
                                       contextType="teacher"
                                       onCollectFee={handleOpenFeeModal}
                                     />
@@ -894,52 +928,50 @@ export default function SubjectRevenuePage() {
               </div>
 
               {/* Teacher Ledger Pagination */}
-              {teacherTotalPages > 1 && (
-                <div className="flex items-center justify-between text-xs text-slate-600 pt-2 border-t border-slate-100">
-                  <span>
-                    Showing <strong className="text-black">{(teacherPage - 1) * PAGE_SIZE + 1}</strong> to{' '}
-                    <strong className="text-black">{Math.min(teacherPage * PAGE_SIZE, teacherTotal)}</strong> of{' '}
-                    <strong className="text-black">{teacherTotal}</strong> teachers
+              <div className="flex items-center justify-between text-xs text-slate-600 pt-2 border-t border-slate-100">
+                <span>
+                  Showing <strong className="text-black">{teacherTotal === 0 ? 0 : (teacherPage - 1) * PAGE_SIZE + 1}</strong> to{' '}
+                  <strong className="text-black">{Math.min(teacherPage * PAGE_SIZE, teacherTotal)}</strong> of{' '}
+                  <strong className="text-black">{teacherTotal}</strong> teachers
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setTeacherPage(1)}
+                    disabled={teacherPage <= 1}
+                    className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="First Page"
+                  >
+                    <ChevronsLeft className="w-3.5 h-3.5 text-black" />
+                  </button>
+                  <button
+                    onClick={() => setTeacherPage((p) => Math.max(1, p - 1))}
+                    disabled={teacherPage <= 1}
+                    className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Previous Page"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5 text-black" />
+                  </button>
+                  <span className="px-2 py-0.5 font-medium text-black">
+                    Page {teacherPage} of {Math.max(1, teacherTotalPages)}
                   </span>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => setTeacherPage(1)}
-                      disabled={teacherPage <= 1}
-                      className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                      title="First Page"
-                    >
-                      <ChevronsLeft className="w-3.5 h-3.5 text-black" />
-                    </button>
-                    <button
-                      onClick={() => setTeacherPage((p) => Math.max(1, p - 1))}
-                      disabled={teacherPage <= 1}
-                      className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                      title="Previous Page"
-                    >
-                      <ChevronLeft className="w-3.5 h-3.5 text-black" />
-                    </button>
-                    <span className="px-2 py-0.5 font-medium text-black">
-                      Page {teacherPage} of {teacherTotalPages}
-                    </span>
-                    <button
-                      onClick={() => setTeacherPage((p) => Math.min(teacherTotalPages, p + 1))}
-                      disabled={teacherPage >= teacherTotalPages}
-                      className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                      title="Next Page"
-                    >
-                      <ChevronRight className="w-3.5 h-3.5 text-black" />
-                    </button>
-                    <button
-                      onClick={() => setTeacherPage(teacherTotalPages)}
-                      disabled={teacherPage >= teacherTotalPages}
-                      className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                      title="Last Page"
-                    >
-                      <ChevronsRight className="w-3.5 h-3.5 text-black" />
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => setTeacherPage((p) => Math.min(Math.max(1, teacherTotalPages), p + 1))}
+                    disabled={teacherPage >= Math.max(1, teacherTotalPages)}
+                    className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Next Page"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5 text-black" />
+                  </button>
+                  <button
+                    onClick={() => setTeacherPage(Math.max(1, teacherTotalPages))}
+                    disabled={teacherPage >= Math.max(1, teacherTotalPages)}
+                    className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Last Page"
+                  >
+                    <ChevronsRight className="w-3.5 h-3.5 text-black" />
+                  </button>
                 </div>
-              )}
+              </div>
             </div>
           )}
 

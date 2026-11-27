@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
+import PaginationBar from '../../components/common/PaginationBar';
 import { paymentApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
@@ -31,6 +32,7 @@ export default function PaymentDetailPage() {
   const { isAdmin } = useAuth();
 
   const [payment, setPayment] = useState(null);
+  const [allocPage, setAllocPage] = useState(1);
   const [loading, setLoading] = useState(true);
 
   // Modals
@@ -41,14 +43,14 @@ export default function PaymentDetailPage() {
   const loadPayment = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await paymentApi.getReceipt(id);
+      const data = await paymentApi.getReceipt(id, { page: allocPage, page_size: 50 });
       setPayment(data);
     } catch (err) {
       error(err.message || 'Failed to load payment transaction');
     } finally {
       setLoading(false);
     }
-  }, [id, error]);
+  }, [id, allocPage, error]);
 
   useEffect(() => {
     loadPayment();
@@ -290,7 +292,7 @@ export default function PaymentDetailPage() {
               <span>Subject & Course Revenue Allocations</span>
             </h3>
             <span className="text-xs text-slate-500 font-medium">
-              {payment.allocations.length} allocated item(s)
+              {payment.allocations_total ?? payment.allocations.length} allocated item(s)
             </span>
           </div>
 
@@ -324,6 +326,15 @@ export default function PaymentDetailPage() {
               </tbody>
             </table>
           </div>
+          <PaginationBar
+            page={allocPage}
+            pageSize={payment.allocations_page_size || 50}
+            total={payment.allocations_total ?? payment.allocations.length}
+            totalPages={payment.allocations_total_pages || 1}
+            onPageChange={(p) => setAllocPage(p)}
+            loading={loading}
+            itemLabel="allocations"
+          />
         </div>
       )}
 

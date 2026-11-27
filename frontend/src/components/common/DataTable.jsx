@@ -6,7 +6,7 @@ export default function DataTable({
   data = [],
   total = 0,
   page = 1,
-  pageSize = 15,
+  pageSize = 50,
   onPageChange,
   onSearchChange,
   onRefresh,

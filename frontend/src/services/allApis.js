@@ -32,8 +32,8 @@ export const dashboardApi = {
     const res = await api.get('/dashboard/cashier');
     return res.data;
   },
-  getTeacher: async () => {
-    const res = await api.get('/dashboard/teacher');
+  getTeacher: async (params) => {
+    const res = await api.get('/dashboard/teacher', { params });
     return res.data;
   },
 };
@@ -71,24 +71,24 @@ export const teacherApi = {
     const res = await api.get(`/teachers/${id}/roster`, { params });
     return res.data;
   },
-  getBreakup: async (id) => {
-    const res = await api.get(`/teachers/${id}/breakup`);
+  getBreakup: async (id, params) => {
+    const res = await api.get(`/teachers/${id}/breakup`, { params });
     return res.data;
   },
   getHistory: async (id, params) => {
     const res = await api.get(`/teachers/${id}/history`, { params });
     return res.data;
   },
-  getCollections: async (id) => {
-    const res = await api.get(`/teachers/${id}/collections`);
+  getCollections: async (id, params) => {
+    const res = await api.get(`/teachers/${id}/collections`, { params });
     return res.data;
   },
-  getDemoConversion: async (id) => {
-    const res = await api.get(`/teachers/${id}/demo-conversion`);
+  getDemoConversion: async (id, params) => {
+    const res = await api.get(`/teachers/${id}/demo-conversion`, { params });
     return res.data;
   },
-  getSalaries: async (id) => {
-    const res = await api.get(`/teachers/${id}/salaries`);
+  getSalaries: async (id, params) => {
+    const res = await api.get(`/teachers/${id}/salaries`, { params });
     return res.data;
   },
   getAttendanceSummary: async (params) => {
@@ -158,8 +158,8 @@ export const studentApi = {
     const res = await api.get(`/audit/student/${id}`, { params });
     return res.data;
   },
-  getDemos: async (id) => {
-    const res = await api.get(`/students/${id}/demos`);
+  getDemos: async (id, params) => {
+    const res = await api.get(`/students/${id}/demos`, { params });
     return res.data;
   },
   giveDemo: async (id, data) => {
@@ -188,8 +188,8 @@ export const studentApi = {
     });
     return res.data;
   },
-  getActiveEnrollment: async (studentId) => {
-    const res = await api.get(`/students/${studentId}/active-enrollment`);
+  getActiveEnrollment: async (studentId, params) => {
+    const res = await api.get(`/students/${studentId}/active-enrollment`, { params });
     return res.data;
   },
 };
@@ -215,12 +215,12 @@ export const enquiryApi = {
     const res = await api.get('/enquiries/summary');
     return res.data;
   },
-  getUpcomingDeadlines: async () => {
-    const res = await api.get('/enquiries/upcoming-deadlines');
+  getUpcomingDeadlines: async (params) => {
+    const res = await api.get('/enquiries/upcoming-deadlines', { params });
     return res.data;
   },
-  get: async (id) => {
-    const res = await api.get(`/enquiries/${id}`);
+  get: async (id, params) => {
+    const res = await api.get(`/enquiries/${id}`, { params });
     return res.data;
   },
   create: async (data) => {
@@ -277,8 +277,8 @@ export const subjectApi = {
 };
 
 export const greenCardApi = {
-  list: async () => {
-    const res = await api.get('/green-card');
+  list: async (params) => {
+    const res = await api.get('/green-card', { params });
     return res.data;
   },
   getActive: async () => {
@@ -304,8 +304,8 @@ export const admissionApi = {
     const res = await api.get('/admissions', { params });
     return res.data;
   },
-  get: async (id) => {
-    const res = await api.get(`/admissions/${id}`);
+  get: async (id, params) => {
+    const res = await api.get(`/admissions/${id}`, { params });
     return res.data;
   },
   create: async (payload) => {
@@ -407,8 +407,8 @@ export const paymentApi = {
     const res = await api.get('/payments/refunds', { params });
     return res.data;
   },
-  getReceipt: async (id) => {
-    const res = await api.get(`/payments/${id}/receipt`);
+  getReceipt: async (id, params) => {
+    const res = await api.get(`/payments/${id}/receipt`, { params });
     return res.data;
   },
   getRefundReceipt: async (id) => {
@@ -418,8 +418,8 @@ export const paymentApi = {
 };
 
 export const expenseApi = {
-  listCategories: async () => {
-    const res = await api.get('/expenses/categories');
+  listCategories: async (params) => {
+    const res = await api.get('/expenses/categories', { params });
     return res.data;
   },
   createCategory: async (data) => {
@@ -498,8 +498,16 @@ export const reportApi = {
     const res = await api.get('/reports/subject-revenue', { params });
     return res.data;
   },
+  getSubjectRevenueStudents: async (subjectId, params) => {
+    const res = await api.get(`/reports/subject-revenue/${subjectId}/students`, { params });
+    return res.data;
+  },
   getTeacherRevenue: async (params) => {
     const res = await api.get('/reports/teacher-revenue', { params });
+    return res.data;
+  },
+  getTeacherRevenueStudents: async (teacherId, params) => {
+    const res = await api.get(`/reports/teacher-revenue/${teacherId}/students`, { params });
     return res.data;
   },
   getCashMovement: async (params = 2026) => {

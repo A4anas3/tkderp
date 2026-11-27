@@ -55,7 +55,7 @@ export default function StaffUsersPage() {
     try {
       const res = await userApi.list({
         page,
-        page_size: 15,
+        page_size: 50,
         search: search.trim() || undefined,
       });
       setUsers(res.items || []);
@@ -320,7 +320,8 @@ export default function StaffUsersPage() {
         data={users}
         total={total}
         page={page}
-        pageSize={15}
+        pageSize={50}
+        alwaysShowPagination
         onPageChange={(p) => setPage(p)}
         searchValue={search}
         onSearchChange={(val) => {

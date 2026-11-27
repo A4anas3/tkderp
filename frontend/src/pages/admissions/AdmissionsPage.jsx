@@ -38,7 +38,7 @@ export default function AdmissionsPage() {
     try {
       const res = await admissionApi.list({
         page,
-        page_size: 15,
+        page_size: 50,
         search: search.trim() || undefined,
         payment_status: paymentStatusFilter || undefined,
         active_only: true,
@@ -69,7 +69,7 @@ export default function AdmissionsPage() {
     }
   };
 
-  const totalPages = Math.max(1, Math.ceil(total / 15));
+  const totalPages = Math.max(1, Math.ceil(total / 50));
 
   const columns = [
     {
@@ -479,31 +479,29 @@ export default function AdmissionsPage() {
             })}
 
             {/* Mobile Pagination */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between bg-white border border-slate-200 rounded-lg p-2.5 text-xs">
-                <Button
-                  size="xs"
-                  variant="secondary"
-                  disabled={page <= 1}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  className="min-h-[34px]"
-                >
-                  <ChevronLeft className="w-3.5 h-3.5 mr-1" /> Prev
-                </Button>
-                <span className="font-semibold text-slate-700">
-                  Page {page} of {totalPages}
-                </span>
-                <Button
-                  size="xs"
-                  variant="secondary"
-                  disabled={page >= totalPages}
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  className="min-h-[34px]"
-                >
-                  Next <ChevronRight className="w-3.5 h-3.5 ml-1" />
-                </Button>
-              </div>
-            )}
+            <div className="flex items-center justify-between bg-white border border-slate-200 rounded-lg p-2.5 text-xs">
+              <Button
+                size="xs"
+                variant="secondary"
+                disabled={page <= 1 || loading}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="min-h-[34px]"
+              >
+                <ChevronLeft className="w-3.5 h-3.5 mr-1" /> Prev
+              </Button>
+              <span className="font-semibold text-slate-700">
+                Page {page} of {totalPages}
+              </span>
+              <Button
+                size="xs"
+                variant="secondary"
+                disabled={page >= totalPages || loading}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                className="min-h-[34px]"
+              >
+                Next <ChevronRight className="w-3.5 h-3.5 ml-1" />
+              </Button>
+            </div>
           </div>
         )}
       </div>
@@ -515,7 +513,8 @@ export default function AdmissionsPage() {
           data={admissions}
           total={total}
           page={page}
-          pageSize={15}
+          pageSize={50}
+          alwaysShowPagination
           onPageChange={(p) => setPage(p)}
           searchValue={search}
           onSearchChange={(val) => {

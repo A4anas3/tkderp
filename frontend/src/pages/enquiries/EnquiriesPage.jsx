@@ -42,6 +42,7 @@ import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
+import PaginationBar from '../../components/common/PaginationBar';
 import EnquiryDetailModal from '../../components/modals/EnquiryDetailModal';
 import DemoPassModal from '../../components/modals/DemoPassModal';
 import RegisterStudentModal from '../../components/modals/RegisterStudentModal';
@@ -104,6 +105,9 @@ export default function EnquiriesPage() {
 
   // Deadlines widget data
   const [deadlines, setDeadlines] = useState([]);
+  const [deadlinePage, setDeadlinePage] = useState(1);
+  const [deadlineTotal, setDeadlineTotal] = useState(0);
+  const [deadlineTotalPages, setDeadlineTotalPages] = useState(1);
   const [deadlinesLoading, setDeadlinesLoading] = useState(true);
 
   // Modals
@@ -140,6 +144,8 @@ export default function EnquiriesPage() {
   // TAB 3: DEMO ANALYTICS STATE
   // ==========================================
   const [analyticsData, setAnalyticsData] = useState(null);
+  const [analyticsTeacherPage, setAnalyticsTeacherPage] = useState(1);
+  const [analyticsSubjectPage, setAnalyticsSubjectPage] = useState(1);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
   // ==========================================
@@ -206,6 +212,11 @@ export default function EnquiriesPage() {
   const handleTabChange = (tabKey) => {
     setActiveTab(tabKey);
     setSearchParams({ tab: tabKey });
+    setEnquiryPage(1);
+    setDeadlinePage(1);
+    setDemoPage(1);
+    setAnalyticsTeacherPage(1);
+    setAnalyticsSubjectPage(1);
   };
 
   // Load Reference Catalogs (Subjects & Teachers)
@@ -280,7 +291,7 @@ export default function EnquiriesPage() {
     try {
       const res = await enquiryApi.list({
         page: enquiryPage,
-        page_size: 15,
+        page_size: 50,
         search: enquirySearch.trim() || undefined,
         status_filter: enquiryStatusFilter || undefined,
         status: enquiryStatusFilter || undefined,
@@ -308,14 +319,22 @@ export default function EnquiriesPage() {
   const loadDeadlines = useCallback(async () => {
     setDeadlinesLoading(true);
     try {
-      const res = await enquiryApi.getUpcomingDeadlines();
-      setDeadlines(res || []);
+      const res = await enquiryApi.getUpcomingDeadlines({ page: deadlinePage, page_size: 50 });
+      if (Array.isArray(res)) {
+        setDeadlines(res);
+        setDeadlineTotal(res.length);
+        setDeadlineTotalPages(1);
+      } else {
+        setDeadlines(res?.items || []);
+        setDeadlineTotal(res?.total ?? 0);
+        setDeadlineTotalPages(Math.max(1, res?.total_pages || 1));
+      }
     } catch (err) {
       console.error('Failed to load upcoming demo deadlines:', err);
     } finally {
       setDeadlinesLoading(false);
     }
-  }, []);
+  }, [deadlinePage]);
 
   // Load Demos Register (Tab 2)
   const loadDemos = useCallback(async () => {
@@ -323,7 +342,7 @@ export default function EnquiriesPage() {
     try {
       const res = await enquiryApi.listDemos({
         page: demoPage,
-        page_size: 15,
+        page_size: 50,
         search: demoSearch.trim() || undefined,
         status_filter: demoStatusFilter || undefined,
         status: demoStatusFilter || undefined,
@@ -348,6 +367,10 @@ export default function EnquiriesPage() {
       const res = await enquiryApi.getAnalytics({
         month: selectedMonth ? parseInt(selectedMonth, 10) : undefined,
         year: selectedYear ? parseInt(selectedYear, 10) : undefined,
+        teacher_page: analyticsTeacherPage,
+        teacher_page_size: 50,
+        subject_page: analyticsSubjectPage,
+        subject_page_size: 50,
       });
       setAnalyticsData(res);
     } catch (err) {
@@ -355,7 +378,7 @@ export default function EnquiriesPage() {
     } finally {
       setAnalyticsLoading(false);
     }
-  }, [selectedMonth, selectedYear, error]);
+  }, [selectedMonth, selectedYear, analyticsTeacherPage, analyticsSubjectPage, error]);
 
   // Tab-dependent data fetching
   useEffect(() => {
@@ -1500,6 +1523,8 @@ export default function EnquiriesPage() {
               setSelectedMonth(e.target.value);
               setEnquiryPage(1);
               setDemoPage(1);
+              setAnalyticsTeacherPage(1);
+              setAnalyticsSubjectPage(1);
             }}
             className="text-xs font-semibold text-black bg-slate-50 border border-slate-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600"
           >
@@ -1524,6 +1549,8 @@ export default function EnquiriesPage() {
               setSelectedYear(e.target.value);
               setEnquiryPage(1);
               setDemoPage(1);
+              setAnalyticsTeacherPage(1);
+              setAnalyticsSubjectPage(1);
             }}
             className="text-xs font-semibold text-black bg-slate-50 border border-slate-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600"
           >
@@ -1540,6 +1567,8 @@ export default function EnquiriesPage() {
                 setSelectedYear(currentYear);
                 setEnquiryPage(1);
                 setDemoPage(1);
+                setAnalyticsTeacherPage(1);
+                setAnalyticsSubjectPage(1);
               }}
               title="Reset month/year filters"
               className="p-1 rounded text-slate-400 hover:text-black hover:bg-slate-100 transition"
@@ -1846,6 +1875,18 @@ export default function EnquiriesPage() {
                   );
                 })}
               </div>
+
+              <PaginationBar
+                compact
+                className="mt-3"
+                page={deadlinePage}
+                pageSize={50}
+                total={deadlineTotal}
+                totalPages={deadlineTotalPages}
+                onPageChange={(p) => setDeadlinePage(p)}
+                loading={deadlinesLoading}
+                itemLabel="deadlines"
+              />
             </div>
           )}
 
@@ -1895,7 +1936,8 @@ export default function EnquiriesPage() {
             data={enquiries}
             total={enquiryTotal}
             page={enquiryPage}
-            pageSize={15}
+            pageSize={50}
+            alwaysShowPagination
             onPageChange={(p) => setEnquiryPage(p)}
             searchValue={enquirySearch}
             onSearchChange={(val) => {
@@ -1994,7 +2036,8 @@ export default function EnquiriesPage() {
             data={demos}
             total={demoTotal}
             page={demoPage}
-            pageSize={15}
+            pageSize={50}
+            alwaysShowPagination
             onPageChange={(p) => setDemoPage(p)}
             searchValue={demoSearch}
             onSearchChange={(val) => {
@@ -2192,6 +2235,16 @@ export default function EnquiriesPage() {
                     </tbody>
                   </table>
                 </div>
+
+                <PaginationBar
+                  page={analyticsTeacherPage}
+                  pageSize={analyticsData.teacher_page_size || 50}
+                  total={analyticsData.teacher_total ?? (analyticsData.by_teacher?.length || 0)}
+                  totalPages={analyticsData.teacher_total_pages || 1}
+                  onPageChange={(p) => setAnalyticsTeacherPage(p)}
+                  loading={analyticsLoading}
+                  itemLabel="teachers"
+                />
               </div>
 
               {/* Subject-Wise Demo Breakdown */}
@@ -2264,6 +2317,16 @@ export default function EnquiriesPage() {
                     </tbody>
                   </table>
                 </div>
+
+                <PaginationBar
+                  page={analyticsSubjectPage}
+                  pageSize={analyticsData.subject_page_size || 50}
+                  total={analyticsData.subject_total ?? (analyticsData.by_subject?.length || 0)}
+                  totalPages={analyticsData.subject_total_pages || 1}
+                  onPageChange={(p) => setAnalyticsSubjectPage(p)}
+                  loading={analyticsLoading}
+                  itemLabel="subjects"
+                />
               </div>
             </>
           ) : (

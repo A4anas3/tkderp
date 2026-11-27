@@ -293,6 +293,14 @@ class TeacherBreakupResponse(BaseModel):
     collection_efficiency: float
     subjects: List[TeacherSubjectBreakupItem] = []
     students: List[TeacherStudentBreakupItem] = []
+    subjects_total: int = 0
+    subjects_total_pages: int = 1
+    subjects_page: int = 1
+    subjects_page_size: int = 50
+    students_total: int = 0
+    students_total_pages: int = 1
+    students_page: int = 1
+    students_page_size: int = 50
 
 
 class TeacherCollectionItem(BaseModel):
@@ -321,6 +329,10 @@ class TeacherCollectionsResponse(BaseModel):
     collections_count: int
     by_mode: dict = {}
     items: List[TeacherCollectionItem] = []
+    total: int = 0
+    total_pages: int = 1
+    page: int = 1
+    page_size: int = 50
 
 # Teacher Attendance Schemas
 class TeacherAttendanceToggle(BaseModel):
@@ -414,5 +426,19 @@ class TeacherDemoConversionResponse(BaseModel):
     conversion_rate_pct: float = 0.0
     enrolled_subjects: List[TeacherDemoConversionSubjectDetail] = []
     converted_demos: List[TeacherConvertedDemoItem] = []
+    total: int = 0
+    total_pages: int = 1
+    page: int = 1
+    page_size: int = 50
+
+
+class TeacherSalaryPageResponse(BaseModel):
+    items: List[Any] = []
+    total: int = 0
+    total_pages: int = 1
+    page: int = 1
+    page_size: int = 50
+    total_paid_amount: float = 0.0
+    total_salary_amount: float = 0.0
 
 

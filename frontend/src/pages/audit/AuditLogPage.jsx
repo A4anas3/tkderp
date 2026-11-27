@@ -320,7 +320,7 @@ export default function AuditLogPage() {
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [pageSize, setPageSize] = useState(50);
 
   const [stats, setStats] = useState({
     total_events: 0,
@@ -393,8 +393,11 @@ export default function AuditLogPage() {
   };
 
   useEffect(() => {
-    fetchLogs();
-  }, [page, pageSize, selectedAction, selectedEntityType, selectedUser, fromDate, toDate]);
+    const timer = setTimeout(() => {
+      fetchLogs();
+    }, searchQuery ? 300 : 0);
+    return () => clearTimeout(timer);
+  }, [page, pageSize, selectedAction, selectedEntityType, selectedUser, fromDate, toDate, searchQuery]);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -534,7 +537,10 @@ export default function AuditLogPage() {
               type="text"
               placeholder="Search reference, details, notes, staff..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setPage(1);
+              }}
               className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg text-black font-medium focus:bg-white focus:outline-none focus:ring-1 focus:ring-odoo-500 placeholder:text-slate-400"
             />
           </div>
@@ -785,74 +791,74 @@ export default function AuditLogPage() {
                 );
               })}
             </div>
-
-            {/* 5. Pagination Bar */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 bg-slate-50 border-t border-slate-200 text-xs">
-              <div className="text-slate-700 font-medium">
-                Showing <span className="font-bold text-black">{logs.length > 0 ? (page - 1) * pageSize + 1 : 0}</span> to{' '}
-                <span className="font-bold text-black">{Math.min(page * pageSize, total)}</span> of{' '}
-                <span className="font-bold text-black">{total.toLocaleString('en-IN')}</span> entries
-              </div>
-
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1 text-slate-600 font-medium mr-2">
-                  <span>Per page:</span>
-                  <select
-                    value={pageSize}
-                    onChange={(e) => {
-                      setPageSize(Number(e.target.value));
-                      setPage(1);
-                    }}
-                    className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs text-black font-semibold focus:outline-none"
-                  >
-                    <option value={10}>10</option>
-                    <option value={25}>25</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                  </select>
-                </div>
-
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setPage(1)}
-                    disabled={page === 1}
-                    className="p-1 rounded border border-slate-300 bg-white text-black hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
-                    title="First Page"
-                  >
-                    <ChevronsLeft className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    disabled={page === 1}
-                    className="p-1 rounded border border-slate-300 bg-white text-black hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
-                    title="Previous Page"
-                  >
-                    <ChevronLeft className="w-3.5 h-3.5" />
-                  </button>
-                  <span className="px-2 font-bold text-black">
-                    Page {page} of {totalPages}
-                  </span>
-                  <button
-                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={page >= totalPages}
-                    className="p-1 rounded border border-slate-300 bg-white text-black hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
-                    title="Next Page"
-                  >
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => setPage(totalPages)}
-                    disabled={page >= totalPages}
-                    className="p-1 rounded border border-slate-300 bg-white text-black hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
-                    title="Last Page"
-                  >
-                    <ChevronsRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            </div>
           </>
         )}
+
+        {/* 5. Pagination Bar */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 bg-slate-50 border-t border-slate-200 text-xs">
+          <div className="text-slate-700 font-medium">
+            Showing <span className="font-bold text-black">{total > 0 ? (page - 1) * pageSize + 1 : 0}</span> to{' '}
+            <span className="font-bold text-black">{Math.min(page * pageSize, total)}</span> of{' '}
+            <span className="font-bold text-black">{total.toLocaleString('en-IN')}</span> entries
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 text-slate-600 font-medium mr-2">
+              <span>Per page:</span>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs text-black font-semibold focus:outline-none"
+              >
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPage(1)}
+                disabled={page === 1 || loading}
+                className="p-1 rounded border border-slate-300 bg-white text-black hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                title="First Page"
+              >
+                <ChevronsLeft className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1 || loading}
+                className="p-1 rounded border border-slate-300 bg-white text-black hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Previous Page"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+              <span className="px-2 font-bold text-black">
+                Page {page} of {Math.max(1, totalPages)}
+              </span>
+              <button
+                onClick={() => setPage((p) => Math.min(Math.max(1, totalPages), p + 1))}
+                disabled={page >= Math.max(1, totalPages) || loading}
+                className="p-1 rounded border border-slate-300 bg-white text-black hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Next Page"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => setPage(Math.max(1, totalPages))}
+                disabled={page >= Math.max(1, totalPages) || loading}
+                className="p-1 rounded border border-slate-300 bg-white text-black hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Last Page"
+              >
+                <ChevronsRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* 5. Detailed Event Modal */}

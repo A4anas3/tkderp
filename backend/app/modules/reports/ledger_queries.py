@@ -21,7 +21,7 @@ def _paginate_slice(
     items: List[Any],
     page: Optional[int],
     page_size: Optional[int],
-    default_page_size: int = 15,
+    default_page_size: int = 50,
 ) -> Tuple[List[Any], int, int, int, int]:
     """Slice a list for pagination and return (paged_items, total, total_pages, cur_page, effective_page_size)."""
     total = len(items)
@@ -686,6 +686,8 @@ async def get_collections_detailed(
     page_size: Optional[int] = None,
     cashier_page: Optional[int] = None,
     cashier_page_size: Optional[int] = None,
+    mode_page: Optional[int] = None,
+    mode_page_size: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     Collections Report:
@@ -791,6 +793,9 @@ async def get_collections_detailed(
     paged_cashiers, c_total, c_total_pages, c_cur_page, c_page_size = _paginate_slice(
         by_cashier, cashier_page, cashier_page_size
     )
+    paged_modes, m_total, m_total_pages, m_cur_page, m_page_size = _paginate_slice(
+        by_mode, mode_page, mode_page_size
+    )
 
     return {
         "summary": {
@@ -810,8 +815,12 @@ async def get_collections_detailed(
                 "total_refunded": float(m["total_refunded"]),
                 "net_collected": float(m["net_collected"])
             }
-            for m in by_mode
+            for m in paged_modes
         ],
+        "mode_total": m_total,
+        "mode_total_pages": m_total_pages,
+        "mode_page": m_cur_page,
+        "mode_page_size": m_page_size,
         "by_cashier": [
             {
                 "user_id": c["user_id"],
@@ -1079,7 +1088,9 @@ async def get_expenses_detailed(
     payment_mode: Optional[str] = None,
     search: Optional[str] = None,
     page: Optional[int] = None,
-    page_size: Optional[int] = None
+    page_size: Optional[int] = None,
+    category_page: Optional[int] = None,
+    category_page_size: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     Expenses Report:
@@ -1207,6 +1218,14 @@ async def get_expenses_detailed(
         paged_items = items
         cur_page = 1
 
+    by_category_all = [
+        {"category_name": c["category_name"], "count": c["count"], "amount": float(c["amount"])}
+        for c in by_category_map.values()
+    ]
+    paged_categories, cat_total, cat_total_pages, cat_cur_page, cat_page_size = _paginate_slice(
+        by_category_all, category_page, category_page_size
+    )
+
     return {
         "summary": {
             "total_expenses": float(total_operational + total_salaries),
@@ -1214,10 +1233,11 @@ async def get_expenses_detailed(
             "total_salaries_paid": float(total_salaries),
             "expense_count": total
         },
-        "by_category": [
-            {"category_name": c["category_name"], "count": c["count"], "amount": float(c["amount"])}
-            for c in by_category_map.values()
-        ],
+        "by_category": paged_categories,
+        "by_category_total": cat_total,
+        "by_category_total_pages": cat_total_pages,
+        "by_category_page": cat_cur_page,
+        "by_category_page_size": cat_page_size,
         "by_mode": [
             {"mode": m["mode"], "count": m["count"], "amount": float(m["amount"])}
             for m in by_mode_map.values()
@@ -1273,6 +1293,14 @@ async def get_admissions_conversion_detailed(
     source: Optional[str] = None,
     search: Optional[str] = None,
     page: Optional[int] = None,
+    page_size: Optional[int] = None,
+    subject_page: Optional[int] = None,
+    subject_page_size: Optional[int] = None,
+    teacher_page: Optional[int] = None,
+    teacher_page_size: Optional[int] = None,
+    source_page: Optional[int] = None,
+    source_page_size: Optional[int] = None,
+) -> Dict[str, Any]:
     page_size: Optional[int] = None,
     subject_page: Optional[int] = None,
     subject_page_size: Optional[int] = None,
@@ -1553,6 +1581,9 @@ async def get_admissions_conversion_detailed(
     paged_teachers, tch_total, tch_total_pages, tch_cur_page, tch_page_size = _paginate_slice(
         by_teacher, teacher_page, teacher_page_size
     )
+    paged_sources, src_total, src_total_pages, src_cur_page, src_page_size = _paginate_slice(
+        by_source, source_page, source_page_size
+    )
 
     return {
         "summary": {
@@ -1568,7 +1599,11 @@ async def get_admissions_conversion_detailed(
         "by_subject_total_pages": subj_total_pages,
         "by_subject_page": subj_cur_page,
         "by_subject_page_size": subj_page_size,
-        "by_source": by_source,
+        "by_source": paged_sources,
+        "by_source_total": src_total,
+        "by_source_total_pages": src_total_pages,
+        "by_source_page": src_cur_page,
+        "by_source_page_size": src_page_size,
         "by_teacher": paged_teachers,
         "by_teacher_total": tch_total,
         "by_teacher_total_pages": tch_total_pages,

@@ -195,6 +195,10 @@ class AdmissionResponse(BaseModel):
     created_by: Optional[uuid.UUID] = None
     collector_name: Optional[str] = None
     items: List[AdmissionItemResponse] = Field(default_factory=list)
+    items_total: Optional[int] = None
+    items_total_pages: Optional[int] = None
+    items_page: Optional[int] = None
+    items_page_size: Optional[int] = None
     can_cancel: bool = True
 
     @model_validator(mode="before")

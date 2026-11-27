@@ -17,6 +17,7 @@ import TeacherAttendanceCalendar from '../../components/teachers/TeacherAttendan
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
 import Input from '../../components/common/Input';
+import PaginationBar from '../../components/common/PaginationBar';
 import { teacherApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 import { getDaysInMonth, parseMonthYear } from '../../utils/calendarUtils';
@@ -36,6 +37,11 @@ export default function TeacherAttendancePage() {
   const [attendanceSummary, setAttendanceSummary] = useState([]);
   const [selectedTeacherId, setSelectedTeacherId] = useState(null);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [teacherPage, setTeacherPage] = useState(1);
+  const [teacherTotal, setTeacherTotal] = useState(0);
+  const [teacherTotalPages, setTeacherTotalPages] = useState(1);
+  const teacherPageSize = 50;
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('CALENDAR'); // 'CALENDAR' | 'SUMMARY'
 
@@ -44,7 +50,14 @@ export default function TeacherAttendancePage() {
   const [summaryPage, setSummaryPage] = useState(1);
   const [summaryTotal, setSummaryTotal] = useState(0);
   const [summaryTotalPages, setSummaryTotalPages] = useState(1);
-  const summaryPageSize = 15;
+  const summaryPageSize = 50;
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
   const loadSummaryData = useCallback(async () => {
     try {
@@ -71,18 +84,24 @@ export default function TeacherAttendancePage() {
     setSummaryPage(1);
   }, [monthYear]);
 
-  // Load teacher attendance summary for the given month
+  // Load teacher attendance roster & summary for the given month
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const [tchRes, summaryRes] = await Promise.all([
-        teacherApi.list({ page: 1, page_size: 100 }),
-        teacherApi.getAttendanceSummary({ month_year: monthYear }),
+        teacherApi.list({
+          page: teacherPage,
+          page_size: teacherPageSize,
+          search: debouncedSearch.trim() || undefined,
+        }),
+        teacherApi.getAttendanceSummary({ month_year: monthYear, page: teacherPage, page_size: teacherPageSize }),
       ]);
 
       const tList = tchRes.items || [];
       setTeachers(tList);
-      setAttendanceSummary(summaryRes || []);
+      setTeacherTotal(tchRes.total ?? tList.length);
+      setTeacherTotalPages(Math.max(1, Math.ceil((tchRes.total ?? tList.length) / teacherPageSize)));
+      setAttendanceSummary(Array.isArray(summaryRes) ? summaryRes : summaryRes?.items || []);
 
       setSelectedTeacherId((prev) => prev || (tList.length > 0 ? tList[0].id : null));
     } catch (err) {
@@ -91,7 +110,7 @@ export default function TeacherAttendancePage() {
     } finally {
       setLoading(false);
     }
-  }, [monthYear, error]);
+  }, [monthYear, teacherPage, teacherPageSize, debouncedSearch, error]);
 
   useEffect(() => {
     loadData();
@@ -129,17 +148,8 @@ export default function TeacherAttendancePage() {
     return map;
   }, [attendanceSummary]);
 
-  // Filtered teachers list
-  const filteredTeachers = React.useMemo(() => {
-    return teachers.filter((t) => {
-      const q = search.toLowerCase();
-      return (
-        t.name?.toLowerCase().includes(q) ||
-        t.specialization?.toLowerCase().includes(q) ||
-        t.teacher_code?.toLowerCase().includes(q)
-      );
-    });
-  }, [teachers, search]);
+  // Server-paginated teachers list
+  const filteredTeachers = teachers;
 
   const selectedTeacher = teachers.find((t) => t.id === selectedTeacherId);
 
@@ -243,7 +253,10 @@ export default function TeacherAttendancePage() {
       <div className="flex items-center gap-1 border-b border-slate-200 pb-1">
         <button
           type="button"
-          onClick={() => setActiveTab('CALENDAR')}
+          onClick={() => {
+            setActiveTab('CALENDAR');
+            setTeacherPage(1);
+          }}
           className={`flex items-center gap-2 px-3 py-2 min-h-[36px] text-xs font-bold border-b-2 transition cursor-pointer ${
             activeTab === 'CALENDAR'
               ? 'border-odoo-600 text-odoo-700 bg-purple-50/50 rounded-t-lg'
@@ -256,7 +269,10 @@ export default function TeacherAttendancePage() {
 
         <button
           type="button"
-          onClick={() => setActiveTab('SUMMARY')}
+          onClick={() => {
+            setActiveTab('SUMMARY');
+            setSummaryPage(1);
+          }}
           className={`flex items-center gap-2 px-3 py-2 min-h-[36px] text-xs font-bold border-b-2 transition cursor-pointer ${
             activeTab === 'SUMMARY'
               ? 'border-odoo-600 text-odoo-700 bg-purple-50/50 rounded-t-lg'
@@ -264,7 +280,7 @@ export default function TeacherAttendancePage() {
           }`}
         >
           <Users className="w-4 h-4" />
-          <span>All Faculty Summary ({teachers.length})</span>
+          <span>All Faculty Summary ({summaryTotal || teacherTotal})</span>
         </button>
       </div>
 
@@ -275,7 +291,7 @@ export default function TeacherAttendancePage() {
           <div className="lg:col-span-1 bg-white rounded-xl border border-slate-200 shadow-2xs p-3.5 space-y-3">
             <div>
               <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                Select Teacher ({filteredTeachers.length})
+                Select Teacher ({teacherTotal})
               </span>
               <div className="relative">
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
@@ -283,7 +299,10 @@ export default function TeacherAttendancePage() {
                   type="text"
                   placeholder="Filter teacher..."
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  onChange={(e) => {
+                    setSearch(e.target.value);
+                    setTeacherPage(1);
+                  }}
                   className="w-full pl-8 pr-2.5 py-1.5 text-xs rounded-lg border border-slate-300 focus:outline-none focus:border-odoo-600"
                 />
               </div>
@@ -341,6 +360,17 @@ export default function TeacherAttendancePage() {
                 </p>
               )}
             </div>
+
+            <PaginationBar
+              compact
+              page={teacherPage}
+              pageSize={teacherPageSize}
+              total={teacherTotal}
+              totalPages={teacherTotalPages}
+              onPageChange={(p) => setTeacherPage(p)}
+              loading={loading}
+              itemLabel="teachers"
+            />
           </div>
 
           {/* Right Column: Interactive Monthly Calendar */}
@@ -459,34 +489,32 @@ export default function TeacherAttendancePage() {
           </div>
 
           {/* Pagination Controls */}
-          {summaryTotal > 0 && (
-            <div className="p-3 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs bg-slate-50/50">
-              <span className="text-slate-600 font-medium">
-                Showing {(summaryPage - 1) * summaryPageSize + 1} to {Math.min(summaryPage * summaryPageSize, summaryTotal)} of {summaryTotal} faculty members (Page {summaryPage} of {summaryTotalPages})
+          <div className="p-3 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs bg-slate-50/50">
+            <span className="text-slate-600 font-medium">
+              Showing {summaryTotal === 0 ? 0 : (summaryPage - 1) * summaryPageSize + 1} to {Math.min(summaryPage * summaryPageSize, summaryTotal)} of {summaryTotal} faculty members (Page {summaryPage} of {Math.max(1, summaryTotalPages)})
+            </span>
+            <div className="flex items-center gap-1.5">
+              <Button
+                size="xs"
+                variant="secondary"
+                disabled={summaryPage <= 1 || loading}
+                onClick={() => setSummaryPage((p) => Math.max(1, p - 1))}
+              >
+                Previous
+              </Button>
+              <span className="px-2 font-bold text-slate-800">
+                {summaryPage} / {Math.max(1, summaryTotalPages)}
               </span>
-              <div className="flex items-center gap-1.5">
-                <Button
-                  size="xs"
-                  variant="secondary"
-                  disabled={summaryPage <= 1}
-                  onClick={() => setSummaryPage((p) => Math.max(1, p - 1))}
-                >
-                  Previous
-                </Button>
-                <span className="px-2 font-bold text-slate-800">
-                  {summaryPage} / {summaryTotalPages}
-                </span>
-                <Button
-                  size="xs"
-                  variant="secondary"
-                  disabled={summaryPage >= summaryTotalPages}
-                  onClick={() => setSummaryPage((p) => Math.min(summaryTotalPages, p + 1))}
-                >
-                  Next
-                </Button>
-              </div>
+              <Button
+                size="xs"
+                variant="secondary"
+                disabled={summaryPage >= Math.max(1, summaryTotalPages) || loading}
+                onClick={() => setSummaryPage((p) => Math.min(Math.max(1, summaryTotalPages), p + 1))}
+              >
+                Next
+              </Button>
             </div>
-          )}
+          </div>
         </div>
       )}
     </div>

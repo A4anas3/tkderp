@@ -67,7 +67,7 @@ const REPORT_TABS = [
 
 function ReportPagination({
   page,
-  pageSize = 15,
+  pageSize = 50,
   total = 0,
   totalPages = 1,
   onPageChange,
@@ -76,7 +76,6 @@ function ReportPagination({
 }) {
   const safeTotal = Number(total || 0);
   const safeTotalPages = Math.max(1, Number(totalPages) || Math.ceil(safeTotal / pageSize) || 1);
-  if (safeTotal <= 0 && safeTotalPages <= 1 && page <= 1) return null;
 
   const start = safeTotal === 0 ? 0 : (page - 1) * pageSize + 1;
   const end = Math.min(page * pageSize, safeTotal);
@@ -205,10 +204,13 @@ export default function ReportsHubPage() {
   const [loading, setLoading] = useState(true);
   const [tablePage, setTablePage] = useState(1);
   const [cashierPage, setCashierPage] = useState(1);
+  const [modePage, setModePage] = useState(1);
   const [subjectPage, setSubjectPage] = useState(1);
   const [teacherPage, setTeacherPage] = useState(1);
+  const [sourcePage, setSourcePage] = useState(1);
+  const [categoryPage, setCategoryPage] = useState(1);
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const PAGE_SIZE = 15;
+  const PAGE_SIZE = 50;
   const fetchSeqRef = useRef(0);
   const prevFilterKeyRef = useRef('');
 
@@ -352,6 +354,8 @@ export default function ReportsHubPage() {
       if (includePagination) {
         params.cashier_page = cashierPage;
         params.cashier_page_size = PAGE_SIZE;
+        params.mode_page = modePage;
+        params.mode_page_size = PAGE_SIZE;
       }
     }
     if (activeTab === 'dues-ageing') {
@@ -366,6 +370,8 @@ export default function ReportsHubPage() {
         params.subject_page_size = PAGE_SIZE;
         params.teacher_page = teacherPage;
         params.teacher_page_size = PAGE_SIZE;
+        params.source_page = sourcePage;
+        params.source_page_size = PAGE_SIZE;
       }
     }
     if (activeTab === 'refunds') {
@@ -374,6 +380,10 @@ export default function ReportsHubPage() {
     if (activeTab === 'expenses') {
       if (expenseCategoryFilter !== 'ALL') params.category_id = expenseCategoryFilter;
       if (paymentModeFilter !== 'ALL') params.payment_mode = paymentModeFilter;
+      if (includePagination) {
+        params.category_page = categoryPage;
+        params.category_page_size = PAGE_SIZE;
+      }
     }
     if (activeTab === 'summary-dashboard') {
       params.period = summaryPeriod;
@@ -382,8 +392,11 @@ export default function ReportsHubPage() {
   }, [
     tablePage,
     cashierPage,
+    modePage,
     subjectPage,
     teacherPage,
+    sourcePage,
+    categoryPage,
     fromDate,
     toDate,
     selectedMonth,
@@ -405,11 +418,22 @@ export default function ReportsHubPage() {
   const fetchReportData = useCallback(async () => {
     if (prevFilterKeyRef.current !== filterKey) {
       prevFilterKeyRef.current = filterKey;
-      if (tablePage !== 1 || cashierPage !== 1 || subjectPage !== 1 || teacherPage !== 1) {
+      if (
+        tablePage !== 1 ||
+        cashierPage !== 1 ||
+        modePage !== 1 ||
+        subjectPage !== 1 ||
+        teacherPage !== 1 ||
+        sourcePage !== 1 ||
+        categoryPage !== 1
+      ) {
         setTablePage(1);
         setCashierPage(1);
+        setModePage(1);
         setSubjectPage(1);
         setTeacherPage(1);
+        setSourcePage(1);
+        setCategoryPage(1);
         return;
       }
     }
@@ -463,7 +487,7 @@ export default function ReportsHubPage() {
         setLoading(false);
       }
     }
-  }, [activeTab, buildQueryParams, filterKey, tablePage, cashierPage, subjectPage, teacherPage]);
+  }, [activeTab, buildQueryParams, filterKey, tablePage, cashierPage, modePage, subjectPage, teacherPage, sourcePage, categoryPage]);
 
   useEffect(() => {
     fetchReportData();
@@ -923,6 +947,15 @@ export default function ReportsHubPage() {
                       </tbody>
                     </table>
                   </div>
+                  <ReportPagination
+                    page={modePage}
+                    pageSize={data?.mode_page_size ?? PAGE_SIZE}
+                    total={data?.mode_total ?? (data?.by_mode?.length || 0)}
+                    totalPages={data?.mode_total_pages}
+                    onPageChange={setModePage}
+                    loading={loading}
+                    itemLabel="payment modes"
+                  />
                 </div>
 
                 {/* Breakdown by Cashier Staff */}
@@ -1436,6 +1469,15 @@ export default function ReportsHubPage() {
                       </tbody>
                     </table>
                   </div>
+                  <ReportPagination
+                    page={sourcePage}
+                    pageSize={data?.by_source_page_size ?? PAGE_SIZE}
+                    total={data?.by_source_total ?? (data?.by_source?.length || 0)}
+                    totalPages={data?.by_source_total_pages}
+                    onPageChange={setSourcePage}
+                    loading={loading}
+                    itemLabel="lead sources"
+                  />
                 </div>
 
                 {/* By Subject Table */}
@@ -1897,6 +1939,16 @@ export default function ReportsHubPage() {
                     </div>
                   ))}
                 </div>
+
+                <ReportPagination
+                  page={categoryPage}
+                  pageSize={data?.by_category_page_size ?? PAGE_SIZE}
+                  total={data?.by_category_total ?? (data?.by_category?.length || 0)}
+                  totalPages={data?.by_category_total_pages}
+                  onPageChange={setCategoryPage}
+                  loading={loading}
+                  itemLabel="categories"
+                />
 
                 {/* Items Table */}
                 <h4 className="text-xs font-black text-black uppercase tracking-wider mb-2 pt-2 border-t border-slate-100">

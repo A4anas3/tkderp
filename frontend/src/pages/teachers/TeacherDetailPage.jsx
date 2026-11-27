@@ -41,6 +41,7 @@ import Badge from '../../components/common/Badge';
 import Modal from '../../components/common/Modal';
 import Input from '../../components/common/Input';
 import Avatar from '../../components/common/Avatar';
+import PaginationBar from '../../components/common/PaginationBar';
 import QuickPaymentModal from '../../components/modals/QuickPaymentModal';
 import PaymentReceiptModal from '../../components/receipts/PaymentReceiptModal';
 import { teacherApi, expenseApi } from '../../services/allApis';
@@ -50,8 +51,9 @@ import { formatIndianDate } from '../../utils/dateCycleUtils';
 import { cleanMobileInput } from '../../utils/phoneUtils';
 import { compressImage } from '../../utils/imageCompressor';
 
-const ROSTER_PAGE_SIZE = 10;
-const HISTORY_PAGE_SIZE = 10;
+const ROSTER_PAGE_SIZE = 50;
+const HISTORY_PAGE_SIZE = 50;
+const DETAIL_PAGE_SIZE = 50;
 
 export default function TeacherDetailPage() {
   const { id } = useParams();
@@ -68,6 +70,8 @@ export default function TeacherDetailPage() {
 
   // 3. Database Breakup State (Part c)
   const [breakup, setBreakup] = useState(null);
+  const [breakupSubjPage, setBreakupSubjPage] = useState(1);
+  const [breakupStuPage, setBreakupStuPage] = useState(1);
   const [breakupLoading, setBreakupLoading] = useState(false);
 
   // 4. Chronological History State (Part b)
@@ -93,11 +97,17 @@ export default function TeacherDetailPage() {
     collections_count: 0,
     by_mode: {},
     items: [],
+    total: 0,
+    total_pages: 1,
+    page: 1,
+    page_size: DETAIL_PAGE_SIZE,
   });
+  const [collectionsPage, setCollectionsPage] = useState(1);
   const [collectionsLoading, setCollectionsLoading] = useState(false);
 
   // 5b. Demo Conversion State (credited as demo giver, verified via source_demo_number)
   const [demoConversion, setDemoConversion] = useState(null);
+  const [convPage, setConvPage] = useState(1);
   const [demoConversionLoading, setDemoConversionLoading] = useState(false);
 
   // 6. Roster State (from database roster endpoint)
@@ -121,6 +131,11 @@ export default function TeacherDetailPage() {
 
   // 7. Monthly Salary History State (Requirement 5)
   const [salaries, setSalaries] = useState([]);
+  const [salPage, setSalPage] = useState(1);
+  const [salTotal, setSalTotal] = useState(0);
+  const [salTotalPages, setSalTotalPages] = useState(1);
+  const [salTotalPaid, setSalTotalPaid] = useState(0);
+  const [salTotalPayable, setSalTotalPayable] = useState(0);
   const [salariesLoading, setSalariesLoading] = useState(false);
 
   // 8. Modals State
@@ -156,6 +171,7 @@ export default function TeacherDetailPage() {
   useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedSearch(searchQuery);
+      setRosterPage(1);
     }, 300);
     return () => clearTimeout(handler);
   }, [searchQuery]);
@@ -193,14 +209,19 @@ export default function TeacherDetailPage() {
     if (!id) return;
     setBreakupLoading(true);
     try {
-      const data = await teacherApi.getBreakup(id);
+      const data = await teacherApi.getBreakup(id, {
+        subjects_page: breakupSubjPage,
+        subjects_page_size: DETAIL_PAGE_SIZE,
+        students_page: breakupStuPage,
+        students_page_size: DETAIL_PAGE_SIZE,
+      });
       setBreakup(data);
     } catch (err) {
       console.error('Failed to load teacher breakup:', err);
     } finally {
       setBreakupLoading(false);
     }
-  }, [id]);
+  }, [id, breakupSubjPage, breakupStuPage]);
 
   // Load chronological history (Part b)
   const loadHistory = useCallback(async () => {
@@ -236,28 +257,34 @@ export default function TeacherDetailPage() {
     if (!id) return;
     setCollectionsLoading(true);
     try {
-      const data = await teacherApi.getCollections(id);
+      const data = await teacherApi.getCollections(id, {
+        page: collectionsPage,
+        page_size: DETAIL_PAGE_SIZE,
+      });
       setCollections(data);
     } catch (err) {
       console.error('Failed to load teacher collections:', err);
     } finally {
       setCollectionsLoading(false);
     }
-  }, [id]);
+  }, [id, collectionsPage]);
 
   // Load demo conversion stats (credited as demo giver, verified by source_demo_number)
   const loadDemoConversion = useCallback(async () => {
     if (!id) return;
     setDemoConversionLoading(true);
     try {
-      const data = await teacherApi.getDemoConversion(id);
+      const data = await teacherApi.getDemoConversion(id, {
+        page: convPage,
+        page_size: DETAIL_PAGE_SIZE,
+      });
       setDemoConversion(data);
     } catch (err) {
       console.error('Failed to load teacher demo conversion:', err);
     } finally {
       setDemoConversionLoading(false);
     }
-  }, [id]);
+  }, [id, convPage]);
 
   // Load course enrollments roster
   const loadRoster = useCallback(async () => {
@@ -288,20 +315,42 @@ export default function TeacherDetailPage() {
     if (!id) return;
     setSalariesLoading(true);
     try {
-      let data = [];
+      let res = null;
       try {
-        data = await teacherApi.getSalaries(id);
+        res = await teacherApi.getSalaries(id, { page: salPage, page_size: DETAIL_PAGE_SIZE });
       } catch (err) {
-        const res = await expenseApi.listSalaries({ employee_id: id, page_size: 100 });
-        data = res.items || [];
+        res = await expenseApi.listSalaries({ employee_id: id, page: salPage, page_size: DETAIL_PAGE_SIZE });
       }
-      setSalaries(data || []);
+      if (Array.isArray(res)) {
+        setSalaries(res);
+        setSalTotal(res.length);
+        setSalTotalPages(1);
+        setSalTotalPaid(res.reduce((acc, s) => acc + Number(s.paid_amount || 0), 0));
+        setSalTotalPayable(res.reduce((acc, s) => acc + Number(s.salary_amount || 0), 0));
+      } else {
+        const items = res?.items || [];
+        setSalaries(items);
+        setSalTotal(res?.total ?? items.length);
+        setSalTotalPages(Math.max(1, res?.total_pages || 1));
+        setSalTotalPaid(
+          Number(
+            res?.total_paid_amount ??
+              items.reduce((acc, s) => acc + Number(s.paid_amount || 0), 0)
+          )
+        );
+        setSalTotalPayable(
+          Number(
+            res?.total_salary_amount ??
+              items.reduce((acc, s) => acc + Number(s.salary_amount || 0), 0)
+          )
+        );
+      }
     } catch (err) {
       console.error('Failed to load teacher salary history:', err);
     } finally {
       setSalariesLoading(false);
     }
-  }, [id]);
+  }, [id, salPage]);
 
   // Master refresh function
   const refreshAll = useCallback(() => {
@@ -901,6 +950,15 @@ export default function TeacherDetailPage() {
                     ))}
                   </tbody>
                 </table>
+                <PaginationBar
+                  page={salPage}
+                  pageSize={DETAIL_PAGE_SIZE}
+                  total={salTotal}
+                  totalPages={salTotalPages}
+                  onPageChange={(p) => setSalPage(p)}
+                  loading={salariesLoading}
+                  itemLabel="salary records"
+                />
               </div>
             ) : (
               <div className="text-center py-4 bg-slate-50 rounded-lg border border-dashed border-slate-200 text-xs text-slate-500">
@@ -917,7 +975,11 @@ export default function TeacherDetailPage() {
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2">
         <button
           type="button"
-          onClick={() => setActiveTab('HISTORY')}
+          onClick={() => {
+            setActiveTab('HISTORY');
+            setRosterPage(1);
+            setHistoryPage(1);
+          }}
           className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-lg transition cursor-pointer ${
             activeTab === 'HISTORY'
               ? 'bg-odoo-700 text-white shadow-2xs'
@@ -930,7 +992,11 @@ export default function TeacherDetailPage() {
 
         <button
           type="button"
-          onClick={() => setActiveTab('BREAKUP')}
+          onClick={() => {
+            setActiveTab('BREAKUP');
+            setBreakupSubjPage(1);
+            setBreakupStuPage(1);
+          }}
           className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-lg transition cursor-pointer ${
             activeTab === 'BREAKUP'
               ? 'bg-odoo-700 text-white shadow-2xs'
@@ -943,7 +1009,10 @@ export default function TeacherDetailPage() {
 
         <button
           type="button"
-          onClick={() => setActiveTab('COLLECTIONS')}
+          onClick={() => {
+            setActiveTab('COLLECTIONS');
+            setCollectionsPage(1);
+          }}
           className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-lg transition cursor-pointer ${
             activeTab === 'COLLECTIONS'
               ? 'bg-odoo-700 text-white shadow-2xs'
@@ -969,7 +1038,10 @@ export default function TeacherDetailPage() {
 
         <button
           type="button"
-          onClick={() => setActiveTab('SALARY')}
+          onClick={() => {
+            setActiveTab('SALARY');
+            setSalPage(1);
+          }}
           className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-lg transition cursor-pointer ${
             activeTab === 'SALARY'
               ? 'bg-odoo-700 text-white shadow-2xs'
@@ -977,7 +1049,7 @@ export default function TeacherDetailPage() {
           }`}
         >
           <Wallet className="w-4 h-4" />
-          <span>Monthly Salary History ({salaries.length})</span>
+          <span>Monthly Salary History ({salTotal || salaries.length})</span>
         </button>
       </div>
 
@@ -1211,33 +1283,15 @@ export default function TeacherDetailPage() {
             )}
 
             {/* Roster Pagination */}
-            {rosterTotalPages > 1 && (
-              <div className="flex items-center justify-between pt-3 border-t border-slate-200 text-xs">
-                <span className="text-slate-500">
-                  Showing {(rosterPage - 1) * ROSTER_PAGE_SIZE + 1} to{' '}
-                  {Math.min(rosterPage * ROSTER_PAGE_SIZE, rosterTotal)} of {rosterTotal} enrollments
-                </span>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setRosterPage((p) => Math.max(1, p - 1))}
-                    disabled={rosterPage === 1}
-                    className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
-                  >
-                    <ChevronLeft className="w-3.5 h-3.5" />
-                  </button>
-                  <span className="px-2 font-bold text-black">
-                    Page {rosterPage} of {rosterTotalPages}
-                  </span>
-                  <button
-                    onClick={() => setRosterPage((p) => Math.min(rosterTotalPages, p + 1))}
-                    disabled={rosterPage === rosterTotalPages}
-                    className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
-                  >
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            )}
+            <PaginationBar
+              page={rosterPage}
+              pageSize={ROSTER_PAGE_SIZE}
+              total={rosterTotal}
+              totalPages={rosterTotalPages}
+              onPageChange={(p) => setRosterPage(p)}
+              loading={rosterLoading}
+              itemLabel="enrollments"
+            />
           </div>
 
           {/* Chronological History Ledger */}
@@ -1491,33 +1545,15 @@ export default function TeacherDetailPage() {
             )}
 
             {/* History Pagination */}
-            {(historyTotal > HISTORY_PAGE_SIZE || historyTotalPages > 1 || (historyEvents.length > 0 && historyPage > 1)) && (
-              <div className="flex items-center justify-between pt-3 border-t border-slate-200 text-xs">
-                <span className="text-slate-500">
-                  Showing {(historyPage - 1) * HISTORY_PAGE_SIZE + 1} to{' '}
-                  {Math.min(historyPage * HISTORY_PAGE_SIZE, historyTotal)} of {historyTotal} events
-                </span>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
-                    disabled={historyPage === 1}
-                    className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
-                  >
-                    <ChevronLeft className="w-3.5 h-3.5" />
-                  </button>
-                  <span className="px-2 font-bold text-black">
-                    Page {historyPage} of {historyTotalPages}
-                  </span>
-                  <button
-                    onClick={() => setHistoryPage((p) => Math.min(historyTotalPages, p + 1))}
-                    disabled={historyPage === historyTotalPages}
-                    className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
-                  >
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            )}
+            <PaginationBar
+              page={historyPage}
+              pageSize={HISTORY_PAGE_SIZE}
+              total={historyTotal}
+              totalPages={historyTotalPages}
+              onPageChange={(p) => setHistoryPage(p)}
+              loading={historyLoading}
+              itemLabel="events"
+            />
           </div>
         </div>
       )}
@@ -1664,6 +1700,15 @@ export default function TeacherDetailPage() {
                   )}
                 </tbody>
               </table>
+              <PaginationBar
+                page={breakupSubjPage}
+                pageSize={breakup?.subjects_page_size || DETAIL_PAGE_SIZE}
+                total={breakup?.subjects_total ?? (breakup?.subjects?.length || 0)}
+                totalPages={breakup?.subjects_total_pages || 1}
+                onPageChange={(p) => setBreakupSubjPage(p)}
+                loading={breakupLoading}
+                itemLabel="subjects"
+              />
             </div>
           </div>
 
@@ -1671,7 +1716,7 @@ export default function TeacherDetailPage() {
           <div>
             <h4 className="font-bold text-black text-xs uppercase tracking-wider mb-2 flex items-center gap-1.5">
               <Users className="w-3.5 h-3.5 text-odoo-600" />
-              <span>Scholar-wise Financial Breakdown ({breakup?.students?.length ?? 0} Students)</span>
+              <span>Scholar-wise Financial Breakdown ({breakup?.students_total ?? breakup?.students?.length ?? 0} Students)</span>
             </h4>
             <div className="overflow-x-auto rounded-lg border border-slate-200">
               <table className="w-full text-left text-xs min-w-[700px]">
@@ -1695,7 +1740,7 @@ export default function TeacherDetailPage() {
                       </td>
                     </tr>
                   ) : (
-                    breakup.students.slice(0, 50).map((stu, sIdx) => (
+                    breakup.students.map((stu, sIdx) => (
                       <tr key={sIdx} className="hover:bg-slate-50/60 transition">
                         <td className="p-3">
                           <Link
@@ -1758,6 +1803,15 @@ export default function TeacherDetailPage() {
                   )}
                 </tbody>
               </table>
+              <PaginationBar
+                page={breakupStuPage}
+                pageSize={breakup?.students_page_size || DETAIL_PAGE_SIZE}
+                total={breakup?.students_total ?? (breakup?.students?.length || 0)}
+                totalPages={breakup?.students_total_pages || 1}
+                onPageChange={(p) => setBreakupStuPage(p)}
+                loading={breakupLoading}
+                itemLabel="scholars"
+              />
             </div>
           </div>
         </div>
@@ -1892,6 +1946,15 @@ export default function TeacherDetailPage() {
                   ))}
                 </tbody>
               </table>
+              <PaginationBar
+                page={collectionsPage}
+                pageSize={collections?.page_size || DETAIL_PAGE_SIZE}
+                total={collections?.total ?? (collections?.items?.length || 0)}
+                totalPages={collections?.total_pages || 1}
+                onPageChange={(p) => setCollectionsPage(p)}
+                loading={collectionsLoading}
+                itemLabel="collections"
+              />
             </div>
           )}
         </div>
@@ -1933,10 +1996,10 @@ export default function TeacherDetailPage() {
                   </span>
                 )}
                 <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200">
-                  Total Paid: ₹{salaries.reduce((acc, s) => acc + Number(s.paid_amount || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  Total Paid: ₹{salTotalPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </span>
                 <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 border border-slate-200">
-                  Total Payable: ₹{salaries.reduce((acc, s) => acc + Number(s.salary_amount || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  Total Payable: ₹{salTotalPayable.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </span>
               </div>
             </div>
@@ -2032,6 +2095,15 @@ export default function TeacherDetailPage() {
                     })}
                   </tbody>
                 </table>
+                <PaginationBar
+                  page={salPage}
+                  pageSize={DETAIL_PAGE_SIZE}
+                  total={salTotal}
+                  totalPages={salTotalPages}
+                  onPageChange={(p) => setSalPage(p)}
+                  loading={salariesLoading}
+                  itemLabel="salary records"
+                />
               </div>
             )}
           </div>

@@ -137,6 +137,10 @@ class PaymentReceiptResponse(BaseModel):
     valid_to: Optional[date] = None
     fee_period: Optional[str] = None
     allocations: List[dict] = Field(default_factory=list)
+    allocations_total: int = 0
+    allocations_total_pages: int = 1
+    allocations_page: int = 1
+    allocations_page_size: int = 50
 
 class TransactionResponse(BaseModel):
     id: uuid.UUID

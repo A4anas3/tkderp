@@ -34,7 +34,7 @@ from app.modules.teachers.schemas import (
     TeacherCollectionItem, TeacherCollectionsResponse,
     TeacherAttendanceToggle, TeacherAttendanceBulkUpdate, TeacherAttendanceRecordResponse,
     TeacherAttendanceMonthlySummary, TeacherMonthlyAttendanceResponse,
-    TeacherDemoConversionResponse
+    TeacherDemoConversionResponse, TeacherSalaryPageResponse
 )
 from app.modules.batches.models import Batch
 from app.modules.subjects.models import Subject
@@ -1039,9 +1039,23 @@ async def create_teacher_payout(
     )
 
 
+def _slice_teacher_sublist(items: list, page: Optional[int], page_size: Optional[int], default_size: int = 50):
+    total = len(items)
+    if page is not None:
+        ps = page_size or default_size
+        total_pages = max(1, (total + ps - 1) // ps) if total > 0 else 1
+        start = (page - 1) * ps
+        return items[start:start + ps], total, total_pages, page, ps
+    return items, total, 1, 1, total or default_size
+
+
 @router.get("/{teacher_id}/breakup", response_model=TeacherBreakupResponse)
 async def get_teacher_breakup(
     teacher_id: uuid.UUID,
+    subjects_page: Optional[int] = Query(None, ge=1),
+    subjects_page_size: Optional[int] = Query(None, ge=1, le=100),
+    students_page: Optional[int] = Query(None, ge=1),
+    students_page_size: Optional[int] = Query(None, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     user = Depends(require_cashier_or_admin)
 ):
@@ -1051,7 +1065,11 @@ async def get_teacher_breakup(
     plus per-subject breakup and enrolled scholar ledger.
     All figures derived strictly from the backend ledger as single source of truth.
     """
-    cache_key = make_cache_key("teachers", "breakup", teacher_id)
+    cache_key = make_cache_key(
+        "teachers", "breakup", teacher_id,
+        subjects_page=subjects_page, subjects_page_size=subjects_page_size,
+        students_page=students_page, students_page_size=students_page_size,
+    )
     hit, cached = await cache_get(cache_key)
     if hit:
         return cached
@@ -1233,6 +1251,13 @@ async def get_teacher_breakup(
             payment_status=adm.payment_status
         ))
 
+    paged_subjects, subj_total, subj_total_pages, subj_cur_page, subj_ps = _slice_teacher_sublist(
+        subjects_list, subjects_page, subjects_page_size
+    )
+    paged_students, stu_total, stu_total_pages, stu_cur_page, stu_ps = _slice_teacher_sublist(
+        students_list, students_page, students_page_size
+    )
+
     resp = TeacherBreakupResponse(
         teacher_id=teacher.id,
         teacher_name=teacher.name,
@@ -1248,8 +1273,16 @@ async def get_teacher_breakup(
         total_refunded=ref_f,
         net_revenue=net_rev_f,
         collection_efficiency=eff_pct,
-        subjects=subjects_list,
-        students=students_list
+        subjects=paged_subjects,
+        students=paged_students,
+        subjects_total=subj_total,
+        subjects_total_pages=subj_total_pages,
+        subjects_page=subj_cur_page,
+        subjects_page_size=subj_ps,
+        students_total=stu_total,
+        students_total_pages=stu_total_pages,
+        students_page=stu_cur_page,
+        students_page_size=stu_ps,
     )
     await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=TeacherBreakupResponse)
     return resp
@@ -1520,6 +1553,8 @@ async def get_teacher_history(
 @router.get("/{teacher_id}/collections", response_model=TeacherCollectionsResponse)
 async def get_teacher_collections(
     teacher_id: uuid.UUID,
+    page: Optional[int] = Query(None, ge=1),
+    page_size: Optional[int] = Query(None, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     user = Depends(require_cashier_or_admin)
 ):
@@ -1527,7 +1562,7 @@ async def get_teacher_collections(
     Fee collections handled by this teacher where the ledger records it.
     Matches Payment records where collected_by user or collector_name matches this teacher.
     """
-    cache_key = make_cache_key("teachers", "collections", teacher_id)
+    cache_key = make_cache_key("teachers", "collections", teacher_id, page=page, page_size=page_size)
     hit, cached = await cache_get(cache_key)
     if hit:
         return cached
@@ -1590,6 +1625,10 @@ async def get_teacher_collections(
             subject_names=p_subj_map.get(p.id, [])
         ))
 
+    paged_items, total_coll, total_pages, cur_page, eff_ps = _slice_teacher_sublist(
+        items, page, page_size
+    )
+
     resp = TeacherCollectionsResponse(
         teacher_id=teacher.id,
         teacher_name=teacher.name,
@@ -1597,7 +1636,11 @@ async def get_teacher_collections(
         total_collected=float(tot_coll),
         collections_count=len(items),
         by_mode=dict(by_mode),
-        items=items
+        items=paged_items,
+        total=total_coll,
+        total_pages=total_pages,
+        page=cur_page,
+        page_size=eff_ps,
     )
     await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=TeacherCollectionsResponse)
     return resp
@@ -1606,6 +1649,8 @@ async def get_teacher_collections(
 @router.get("/{teacher_id}/demo-conversion", response_model=TeacherDemoConversionResponse)
 async def get_teacher_demo_conversion_endpoint(
     teacher_id: uuid.UUID,
+    page: Optional[int] = Query(None, ge=1),
+    page_size: Optional[int] = Query(None, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     user = Depends(require_cashier_or_admin)
 ):
@@ -1613,7 +1658,7 @@ async def get_teacher_demo_conversion_endpoint(
     Demo conversion metrics credited to this teacher as the demo giver,
     verified by source_demo_number, matching the Reports teacher-wise demo conversion table.
     """
-    cache_key = make_cache_key("teachers", "demo_conversion", teacher_id)
+    cache_key = make_cache_key("teachers", "demo_conversion", teacher_id, page=page, page_size=page_size)
     hit, cached = await cache_get(cache_key)
     if hit:
         return cached
@@ -1622,6 +1667,9 @@ async def get_teacher_demo_conversion_endpoint(
         raise HTTPException(status_code=404, detail="Teacher not found")
 
     stats = await get_teacher_demo_conversion(db, teacher_id)
+    paged_demos, total_demos, total_pages, cur_page, eff_ps = _slice_teacher_sublist(
+        stats["converted_demos"], page, page_size
+    )
     resp = TeacherDemoConversionResponse(
         teacher_id=teacher.id,
         teacher_name=teacher.name,
@@ -1630,7 +1678,11 @@ async def get_teacher_demo_conversion_endpoint(
         demos_converted=stats["demos_converted"],
         conversion_rate_pct=stats["conversion_rate_pct"],
         enrolled_subjects=stats["enrolled_subjects"],
-        converted_demos=stats["converted_demos"],
+        converted_demos=paged_demos,
+        total=total_demos,
+        total_pages=total_pages,
+        page=cur_page,
+        page_size=eff_ps,
     )
     await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=TeacherDemoConversionResponse)
     return resp
@@ -1807,13 +1859,15 @@ async def bulk_set_teacher_attendance(
     await invalidate_expense_and_salary_cache()
     return await get_teacher_attendance_detail(teacher_id=teacher_id, month_year=m_year, db=db, user=user)
 
-@router.get("/{teacher_id}/salaries", response_model=List[SalaryRecordResponse])
+@router.get("/{teacher_id}/salaries", response_model=Union[TeacherSalaryPageResponse, List[SalaryRecordResponse]])
 async def get_teacher_salary_history(
     teacher_id: uuid.UUID,
+    page: Optional[int] = Query(None, ge=1),
+    page_size: Optional[int] = Query(None, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     user = Depends(require_cashier_or_admin)
 ):
-    cache_key = make_cache_key("teachers", "salaries", teacher_id)
+    cache_key = make_cache_key("teachers", "salaries", teacher_id, page=page, page_size=page_size)
     hit, cached = await cache_get(cache_key)
     if hit:
         return cached
@@ -1851,6 +1905,22 @@ async def get_teacher_salary_history(
                 holidays_count=r.holidays_count or 0
             )
         )
+    if page is not None:
+        total_paid_amt = float(sum(float(item.paid_amount or 0) for item in resp))
+        total_sal_amt = float(sum(float(item.salary_amount or 0) for item in resp))
+        paged, total, total_pages, cur_page, eff_ps = _slice_teacher_sublist(resp, page, page_size)
+        page_resp = TeacherSalaryPageResponse(
+            items=[item.model_dump(mode="json") for item in paged],
+            total=total,
+            total_pages=total_pages,
+            page=cur_page,
+            page_size=eff_ps,
+            total_paid_amount=total_paid_amt,
+            total_salary_amount=total_sal_amt,
+        )
+        await cache_set(cache_key, page_resp, ttl=TTL_MEDIUM, model=TeacherSalaryPageResponse)
+        return page_resp
+
     await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=List[SalaryRecordResponse])
     return resp
 

@@ -404,6 +404,49 @@ async def get_subject_revenue_report(
     return resp
 
 
+@router.get("/subject-revenue/{subject_id}/students")
+async def get_subject_revenue_students(
+    subject_id: str,
+    from_date: Optional[date] = Query(None, description="Start date (YYYY-MM-DD)"),
+    to_date: Optional[date] = Query(None, description="End date (YYYY-MM-DD)"),
+    month: Optional[int] = Query(None, ge=1, le=12, description="Specific month (1-12)"),
+    year: Optional[int] = Query(None, description="Specific year (e.g. 2026)"),
+    search: Optional[str] = Query(None, description="Search student name, code, mobile, admission"),
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(50, ge=1, le=100, description="Items per page"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    report_data = await get_subject_revenue_report(
+        from_date=from_date, to_date=to_date, month=month, year=year,
+        search=None, page=None, page_size=None, format=None, db=db, current_user=current_user,
+    )
+    items = report_data.get("items", []) if isinstance(report_data, dict) else (report_data or [])
+    row = next((s for s in items if str(s.get("subject_id")) == str(subject_id)), None)
+    students = list(row.get("students", [])) if row else []
+    total_all = len(students)
+    if search and search.strip():
+        q = search.strip().lower()
+        students = [
+            s for s in students
+            if q in (s.get("student_name") or "").lower()
+            or q in (s.get("student_code") or "").lower()
+            or q in (s.get("mobile") or "").lower()
+            or q in (s.get("admission_number") or "").lower()
+        ]
+    total = len(students)
+    total_pages = max(1, (total + page_size - 1) // page_size) if total > 0 else 1
+    start = (page - 1) * page_size
+    return {
+        "items": students[start:start + page_size],
+        "total": total,
+        "total_all": total_all,
+        "total_pages": total_pages,
+        "page": page,
+        "page_size": page_size,
+    }
+
+
 @router.get("/subject-revenue/csv")
 async def get_subject_revenue_csv(
     from_date: Optional[date] = Query(None),
@@ -785,6 +828,49 @@ async def get_teacher_revenue_report(
     return report
 
 
+@router.get("/teacher-revenue/{teacher_id}/students")
+async def get_teacher_revenue_students(
+    teacher_id: str,
+    from_date: Optional[date] = Query(None, description="Start date (YYYY-MM-DD)"),
+    to_date: Optional[date] = Query(None, description="End date (YYYY-MM-DD)"),
+    month: Optional[int] = Query(None, ge=1, le=12, description="Specific month (1-12)"),
+    year: Optional[int] = Query(None, description="Specific year (e.g. 2026)"),
+    search: Optional[str] = Query(None, description="Search student name, code, mobile, admission"),
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(50, ge=1, le=100, description="Items per page"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    report_data = await get_teacher_revenue_report(
+        from_date=from_date, to_date=to_date, month=month, year=year,
+        search=None, page=None, page_size=None, format=None, db=db, current_user=current_user,
+    )
+    items = report_data.get("items", []) if isinstance(report_data, dict) else (report_data or [])
+    row = next((t for t in items if str(t.get("teacher_id")) == str(teacher_id)), None)
+    students = list(row.get("students", [])) if row else []
+    total_all = len(students)
+    if search and search.strip():
+        q = search.strip().lower()
+        students = [
+            s for s in students
+            if q in (s.get("student_name") or "").lower()
+            or q in (s.get("student_code") or "").lower()
+            or q in (s.get("mobile") or "").lower()
+            or q in (s.get("admission_number") or "").lower()
+        ]
+    total = len(students)
+    total_pages = max(1, (total + page_size - 1) // page_size) if total > 0 else 1
+    start = (page - 1) * page_size
+    return {
+        "items": students[start:start + page_size],
+        "total": total,
+        "total_all": total_all,
+        "total_pages": total_pages,
+        "page": page,
+        "page_size": page_size,
+    }
+
+
 @router.get("/teacher-revenue/csv")
 async def get_teacher_revenue_csv(
     from_date: Optional[date] = Query(None),
@@ -1089,6 +1175,8 @@ async def get_cash_movement_report(
     to_date: Optional[date] = Query(None, description="End date (YYYY-MM-DD)"),
     month: Optional[int] = Query(None, ge=1, le=12, description="Specific month (1-12)"),
     year: Optional[int] = Query(None, description="Specific year (e.g. 2026)"),
+    page: Optional[int] = Query(None, ge=1, description="Page number"),
+    page_size: Optional[int] = Query(None, ge=1, le=100, description="Items per page"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin)
 ):
@@ -1102,7 +1190,7 @@ async def get_cash_movement_report(
     f_date, t_date = _resolve_date_range(from_date, to_date, month, year)
     cache_key = make_cache_key(
         "reports", "cash_movement",
-        from_date=f_date, to_date=t_date, month=month, year=year,
+        from_date=f_date, to_date=t_date, month=month, year=year, page=page, page_size=page_size,
     )
     hit, cached = await cache_get(cache_key)
     if hit:
@@ -1245,6 +1333,19 @@ async def get_cash_movement_report(
                 else:
                     cur_month += 1
 
+        tot_rows = len(breakdown)
+        if page is not None:
+            ps = page_size or 50
+            tot_pages = max(1, (tot_rows + ps - 1) // ps) if tot_rows > 0 else 1
+            start = (page - 1) * ps
+            paged_breakdown = breakdown[start:start + ps]
+            cur_page = page
+        else:
+            ps = tot_rows or 50
+            tot_pages = 1
+            paged_breakdown = breakdown
+            cur_page = 1
+
         resp = {
             "filters": {
                 "from_date": str(f_date),
@@ -1258,8 +1359,13 @@ async def get_cash_movement_report(
             "total_refunds": float(total_refunds),
             "total_outflows": float(total_outflow),
             "net_cash_position": float(net_cash),
-            "breakdown": breakdown,
-            "monthly_breakdown": breakdown
+            "total": tot_rows,
+            "total_pages": tot_pages,
+            "page": cur_page,
+            "page_size": ps,
+            "chart_breakdown": breakdown,
+            "breakdown": paged_breakdown,
+            "monthly_breakdown": paged_breakdown
         }
         await cache_set(cache_key, resp, ttl=TTL_MEDIUM)
         return resp
@@ -1324,6 +1430,19 @@ async def get_cash_movement_report(
     total_refunds = sum(m["fee_refunds"] for m in months_data)
     total_outflows = sum(m["total_outflows"] for m in months_data)
 
+    tot_rows = len(months_data)
+    if page is not None:
+        ps = page_size or 50
+        tot_pages = max(1, (tot_rows + ps - 1) // ps) if tot_rows > 0 else 1
+        start = (page - 1) * ps
+        paged_months = months_data[start:start + ps]
+        cur_page = page
+    else:
+        ps = tot_rows or 50
+        tot_pages = 1
+        paged_months = months_data
+        cur_page = 1
+
     resp = {
         "filters": {
             "from_date": None,
@@ -1338,8 +1457,13 @@ async def get_cash_movement_report(
         "total_refunds": total_refunds,
         "total_outflows": total_outflows,
         "net_cash_position": total_inflows - total_outflows,
-        "breakdown": months_data,
-        "monthly_breakdown": months_data
+        "total": tot_rows,
+        "total_pages": tot_pages,
+        "page": cur_page,
+        "page_size": ps,
+        "chart_breakdown": months_data,
+        "breakdown": paged_months,
+        "monthly_breakdown": paged_months
     }
     await cache_set(cache_key, resp, ttl=TTL_MEDIUM)
     return resp
@@ -1487,6 +1611,8 @@ async def get_collections_report(
     page_size: Optional[int] = Query(None, ge=1, le=100, description="Items per page"),
     cashier_page: Optional[int] = Query(None, ge=1, description="Page number for cashier breakdown"),
     cashier_page_size: Optional[int] = Query(None, ge=1, le=100, description="Items per page for cashier breakdown"),
+    mode_page: Optional[int] = Query(None, ge=1, description="Page number for payment mode breakdown"),
+    mode_page_size: Optional[int] = Query(None, ge=1, le=100, description="Items per page for payment mode breakdown"),
     format: Optional[str] = Query(None, description="Set to 'csv' for CSV export"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin)
@@ -1498,7 +1624,8 @@ async def get_collections_report(
         "reports", "collections",
         from_date=from_date, to_date=to_date, payment_mode=payment_mode,
         cashier_id=cashier_id, search=search, page=page, page_size=page_size,
-        cashier_page=cashier_page, cashier_page_size=cashier_page_size, format=format,
+        cashier_page=cashier_page, cashier_page_size=cashier_page_size,
+        mode_page=mode_page, mode_page_size=mode_page_size, format=format,
     )
     hit, cached = await cache_get(cache_key)
     if hit:
@@ -1512,6 +1639,8 @@ async def get_collections_report(
         page_size=page_size if format != "csv" else None,
         cashier_page=cashier_page if format != "csv" else None,
         cashier_page_size=cashier_page_size if format != "csv" else None,
+        mode_page=mode_page if format != "csv" else None,
+        mode_page_size=mode_page_size if format != "csv" else None,
     )
     if format == "csv":
         headers = ["Payment Number", "Date", "Student Name", "Reg No", "Admission Number", "Amount (₹)", "Payment Mode", "Cashier", "Reference", "Notes"]
@@ -1545,6 +1674,7 @@ async def get_collections_csv(
         from_date=from_date, to_date=to_date, payment_mode=payment_mode,
         cashier_id=cashier_id, search=search,
         page=None, page_size=None, cashier_page=None, cashier_page_size=None,
+        mode_page=None, mode_page_size=None,
         format="csv", db=db, current_user=current_user
     )
 
@@ -1752,6 +1882,8 @@ async def get_admissions_conversion_api(
     subject_page_size: Optional[int] = Query(None, ge=1, le=100, description="Items per page for subject breakdown"),
     teacher_page: Optional[int] = Query(None, ge=1, description="Page number for teacher breakdown"),
     teacher_page_size: Optional[int] = Query(None, ge=1, le=100, description="Items per page for teacher breakdown"),
+    source_page: Optional[int] = Query(None, ge=1, description="Page number for source breakdown"),
+    source_page_size: Optional[int] = Query(None, ge=1, le=100, description="Items per page for source breakdown"),
     format: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin)
@@ -1765,6 +1897,7 @@ async def get_admissions_conversion_api(
         source=source, search=search, page=page, page_size=page_size,
         subject_page=subject_page, subject_page_size=subject_page_size,
         teacher_page=teacher_page, teacher_page_size=teacher_page_size,
+        source_page=source_page, source_page_size=source_page_size,
         format=format,
     )
     hit, cached = await cache_get(cache_key)
@@ -1779,6 +1912,8 @@ async def get_admissions_conversion_api(
         subject_page_size=subject_page_size if format != "csv" else None,
         teacher_page=teacher_page if format != "csv" else None,
         teacher_page_size=teacher_page_size if format != "csv" else None,
+        source_page=source_page if format != "csv" else None,
+        source_page_size=source_page_size if format != "csv" else None,
     )
     if format == "csv":
         headers = ["Enquiry Code", "Date", "Student Name", "Mobile", "Interested Subject", "Source", "Status", "Converted Student", "Admission Number"]
@@ -1814,6 +1949,7 @@ async def get_admissions_conversion_csv(
         page=None, page_size=None,
         subject_page=None, subject_page_size=None,
         teacher_page=None, teacher_page_size=None,
+        source_page=None, source_page_size=None,
         format="csv", db=db, current_user=current_user
     )
 
@@ -1949,6 +2085,8 @@ async def get_expenses_report_api(
     search: Optional[str] = Query(None),
     page: Optional[int] = Query(None, ge=1, description="Page number"),
     page_size: Optional[int] = Query(None, ge=1, le=100, description="Items per page"),
+    category_page: Optional[int] = Query(None, ge=1, description="Page number for category breakdown"),
+    category_page_size: Optional[int] = Query(None, ge=1, le=100, description="Items per page for category breakdown"),
     format: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin)
@@ -1959,7 +2097,8 @@ async def get_expenses_report_api(
     cache_key = make_cache_key(
         "reports", "expenses",
         from_date=from_date, to_date=to_date, category_id=category_id,
-        payment_mode=payment_mode, search=search, page=page, page_size=page_size, format=format,
+        payment_mode=payment_mode, search=search, page=page, page_size=page_size,
+        category_page=category_page, category_page_size=category_page_size, format=format,
     )
     hit, cached = await cache_get(cache_key)
     if hit:
@@ -1968,7 +2107,9 @@ async def get_expenses_report_api(
         db, from_date=from_date, to_date=to_date,
         category_id=category_id, payment_mode=payment_mode, search=search,
         page=page if format != "csv" else None,
-        page_size=page_size if format != "csv" else None
+        page_size=page_size if format != "csv" else None,
+        category_page=category_page if format != "csv" else None,
+        category_page_size=category_page_size if format != "csv" else None,
     )
     if format == "csv":
         headers = ["Date", "Type", "Title", "Category", "Amount (₹)", "Payment Mode", "Reference", "Added By", "Notes"]
@@ -1999,7 +2140,9 @@ async def get_expenses_csv(
 ):
     return await get_expenses_report_api(
         from_date=from_date, to_date=to_date, category_id=category_id,
-        payment_mode=payment_mode, search=search, format="csv", db=db, current_user=current_user
+        payment_mode=payment_mode, search=search,
+        page=None, page_size=None, category_page=None, category_page_size=None,
+        format="csv", db=db, current_user=current_user
     )
 
 

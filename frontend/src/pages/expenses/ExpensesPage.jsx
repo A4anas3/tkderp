@@ -21,6 +21,7 @@ import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
+import PaginationBar from '../../components/common/PaginationBar';
 import SalarySlipModal from '../../components/receipts/SalarySlipModal';
 import { expenseApi, teacherApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
@@ -58,6 +59,11 @@ export default function ExpensesPage() {
 
   // Categories
   const [categories, setCategories] = useState([]);
+  const [catList, setCatList] = useState([]);
+  const [catPage, setCatPage] = useState(1);
+  const [catTotal, setCatTotal] = useState(0);
+  const [catTotalPages, setCatTotalPages] = useState(1);
+  const [catLoading, setCatLoading] = useState(false);
   const [catModalOpen, setCatModalOpen] = useState(false);
   const [catForm, setCatForm] = useState({ name: '', description: '', is_active: true });
 
@@ -130,18 +136,40 @@ export default function ExpensesPage() {
   const [submitting, setSubmitting] = useState(false);
   const [salarySlipToShow, setSalarySlipToShow] = useState(null);
 
-  // Load Categories
+  // Load Categories (full list for dropdowns)
   const loadCategories = async () => {
     try {
       const res = await expenseApi.listCategories();
-      setCategories(res || []);
-      if (res?.length > 0 && !expForm.category_id) {
-        setExpForm((prev) => ({ ...prev, category_id: res[0].id }));
+      const items = Array.isArray(res) ? res : res?.items || [];
+      setCategories(items);
+      if (items.length > 0 && !expForm.category_id) {
+        setExpForm((prev) => ({ ...prev, category_id: items[0].id }));
       }
     } catch (err) {
       console.error('Failed to load categories:', err);
     }
   };
+
+  // Load Paginated Categories (Tab 3)
+  const loadCategoriesPage = useCallback(async () => {
+    setCatLoading(true);
+    try {
+      const res = await expenseApi.listCategories({ page: catPage, page_size: 50 });
+      if (Array.isArray(res)) {
+        setCatList(res);
+        setCatTotal(res.length);
+        setCatTotalPages(1);
+      } else {
+        setCatList(res?.items || []);
+        setCatTotal(res?.total ?? 0);
+        setCatTotalPages(Math.max(1, res?.total_pages || 1));
+      }
+    } catch (err) {
+      console.error('Failed to load paginated categories:', err);
+    } finally {
+      setCatLoading(false);
+    }
+  }, [catPage]);
 
   // Load Salary Filter Options (staff & months)
   const loadSalaryFilterOptions = useCallback(async () => {
@@ -160,7 +188,7 @@ export default function ExpensesPage() {
     try {
       const params = {
         page: expPage,
-        page_size: 15,
+        page_size: 50,
       };
       if (expSearch && expSearch.trim()) {
         params.search = expSearch.trim();
@@ -194,7 +222,7 @@ export default function ExpensesPage() {
     try {
       const params = {
         page: salPage,
-        page_size: 15,
+        page_size: 50,
       };
       if (salMonthFilter && salMonthFilter !== 'ALL') {
         params.month_year = salMonthFilter;
@@ -283,7 +311,8 @@ export default function ExpensesPage() {
   useEffect(() => {
     if (activeTab === 'daily') loadExpenses();
     if (activeTab === 'salaries') loadSalaries();
-  }, [activeTab, loadExpenses, loadSalaries]);
+    if (activeTab === 'categories') loadCategoriesPage();
+  }, [activeTab, loadExpenses, loadSalaries, loadCategoriesPage]);
 
   // Helper formula: Payable = monthly salary - (per-day rate x absent days)
   // per-day rate = monthly salary / real days in that month (31/30/28/29)
@@ -419,6 +448,7 @@ export default function ExpensesPage() {
       setCatModalOpen(false);
       setCatForm({ name: '', description: '', is_active: true });
       loadCategories();
+      loadCategoriesPage();
     } catch (err) {
       error(err.message || 'Failed to create category');
     } finally {
@@ -789,7 +819,10 @@ export default function ExpensesPage() {
       {/* Tabs */}
       <div className="flex flex-wrap border-b border-slate-200 gap-1 pb-1">
         <button
-          onClick={() => setActiveTab('daily')}
+          onClick={() => {
+            setActiveTab('daily');
+            setExpPage(1);
+          }}
           className={`px-3 py-2 min-h-[36px] text-xs font-bold border-b-2 transition cursor-pointer ${
             activeTab === 'daily'
               ? 'border-odoo-600 text-odoo-700 bg-purple-50/50 rounded-t-lg'
@@ -799,7 +832,10 @@ export default function ExpensesPage() {
           Daily Miscellaneous Expenses
         </button>
         <button
-          onClick={() => setActiveTab('salaries')}
+          onClick={() => {
+            setActiveTab('salaries');
+            setSalPage(1);
+          }}
           className={`px-3 py-2 min-h-[36px] text-xs font-bold border-b-2 transition cursor-pointer ${
             activeTab === 'salaries'
               ? 'border-odoo-600 text-odoo-700 bg-purple-50/50 rounded-t-lg'
@@ -809,7 +845,10 @@ export default function ExpensesPage() {
           Faculty & Staff Payroll
         </button>
         <button
-          onClick={() => setActiveTab('categories')}
+          onClick={() => {
+            setActiveTab('categories');
+            setCatPage(1);
+          }}
           className={`px-3 py-2 min-h-[36px] text-xs font-bold border-b-2 transition cursor-pointer ${
             activeTab === 'categories'
               ? 'border-odoo-600 text-odoo-700 bg-purple-50/50 rounded-t-lg'
@@ -956,7 +995,8 @@ export default function ExpensesPage() {
             data={expenses}
             total={expTotal}
             page={expPage}
-            pageSize={15}
+            pageSize={50}
+            alwaysShowPagination
             onPageChange={(p) => setExpPage(p)}
             searchValue={expSearch}
             onSearchChange={(val) => {
@@ -1137,7 +1177,8 @@ export default function ExpensesPage() {
             data={salaries}
             total={salTotal}
             page={salPage}
-            pageSize={15}
+            pageSize={50}
+            alwaysShowPagination
             onPageChange={(p) => setSalPage(p)}
             searchValue={salSearch}
             onSearchChange={(val) => {
@@ -1158,21 +1199,34 @@ export default function ExpensesPage() {
 
       {/* Tab 3: Categories */}
       {activeTab === 'categories' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-          {categories.map((c) => (
-            <div
-              key={c.id}
-              className="bg-white border border-slate-200 rounded-lg p-3.5 shadow-xs flex items-center justify-between"
-            >
-              <div>
-                <span className="font-bold text-sm text-black block">{c.name}</span>
-                <span className="text-xs text-slate-500">{c.description || 'General expense category'}</span>
+        <div className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            {catList.map((c) => (
+              <div
+                key={c.id}
+                className="bg-white border border-slate-200 rounded-lg p-3.5 shadow-xs flex items-center justify-between"
+              >
+                <div>
+                  <span className="font-bold text-sm text-black block">{c.name}</span>
+                  <span className="text-xs text-slate-500">{c.description || 'General expense category'}</span>
+                </div>
+                <Badge size="xs" variant={c.is_active ? 'success' : 'neutral'}>
+                  {c.is_active ? 'Active' : 'Archived'}
+                </Badge>
               </div>
-              <Badge size="xs" variant={c.is_active ? 'success' : 'neutral'}>
-                {c.is_active ? 'Active' : 'Archived'}
-              </Badge>
-            </div>
-          ))}
+            ))}
+          </div>
+
+          <PaginationBar
+            page={catPage}
+            pageSize={50}
+            total={catTotal}
+            totalPages={catTotalPages}
+            onPageChange={(p) => setCatPage(p)}
+            loading={catLoading}
+            itemLabel="categories"
+            className="rounded-lg border border-slate-200"
+          />
         </div>
       )}
 

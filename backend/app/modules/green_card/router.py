@@ -1,10 +1,11 @@
 import uuid
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Optional, Union
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 
-from app.core.cache import TTL_LONG, cache_get, cache_set, invalidate_green_card_cache
+from app.core.cache import TTL_LONG, cache_get, cache_set, invalidate_green_card_cache, make_cache_key
+from app.common.pagination import PaginationParams, PageResponse
 from app.database.session import get_db
 from app.core.dependencies import require_cashier_or_admin, require_admin
 from app.database.models import GreenCardProduct, User
@@ -12,11 +13,31 @@ from app.modules.green_card.schemas import GreenCardCreate, GreenCardUpdate, Gre
 
 router = APIRouter(prefix="/api/green-card", tags=["Green Card"])
 
-@router.get("", response_model=list[GreenCardResponse])
+@router.get("", response_model=Union[PageResponse[GreenCardResponse], list[GreenCardResponse]])
 async def list_green_cards(
+    page: Optional[int] = Query(None, ge=1),
+    page_size: Optional[int] = Query(None, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
+    if page is not None:
+        ps = page_size or 50
+        cache_key = make_cache_key("green_card", "list", page=page, page_size=ps)
+        hit, cached = await cache_get(cache_key)
+        if hit:
+            return cached
+        total = (await db.execute(select(func.count(GreenCardProduct.id)))).scalar_one()
+        result = await db.execute(
+            select(GreenCardProduct)
+            .order_by(GreenCardProduct.created_at.desc())
+            .offset((page - 1) * ps)
+            .limit(ps)
+        )
+        items = result.scalars().all()
+        resp = PageResponse.create(items=items, total=total, params=PaginationParams(page=page, page_size=ps))
+        await cache_set(cache_key, resp, ttl=TTL_LONG, model=PageResponse[GreenCardResponse])
+        return resp
+
     cache_key = "erp:green_card:list"
     hit, cached = await cache_get(cache_key)
     if hit:

@@ -48,6 +48,7 @@ import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
 import StatCard from '../../components/common/StatCard';
 import Avatar from '../../components/common/Avatar';
+import PaginationBar from '../../components/common/PaginationBar';
 import { studentApi, admissionApi, paymentApi, remindersApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 import { compressImage } from '../../utils/imageCompressor';
@@ -181,6 +182,9 @@ export default function StudentDetailPage() {
   const [accessDenied, setAccessDenied] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [demos, setDemos] = useState([]);
+  const [demosPage, setDemosPage] = useState(1);
+  const [demosTotal, setDemosTotal] = useState(0);
+  const [demosTotalPages, setDemosTotalPages] = useState(1);
   const [demosLoading, setDemosLoading] = useState(false);
 
   // Tab State: 'HISTORY' | 'INVOICES' | 'LEDGER'
@@ -188,6 +192,8 @@ export default function StudentDetailPage() {
 
   // Active Enrollment State
   const [enrollmentData, setEnrollmentData] = useState(null);
+  const [activeSubjPage, setActiveSubjPage] = useState(1);
+  const [historySubjPage, setHistorySubjPage] = useState(1);
   const [enrollmentLoading, setEnrollmentLoading] = useState(false);
 
   // Renewal Modal
@@ -228,7 +234,7 @@ export default function StudentDetailPage() {
 
   // Admissions backend pagination & search
   const [admPage, setAdmPage] = useState(1);
-  const [admPageSize, setAdmPageSize] = useState(5);
+  const [admPageSize, setAdmPageSize] = useState(50);
   const [admSearch, setAdmSearch] = useState('');
   const [admStatusFilter, setAdmStatusFilter] = useState('ALL');
   const [admTotal, setAdmTotal] = useState(0);
@@ -237,7 +243,7 @@ export default function StudentDetailPage() {
 
   // Financial Transactions backend pagination & search
   const [txnPage, setTxnPage] = useState(1);
-  const [txnPageSize, setTxnPageSize] = useState(10);
+  const [txnPageSize, setTxnPageSize] = useState(50);
   const [txnSearch, setTxnSearch] = useState('');
   const [txnModeFilter, setTxnModeFilter] = useState('ALL');
   const [txnTypeFilter, setTxnTypeFilter] = useState('ALL');
@@ -251,7 +257,7 @@ export default function StudentDetailPage() {
   const [auditTotalPages, setAuditTotalPages] = useState(1);
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditPage, setAuditPage] = useState(1);
-  const [auditPageSize, setAuditPageSize] = useState(10);
+  const [auditPageSize, setAuditPageSize] = useState(50);
   const [auditSearch, setAuditSearch] = useState('');
   const [auditActionFilter, setAuditActionFilter] = useState('ALL');
   const [selectedAuditForInspection, setSelectedAuditForInspection] = useState(null);
@@ -278,11 +284,20 @@ export default function StudentDetailPage() {
     }
   };
 
-  const fetchDemosData = async () => {
+  const fetchDemosData = async (page = demosPage) => {
     setDemosLoading(true);
     try {
-      const res = await studentApi.getDemos(id);
-      setDemos(res || []);
+      const res = await studentApi.getDemos(id, { page, page_size: 50 });
+      if (Array.isArray(res)) {
+        setDemos(res);
+        setDemosTotal(res.length);
+        setDemosTotalPages(1);
+      } else {
+        const items = res?.items || [];
+        setDemos(items);
+        setDemosTotal(res?.total ?? items.length);
+        setDemosTotalPages(Math.max(1, res?.total_pages || 1));
+      }
     } catch (err) {
       console.warn('Failed to fetch student demos:', err);
     } finally {
@@ -296,11 +311,6 @@ export default function StudentDetailPage() {
     try {
       const stRes = await studentApi.get(id);
       setStudent(stRes);
-      if (stRes?.demos) {
-        setDemos(stRes.demos);
-      } else {
-        fetchDemosData();
-      }
       return stRes;
     } catch (err) {
       if (err?.response?.status === 403) {
@@ -369,10 +379,15 @@ export default function StudentDetailPage() {
     }
   };
 
-  const fetchEnrollmentData = async () => {
+  const fetchEnrollmentData = async (actPage = activeSubjPage, histPage = historySubjPage) => {
     setEnrollmentLoading(true);
     try {
-      const data = await studentApi.getActiveEnrollment(id);
+      const data = await studentApi.getActiveEnrollment(id, {
+        active_page: actPage,
+        active_page_size: 50,
+        history_page: histPage,
+        history_page_size: 50,
+      });
       setEnrollmentData(data);
       return data;
     } catch (e) {
@@ -468,9 +483,15 @@ export default function StudentDetailPage() {
 
   useEffect(() => {
     fetchStudentProfile();
-    fetchEnrollmentData();
-    fetchDemosData();
   }, [id]);
+
+  useEffect(() => {
+    fetchEnrollmentData(activeSubjPage, historySubjPage);
+  }, [id, activeSubjPage, historySubjPage]);
+
+  useEffect(() => {
+    fetchDemosData(demosPage);
+  }, [id, demosPage]);
 
   useEffect(() => {
     if (!isTeacher) {
@@ -805,6 +826,16 @@ export default function StudentDetailPage() {
             </table>
           </div>
         )}
+        <PaginationBar
+          page={demosPage}
+          pageSize={50}
+          total={demosTotal}
+          totalPages={demosTotalPages}
+          onPageChange={(p) => setDemosPage(p)}
+          loading={demosLoading}
+          itemLabel="demos"
+          className="rounded-lg border border-slate-200"
+        />
       </div>
     );
   };
@@ -1732,6 +1763,17 @@ export default function StudentDetailPage() {
               </table>
             </div>
 
+            <PaginationBar
+              page={activeSubjPage}
+              pageSize={enrollmentData?.active_page_size || 50}
+              total={enrollmentData?.active_total ?? activeSubjects.length}
+              totalPages={enrollmentData?.active_total_pages || 1}
+              onPageChange={(p) => setActiveSubjPage(p)}
+              loading={enrollmentLoading}
+              itemLabel="active subjects"
+              className="rounded-lg border border-slate-200"
+            />
+
             {/* Active Totals Footer */}
             {!isTeacher && (
             <div className="bg-purple-50/70 border border-purple-200 p-3 sm:p-3.5 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
@@ -1783,7 +1825,10 @@ export default function StudentDetailPage() {
       ) : (
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-1 p-1 bg-slate-100 rounded-xl sm:bg-transparent sm:p-0 sm:border-b sm:border-slate-200 sm:flex sm:items-center sm:gap-2 sm:rounded-none">
         <button
-          onClick={() => setActiveMainTab('HISTORY')}
+          onClick={() => {
+            setActiveMainTab('HISTORY');
+            setHistorySubjPage(1);
+          }}
           className={`flex items-center justify-center gap-1.5 px-2.5 sm:px-4 py-2 text-xs font-bold rounded-lg sm:rounded-none sm:border-b-2 transition ${
             activeMainTab === 'HISTORY'
               ? 'bg-white shadow-xs text-odoo-800 sm:bg-transparent sm:shadow-none sm:border-odoo-600 sm:text-odoo-700'
@@ -1794,15 +1839,18 @@ export default function StudentDetailPage() {
           <span>
             <span className="hidden sm:inline">Subject & Enrollment </span>History
           </span>
-          {enrollmentData?.historical_subjects?.length > 0 && (
+          {enrollmentData?.history_total > 0 && (
             <span className="px-1.5 py-0.2 text-[10px] rounded-full bg-slate-200 text-black font-mono font-bold">
-              {enrollmentData.historical_subjects.length}
+              {enrollmentData.history_total}
             </span>
           )}
         </button>
 
         <button
-          onClick={() => setActiveMainTab('DEMOS')}
+          onClick={() => {
+            setActiveMainTab('DEMOS');
+            setDemosPage(1);
+          }}
           className={`flex items-center justify-center gap-1.5 px-2.5 sm:px-4 py-2 text-xs font-bold rounded-lg sm:rounded-none sm:border-b-2 transition ${
             activeMainTab === 'DEMOS'
               ? 'bg-white shadow-xs text-odoo-800 sm:bg-transparent sm:shadow-none sm:border-odoo-600 sm:text-odoo-700'
@@ -1811,15 +1859,18 @@ export default function StudentDetailPage() {
         >
           <Sparkles className="w-3.5 h-3.5 shrink-0 text-odoo-600" />
           <span>Demos</span>
-          {demos.length > 0 && (
+          {demosTotal > 0 && (
             <span className="px-1.5 py-0.2 text-[10px] rounded-full bg-purple-100 text-purple-900 font-mono font-bold">
-              {demos.length}
+              {demosTotal}
             </span>
           )}
         </button>
 
         <button
-          onClick={() => setActiveMainTab('INVOICES')}
+          onClick={() => {
+            setActiveMainTab('INVOICES');
+            setAdmPage(1);
+          }}
           className={`flex items-center justify-center gap-1.5 px-2.5 sm:px-4 py-2 text-xs font-bold rounded-lg sm:rounded-none sm:border-b-2 transition ${
             activeMainTab === 'INVOICES'
               ? 'bg-white shadow-xs text-odoo-800 sm:bg-transparent sm:shadow-none sm:border-odoo-600 sm:text-odoo-700'
@@ -1836,7 +1887,10 @@ export default function StudentDetailPage() {
         </button>
 
         <button
-          onClick={() => setActiveMainTab('LEDGER')}
+          onClick={() => {
+            setActiveMainTab('LEDGER');
+            setTxnPage(1);
+          }}
           className={`flex items-center justify-center gap-1.5 px-2.5 sm:px-4 py-2 text-xs font-bold rounded-lg sm:rounded-none sm:border-b-2 transition ${
             activeMainTab === 'LEDGER'
               ? 'bg-white shadow-xs text-odoo-800 sm:bg-transparent sm:shadow-none sm:border-odoo-600 sm:text-odoo-700'
@@ -1853,7 +1907,10 @@ export default function StudentDetailPage() {
         </button>
 
         <button
-          onClick={() => setActiveMainTab('AUDIT')}
+          onClick={() => {
+            setActiveMainTab('AUDIT');
+            setAuditPage(1);
+          }}
           className={`flex items-center justify-center gap-1.5 px-2.5 sm:px-4 py-2 text-xs font-bold rounded-lg sm:rounded-none sm:border-b-2 transition ${
             activeMainTab === 'AUDIT'
               ? 'bg-white shadow-xs text-odoo-800 sm:bg-transparent sm:shadow-none sm:border-odoo-600 sm:text-odoo-700'
@@ -2141,6 +2198,17 @@ export default function StudentDetailPage() {
               </div>
             </div>
           )}
+
+          <PaginationBar
+            page={historySubjPage}
+            pageSize={enrollmentData?.history_page_size || 50}
+            total={enrollmentData?.history_total ?? (enrollmentData?.historical_subjects?.length || 0)}
+            totalPages={enrollmentData?.history_total_pages || 1}
+            onPageChange={(p) => setHistorySubjPage(p)}
+            loading={enrollmentLoading}
+            itemLabel="history records"
+            className="rounded-lg border border-slate-200"
+          />
 
           {/* Demos Section in History Tab */}
           {demos.length > 0 && (
@@ -2780,6 +2848,7 @@ export default function StudentDetailPage() {
                 <option value={5}>5</option>
                 <option value={10}>10</option>
                 <option value={20}>20</option>
+                <option value={50}>50</option>
               </select>
             </label>
           </div>
@@ -3195,6 +3264,7 @@ export default function StudentDetailPage() {
                 <option value={5}>5</option>
                 <option value={10}>10</option>
                 <option value={20}>20</option>
+                <option value={50}>50</option>
               </select>
             </label>
           </div>
@@ -3442,77 +3512,76 @@ export default function StudentDetailPage() {
                         >
                           <Eye className="w-3 h-3" /> Inspect
                         </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Audit Pagination Controls */}
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-3 border-t border-slate-200 text-xs">
-                <div className="flex items-center gap-2 text-slate-700 font-medium">
-                  <span>
-                    Showing {auditTotal === 0 ? 0 : (auditPage - 1) * auditPageSize + 1} to{' '}
-                    {Math.min(auditPage * auditPageSize, auditTotal)} of {auditTotal}
-                  </span>
-                  <span className="text-slate-300">•</span>
-                  <label className="flex items-center gap-1 text-slate-700 text-[11px] font-semibold">
-                    Per page:
-                    <select
-                      value={auditPageSize}
-                      onChange={(e) => {
-                        setAuditPageSize(Number(e.target.value));
-                        setAuditPage(1);
-                      }}
-                      className="border border-slate-300 rounded px-1.5 py-0.5 bg-white text-black font-bold text-xs"
-                    >
-                      <option value={5}>5</option>
-                      <option value={10}>10</option>
-                      <option value={20}>20</option>
-                    </select>
-                  </label>
-                </div>
-
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setAuditPage(1)}
-                    disabled={auditPage <= 1 || auditLoading}
-                    className="p-1 rounded-md border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                    title="First Page"
-                  >
-                    <ChevronsLeft className="w-3.5 h-3.5 text-slate-700" />
-                  </button>
-                  <button
-                    onClick={() => setAuditPage((p) => Math.max(1, p - 1))}
-                    disabled={auditPage <= 1 || auditLoading}
-                    className="p-1 rounded-md border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                    title="Previous Page"
-                  >
-                    <ChevronLeft className="w-3.5 h-3.5 text-slate-700" />
-                  </button>
-                  <span className="px-2 font-bold text-black text-xs">
-                    Page {auditPage} of {Math.max(1, auditTotalPages)}
-                  </span>
-                  <button
-                    onClick={() => setAuditPage((p) => Math.min(auditTotalPages, p + 1))}
-                    disabled={auditPage >= auditTotalPages || auditLoading}
-                    className="p-1 rounded-md border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                    title="Next Page"
-                  >
-                    <ChevronRight className="w-3.5 h-3.5 text-slate-700" />
-                  </button>
-                  <button
-                    onClick={() => setAuditPage(auditTotalPages)}
-                    disabled={auditPage >= auditTotalPages || auditLoading}
-                    className="p-1 rounded-md border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                    title="Last Page"
-                  >
-                    <ChevronsRight className="w-3.5 h-3.5 text-slate-700" />
-                  </button>
-                </div>
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
+
+          {/* Audit Pagination Controls (Always visible) */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-3 border-t border-slate-200 text-xs">
+            <div className="flex items-center gap-2 text-slate-700 font-medium">
+              <span>
+                Showing {auditTotal === 0 ? 0 : (auditPage - 1) * auditPageSize + 1} to{' '}
+                {Math.min(auditPage * auditPageSize, auditTotal)} of {auditTotal}
+              </span>
+              <span className="text-slate-300">•</span>
+              <label className="flex items-center gap-1 text-slate-700 text-[11px] font-semibold">
+                Per page:
+                <select
+                  value={auditPageSize}
+                  onChange={(e) => {
+                    setAuditPageSize(Number(e.target.value));
+                    setAuditPage(1);
+                  }}
+                  className="border border-slate-300 rounded px-1.5 py-0.5 bg-white text-black font-bold text-xs"
+                >
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setAuditPage(1)}
+                disabled={auditPage <= 1 || auditLoading}
+                className="p-1 rounded-md border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                title="First Page"
+              >
+                <ChevronsLeft className="w-3.5 h-3.5 text-slate-700" />
+              </button>
+              <button
+                onClick={() => setAuditPage((p) => Math.max(1, p - 1))}
+                disabled={auditPage <= 1 || auditLoading}
+                className="p-1 rounded-md border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Previous Page"
+              >
+                <ChevronLeft className="w-3.5 h-3.5 text-slate-700" />
+              </button>
+              <span className="px-2 font-bold text-black text-xs">
+                Page {auditPage} of {Math.max(1, auditTotalPages)}
+              </span>
+              <button
+                onClick={() => setAuditPage((p) => Math.min(Math.max(1, auditTotalPages), p + 1))}
+                disabled={auditPage >= Math.max(1, auditTotalPages) || auditLoading}
+                className="p-1 rounded-md border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Next Page"
+              >
+                <ChevronRight className="w-3.5 h-3.5 text-slate-700" />
+              </button>
+              <button
+                onClick={() => setAuditPage(Math.max(1, auditTotalPages))}
+                disabled={auditPage >= Math.max(1, auditTotalPages) || auditLoading}
+                className="p-1 rounded-md border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Last Page"
+              >
+                <ChevronsRight className="w-3.5 h-3.5 text-slate-700" />
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

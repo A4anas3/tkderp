@@ -771,10 +771,12 @@ async def get_renewals_due(
 @router.get("/{admission_id}", response_model=AdmissionResponse)
 async def get_admission(
     admission_id: uuid.UUID,
+    items_page: Optional[int] = Query(None, ge=1),
+    items_page_size: Optional[int] = Query(None, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
-    cache_key = make_cache_key("admissions", "detail", admission_id)
+    cache_key = make_cache_key("admissions", "detail", admission_id, items_page=items_page, items_page_size=items_page_size)
     hit, cached = await cache_get(cache_key)
     if hit:
         return cached
@@ -794,6 +796,21 @@ async def get_admission(
             await recompute_admission_totals(admission, db)
             await db.commit()
             await db.refresh(admission)
+
+    if items_page is not None:
+        ps = items_page_size or 50
+        validated = AdmissionResponse.model_validate(admission)
+        all_items = list(validated.items or [])
+        total = len(all_items)
+        total_pages = max(1, (total + ps - 1) // ps) if total > 0 else 1
+        start = (items_page - 1) * ps
+        validated.items = all_items[start:start + ps]
+        validated.items_total = total
+        validated.items_total_pages = total_pages
+        validated.items_page = items_page
+        validated.items_page_size = ps
+        await cache_set(cache_key, validated, ttl=TTL_MEDIUM, model=AdmissionResponse)
+        return validated
 
     await cache_set(cache_key, admission, ttl=TTL_MEDIUM, model=AdmissionResponse)
     return admission

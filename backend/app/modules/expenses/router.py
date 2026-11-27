@@ -3,7 +3,7 @@ import json
 import calendar
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Optional, Union
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, desc
@@ -31,11 +31,31 @@ from app.common.pagination import PaginationParams, PageResponse
 router = APIRouter(prefix="/api/expenses", tags=["Expenses & Salaries"])
 
 # --- Categories ---
-@router.get("/categories", response_model=list[ExpenseCategoryResponse])
+@router.get("/categories", response_model=Union[PageResponse[ExpenseCategoryResponse], list[ExpenseCategoryResponse]])
 async def list_expense_categories(
+    page: Optional[int] = Query(None, ge=1),
+    page_size: Optional[int] = Query(None, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
+    if page is not None:
+        ps = page_size or 50
+        cache_key = make_cache_key("expenses", "categories", page=page, page_size=ps)
+        hit, cached = await cache_get(cache_key)
+        if hit:
+            return cached
+        total = (await db.execute(select(func.count(ExpenseCategory.id)))).scalar_one()
+        result = await db.execute(
+            select(ExpenseCategory)
+            .order_by(ExpenseCategory.name.asc())
+            .offset((page - 1) * ps)
+            .limit(ps)
+        )
+        items = result.scalars().all()
+        resp = PageResponse.create(items=items, total=total, params=PaginationParams(page=page, page_size=ps))
+        await cache_set(cache_key, resp, ttl=TTL_LONG, model=PageResponse[ExpenseCategoryResponse])
+        return resp
+
     cache_key = "erp:expenses:categories"
     hit, cached = await cache_get(cache_key)
     if hit:

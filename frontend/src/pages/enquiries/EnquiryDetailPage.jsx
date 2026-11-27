@@ -27,6 +27,7 @@ import Badge from '../../components/common/Badge';
 import Modal from '../../components/common/Modal';
 import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
+import PaginationBar from '../../components/common/PaginationBar';
 import DemoPassModal from '../../components/modals/DemoPassModal';
 import RegisterStudentModal from '../../components/modals/RegisterStudentModal';
 import { enquiryApi } from '../../services/allApis';
@@ -46,6 +47,7 @@ export default function EnquiryDetailPage() {
   const backLabel = backRoute === '/demos' ? 'Demos' : 'Enquiries';
 
   const [enquiry, setEnquiry] = useState(null);
+  const [demoPage, setDemoPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [passModalOpen, setPassModalOpen] = useState(false);
   const [registerModalOpen, setRegisterModalOpen] = useState(false);
@@ -75,7 +77,7 @@ export default function EnquiryDetailPage() {
   const loadEnquiry = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await enquiryApi.get(id);
+      const data = await enquiryApi.get(id, { demo_page: demoPage, demo_page_size: 50 });
       setEnquiry(data);
       setEditFormData({
         student_name: data.student_name || '',
@@ -92,7 +94,7 @@ export default function EnquiryDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [id, error]);
+  }, [id, demoPage, error]);
 
   useEffect(() => {
     loadEnquiry();
@@ -603,7 +605,7 @@ export default function EnquiryDetailPage() {
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <h3 className="font-bold text-black text-sm flex items-center gap-2">
               <Hash className="w-4 h-4 text-odoo-600" />
-              <span>Subject Demos & Tracking Codes ({enquiry.demo_items.length})</span>
+              <span>Subject Demos & Tracking Codes ({enquiry.demo_items_total || enquiry.demo_items.length})</span>
             </h3>
             <Button
               size="xs"
@@ -699,6 +701,15 @@ export default function EnquiryDetailPage() {
               </div>
             ))}
           </div>
+          <PaginationBar
+            page={demoPage}
+            pageSize={enquiry.demo_items_page_size || 50}
+            total={enquiry.demo_items_total || enquiry.demo_items.length}
+            totalPages={enquiry.demo_items_total_pages || 1}
+            onPageChange={(p) => setDemoPage(p)}
+            loading={loading}
+            itemLabel="demos"
+          />
         </div>
       )}
 

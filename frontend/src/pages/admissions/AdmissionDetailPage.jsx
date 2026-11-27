@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
+import PaginationBar from '../../components/common/PaginationBar';
 import { admissionApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
@@ -41,6 +42,7 @@ export default function AdmissionDetailPage() {
   const { isAdmin } = useAuth();
 
   const [admission, setAdmission] = useState(null);
+  const [itemsPage, setItemsPage] = useState(1);
   const [loading, setLoading] = useState(true);
 
   // Modals for actions
@@ -57,14 +59,14 @@ export default function AdmissionDetailPage() {
   const loadAdmission = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await admissionApi.get(id);
+      const data = await admissionApi.get(id, { items_page: itemsPage, items_page_size: 50 });
       setAdmission(data);
     } catch (err) {
       error(err.message || 'Failed to load admission details');
     } finally {
       setLoading(false);
     }
-  }, [id, error]);
+  }, [id, itemsPage, error]);
 
   useEffect(() => {
     loadAdmission();
@@ -433,6 +435,15 @@ export default function AdmissionDetailPage() {
               ))}
             </tbody>
           </table>
+          <PaginationBar
+            page={itemsPage}
+            pageSize={admission.items_page_size || 50}
+            total={admission.items_total ?? (admission.items?.length || 0)}
+            totalPages={admission.items_total_pages || 1}
+            onPageChange={(p) => setItemsPage(p)}
+            loading={loading}
+            itemLabel="items"
+          />
         </div>
 
         {/* Financial KPI Summary Bar */}

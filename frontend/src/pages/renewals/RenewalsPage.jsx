@@ -50,7 +50,7 @@ export default function RenewalsPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
-  const pageSize = 15;
+  const pageSize = 50;
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
@@ -525,34 +525,32 @@ export default function RenewalsPage() {
           )}
 
           {/* Pagination Controls */}
-          {total > 0 && (
-            <div className="p-3 bg-white rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-2xs">
-              <span className="text-slate-600 font-medium">
-                Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, total)} of {total} candidates (Page {page} of {totalPages})
+          <div className="p-3 bg-white rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-2xs">
+            <span className="text-slate-600 font-medium">
+              Showing {total === 0 ? 0 : (page - 1) * pageSize + 1} to {Math.min(page * pageSize, total)} of {total} candidates (Page {page} of {totalPages})
+            </span>
+            <div className="flex items-center gap-1.5">
+              <Button
+                size="xs"
+                variant="secondary"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                Previous
+              </Button>
+              <span className="px-2 font-bold text-slate-800">
+                {page} / {totalPages}
               </span>
-              <div className="flex items-center gap-1.5">
-                <Button
-                  size="xs"
-                  variant="secondary"
-                  disabled={page <= 1}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                >
-                  Previous
-                </Button>
-                <span className="px-2 font-bold text-slate-800">
-                  {page} / {totalPages}
-                </span>
-                <Button
-                  size="xs"
-                  variant="secondary"
-                  disabled={page >= totalPages}
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                >
-                  Next
-                </Button>
-              </div>
+              <Button
+                size="xs"
+                variant="secondary"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                Next
+              </Button>
             </div>
-          )}
+          </div>
         </div>
       )}
     </div>

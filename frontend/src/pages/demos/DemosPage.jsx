@@ -23,11 +23,14 @@ import {
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
 import Modal from '../../components/common/Modal';
+import PaginationBar from '../../components/common/PaginationBar';
 import DemoPassModal from '../../components/modals/DemoPassModal';
 import { enquiryApi, subjectApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
 import { formatIndianDate } from '../../utils/dateCycleUtils';
+
+const PAGE_SIZE = 50;
 
 export default function DemosPage() {
   const navigate = useNavigate();
@@ -35,6 +38,9 @@ export default function DemosPage() {
   const { role, isTeacher } = useAuth();
 
   const [demos, setDemos] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [page, setPage] = useState(1);
   const [subjects, setSubjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -42,92 +48,62 @@ export default function DemosPage() {
   // Filters
   const [selectedSubjectId, setSelectedSubjectId] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
 
   // Modals
   const [detailItem, setDetailItem] = useState(null);
   const [slipModalItem, setSlipModalItem] = useState(null);
 
-  // Helper to test if a demo item is strictly "Active"
-  // Active demo means a demo item with status SCHEDULED or ATTENDED (or enquiry status ACTIVE_DEMO),
-  // with demo_end_date today or later, and NOT CONVERTED, DROPPED or EXPIRED.
-  const isActiveDemo = useCallback((item) => {
-    if (!item) return false;
-    const status = (item.status || '').toUpperCase();
-    if (['CONVERTED', 'DROPPED', 'EXPIRED'].includes(status)) return false;
-    if (item.converted_admission_item_id) return false;
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
-    // Check end date >= today
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    if (item.demo_end_date) {
-      const parts = String(item.demo_end_date).split('T')[0].split('-');
-      if (parts.length === 3) {
-        const endDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-        endDate.setHours(23, 59, 59, 999);
-        if (endDate < today) return false;
-      }
+  const loadSubjects = useCallback(async () => {
+    try {
+      const loadedSubjects = (await subjectApi.getAll(isTeacher ? {} : { all_institute: true })) || [];
+      loadedSubjects.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      setSubjects(loadedSubjects);
+    } catch (err) {
+      console.error('Failed to load subjects:', err);
     }
+  }, [isTeacher]);
 
-    const enqStatus = (item.enquiry_status || '').toUpperCase();
-    return ['SCHEDULED', 'ATTENDED'].includes(status) || enqStatus === 'ACTIVE_DEMO';
-  }, []);
+  useEffect(() => {
+    loadSubjects();
+  }, [loadSubjects]);
 
   const loadData = useCallback(async (isManualRefresh = false) => {
     if (isManualRefresh) setRefreshing(true);
     else setLoading(true);
 
     try {
-      // 1. Fetch active demos (teachers receive only their own active demos from backend)
-      const [demosRes, subjectsRes] = await Promise.allSettled([
-        enquiryApi.listDemos({
-          status_filter: 'ACTIVE',
-          page_size: 100,
-        }),
-        subjectApi.getAll(isTeacher ? {} : { all_institute: true }),
-      ]);
-
-      let loadedDemos = [];
-      if (demosRes.status === 'fulfilled' && demosRes.value) {
-        const items = demosRes.value.items || demosRes.value || [];
-        loadedDemos = items.filter(isActiveDemo);
-      }
-      setDemos(loadedDemos);
-
-      // 2. Fetch subjects list across institute
-      let loadedSubjects = [];
-      if (subjectsRes.status === 'fulfilled' && subjectsRes.value) {
-        loadedSubjects = subjectsRes.value || [];
-      }
-
-      // Also ensure any subject referenced in active demos is included in subjects list
-      const seenSubjectIds = new Set(loadedSubjects.map((s) => String(s.id)));
-      loadedDemos.forEach((d) => {
-        if (d.subject_id && !seenSubjectIds.has(String(d.subject_id))) {
-          seenSubjectIds.add(String(d.subject_id));
-          loadedSubjects.push({
-            id: d.subject_id,
-            name: d.subject_name || d.subject_name_snapshot || 'Subject',
-          });
-        }
+      const res = await enquiryApi.listDemos({
+        status_filter: 'ACTIVE',
+        page,
+        page_size: PAGE_SIZE,
+        subject_id: selectedSubjectId || undefined,
+        search: debouncedSearch.trim() || undefined,
       });
 
-      // Sort subjects alphabetically
-      loadedSubjects.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-      setSubjects(loadedSubjects);
+      const items = res?.items || (Array.isArray(res) ? res : []);
+      setDemos(items);
+      setTotal(res?.total ?? items.length);
+      setTotalPages(Math.max(1, res?.total_pages ?? Math.ceil((res?.total ?? items.length) / PAGE_SIZE)));
     } catch (err) {
       error(err.message || 'Failed to load active demos');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [error, isActiveDemo]);
+  }, [page, selectedSubjectId, debouncedSearch, error]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
-  // Compute subject-wise demo counts for pills
   const subjectCounts = useMemo(() => {
     const counts = {};
     demos.forEach((d) => {
@@ -139,44 +115,7 @@ export default function DemosPage() {
     return counts;
   }, [demos]);
 
-  // Filter demos by subject and search text
-  const filteredDemos = useMemo(() => {
-    return demos.filter((d) => {
-      // Subject filter
-      if (selectedSubjectId) {
-        const dSubjectId = d.subject_id ? String(d.subject_id) : '';
-        if (dSubjectId !== String(selectedSubjectId)) {
-          return false;
-        }
-      }
-
-      // Search query
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const refNo = (d.demo_reference_number || '').toLowerCase();
-        const sName = (d.student_name || '').toLowerCase();
-        const mobile = (d.mobile || '').toLowerCase();
-        const tName = (d.teacher_name || d.teacher_name_snapshot || '').toLowerCase();
-        const subj = (d.subject_name || d.subject_name_snapshot || '').toLowerCase();
-        const hall = (d.hall_number || d.hall_number_snapshot || '').toLowerCase();
-        const timing = (d.timing || d.schedule || '').toLowerCase();
-
-        if (
-          !refNo.includes(q) &&
-          !sName.includes(q) &&
-          !mobile.includes(q) &&
-          !tName.includes(q) &&
-          !subj.includes(q) &&
-          !hall.includes(q) &&
-          !timing.includes(q)
-        ) {
-          return false;
-        }
-      }
-
-      return true;
-    });
-  }, [demos, selectedSubjectId, searchQuery]);
+  const filteredDemos = demos;
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto pb-12">
@@ -193,7 +132,7 @@ export default function DemosPage() {
                   Active Trial Demos
                 </h1>
                 <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-[#714B67]/10 text-[#714B67] border border-[#714B67]/20">
-                  {filteredDemos.length} Active
+                  {total} Active
                 </span>
                 <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                   View Only
@@ -215,14 +154,20 @@ export default function DemosPage() {
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setPage(1);
+              }}
               placeholder="Search candidate, demo ID, faculty..."
               className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-odoo-500 focus:border-odoo-600 transition"
             />
             {searchQuery && (
               <button
                 type="button"
-                onClick={() => setSearchQuery('')}
+                onClick={() => {
+                  setSearchQuery('');
+                  setPage(1);
+                }}
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
                 title="Clear search"
               >
@@ -251,7 +196,7 @@ export default function DemosPage() {
             Subject-Wise Filter:
           </span>
           <span className="text-[11px]">
-            Showing {filteredDemos.length} of {demos.length} total active trials
+            Showing {filteredDemos.length} of {total} total active trials
           </span>
         </div>
 
@@ -259,7 +204,10 @@ export default function DemosPage() {
         <div className="flex flex-wrap items-center gap-1.5 pt-1">
           <button
             type="button"
-            onClick={() => setSelectedSubjectId('')}
+            onClick={() => {
+              setSelectedSubjectId('');
+              setPage(1);
+            }}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
               selectedSubjectId === ''
                 ? 'bg-slate-900 text-white shadow-2xs'
@@ -274,7 +222,7 @@ export default function DemosPage() {
                   : 'bg-slate-200 text-slate-800'
               }`}
             >
-              {demos.length}
+              {total}
             </span>
           </button>
 
@@ -285,7 +233,10 @@ export default function DemosPage() {
               <button
                 key={sub.id}
                 type="button"
-                onClick={() => setSelectedSubjectId(isSelected ? '' : String(sub.id))}
+                onClick={() => {
+                  setSelectedSubjectId(isSelected ? '' : String(sub.id));
+                  setPage(1);
+                }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
                   isSelected
                     ? 'bg-odoo-700 text-white shadow-2xs'
@@ -293,17 +244,17 @@ export default function DemosPage() {
                 }`}
               >
                 <span>{sub.name}</span>
-                <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                    isSelected
-                      ? 'bg-white/20 text-white'
-                      : count > 0
-                      ? 'bg-purple-100 text-odoo-800 font-bold'
-                      : 'bg-slate-200 text-slate-500'
-                  }`}
-                >
-                  {count}
-                </span>
+                {count > 0 && (
+                  <span
+                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                      isSelected
+                        ? 'bg-white/20 text-white'
+                        : 'bg-purple-100 text-odoo-800 font-bold'
+                    }`}
+                  >
+                    {count}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -334,6 +285,7 @@ export default function DemosPage() {
                 onClick={() => {
                   setSelectedSubjectId('');
                   setSearchQuery('');
+                  setPage(1);
                 }}
                 className="mt-2 px-3 py-1 text-xs font-semibold text-odoo-700 hover:text-odoo-900 bg-purple-50 hover:bg-purple-100 rounded-md border border-purple-200 cursor-pointer inline-flex items-center gap-1"
               >
@@ -518,6 +470,16 @@ export default function DemosPage() {
             </table>
           </div>
         )}
+
+        <PaginationBar
+          page={page}
+          pageSize={PAGE_SIZE}
+          total={total}
+          totalPages={totalPages}
+          onPageChange={(p) => setPage(p)}
+          loading={loading}
+          itemLabel="demos"
+        />
       </div>
 
       {/* ========================================================= */}

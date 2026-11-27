@@ -2,17 +2,22 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BookOpen, Calendar, MapPin } from 'lucide-react';
 import Badge from '../../components/common/Badge';
+import PaginationBar from '../../components/common/PaginationBar';
 import { dashboardApi } from '../../services/allApis';
+
+const PAGE_SIZE = 50;
 
 export default function TeacherDashboard() {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchTeacherStats = async () => {
+      setLoading(true);
       try {
-        const res = await dashboardApi.getTeacher();
+        const res = await dashboardApi.getTeacher({ page, page_size: PAGE_SIZE });
         setData(res);
       } catch (err) {
         console.error('Failed to load teacher dashboard:', err);
@@ -21,7 +26,7 @@ export default function TeacherDashboard() {
       }
     };
     fetchTeacherStats();
-  }, []);
+  }, [page]);
 
   if (loading) {
     return (
@@ -114,6 +119,17 @@ export default function TeacherDashboard() {
             })}
           </div>
         )}
+
+        <PaginationBar
+          page={page}
+          pageSize={data?.subjects_page_size || PAGE_SIZE}
+          total={data?.subjects_total ?? (data?.subjects_count ?? subjectsList.length)}
+          totalPages={data?.subjects_total_pages || 1}
+          onPageChange={(p) => setPage(p)}
+          loading={loading}
+          itemLabel="subjects"
+          className="rounded-xl border border-slate-200"
+        />
       </div>
     </div>
   );

@@ -106,6 +106,10 @@ class EnquiryResponse(EnquiryBase):
     course_items_count: int = 0
     created_by: Optional[uuid.UUID] = None
     demo_items: List[EnquiryDemoItemResponse] = []
+    demo_items_total: int = 0
+    demo_items_total_pages: int = 1
+    demo_items_page: int = 1
+    demo_items_page_size: int = 50
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -183,6 +187,14 @@ class DemoAnalyticsResponse(BaseModel):
     summary: DemoAnalyticsSummary
     by_teacher: List[TeacherDemoMetric]
     by_subject: List[SubjectDemoMetric]
+    teacher_total: int = 0
+    teacher_total_pages: int = 1
+    teacher_page: int = 1
+    teacher_page_size: int = 50
+    subject_total: int = 0
+    subject_total_pages: int = 1
+    subject_page: int = 1
+    subject_page_size: int = 50
     filters: Dict[str, Any]
 
 # Student Registration from Enquiry schemas

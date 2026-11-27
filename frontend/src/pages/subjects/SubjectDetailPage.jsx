@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
+import PaginationBar from '../../components/common/PaginationBar';
 import QuickPaymentModal from '../../components/modals/QuickPaymentModal';
 import PaymentReceiptModal from '../../components/receipts/PaymentReceiptModal';
 import { subjectApi, reportApi, remindersApi, enquiryApi } from '../../services/allApis';
@@ -36,7 +37,7 @@ import { useAuth } from '../../context/AuthContext';
 import { formatIndianDate, formatCycleLabel, computeDaysRemainingForPeriods } from '../../utils/dateCycleUtils';
 import { WhatsAppIcon } from '../../utils/whatsappHelpers';
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 50;
 
 export default function SubjectDetailPage() {
   const { id } = useParams();
@@ -88,6 +89,10 @@ export default function SubjectDetailPage() {
     conversionRate: 0,
     items: [],
   });
+  const [convPage, setConvPage] = useState(1);
+  const [convTotal, setConvTotal] = useState(0);
+  const [convTotalPages, setConvTotalPages] = useState(1);
+  const [convLoading, setConvLoading] = useState(false);
 
   // Status & Search Filtering for Course Enrollments
   const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL' | 'ACTIVE' | 'INACTIVE'
@@ -106,10 +111,9 @@ export default function SubjectDetailPage() {
     setLoading(true);
     setAccessDenied(false);
     try {
-      // 1. Fetch core subject info, demo leads and conversion report concurrently
-      const [sDataResult, demosResult, convReportResult] = await Promise.allSettled([
+      // 1. Fetch core subject info and conversion report concurrently
+      const [sDataResult, convReportResult] = await Promise.allSettled([
         subjectApi.get(id),
-        enquiryApi.listDemos({ subject_id: id, page_size: 100 }),
         isAdmin ? reportApi.getAdmissionsConversion({}) : Promise.resolve(null),
       ]);
 
@@ -141,40 +145,20 @@ export default function SubjectDetailPage() {
           }
         : null;
 
-      // Immediately process demo leads and conversion statistics
-      let totalDemos = 0;
-      let convertedCount = 0;
-      let conversionRate = 0;
-      let demoItems = [];
-
-      if (demosResult.status === 'fulfilled' && demosResult.value) {
-        demoItems = demosResult.value.items || [];
-        totalDemos = demosResult.value.total ?? demoItems.length;
-        convertedCount = demoItems.filter((d) => d.status === 'CONVERTED').length;
-      }
-
       if (convReportResult.status === 'fulfilled' && convReportResult.value?.by_subject) {
         const subName = currentSub?.subject_name;
         const match = convReportResult.value.by_subject.find(
           (s) => String(s.subject_id) === String(id) || (subName && s.subject_name === subName)
         );
         if (match) {
-          totalDemos = Math.max(totalDemos, match.enquiries_count || 0);
-          convertedCount = Math.max(convertedCount, match.converted_count || 0);
-          conversionRate = match.conversion_rate_pct || 0;
+          setConversionData((prev) => ({
+            ...prev,
+            totalDemos: Math.max(prev.totalDemos, match.enquiries_count || 0),
+            convertedCount: Math.max(prev.convertedCount, match.converted_count || 0),
+            conversionRate: match.conversion_rate_pct || prev.conversionRate || 0,
+          }));
         }
       }
-
-      if (totalDemos > 0 && conversionRate === 0) {
-        conversionRate = Math.round((convertedCount / totalDemos) * 100);
-      }
-
-      setConversionData({
-        totalDemos,
-        convertedCount,
-        conversionRate,
-        items: demoItems,
-      });
 
       if (currentSub) {
         setSubject(currentSub);
@@ -236,6 +220,42 @@ export default function SubjectDetailPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Load paginated demos / conversion history from backend
+  const loadConversionDemos = useCallback(async () => {
+    if (!id || isTeacher) return;
+    setConvLoading(true);
+    try {
+      const res = await enquiryApi.listDemos({
+        subject_id: id,
+        page: convPage,
+        page_size: PAGE_SIZE,
+      });
+      const items = res?.items || [];
+      const tot = res?.total ?? items.length;
+      setConvTotal(tot);
+      setConvTotalPages(Math.max(1, res?.total_pages || Math.ceil(tot / PAGE_SIZE)));
+      setConversionData((prev) => {
+        const nextTotal = Math.max(prev.totalDemos || 0, tot);
+        const convCnt = prev.convertedCount || items.filter((d) => d.status === 'CONVERTED').length;
+        const rate = prev.conversionRate || (nextTotal > 0 ? Math.round((convCnt / nextTotal) * 100) : 0);
+        return {
+          totalDemos: nextTotal,
+          convertedCount: convCnt,
+          conversionRate: rate,
+          items,
+        };
+      });
+    } catch (err) {
+      console.warn('Failed to load subject demo conversion page:', err);
+    } finally {
+      setConvLoading(false);
+    }
+  }, [id, convPage, isTeacher]);
+
+  useEffect(() => {
+    loadConversionDemos();
+  }, [loadConversionDemos]);
 
   useEffect(() => {
     loadRoster();
@@ -483,7 +503,10 @@ export default function SubjectDetailPage() {
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2">
         <button
           type="button"
-          onClick={() => setActiveTab('ENROLLMENTS')}
+          onClick={() => {
+            setActiveTab('ENROLLMENTS');
+            setPage(1);
+          }}
           className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-lg transition cursor-pointer ${
             activeTab === 'ENROLLMENTS'
               ? 'bg-odoo-700 text-white shadow-2xs'
@@ -497,7 +520,10 @@ export default function SubjectDetailPage() {
         {isAdmin && (
           <button
             type="button"
-            onClick={() => setActiveTab('BREAKUP')}
+            onClick={() => {
+              setActiveTab('BREAKUP');
+              setPage(1);
+            }}
             className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-lg transition cursor-pointer ${
               activeTab === 'BREAKUP'
                 ? 'bg-odoo-700 text-white shadow-2xs'
@@ -512,7 +538,10 @@ export default function SubjectDetailPage() {
         {!isTeacher && (
           <button
             type="button"
-            onClick={() => setActiveTab('CONVERSION')}
+            onClick={() => {
+              setActiveTab('CONVERSION');
+              setConvPage(1);
+            }}
             className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-lg transition cursor-pointer ${
               activeTab === 'CONVERSION'
                 ? 'bg-odoo-700 text-white shadow-2xs'
@@ -864,52 +893,15 @@ export default function SubjectDetailPage() {
           )}
 
           {/* Pagination Controls */}
-          {(rosterTotal > PAGE_SIZE || rosterTotalPages > 1 || page > 1) && (
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-2 pt-3 border-t border-slate-200 text-xs">
-              <span className="text-slate-600 font-medium">
-                Showing {(page - 1) * PAGE_SIZE + 1} to{' '}
-                {Math.min(page * PAGE_SIZE, rosterTotal)} of {rosterTotal} course enrollments (Page {page} of {rosterTotalPages})
-              </span>
-
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setPage(1)}
-                  disabled={page <= 1}
-                  className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
-                  title="First Page"
-                >
-                  <ChevronsLeft className="w-3.5 h-3.5 text-slate-700" />
-                </button>
-                <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page <= 1}
-                  className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
-                  title="Previous Page"
-                >
-                  <ChevronLeft className="w-3.5 h-3.5 text-slate-700" />
-                </button>
-                <span className="px-2 font-bold text-black">
-                  Page {page} of {rosterTotalPages}
-                </span>
-                <button
-                  onClick={() => setPage((p) => Math.min(rosterTotalPages, p + 1))}
-                  disabled={page >= rosterTotalPages}
-                  className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
-                  title="Next Page"
-                >
-                  <ChevronRight className="w-3.5 h-3.5 text-slate-700" />
-                </button>
-                <button
-                  onClick={() => setPage(rosterTotalPages)}
-                  disabled={page >= rosterTotalPages}
-                  className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
-                  title="Last Page"
-                >
-                  <ChevronsRight className="w-3.5 h-3.5 text-slate-700" />
-                </button>
-              </div>
-            </div>
-          )}
+          <PaginationBar
+            page={page}
+            pageSize={PAGE_SIZE}
+            total={rosterTotal}
+            totalPages={rosterTotalPages}
+            onPageChange={(p) => setPage(p)}
+            loading={rosterLoading}
+            itemLabel="course enrollments"
+          />
         </div>
       )}
 
@@ -1025,6 +1017,15 @@ export default function SubjectDetailPage() {
                 )}
               </tbody>
             </table>
+            <PaginationBar
+              page={page}
+              pageSize={PAGE_SIZE}
+              total={rosterTotal}
+              totalPages={rosterTotalPages}
+              onPageChange={(p) => setPage(p)}
+              loading={rosterLoading}
+              itemLabel="scholars"
+            />
           </div>
         </div>
       )}
@@ -1180,6 +1181,15 @@ export default function SubjectDetailPage() {
                 )}
               </tbody>
             </table>
+            <PaginationBar
+              page={convPage}
+              pageSize={PAGE_SIZE}
+              total={convTotal}
+              totalPages={convTotalPages}
+              onPageChange={(p) => setConvPage(p)}
+              loading={convLoading}
+              itemLabel="demos"
+            />
           </div>
         </div>
       )}

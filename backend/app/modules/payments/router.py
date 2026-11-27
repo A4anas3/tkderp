@@ -329,10 +329,12 @@ async def record_payment(
 @router.get("/{payment_id}/receipt", response_model=PaymentReceiptResponse)
 async def get_payment_receipt(
     payment_id: uuid.UUID,
+    page: Optional[int] = Query(None, ge=1),
+    page_size: Optional[int] = Query(None, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
-    cache_key = make_cache_key("payments", "receipt", payment_id)
+    cache_key = make_cache_key("payments", "receipt", payment_id, page=page, page_size=page_size)
     hit, cached = await cache_get(cache_key)
     if hit:
         return cached
@@ -369,6 +371,19 @@ async def get_payment_receipt(
         for a in p.allocations
     ]
 
+    alloc_total = len(alloc_data)
+    if page is not None:
+        ps = page_size or 50
+        alloc_total_pages = max(1, (alloc_total + ps - 1) // ps) if alloc_total > 0 else 1
+        start = (page - 1) * ps
+        paged_alloc_data = alloc_data[start:start + ps]
+        cur_page = page
+    else:
+        ps = alloc_total or 50
+        alloc_total_pages = 1
+        paged_alloc_data = alloc_data
+        cur_page = 1
+
     resp = PaymentReceiptResponse(
         payment_number=p.payment_number,
         payment_date=p.payment_date,
@@ -387,7 +402,11 @@ async def get_payment_receipt(
         valid_from=p.valid_from,
         valid_to=p.valid_to,
         fee_period=p.fee_period,
-        allocations=alloc_data
+        allocations=paged_alloc_data,
+        allocations_total=alloc_total,
+        allocations_total_pages=alloc_total_pages,
+        allocations_page=cur_page,
+        allocations_page_size=ps,
     )
     await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=PaymentReceiptResponse)
     return resp

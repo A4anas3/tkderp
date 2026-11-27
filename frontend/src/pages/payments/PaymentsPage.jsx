@@ -65,7 +65,7 @@ export default function PaymentsPage() {
     try {
       const res = await paymentApi.list({
         page: payPage,
-        page_size: 15,
+        page_size: 50,
         search: paySearch.trim() || undefined,
       });
       setPayments(res.items || []);
@@ -82,7 +82,7 @@ export default function PaymentsPage() {
     try {
       const res = await paymentApi.listRefunds({
         page: refundPage,
-        page_size: 15,
+        page_size: 50,
         search: refundSearch.trim() || undefined,
       });
       setRefunds(res.items || []);
@@ -346,7 +346,10 @@ export default function PaymentsPage() {
       {/* Tabs Switcher */}
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-1">
         <button
-          onClick={() => setActiveTab('payments')}
+          onClick={() => {
+            setActiveTab('payments');
+            setPayPage(1);
+          }}
           className={`flex items-center gap-1.5 px-3 py-2 min-h-[36px] text-xs font-bold rounded-t-lg transition border-b-2 cursor-pointer ${
             activeTab === 'payments'
               ? 'border-odoo-600 text-odoo-900 bg-purple-50/50'
@@ -358,7 +361,10 @@ export default function PaymentsPage() {
         </button>
 
         <button
-          onClick={() => setActiveTab('refunds')}
+          onClick={() => {
+            setActiveTab('refunds');
+            setRefundPage(1);
+          }}
           className={`flex items-center gap-1.5 px-3 py-2 min-h-[36px] text-xs font-bold rounded-t-lg transition border-b-2 cursor-pointer ${
             activeTab === 'refunds'
               ? 'border-amber-600 text-amber-950 bg-amber-50/50'
@@ -377,7 +383,8 @@ export default function PaymentsPage() {
           data={payments}
           total={totalPayments}
           page={payPage}
-          pageSize={15}
+          pageSize={50}
+          alwaysShowPagination
           onPageChange={(p) => setPayPage(p)}
           searchValue={paySearch}
           onSearchChange={(val) => {
@@ -399,7 +406,8 @@ export default function PaymentsPage() {
           data={refunds}
           total={totalRefunds}
           page={refundPage}
-          pageSize={15}
+          pageSize={50}
+          alwaysShowPagination
           onPageChange={(p) => setRefundPage(p)}
           searchValue={refundSearch}
           onSearchChange={(val) => {

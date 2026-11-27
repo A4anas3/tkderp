@@ -276,7 +276,7 @@ export default function SubjectsPage() {
     try {
       const res = await subjectApi.list({
         page,
-        page_size: viewMode === 'kanban' ? 24 : 15,
+        page_size: 50,
         search: search.trim() || undefined,
         status_filter: statusFilter || undefined,
       });
@@ -502,7 +502,7 @@ export default function SubjectsPage() {
     },
   ];
 
-  const kanbanPageSize = 24;
+  const kanbanPageSize = 50;
   const kanbanTotalPages = Math.max(1, Math.ceil(total / kanbanPageSize));
 
   return (
@@ -583,7 +583,8 @@ export default function SubjectsPage() {
           data={subjects}
           total={total}
           page={page}
-          pageSize={15}
+          pageSize={50}
+          alwaysShowPagination
           onPageChange={(p) => setPage(p)}
           searchValue={search}
           onSearchChange={(val) => {
@@ -737,33 +738,34 @@ export default function SubjectsPage() {
           )}
 
           {/* Kanban Pagination */}
-          {kanbanTotalPages > 1 && (
-            <div className="bg-white border border-slate-200 rounded-lg p-2.5 shadow-2xs flex items-center justify-between text-xs">
-              <span className="text-slate-700">
-                Page <span className="font-bold text-black">{page}</span> of <span className="font-bold text-black">{kanbanTotalPages}</span>
-              </span>
-              <div className="flex items-center gap-1.5">
-                <Button
-                  size="xs"
-                  variant="secondary"
-                  disabled={page <= 1}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  className="min-h-[30px]"
-                >
-                  Previous
-                </Button>
-                <Button
-                  size="xs"
-                  variant="secondary"
-                  disabled={page >= kanbanTotalPages}
-                  onClick={() => setPage((p) => Math.min(kanbanTotalPages, p + 1))}
-                  className="min-h-[30px]"
-                >
-                  Next
-                </Button>
-              </div>
+          <div className="bg-white border border-slate-200 rounded-lg p-2.5 shadow-2xs flex items-center justify-between text-xs">
+            <span className="text-slate-700">
+              Showing <span className="font-bold text-black">{total === 0 ? 0 : (page - 1) * kanbanPageSize + 1}</span> to{' '}
+              <span className="font-bold text-black">{Math.min(page * kanbanPageSize, total)}</span> of{' '}
+              <span className="font-bold text-black">{total}</span> records •{' '}
+              Page <span className="font-bold text-black">{page}</span> of <span className="font-bold text-black">{kanbanTotalPages}</span>
+            </span>
+            <div className="flex items-center gap-1.5">
+              <Button
+                size="xs"
+                variant="secondary"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="min-h-[30px]"
+              >
+                Previous
+              </Button>
+              <Button
+                size="xs"
+                variant="secondary"
+                disabled={page >= kanbanTotalPages}
+                onClick={() => setPage((p) => Math.min(kanbanTotalPages, p + 1))}
+                className="min-h-[30px]"
+              >
+                Next
+              </Button>
             </div>
-          )}
+          </div>
         </div>
       )}
 

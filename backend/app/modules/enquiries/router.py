@@ -3,7 +3,7 @@ import json
 import calendar
 import re
 from datetime import date, timedelta
-from typing import Optional, List
+from typing import Optional, List, Union
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, and_, desc, case, exists
@@ -699,6 +699,10 @@ async def get_demo_analytics(
     to_date: Optional[date] = None,
     teacher_id: Optional[uuid.UUID] = None,
     subject_id: Optional[uuid.UUID] = None,
+    teacher_page: Optional[int] = Query(None, ge=1),
+    teacher_page_size: Optional[int] = Query(None, ge=1, le=100),
+    subject_page: Optional[int] = Query(None, ge=1),
+    subject_page_size: Optional[int] = Query(None, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin)
 ):
@@ -712,6 +716,8 @@ async def get_demo_analytics(
         "demos", "analytics",
         month=month, year=year, from_date=f_date, to_date=t_date,
         teacher_id=teacher_id, subject_id=subject_id,
+        teacher_page=teacher_page, teacher_page_size=teacher_page_size,
+        subject_page=subject_page, subject_page_size=subject_page_size,
     )
     hit, cached = await cache_get(cache_key)
     if hit:
@@ -822,10 +828,44 @@ async def get_demo_analytics(
             conversion_rate_percentage=rate
         ))
 
+    t_total = len(by_teacher)
+    if teacher_page is not None:
+        t_ps = teacher_page_size or 50
+        t_total_pages = max(1, (t_total + t_ps - 1) // t_ps) if t_total > 0 else 1
+        t_start = (teacher_page - 1) * t_ps
+        paged_teachers = by_teacher[t_start:t_start + t_ps]
+        t_cur_page = teacher_page
+    else:
+        t_ps = t_total or 50
+        t_total_pages = 1
+        paged_teachers = by_teacher
+        t_cur_page = 1
+
+    s_total = len(by_subject)
+    if subject_page is not None:
+        s_ps = subject_page_size or 50
+        s_total_pages = max(1, (s_total + s_ps - 1) // s_ps) if s_total > 0 else 1
+        s_start = (subject_page - 1) * s_ps
+        paged_subjects = by_subject[s_start:s_start + s_ps]
+        s_cur_page = subject_page
+    else:
+        s_ps = s_total or 50
+        s_total_pages = 1
+        paged_subjects = by_subject
+        s_cur_page = 1
+
     resp = DemoAnalyticsResponse(
         summary=summary,
-        by_teacher=by_teacher,
-        by_subject=by_subject,
+        by_teacher=paged_teachers,
+        by_subject=paged_subjects,
+        teacher_total=t_total,
+        teacher_total_pages=t_total_pages,
+        teacher_page=t_cur_page,
+        teacher_page_size=t_ps,
+        subject_total=s_total,
+        subject_total_pages=s_total_pages,
+        subject_page=s_cur_page,
+        subject_page_size=s_ps,
         filters={
             "month": month,
             "year": year,
@@ -879,13 +919,15 @@ async def get_enquiry_summary(
     return resp
 
 
-@router.get("/upcoming-deadlines", response_model=list[EnquiryResponse])
+@router.get("/upcoming-deadlines", response_model=Union[PageResponse[EnquiryResponse], list[EnquiryResponse]])
 async def get_upcoming_demo_deadlines(
     days_ahead: int = Query(7, ge=1, le=30),
+    page: Optional[int] = Query(None, ge=1),
+    page_size: Optional[int] = Query(None, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_cashier_or_admin)
 ):
-    cache_key = make_cache_key("enquiries", "upcoming", days_ahead=days_ahead)
+    cache_key = make_cache_key("enquiries", "upcoming", days_ahead=days_ahead, page=page, page_size=page_size)
     hit, cached = await cache_get(cache_key)
     if hit:
         return cached
@@ -934,6 +976,14 @@ async def get_upcoming_demo_deadlines(
                 demo_items=formatted_demo_items
             )
         )
+    if page is not None:
+        ps = page_size or 50
+        total = len(response_items)
+        start = (page - 1) * ps
+        paged = response_items[start:start + ps]
+        page_resp = PageResponse.create(items=paged, total=total, params=PaginationParams(page=page, page_size=ps))
+        await cache_set(cache_key, page_resp, ttl=TTL_MEDIUM, model=PageResponse[EnquiryResponse])
+        return page_resp
     await cache_set(cache_key, response_items, ttl=TTL_MEDIUM, model=list[EnquiryResponse])
     return response_items
 
@@ -1448,10 +1498,12 @@ async def _resolve_single_enquiry_response(
 @router.get("/{enquiry_id}", response_model=EnquiryResponse)
 async def get_enquiry(
     enquiry_id: uuid.UUID,
+    demo_page: Optional[int] = Query(None, ge=1),
+    demo_page_size: Optional[int] = Query(None, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_staff)
 ):
-    cache_key = make_cache_key("enquiries", "detail", enquiry_id, user_scope(current_user))
+    cache_key = make_cache_key("enquiries", "detail", enquiry_id, user_scope(current_user), demo_page=demo_page, demo_page_size=demo_page_size)
     hit, cached = await cache_get(cache_key)
     if hit:
         return cached
@@ -1485,11 +1537,27 @@ async def get_enquiry(
             detail="Access denied: you can only view your own active demos",
         )
     formatted_demo_items = [_format_demo_item_response(d, today) for d in d_items]
+    demo_total = len(formatted_demo_items)
+    if demo_page is not None:
+        d_ps = demo_page_size or 50
+        d_total_pages = max(1, (demo_total + d_ps - 1) // d_ps) if demo_total > 0 else 1
+        d_start = (demo_page - 1) * d_ps
+        paged_demo_items = formatted_demo_items[d_start:d_start + d_ps]
+        d_cur_page = demo_page
+    else:
+        d_ps = demo_total or 50
+        d_total_pages = 1
+        paged_demo_items = formatted_demo_items
+        d_cur_page = 1
 
     resp = await _resolve_single_enquiry_response(
-        db, enquiry, formatted_demo_items, today,
+        db, enquiry, paged_demo_items, today,
         include_billing_info=not is_teacher_user(current_user),
     )
+    resp.demo_items_total = demo_total
+    resp.demo_items_total_pages = d_total_pages
+    resp.demo_items_page = d_cur_page
+    resp.demo_items_page_size = d_ps
     await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=EnquiryResponse)
     return resp
 

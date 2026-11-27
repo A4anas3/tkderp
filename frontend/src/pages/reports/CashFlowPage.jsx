@@ -12,17 +12,25 @@ import {
 import { ArrowDownRight, ArrowUpRight, Wallet, RotateCcw } from 'lucide-react';
 import StatCard from '../../components/common/StatCard';
 import DateRangeFilter from '../../components/common/DateRangeFilter';
+import PaginationBar from '../../components/common/PaginationBar';
 import { reportApi } from '../../services/allApis';
+
+const PAGE_SIZE = 50;
 
 export default function CashFlowPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [currentFilters, setCurrentFilters] = useState({});
+  const [page, setPage] = useState(1);
 
-  const fetchCashMovement = useCallback(async (filters = {}) => {
+  const fetchCashMovement = useCallback(async (filters = {}, targetPage = 1) => {
     setLoading(true);
     try {
-      const res = await reportApi.getCashMovement(filters);
+      const res = await reportApi.getCashMovement({
+        ...filters,
+        page: targetPage,
+        page_size: PAGE_SIZE,
+      });
       setData(res);
     } catch (err) {
       console.error('Failed to load cash flow:', err);
@@ -32,15 +40,16 @@ export default function CashFlowPage() {
   }, []);
 
   useEffect(() => {
-    fetchCashMovement({});
-  }, [fetchCashMovement]);
+    fetchCashMovement(currentFilters, page);
+  }, [currentFilters, page, fetchCashMovement]);
 
   const handleFilterChange = (newFilters) => {
     setCurrentFilters(newFilters);
-    fetchCashMovement(newFilters);
+    setPage(1);
   };
 
   const breakdown = data?.breakdown || data?.monthly_breakdown || [];
+  const chartBreakdown = data?.chart_breakdown || breakdown;
 
   return (
     <div className="space-y-4">
@@ -121,7 +130,7 @@ export default function CashFlowPage() {
 
             <div className="h-64 sm:h-72 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={breakdown} margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
+                <BarChart data={chartBreakdown} margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="period_label" tick={{ fontSize: 11, fill: '#000000' }} interval={0} />
                   <YAxis tick={{ fontSize: 11, fill: '#475569' }} tickFormatter={(val) => `₹${val}`} />
@@ -193,6 +202,17 @@ export default function CashFlowPage() {
                 </tbody>
               </table>
             </div>
+
+            <PaginationBar
+              page={page}
+              pageSize={data?.page_size || PAGE_SIZE}
+              total={data?.total ?? breakdown.length}
+              totalPages={data?.total_pages || 1}
+              onPageChange={(p) => setPage(p)}
+              loading={loading}
+              itemLabel="periods"
+              className="mt-3 rounded-lg border border-slate-200"
+            />
           </div>
         </>
       )}

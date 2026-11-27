@@ -4,6 +4,7 @@ import Modal from '../../components/common/Modal';
 import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
+import PaginationBar from '../../components/common/PaginationBar';
 import { greenCardApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 import { formatValidityDuration } from '../../utils/dateCycleUtils';
@@ -11,6 +12,10 @@ import { formatValidityDuration } from '../../utils/dateCycleUtils';
 export default function GreenCardPage() {
   const { success, error } = useToast();
   const [cards, setCards] = useState([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const PAGE_SIZE = 50;
   const [loading, setLoading] = useState(true);
 
   // Modal State
@@ -25,11 +30,19 @@ export default function GreenCardPage() {
     is_active: true,
   });
 
-  const loadCards = async () => {
+  const loadCards = async (targetPage = page) => {
     setLoading(true);
     try {
-      const res = await greenCardApi.list();
-      setCards(res || []);
+      const res = await greenCardApi.list({ page: targetPage, page_size: PAGE_SIZE });
+      if (Array.isArray(res)) {
+        setCards(res);
+        setTotal(res.length);
+        setTotalPages(1);
+      } else {
+        setCards(res?.items || []);
+        setTotal(res?.total ?? 0);
+        setTotalPages(Math.max(1, res?.total_pages || 1));
+      }
     } catch (err) {
       error(err.message || 'Failed to load Green Card configurations');
     } finally {
@@ -38,8 +51,8 @@ export default function GreenCardPage() {
   };
 
   useEffect(() => {
-    loadCards();
-  }, []);
+    loadCards(page);
+  }, [page]);
 
   const handleOpenAdd = () => {
     setEditingCard(null);
@@ -185,6 +198,17 @@ export default function GreenCardPage() {
           ))}
         </div>
       )}
+
+      <PaginationBar
+        page={page}
+        pageSize={PAGE_SIZE}
+        total={total}
+        totalPages={totalPages}
+        onPageChange={(p) => setPage(p)}
+        loading={loading}
+        itemLabel="passes"
+        className="rounded-lg border border-slate-200"
+      />
 
       {/* Modal */}
       <Modal

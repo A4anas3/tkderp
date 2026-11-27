@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload, joinedload
 from decimal import Decimal
 from datetime import datetime, timezone, date, timedelta
-from typing import Optional, List
+from typing import Optional, List, Union
 import json
 import uuid
 import os
@@ -43,6 +43,7 @@ from app.modules.students.schemas import (
 from app.modules.enquiries.schemas import EnquiryResponse, EnquiryDemoItemCreate
 from app.modules.enquiries.router import create_enquiry_with_demos
 from app.modules.admissions.schemas import AdmissionResponse, RenewalsDueItemResponse
+from app.common.pagination import PaginationParams, PageResponse
 from app.modules.payments.schemas import FinancialTransactionResponse
 from app.common.active_lines import today_kolkata, is_active_line, derive_student_status, compute_days_remaining, compute_days_remaining_for_periods
 from app.common.numbering import create_student_with_unique_code
@@ -746,9 +747,11 @@ async def _get_demos_for_student(
         ))
     return demos
 
-@router.get("/{student_id}/demos", response_model=List[StudentDemoItemResponse])
+@router.get("/{student_id}/demos", response_model=Union[PageResponse[StudentDemoItemResponse], List[StudentDemoItemResponse]])
 async def get_student_demos(
     student_id: str,
+    page: Optional[int] = Query(None, ge=1),
+    page_size: Optional[int] = Query(None, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     user = Depends(require_staff)
 ):
@@ -765,33 +768,22 @@ async def get_student_demos(
             detail="Invalid student ID",
         )
     student_id = student_uuid
-    cache_key = make_cache_key("students", "demos", student_id, user_scope(user))
+    cache_key = make_cache_key("students", "demos", student_id, user_scope(user), page=page, page_size=page_size)
     hit, cached = await cache_get(cache_key)
     if hit:
         return cached
     student = (await db.execute(select(Student).where(Student.id == student_id))).scalar_one_or_none()
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
-    if is_teacher_user(user):
-        teacher = await resolve_teacher_for_user(db, user)
-        allowed, teacher_sub_ids = await is_active_student_of_teacher(
-            db, student.id, teacher.id if teacher else None
-        )
-        if not allowed:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied: student is not an active student in your assigned subjects",
-            )
-        demos = await _get_demos_for_student(
-            db,
-            student,
-            teacher_id=teacher.id if teacher else None,
-            teacher_sub_ids=teacher_sub_ids,
-            active_only=True,
-        )
-        await cache_set(cache_key, demos, ttl=TTL_MEDIUM, model=List[StudentDemoItemResponse])
-        return demos
     demos = await _get_demos_for_student(db, student)
+    if page is not None:
+        ps = page_size or 50
+        total = len(demos)
+        start = (page - 1) * ps
+        paged = demos[start:start + ps]
+        resp = PageResponse.create(items=paged, total=total, params=PaginationParams(page=page, page_size=ps))
+        await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=PageResponse[StudentDemoItemResponse])
+        return resp
     await cache_set(cache_key, demos, ttl=TTL_MEDIUM, model=List[StudentDemoItemResponse])
     return demos
 
@@ -1490,6 +1482,10 @@ async def get_student_renewals_due(
 @router.get("/{student_id}/active-enrollment")
 async def get_student_active_enrollment(
     student_id: str,
+    active_page: Optional[int] = Query(None, ge=1),
+    active_page_size: Optional[int] = Query(None, ge=1, le=100),
+    history_page: Optional[int] = Query(None, ge=1),
+    history_page_size: Optional[int] = Query(None, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     user = Depends(require_staff)
 ):
@@ -1506,7 +1502,11 @@ async def get_student_active_enrollment(
             detail="Invalid student ID",
         )
     student_id = student_uuid
-    cache_key = make_cache_key("students", "active_enr", student_id, user_scope(user))
+    cache_key = make_cache_key(
+        "students", "active_enr", student_id, user_scope(user),
+        active_page=active_page, active_page_size=active_page_size,
+        history_page=history_page, history_page_size=history_page_size,
+    )
     hit, cached = await cache_get(cache_key)
     if hit:
         return cached
@@ -1840,6 +1840,32 @@ async def get_student_active_enrollment(
     else:
         active_demos = await _get_active_demos_for_student(db, student, today)
 
+    active_total = len(active_subjects)
+    if active_page is not None:
+        a_ps = active_page_size or 50
+        a_total_pages = max(1, (active_total + a_ps - 1) // a_ps) if active_total > 0 else 1
+        a_start = (active_page - 1) * a_ps
+        paged_active_subjects = active_subjects[a_start:a_start + a_ps]
+        a_cur_page = active_page
+    else:
+        a_ps = active_total or 50
+        a_total_pages = 1
+        paged_active_subjects = active_subjects
+        a_cur_page = 1
+
+    history_total = len(historical_subjects)
+    if history_page is not None:
+        h_ps = history_page_size or 50
+        h_total_pages = max(1, (history_total + h_ps - 1) // h_ps) if history_total > 0 else 1
+        h_start = (history_page - 1) * h_ps
+        paged_historical_subjects = historical_subjects[h_start:h_start + h_ps]
+        h_cur_page = history_page
+    else:
+        h_ps = history_total or 50
+        h_total_pages = 1
+        paged_historical_subjects = historical_subjects
+        h_cur_page = 1
+
     resp = {
         "student_id": str(student.id),
         "student_code": student.student_code,
@@ -1848,8 +1874,16 @@ async def get_student_active_enrollment(
         "has_active_green_card": False if teacher_mode else (active_green_card is not None or student.has_green_card),
         "active_green_card": None if teacher_mode else active_green_card,
         "is_student_active": len(active_subjects) > 0 or active_green_card is not None or len(active_demos) > 0,
-        "active_subjects": active_subjects,
-        "historical_subjects": historical_subjects,
+        "active_subjects": paged_active_subjects,
+        "active_total": active_total,
+        "active_total_pages": a_total_pages,
+        "active_page": a_cur_page,
+        "active_page_size": a_ps,
+        "historical_subjects": paged_historical_subjects,
+        "history_total": history_total,
+        "history_total_pages": h_total_pages,
+        "history_page": h_cur_page,
+        "history_page_size": h_ps,
         "historical_memberships": historical_memberships,
         "active_demos": [d.model_dump() for d in active_demos],
         "total_active_demos": len(active_demos),

@@ -1,7 +1,8 @@
 import uuid
 from decimal import Decimal
 from datetime import date, timedelta
-from fastapi import APIRouter, Depends
+from typing import Optional
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc, or_
 from sqlalchemy.orm import selectinload
@@ -253,10 +254,12 @@ async def get_cashier_dashboard(
 
 @router.get("/teacher")
 async def get_teacher_dashboard(
+    page: Optional[int] = Query(None, ge=1),
+    page_size: Optional[int] = Query(None, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_teacher_or_admin)
 ):
-    cache_key = make_cache_key("dashboard", "teacher", user_scope(current_user))
+    cache_key = make_cache_key("dashboard", "teacher", user_scope(current_user), page=page, page_size=page_size)
     hit, cached = await cache_get(cache_key)
     if hit:
         return cached
@@ -414,15 +417,32 @@ async def get_teacher_dashboard(
             demo_entry["mobile"] = enq.mobile
         active_demos.append(demo_entry)
 
+    subjects_total = len(batch_list)
+    if page is not None:
+        ps = page_size or 50
+        subjects_total_pages = max(1, (subjects_total + ps - 1) // ps) if subjects_total > 0 else 1
+        start = (page - 1) * ps
+        paged_batches = batch_list[start:start + ps]
+        cur_page = page
+    else:
+        ps = subjects_total or 50
+        subjects_total_pages = 1
+        paged_batches = batch_list
+        cur_page = 1
+
     resp = {
         "teacher_name": teacher.name if teacher else current_user.full_name,
         "specialization": teacher.specialization if teacher else "Faculty",
-        "batches_count": len(batch_list),
-        "subjects_count": len(batch_list),
+        "batches_count": subjects_total,
+        "subjects_count": subjects_total,
         "total_unique_students": len(total_students_set),
         "active_demos_count": len(active_demos),
-        "batches": batch_list,
-        "subjects": batch_list,
+        "batches": paged_batches,
+        "subjects": paged_batches,
+        "subjects_total": subjects_total,
+        "subjects_total_pages": subjects_total_pages,
+        "subjects_page": cur_page,
+        "subjects_page_size": ps,
         "active_demos": active_demos,
     }
     await cache_set(cache_key, resp, ttl=TTL_SHORT)
