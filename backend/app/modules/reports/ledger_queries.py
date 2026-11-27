@@ -1301,12 +1301,6 @@ async def get_admissions_conversion_detailed(
     source_page: Optional[int] = None,
     source_page_size: Optional[int] = None,
 ) -> Dict[str, Any]:
-    page_size: Optional[int] = None,
-    subject_page: Optional[int] = None,
-    subject_page_size: Optional[int] = None,
-    teacher_page: Optional[int] = None,
-    teacher_page_size: Optional[int] = None,
-) -> Dict[str, Any]:
     """
     Admissions & Conversion Report:
     Enquiries received, verified enrollments via demo reference number (source_demo_number),
