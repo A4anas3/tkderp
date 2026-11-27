@@ -149,6 +149,7 @@ export default function TeacherDetailPage() {
     specialization: '',
     joining_date: '',
     status: 'ACTIVE',
+    monthly_salary: '',
   });
 
   // Debounce search input
@@ -175,6 +176,10 @@ export default function TeacherDetailPage() {
         specialization: tData.specialization || '',
         joining_date: tData.joining_date || '',
         status: tData.status || 'ACTIVE',
+        monthly_salary:
+          tData.monthly_salary !== null && tData.monthly_salary !== undefined
+            ? String(tData.monthly_salary)
+            : '',
       });
     } catch (err) {
       error(err.message || 'Failed to load faculty profile');
@@ -379,6 +384,16 @@ export default function TeacherDetailPage() {
     if (!cleanMob || cleanMob.length !== 10) return error('Mobile must be 10 digits');
     if (existingTeacherWithMobile) return error(`Mobile already in use by ${existingTeacherWithMobile.name}`);
 
+    const rawSalary = String(formData.monthly_salary ?? '').trim();
+    let parsedSalary = null;
+    if (rawSalary !== '') {
+      const numSalary = Number(rawSalary);
+      if (!Number.isFinite(numSalary) || numSalary < 0) {
+        return error('Monthly salary must be a non-negative number');
+      }
+      parsedSalary = numSalary;
+    }
+
     setSubmitting(true);
     try {
       let finalPhotoUrl = teacher?.photo_url || null;
@@ -397,6 +412,7 @@ export default function TeacherDetailPage() {
         ...formData,
         mobile: cleanMob,
         photo_url: finalPhotoUrl,
+        monthly_salary: parsedSalary,
       });
       success('Faculty profile updated successfully');
       setEditModalOpen(false);
@@ -579,7 +595,7 @@ export default function TeacherDetailPage() {
             </div>
           </div>
 
-          {/* Quick Contact Chips */}
+          {/* Quick Contact & Compensation Chips */}
           <div className="flex flex-wrap items-center gap-2">
             {teacher.mobile && (
               <a
@@ -601,6 +617,18 @@ export default function TeacherDetailPage() {
                 <span>{teacher.email}</span>
               </a>
             )}
+            <div
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50/70 border border-emerald-200 text-xs font-mono font-bold text-emerald-900"
+              title="Registered Monthly Salary"
+            >
+              <Wallet className="w-3.5 h-3.5 text-emerald-700" />
+              <span>
+                Monthly Salary:{' '}
+                {teacher.monthly_salary !== null && teacher.monthly_salary !== undefined
+                  ? `₹${Number(teacher.monthly_salary).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  : 'Not set'}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -723,6 +751,11 @@ export default function TeacherDetailPage() {
           <span className="text-[10px] text-slate-500 font-medium mt-1 block truncate">
             Payable: ₹{salaries.reduce((sum, s) => sum + Number(s.salary_amount || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
           </span>
+          {teacher.monthly_salary !== null && teacher.monthly_salary !== undefined && (
+            <span className="text-[10px] text-odoo-700 font-mono font-bold mt-0.5 block truncate">
+              Registered: ₹{Number(teacher.monthly_salary).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mo
+            </span>
+          )}
         </div>
       </div>
 
@@ -1893,7 +1926,12 @@ export default function TeacherDetailPage() {
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {teacher.monthly_salary !== null && teacher.monthly_salary !== undefined && (
+                  <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-purple-50 text-odoo-800 border border-odoo-200">
+                    Registered: ₹{Number(teacher.monthly_salary).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mo
+                  </span>
+                )}
                 <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200">
                   Total Paid: ₹{salaries.reduce((acc, s) => acc + Number(s.paid_amount || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </span>
@@ -2193,6 +2231,32 @@ export default function TeacherDetailPage() {
                 onChange={(e) => setFormData({ ...formData, joining_date: e.target.value })}
                 required
               />
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="block font-bold text-slate-700 mb-1">
+                Monthly Salary (₹, Optional)
+              </label>
+              {(() => {
+                const rawSalary = String(formData.monthly_salary ?? '').trim();
+                const parsedSalary = rawSalary === '' ? null : Number(rawSalary);
+                const salaryError =
+                  rawSalary !== '' && (!Number.isFinite(parsedSalary) || parsedSalary < 0)
+                    ? 'Monthly salary must be a non-negative number'
+                    : null;
+                return (
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    inputMode="decimal"
+                    value={formData.monthly_salary}
+                    onChange={(e) => setFormData({ ...formData, monthly_salary: e.target.value })}
+                    placeholder="Optional, e.g. 25000"
+                    error={salaryError}
+                  />
+                );
+              })()}
             </div>
           </div>
 

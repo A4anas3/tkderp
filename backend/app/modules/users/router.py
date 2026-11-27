@@ -278,6 +278,8 @@ async def get_linked_teacher_by_employee_id(
     if latest_salary is not None:
         raw_sal = latest_salary.base_salary if latest_salary.base_salary is not None else latest_salary.salary_amount
         monthly_salary = float(raw_sal) if raw_sal is not None else None
+    elif teacher.monthly_salary is not None:
+        monthly_salary = float(teacher.monthly_salary)
     elif (teacher.share_type or "").upper() == "FIXED_MONTHLY" and teacher.share_value and teacher.share_value > 0:
         monthly_salary = float(teacher.share_value)
 

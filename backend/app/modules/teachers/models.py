@@ -23,6 +23,7 @@ class Teacher(BaseModel):
     # Teacher compensation settings
     share_type: Mapped[str] = mapped_column(String(30), nullable=False, default="PERCENT", server_default="PERCENT") # PERCENT, FIXED_MONTHLY, PER_STUDENT
     share_value: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("0.00"), server_default="0.00")
+    monthly_salary: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
 
     user_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
 

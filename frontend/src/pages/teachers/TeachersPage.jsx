@@ -67,6 +67,7 @@ export default function TeachersPage() {
     photo_url: null,
     joining_date: new Date().toISOString().split('T')[0],
     status: 'ACTIVE',
+    monthly_salary: '',
   });
 
   const loadTeachers = useCallback(async () => {
@@ -177,6 +178,7 @@ export default function TeachersPage() {
       photo_url: null,
       joining_date: new Date().toISOString().split('T')[0],
       status: 'ACTIVE',
+      monthly_salary: '',
     });
     loadTeacherStaffAccounts();
     setModalOpen(true);
@@ -199,6 +201,10 @@ export default function TeachersPage() {
       photo_url: t.photo_url || null,
       joining_date: t.joining_date,
       status: t.status,
+      monthly_salary:
+        t.monthly_salary !== null && t.monthly_salary !== undefined
+          ? String(t.monthly_salary)
+          : '',
     });
     setModalOpen(true);
   };
@@ -355,6 +361,17 @@ export default function TeachersPage() {
       return;
     }
 
+    const rawSalary = String(formData.monthly_salary ?? '').trim();
+    let parsedSalary = null;
+    if (rawSalary !== '') {
+      const numSalary = Number(rawSalary);
+      if (!Number.isFinite(numSalary) || numSalary < 0) {
+        error('Monthly salary must be a non-negative number');
+        return;
+      }
+      parsedSalary = numSalary;
+    }
+
     setSubmitting(true);
     try {
       let finalPhotoUrl = editingTeacher?.photo_url || null;
@@ -382,6 +399,7 @@ export default function TeachersPage() {
         photo_url: finalPhotoUrl,
         joining_date: formData.joining_date,
         status: formData.status,
+        monthly_salary: parsedSalary,
       };
 
       if (editingTeacher) {
@@ -1139,6 +1157,29 @@ export default function TeachersPage() {
             />
           </div>
 
+          {(() => {
+            const rawSalary = String(formData.monthly_salary ?? '').trim();
+            const parsedSalary = rawSalary === '' ? null : Number(rawSalary);
+            const salaryError =
+              rawSalary !== '' && (!Number.isFinite(parsedSalary) || parsedSalary < 0)
+                ? 'Monthly salary must be a non-negative number'
+                : null;
+            return (
+              <Input
+                label="Monthly Salary (₹)"
+                type="number"
+                min="0"
+                step="0.01"
+                inputMode="decimal"
+                value={formData.monthly_salary}
+                onChange={(e) => setFormData({ ...formData, monthly_salary: e.target.value })}
+                placeholder="Optional, e.g. 25000"
+                error={salaryError}
+                helperText={!salaryError ? 'Optional fixed monthly salary in ₹ (does not create payroll records)' : null}
+              />
+            );
+          })()}
+
           <div className="pt-3 flex justify-end gap-2 border-t border-slate-100">
             <Button variant="secondary" onClick={() => setModalOpen(false)} disabled={submitting}>
               Cancel
@@ -1146,6 +1187,9 @@ export default function TeachersPage() {
             {(() => {
               const cleanMob = cleanMobileInput(formData.mobile);
               const hasStaffLink = Boolean(editingTeacher) || Boolean(formData.employee_id);
+              const rawSalary = String(formData.monthly_salary ?? '').trim();
+              const parsedSalary = rawSalary === '' ? null : Number(rawSalary);
+              const isSalaryValid = rawSalary === '' || (Number.isFinite(parsedSalary) && parsedSalary >= 0);
               const isFormValid =
                 hasStaffLink &&
                 formData.name.trim().length >= 2 &&
@@ -1153,7 +1197,8 @@ export default function TeachersPage() {
                 !existingTeacherWithMobile &&
                 formData.qualification.trim().length >= 2 &&
                 formData.specialization.trim().length >= 2 &&
-                Boolean(formData.joining_date);
+                Boolean(formData.joining_date) &&
+                isSalaryValid;
 
               let buttonLabel = editingTeacher ? 'Save Changes' : 'Register Faculty';
               if (!editingTeacher && !formData.employee_id) buttonLabel = 'Select Staff Account';
@@ -1162,6 +1207,7 @@ export default function TeachersPage() {
               else if (existingTeacherWithMobile) buttonLabel = 'Mobile Already Registered';
               else if (!formData.qualification.trim()) buttonLabel = 'Enter Qualification';
               else if (!formData.specialization.trim()) buttonLabel = 'Enter Specialization';
+              else if (!isSalaryValid) buttonLabel = 'Enter Valid Monthly Salary';
 
               return (
                 <Button

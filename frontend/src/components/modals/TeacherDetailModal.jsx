@@ -11,7 +11,8 @@ import {
   Edit2,
   BookOpen,
   Users,
-  ExternalLink
+  ExternalLink,
+  Wallet
 } from 'lucide-react';
 import Modal from '../common/Modal';
 import Button from '../common/Button';
@@ -134,6 +135,18 @@ export default function TeacherDetailModal({
               <span className="text-[11px] text-slate-500 block">Joining Date</span>
               <span className="font-mono font-medium text-black">
                 {formatIndianDate(teacher.joining_date)}
+              </span>
+            </div>
+          </div>
+
+          <div className="bg-white p-3 rounded border border-slate-200 flex items-center gap-2.5 sm:col-span-2">
+            <Wallet className="w-4 h-4 text-emerald-600 shrink-0" />
+            <div>
+              <span className="text-[11px] text-slate-500 block">Monthly Salary</span>
+              <span className="font-mono font-bold text-black">
+                {teacher.monthly_salary !== null && teacher.monthly_salary !== undefined
+                  ? `₹${Number(teacher.monthly_salary).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  : 'Not set'}
               </span>
             </div>
           </div>

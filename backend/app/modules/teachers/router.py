@@ -386,7 +386,8 @@ async def create_teacher(
         joining_date=req.joining_date,
         status=req.status,
         share_type=req.share_type,
-        share_value=req.share_value
+        share_value=req.share_value,
+        monthly_salary=req.monthly_salary,
     )
     db.add(new_teacher)
     await db.commit()
@@ -483,6 +484,8 @@ async def update_teacher(
         user_synced = await _sync_linked_teacher_user_status(db, teacher, req.status)
     if req.share_type is not None: teacher.share_type = req.share_type
     if req.share_value is not None: teacher.share_value = req.share_value
+    if "monthly_salary" in req.model_fields_set:
+        teacher.monthly_salary = req.monthly_salary
 
     await db.commit()
     await db.refresh(teacher)

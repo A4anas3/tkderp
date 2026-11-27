@@ -16,6 +16,7 @@ class TeacherBase(BaseModel):
     status: str = Field(default="ACTIVE", pattern="^(ACTIVE|INACTIVE)$")
     share_type: str = Field(default="PERCENT", pattern="^(PERCENT|FIXED_MONTHLY|PER_STUDENT)$")
     share_value: Decimal = Field(default=Decimal("0.00"), ge=0)
+    monthly_salary: Optional[Decimal] = Field(default=None, ge=0)
 
     @field_validator("qualification", "specialization", mode="before")
     @classmethod
@@ -42,8 +43,9 @@ class TeacherCreate(BaseModel):
     status: str = Field(default="ACTIVE", pattern="^(ACTIVE|INACTIVE)$")
     share_type: str = Field(default="PERCENT", pattern="^(PERCENT|FIXED_MONTHLY|PER_STUDENT)$")
     share_value: Decimal = Field(default=Decimal("0.00"), ge=0)
+    monthly_salary: Optional[Decimal] = Field(default=None, ge=0)
 
-    @field_validator("employee_id", "staff_employee_id", "name", "email", "qualification", "specialization", mode="before")
+    @field_validator("employee_id", "staff_employee_id", "name", "email", "qualification", "specialization", "monthly_salary", mode="before")
     @classmethod
     def sanitize_empty_strings(cls, v):
         if isinstance(v, str) and not v.strip():
@@ -66,6 +68,14 @@ class TeacherUpdate(BaseModel):
     status: Optional[str] = Field(default=None, pattern="^(ACTIVE|INACTIVE)$")
     share_type: Optional[str] = Field(default=None, pattern="^(PERCENT|FIXED_MONTHLY|PER_STUDENT)$")
     share_value: Optional[Decimal] = Field(default=None, ge=0)
+    monthly_salary: Optional[Decimal] = Field(default=None, ge=0)
+
+    @field_validator("monthly_salary", mode="before")
+    @classmethod
+    def sanitize_monthly_salary(cls, v):
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
 
     @field_validator("mobile", mode="before")
     @classmethod
