@@ -1423,9 +1423,39 @@ async def get_student_renewals_due(
         r_res = await db.execute(r_stmt)
         renewed_ids = set(r_res.scalars().all())
 
+    active_periods_by_subj: dict = {}
+    if rows:
+        ap_stmt = (
+            select(
+                AdmissionItem.subject_id,
+                func.coalesce(AdmissionItem.valid_from, Admission.valid_from).label("eff_from"),
+                func.coalesce(AdmissionItem.valid_to, Admission.valid_to).label("eff_to"),
+            )
+            .join(Admission, AdmissionItem.admission_id == Admission.id)
+            .where(
+                Admission.student_id == student_id,
+                AdmissionItem.item_type == "BATCH_SUBJECT",
+                AdmissionItem.status.notin_(["DISCONTINUED", "REVOKED", "CANCELLED"]),
+                AdmissionItem.access_status.notin_(["REVOKED", "CANCELLED", "DISCONTINUED"]),
+                Admission.document_status == "VALID",
+                Admission.status.notin_(["CANCELLED", "REVOKED", "DISCONTINUED"]),
+                Admission.access_status.notin_(["REVOKED", "CANCELLED", "DISCONTINUED"]),
+                func.coalesce(AdmissionItem.valid_to, Admission.valid_to) >= today,
+            )
+            .order_by(func.coalesce(AdmissionItem.valid_from, Admission.valid_from).asc())
+        )
+        for ap_subj_id, ap_from, ap_to in (await db.execute(ap_stmt)).all():
+            if ap_subj_id and ap_to:
+                active_periods_by_subj.setdefault(ap_subj_id, []).append((ap_from, ap_to))
+
     results = []
     for itm, adm, stu, bch in rows:
-        d_remaining = compute_days_remaining(itm.valid_to, itm.valid_from or adm.valid_from, today) or 0
+        eff_from = itm.valid_from or adm.valid_from
+        if itm.valid_to and itm.valid_to >= today and itm.subject_id:
+            periods = active_periods_by_subj.get(itm.subject_id) or [(eff_from, itm.valid_to)]
+            d_remaining = compute_days_remaining_for_periods(periods, today) or 0
+        else:
+            d_remaining = compute_days_remaining(itm.valid_to, eff_from, today) or 0
         results.append(
             RenewalsDueItemResponse(
                 item_id=itm.id,
@@ -1516,6 +1546,7 @@ async def get_student_active_enrollment(
         ]
 
     active_green_card = None
+    active_green_card_cycles = []
     active_subjects_dict = {}  # subj_key -> list of (item, adm, item_dict)
     historical_subjects = []
     historical_memberships = []
@@ -1640,8 +1671,8 @@ async def get_student_active_enrollment(
         }
 
         if item.item_type == "GREEN_CARD":
-            if is_active and not active_green_card:
-                active_green_card = item_dict
+            if is_active:
+                active_green_card_cycles.append((item, adm, item_dict))
             else:
                 historical_memberships.append(item_dict)
         else:
@@ -1670,6 +1701,39 @@ async def get_student_active_enrollment(
                 hist_item["is_expired"] = False if is_inactive_or_cancelled else is_item_expired
                 hist_item["is_overdue"] = False if is_inactive_or_cancelled else is_item_overdue
                 historical_subjects.append(hist_item)
+
+    if active_green_card_cycles:
+        active_green_card_cycles.sort(key=lambda x: (x[0].valid_from or x[1].valid_from or x[1].admission_date or date.min))
+        gc_froms = [x[0].valid_from or x[1].valid_from for x in active_green_card_cycles if (x[0].valid_from or x[1].valid_from)]
+        gc_tos = [x[0].valid_to or x[1].valid_to for x in active_green_card_cycles if (x[0].valid_to or x[1].valid_to)]
+        gc_periods = []
+        gc_period_pairs = []
+        for c_itm, c_adm, c_dict in active_green_card_cycles:
+            c_from = c_itm.valid_from or c_adm.valid_from
+            c_to = c_itm.valid_to or c_adm.valid_to
+            gc_period_pairs.append((c_from, c_to))
+            gc_periods.append({
+                "item_id": str(c_itm.id),
+                "admission_id": str(c_adm.id),
+                "admission_number": c_adm.admission_number,
+                "valid_from": c_from.isoformat() if c_from else None,
+                "valid_to": c_to.isoformat() if c_to else None,
+                "days_remaining": compute_days_remaining(c_to, c_from, today) if c_to else None,
+                "status": c_dict["status"],
+            })
+        latest_gc_dict = active_green_card_cycles[-1][2]
+        gc_days_rem = compute_days_remaining_for_periods(gc_period_pairs, today)
+        active_green_card = dict(latest_gc_dict)
+        active_green_card["valid_from"] = min(gc_froms).isoformat() if gc_froms else latest_gc_dict["valid_from"]
+        active_green_card["valid_to"] = max(gc_tos).isoformat() if gc_tos else latest_gc_dict["valid_to"]
+        active_green_card["validity_periods"] = gc_periods
+        active_green_card["days_remaining"] = gc_days_rem
+        active_green_card["is_expiring_soon"] = gc_days_rem is not None and 0 <= gc_days_rem <= 7
+        if len(active_green_card_cycles) > 1:
+            active_green_card["original_price"] = 0.0 if teacher_mode else float(sum(Decimal(str(x[0].original_price)) for x in active_green_card_cycles))
+            active_green_card["net_price"] = 0.0 if teacher_mode else float(sum(Decimal(str(x[0].net_price)) for x in active_green_card_cycles))
+            active_green_card["amount_collected"] = 0.0 if teacher_mode else float(sum(Decimal(str(x[0].amount_collected)) for x in active_green_card_cycles))
+            active_green_card["balance_due"] = 0.0 if teacher_mode else float(sum(Decimal(str(x[0].balance_due)) for x in active_green_card_cycles))
 
     # Consolidate chained active cycles for each subject (e.g. Month 1 + Month 2 renewal)
     active_subjects = []

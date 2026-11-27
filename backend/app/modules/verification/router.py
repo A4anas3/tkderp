@@ -209,6 +209,7 @@ async def get_student_and_active_courses(
 
     active_courses_dict = {}
     active_green_card = None
+    active_green_card_cycles = []
     latest_adm_seen = None
 
     for item, adm in rows:
@@ -235,39 +236,7 @@ async def get_student_and_active_courses(
             raw_name = raw_name[len("[Renewal] "):]
 
         if item.item_type == "GREEN_CARD":
-            if not active_green_card:
-                sub = subjects_map.get(item.subject_id) or (subjects_by_name.get(raw_name.lower().strip()) if raw_name else None)
-                v_from = item.valid_from or adm.valid_from
-                v_to = item.valid_to or adm.valid_to
-                days_rem = compute_days_remaining(v_to, v_from, today)
-                teach_name = (sub.teacher_name if sub and sub.teacher_name else item.teacher_name_snapshot)
-                hall_num = (sub.hall_number if sub and sub.hall_number else item.hall_number_snapshot)
-                class_sched = (sub.schedule if sub and sub.schedule else None)
-                active_green_card = VerificationCourseItem(
-                    course_name=raw_name,
-                    subject_name="Green Card Membership",
-                    batch_name="All Access Pass",
-                    teacher_name=teach_name,
-                    hall_number=hall_num,
-                    schedule=class_sched,
-                    timing=class_sched,
-                    valid_from=v_from,
-                    valid_to=v_to,
-                    validity_period=format_period(v_from, v_to),
-                    validity_periods=[
-                        CourseValidityPeriod(
-                            valid_from=v_from,
-                            valid_to=v_to,
-                            validity_period=format_period(v_from, v_to),
-                            days_remaining=days_rem,
-                            status="ACTIVE",
-                            admission_number=adm.admission_number,
-                        )
-                    ],
-                    days_remaining=days_rem,
-                    status="ACTIVE",
-                    admission_number=adm.admission_number
-                )
+            active_green_card_cycles.append((item, adm, raw_name))
         else:
             clean_key = str(item.subject_id) if item.subject_id else raw_name.strip().lower()
             if clean_key not in active_courses_dict:
@@ -340,6 +309,61 @@ async def get_student_and_active_courses(
                 status="ACTIVE",
                 admission_number=latest_adm.admission_number
             )
+        )
+
+    if active_green_card_cycles:
+        active_green_card_cycles.sort(key=lambda x: (x[0].valid_from or x[1].valid_from or x[1].admission_date or date.min))
+        gc_froms = [x[0].valid_from or x[1].valid_from for x in active_green_card_cycles if (x[0].valid_from or x[1].valid_from)]
+        gc_tos = [x[0].valid_to or x[1].valid_to for x in active_green_card_cycles if (x[0].valid_to or x[1].valid_to)]
+        gc_periods_list: List[CourseValidityPeriod] = []
+        gc_period_pairs = []
+        for c_itm, c_adm, _ in active_green_card_cycles:
+            c_from = c_itm.valid_from or c_adm.valid_from
+            c_to = c_itm.valid_to or c_adm.valid_to
+            gc_period_pairs.append((c_from, c_to))
+            gc_periods_list.append(
+                CourseValidityPeriod(
+                    valid_from=c_from,
+                    valid_to=c_to,
+                    validity_period=format_period(c_from, c_to),
+                    days_remaining=compute_days_remaining(c_to, c_from, today),
+                    status="ACTIVE",
+                    admission_number=c_adm.admission_number,
+                )
+            )
+        latest_gc_item, latest_gc_adm, latest_gc_raw = active_green_card_cycles[-1]
+        gc_sub = subjects_map.get(latest_gc_item.subject_id) or (subjects_by_name.get(latest_gc_raw.lower().strip()) if latest_gc_raw else None)
+        gc_teach_name = (gc_sub.teacher_name if gc_sub and gc_sub.teacher_name else latest_gc_item.teacher_name_snapshot)
+        gc_hall_num = (gc_sub.hall_number if gc_sub and gc_sub.hall_number else latest_gc_item.hall_number_snapshot)
+        gc_class_sched = (gc_sub.schedule if gc_sub and gc_sub.schedule else None)
+        gc_earliest = min(gc_froms) if gc_froms else (active_green_card_cycles[0][0].valid_from or active_green_card_cycles[0][1].admission_date)
+        gc_latest = max(gc_tos) if gc_tos else None
+        gc_days_rem = compute_days_remaining_for_periods(gc_period_pairs, today)
+        if len(gc_periods_list) == 1:
+            gc_period_str = gc_periods_list[0].validity_period
+        else:
+            gc_parts = [
+                f"{p.valid_from.strftime('%d %b %Y')} to {p.valid_to.strftime('%d %b %Y')}"
+                if (p.valid_from and p.valid_to)
+                else p.validity_period.replace("Valid: ", "")
+                for p in gc_periods_list
+            ]
+            gc_period_str = "Valid: " + " | ".join(gc_parts)
+        active_green_card = VerificationCourseItem(
+            course_name=latest_gc_raw,
+            subject_name="Green Card Membership",
+            batch_name="All Access Pass",
+            teacher_name=gc_teach_name,
+            hall_number=gc_hall_num,
+            schedule=gc_class_sched,
+            timing=gc_class_sched,
+            valid_from=gc_earliest,
+            valid_to=gc_latest,
+            validity_period=gc_period_str,
+            validity_periods=gc_periods_list,
+            days_remaining=gc_days_rem,
+            status="ACTIVE",
+            admission_number=latest_gc_adm.admission_number
         )
 
     if active_green_card:

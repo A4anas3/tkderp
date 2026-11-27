@@ -23,6 +23,7 @@ import StatCard from '../../components/common/StatCard';
 import Badge from '../../components/common/Badge';
 import Button from '../../components/common/Button';
 import { WhatsAppIcon, buildWhatsAppLink, formatINR, formatSlipDate } from '../../utils/whatsappHelpers';
+import { computeDaysRemainingForPeriods } from '../../utils/dateCycleUtils';
 import { useToast } from '../../context/ToastContext';
 
 export default function RenewalsPage() {
@@ -259,12 +260,20 @@ export default function RenewalsPage() {
 
                     {/* Timeline Badge */}
                     <td className="py-3 px-4 whitespace-nowrap">
-                      {isExpiring ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-900 border border-amber-300">
-                          <Clock className="w-3 h-3 text-amber-600" />
-                          {item.status_label}
-                        </span>
-                      ) : (
+                      {isExpiring ? (() => {
+                        const multiDays = Array.isArray(item.validity_periods) && item.validity_periods.length > 1
+                          ? computeDaysRemainingForPeriods(item.validity_periods)
+                          : null;
+                        const label = multiDays !== null
+                          ? (multiDays === 0 ? 'Expires today' : multiDays === 1 ? 'Expires in 1 day' : `Expires in ${multiDays} days`)
+                          : item.status_label;
+                        return (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-900 border border-amber-300">
+                            <Clock className="w-3 h-3 text-amber-600" />
+                            {label}
+                          </span>
+                        );
+                      })() : (
                         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-50 text-rose-900 border border-rose-300">
                           <AlertTriangle className="w-3 h-3 text-rose-600" />
                           {item.status_label}

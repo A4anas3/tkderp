@@ -1304,7 +1304,12 @@ export default function StudentDetailPage() {
 
         {/* Active Green Card Pass Banner */}
         {activeGreenCard && (() => {
-          const gcDays = computeDaysRemaining(activeGreenCard.valid_to, activeGreenCard.valid_from) ?? activeGreenCard.days_remaining;
+          const gcPeriods = Array.isArray(activeGreenCard.validity_periods) && activeGreenCard.validity_periods.length > 0
+            ? activeGreenCard.validity_periods
+            : [{ valid_from: activeGreenCard.valid_from, valid_to: activeGreenCard.valid_to }];
+          const gcDays = (activeGreenCard.validity_periods?.length ? computeDaysRemainingForPeriods(gcPeriods) : null)
+            ?? computeDaysRemaining(activeGreenCard.valid_to, activeGreenCard.valid_from)
+            ?? activeGreenCard.days_remaining;
           return (
           <div className="bg-gradient-to-r from-purple-50 via-indigo-50 to-purple-50 border border-purple-200 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
             <div className="flex items-start sm:items-center gap-3">

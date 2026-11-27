@@ -142,9 +142,10 @@ export function extractActiveCourses(student, enrollmentData) {
   if (courses.length === 0 && student && Array.isArray(student.active)) {
     const grouped = new Map();
     student.active.filter(isActiveEnrollmentItem).forEach((line) => {
+      const cleanName = (line.subject_name || '').replace(/^\[Renewal\]\s*/i, '').split(' (')[0].trim().toLowerCase();
       const key = line.item_type === 'GREEN_CARD'
-        ? `gc:${line.id}`
-        : (line.subject_id || (line.subject_name || '').trim().toLowerCase() || line.id);
+        ? 'gc:all'
+        : (line.subject_id || cleanName || line.id);
       if (!grouped.has(key)) {
         grouped.set(key, []);
       }

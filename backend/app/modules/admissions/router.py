@@ -37,7 +37,7 @@ from app.common.calculations import (
 from app.common.pagination import PaginationParams, PageResponse
 from app.common.numbering import next_number
 from app.common.idempotency import get_idempotency_record, save_idempotency_record, build_idempotent_response
-from app.common.active_lines import today_kolkata, is_active_line, compute_days_remaining
+from app.common.active_lines import today_kolkata, is_active_line, compute_days_remaining, compute_days_remaining_for_periods
 from app.common.collector import resolve_payment_collector_name
 from app.modules.ledger.service import (
     record_payment_service, process_refund_service, recompute_admission_totals,
@@ -701,9 +701,42 @@ async def get_renewals_due(
         r_res = await db.execute(r_stmt)
         renewed_ids = set(r_res.scalars().all())
 
+    # Preload non-expired active cycles for candidate students so remaining days exclude gaps
+    active_periods_map: dict = {}
+    cand_student_ids = {stu.id for _, _, stu, _ in rows}
+    if cand_student_ids:
+        ap_stmt = (
+            select(
+                Admission.student_id,
+                AdmissionItem.subject_id,
+                func.coalesce(AdmissionItem.valid_from, Admission.valid_from).label("eff_from"),
+                func.coalesce(AdmissionItem.valid_to, Admission.valid_to).label("eff_to"),
+            )
+            .join(Admission, AdmissionItem.admission_id == Admission.id)
+            .where(
+                Admission.student_id.in_(cand_student_ids),
+                AdmissionItem.item_type == "BATCH_SUBJECT",
+                AdmissionItem.status.notin_(["DISCONTINUED", "REVOKED", "CANCELLED"]),
+                AdmissionItem.access_status.notin_(["REVOKED", "CANCELLED", "DISCONTINUED"]),
+                Admission.document_status == "VALID",
+                Admission.status.notin_(["CANCELLED", "REVOKED", "DISCONTINUED"]),
+                Admission.access_status.notin_(["REVOKED", "CANCELLED", "DISCONTINUED"]),
+                func.coalesce(AdmissionItem.valid_to, Admission.valid_to) >= today,
+            )
+            .order_by(func.coalesce(AdmissionItem.valid_from, Admission.valid_from).asc())
+        )
+        for ap_stu_id, ap_subj_id, ap_from, ap_to in (await db.execute(ap_stmt)).all():
+            if ap_subj_id and ap_to:
+                active_periods_map.setdefault((ap_stu_id, ap_subj_id), []).append((ap_from, ap_to))
+
     results = []
     for itm, adm, stu, bch in rows:
-        d_remaining = compute_days_remaining(itm.valid_to, itm.valid_from or adm.valid_from, today) or 0
+        eff_from = itm.valid_from or adm.valid_from
+        if itm.valid_to and itm.valid_to >= today and itm.subject_id:
+            periods = active_periods_map.get((stu.id, itm.subject_id)) or [(eff_from, itm.valid_to)]
+            d_remaining = compute_days_remaining_for_periods(periods, today) or 0
+        else:
+            d_remaining = compute_days_remaining(itm.valid_to, eff_from, today) or 0
         results.append(
             RenewalsDueItemResponse(
                 item_id=itm.id,

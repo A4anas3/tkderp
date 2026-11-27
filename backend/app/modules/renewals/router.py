@@ -12,9 +12,10 @@ from app.database.session import get_db
 from app.core.dependencies import require_cashier_or_admin
 from app.modules.users.models import User
 from app.database.models import Admission, AdmissionItem, Student, Batch, Subject
-from app.common.active_lines import today_kolkata, compute_days_remaining
+from app.common.active_lines import today_kolkata, compute_days_remaining, compute_days_remaining_for_periods
 from app.modules.renewals.schemas import (
     RenewalItemResponse,
+    RenewalValidityPeriod,
     RenewalCounts,
     RenewalsSummaryResponse,
 )
@@ -195,6 +196,46 @@ async def get_renewals_summary(
         (r[0], r[1]): r[2] for r in later_res.all() if r[0] and r[1]
     }
 
+    # 3. Collect all non-expired active validity periods per (student_id, subject_key)
+    # so multi-cycle remaining-days counts exclude gap days between disjoint cycles.
+    def _renewal_subj_key(subj_id_val, raw_name_val):
+        if subj_id_val:
+            return str(subj_id_val)
+        clean_name = (raw_name_val or "").replace("[Renewal] ", "").split(" (")[0].strip().lower()
+        return clean_name
+
+    active_periods_stmt = (
+        select(
+            Admission.student_id,
+            AdmissionItem.subject_id,
+            AdmissionItem.item_name_snapshot,
+            func.coalesce(AdmissionItem.valid_from, Admission.valid_from).label("eff_from"),
+            func.coalesce(AdmissionItem.valid_to, Admission.valid_to).label("eff_to"),
+        )
+        .join(Admission, AdmissionItem.admission_id == Admission.id)
+        .where(
+            Admission.student_id.in_(candidate_student_ids),
+            or_(
+                AdmissionItem.item_type.in_(["BATCH_SUBJECT", "SUBJECT", "COURSE"]),
+                AdmissionItem.subject_id.isnot(None),
+            ),
+            AdmissionItem.status.notin_(["DISCONTINUED", "REVOKED", "CANCELLED"]),
+            AdmissionItem.access_status.notin_(["REVOKED", "CANCELLED", "DISCONTINUED"]),
+            Admission.document_status == "VALID",
+            Admission.status.notin_(["CANCELLED", "REVOKED", "DISCONTINUED"]),
+            Admission.access_status.notin_(["REVOKED", "CANCELLED", "DISCONTINUED"]),
+            func.coalesce(AdmissionItem.valid_to, Admission.valid_to) >= today,
+        )
+        .order_by(func.coalesce(AdmissionItem.valid_from, Admission.valid_from).asc())
+    )
+    ap_res = await db.execute(active_periods_stmt)
+    active_periods_map: dict = {}
+    for ap_stu_id, ap_subj_id, ap_name, ap_from, ap_to in ap_res.all():
+        if not ap_to:
+            continue
+        k = (ap_stu_id, _renewal_subj_key(ap_subj_id, ap_name))
+        active_periods_map.setdefault(k, []).append((ap_from, ap_to))
+
     expiring_items: List[RenewalItemResponse] = []
     recently_expired_items: List[RenewalItemResponse] = []
 
@@ -215,6 +256,7 @@ async def get_renewals_summary(
             continue
 
         days_diff = (item_valid_to - today).days
+        subj_key = _renewal_subj_key(itm.subject_id, itm.item_name_snapshot)
 
         # Partition into Expiring vs Recently Expired
         if item_valid_to >= today:
@@ -222,7 +264,14 @@ async def get_renewals_summary(
             if days_diff < 0 or days_diff > window_days:
                 continue
             category = "EXPIRING"
-            days_remaining = compute_days_remaining(item_valid_to, item_valid_from, today)
+            period_pairs = list(active_periods_map.get((stu.id, subj_key), []))
+            if (item_valid_from, item_valid_to) not in period_pairs:
+                period_pairs.append((item_valid_from, item_valid_to))
+            days_remaining = compute_days_remaining_for_periods(period_pairs, today)
+            item_periods = [
+                RenewalValidityPeriod(valid_from=pf, valid_to=pt)
+                for pf, pt in period_pairs
+            ]
             days_ago = None
             if days_remaining == 0:
                 status_label = "Expires today"
@@ -237,6 +286,9 @@ async def get_renewals_summary(
                 continue
             category = "EXPIRED"
             days_remaining = None
+            item_periods = [
+                RenewalValidityPeriod(valid_from=item_valid_from, valid_to=item_valid_to)
+            ]
             if days_ago == 1:
                 status_label = "Expired 1 day ago"
             else:
@@ -270,6 +322,7 @@ async def get_renewals_summary(
             hall_number=itm.hall_number_snapshot,
             valid_from=itm.valid_from or adm.valid_from,
             valid_to=item_valid_to,
+            validity_periods=item_periods,
             days_diff=days_diff,
             days_remaining=days_remaining,
             days_ago=days_ago,

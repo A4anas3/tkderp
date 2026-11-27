@@ -4,6 +4,11 @@ from decimal import Decimal
 from typing import Optional, List, Dict
 from pydantic import BaseModel
 
+class RenewalValidityPeriod(BaseModel):
+    valid_from: Optional[date] = None
+    valid_to: Optional[date] = None
+
+
 class RenewalItemResponse(BaseModel):
     item_id: uuid.UUID
     admission_id: uuid.UUID
@@ -22,6 +27,7 @@ class RenewalItemResponse(BaseModel):
     hall_number: Optional[str] = None
     valid_from: Optional[date] = None
     valid_to: date
+    validity_periods: List[RenewalValidityPeriod] = []
     days_diff: int
     days_remaining: Optional[int] = None
     days_ago: Optional[int] = None

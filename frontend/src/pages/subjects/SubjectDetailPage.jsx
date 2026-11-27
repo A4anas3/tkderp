@@ -33,7 +33,7 @@ import PaymentReceiptModal from '../../components/receipts/PaymentReceiptModal';
 import { subjectApi, reportApi, remindersApi, enquiryApi } from '../../services/allApis';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
-import { formatIndianDate, formatCycleLabel } from '../../utils/dateCycleUtils';
+import { formatIndianDate, formatCycleLabel, computeDaysRemainingForPeriods } from '../../utils/dateCycleUtils';
 import { WhatsAppIcon } from '../../utils/whatsappHelpers';
 
 const PAGE_SIZE = 10;
@@ -247,17 +247,30 @@ export default function SubjectDetailPage() {
 
   // Derived Counts and Metrics
   const isCancelledStudent = (s) => s.cycle_status === 'CANCELLED' || s.admission_status === 'CANCELLED' || s.admission_status === 'REVOKED';
+  const getEffectiveDaysRemaining = (s) => {
+    if (Array.isArray(s.validity_periods) && s.validity_periods.length > 1) {
+      const computed = computeDaysRemainingForPeriods(s.validity_periods);
+      if (computed !== null) return computed;
+    }
+    return s.days_remaining;
+  };
   const totalEnrollments = rosterMetrics?.total_enrollments ?? subject?.total_enrollments ?? subject?.enrolled_count ?? rosterTotal;
   const activeCount = useMemo(() => {
     if (rosterMetrics?.active_enrollments != null) return rosterMetrics.active_enrollments;
     if (subject?.active_enrollments != null) return subject.active_enrollments;
-    return students.filter((s) => !isCancelledStudent(s) && (s.cycle_status === 'ACTIVE' || (s.days_remaining != null && s.days_remaining >= 0))).length;
+    return students.filter((s) => {
+      const effDays = getEffectiveDaysRemaining(s);
+      return !isCancelledStudent(s) && (s.cycle_status === 'ACTIVE' || (effDays != null && effDays >= 0));
+    }).length;
   }, [rosterMetrics, subject, students]);
 
   const inactiveCount = useMemo(() => {
     if (rosterMetrics?.inactive_enrollments != null) return rosterMetrics.inactive_enrollments;
     if (subject?.inactive_enrollments != null) return subject.inactive_enrollments;
-    return students.filter((s) => !isCancelledStudent(s) && (s.cycle_status === 'INACTIVE' || s.cycle_status === 'OVERDUE' || (s.days_remaining != null && s.days_remaining < 0))).length;
+    return students.filter((s) => {
+      const effDays = getEffectiveDaysRemaining(s);
+      return !isCancelledStudent(s) && (s.cycle_status === 'INACTIVE' || s.cycle_status === 'OVERDUE' || (effDays != null && effDays < 0));
+    }).length;
   }, [rosterMetrics, subject, students]);
 
   const uniqueStudentsCount = useMemo(() => {
@@ -744,15 +757,27 @@ export default function SubjectDetailPage() {
 
                       {/* Cycle Status */}
                       <td className="p-3 text-center">
-                        <Badge
-                          variant={isCancelledStudent(s) ? 'danger' : (s.badge_variant || (s.days_remaining != null && s.days_remaining < 0 ? 'danger' : 'success'))}
-                          size="xs"
-                        >
-                          {isCancelledStudent(s) ? 'Cancelled' : (s.status_label || (s.days_remaining != null && s.days_remaining < 0 ? 'Inactive (Expired)' : 'Active'))}
-                        </Badge>
-                        <div className="text-[10px] text-slate-500 mt-0.5 font-medium">
-                          {isCancelledStudent(s) ? 'Cancelled' : s.status_subtext}
-                        </div>
+                        {(() => {
+                          const effDays = getEffectiveDaysRemaining(s);
+                          const isMulti = Array.isArray(s.validity_periods) && s.validity_periods.length > 1 && effDays !== null && effDays !== undefined;
+                          return (
+                            <>
+                              <Badge
+                                variant={isCancelledStudent(s) ? 'danger' : (s.badge_variant || (effDays != null && effDays < 0 ? 'danger' : 'success'))}
+                                size="xs"
+                              >
+                                {isCancelledStudent(s) ? 'Cancelled' : (s.status_label || (effDays != null && effDays < 0 ? 'Inactive (Expired)' : 'Active'))}
+                              </Badge>
+                              <div className="text-[10px] text-slate-500 mt-0.5 font-medium">
+                                {isCancelledStudent(s)
+                                  ? 'Cancelled'
+                                  : isMulti
+                                  ? `${effDays}d remaining across ${s.validity_periods.length} cycles`
+                                  : s.status_subtext}
+                              </div>
+                            </>
+                          );
+                        })()}
                       </td>
 
                       {/* Fee Billed */}

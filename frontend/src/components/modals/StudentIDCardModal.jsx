@@ -17,7 +17,7 @@ import {
   formatValidityPeriod,
   formatDemoDates,
 } from '../../utils/idCardHelpers';
-import { computeGapDays } from '../../utils/dateCycleUtils';
+import { computeDaysRemaining, computeDaysRemainingForPeriods, computeGapDays } from '../../utils/dateCycleUtils';
 
 // Official WhatsApp icon
 function WhatsAppIcon({ className = 'w-4 h-4' }) {
@@ -308,6 +308,10 @@ export default function StudentIDCardModal({
                             Array.isArray(course.validity_periods) && course.validity_periods.length > 0
                               ? course.validity_periods
                               : [{ valid_from: course.valid_from, valid_to: course.valid_to }];
+                          const daysRem =
+                            computeDaysRemainingForPeriods(periods) ??
+                            computeDaysRemaining(course.valid_to, course.valid_from) ??
+                            course.days_remaining;
                           return (
                             <div className="flex flex-wrap items-start justify-between gap-1 text-[11px]">
                               <div className="flex flex-col gap-1">
@@ -330,15 +334,15 @@ export default function StudentIDCardModal({
                                 })}
                               </div>
 
-                              {course.days_remaining !== null && course.days_remaining !== undefined && (
+                              {daysRem !== null && daysRem !== undefined && (
                                 <span
                                   className={`text-[10px] font-bold px-1.5 py-0.2 rounded self-center ${
-                                    course.days_remaining <= 5
+                                    daysRem <= 5
                                       ? 'bg-rose-100 text-rose-900 border border-rose-300'
-                                      : 'bg-slate-200 text-slate-900'
+                                      : 'bg-emerald-100 text-emerald-900 border border-emerald-200'
                                   }`}
                                 >
-                                  {course.days_remaining}d remaining
+                                  {daysRem}d remaining
                                 </span>
                               )}
                             </div>

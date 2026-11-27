@@ -15,6 +15,7 @@ from app.database.models import Subject, User, Teacher, Batch
 from app.modules.admissions.models import Admission, AdmissionItem
 from app.modules.students.models import Student
 from app.common.active_student import today_kolkata, active_student_subject_filter
+from app.common.active_lines import compute_days_remaining_for_periods
 from app.common.teacher_scope import (
     is_teacher_user,
     resolve_teacher_for_user,
@@ -309,6 +310,37 @@ async def get_subject_roster(
     item_ids = [itm.id for itm, adm, stu, bch in rows]
     collected_map = {} if teacher_mode else await get_item_allocated_collected_map(db, item_ids)
 
+    # Preload all active validity periods per student for this subject so multi-cycle
+    # remaining days exclude any gap days between disjoint cycles.
+    stu_ids = list({stu.id for _, _, stu, _ in rows})
+    active_periods_by_student: Dict[uuid.UUID, list] = {}
+    if stu_ids:
+        subj_cond = (
+            AdmissionItem.item_type == "GREEN_CARD"
+            if is_green_card
+            else AdmissionItem.subject_id == s_uuid
+        )
+        active_periods_stmt = (
+            select(AdmissionItem, Admission)
+            .join(Admission, AdmissionItem.admission_id == Admission.id)
+            .where(
+                Admission.student_id.in_(stu_ids),
+                subj_cond,
+                Admission.status == "ACTIVE",
+                func.coalesce(Admission.access_status, "ACTIVE") == "ACTIVE",
+                func.coalesce(Admission.document_status, "VALID") == "VALID",
+                AdmissionItem.status == "ACTIVE",
+                func.coalesce(AdmissionItem.access_status, "ACTIVE") == "ACTIVE",
+                end_col >= today,
+            )
+            .order_by(start_col.asc(), AdmissionItem.created_at.asc())
+        )
+        ap_rows = (await db.execute(active_periods_stmt)).all()
+        for ap_itm, ap_adm in ap_rows:
+            p_from = ap_itm.valid_from or ap_adm.valid_from or ap_adm.admission_date
+            p_to = ap_itm.valid_to or ap_adm.valid_to or (p_from + timedelta(days=30))
+            active_periods_by_student.setdefault(ap_adm.student_id, []).append((p_from, p_to))
+
     items = []
     for itm, adm, stu, bch in rows:
         itm_coll = collected_map.get(itm.id, Decimal("0.00"))
@@ -327,6 +359,28 @@ async def get_subject_roster(
             amount_collected=Decimal("0.00") if teacher_mode else itm_coll,
             is_cancelled=is_line_cancelled,
         )
+        row_end = itm.valid_to or adm.valid_to or ((itm.valid_from or adm.valid_from or adm.admission_date) + timedelta(days=30))
+        stu_periods = active_periods_by_student.get(stu.id, [])
+        if not is_line_cancelled and row_end >= today and len(stu_periods) > 1:
+            multi_days = compute_days_remaining_for_periods(stu_periods, today)
+            c_info["validity_periods"] = [
+                {
+                    "valid_from": pf.isoformat() if pf else None,
+                    "valid_to": pt.isoformat() if pt else None,
+                }
+                for pf, pt in stu_periods
+            ]
+            if multi_days is not None:
+                c_info["days_remaining"] = multi_days
+                if multi_days <= 5:
+                    c_info["cycle_status"] = "DUE_SOON"
+                    c_info["status_label"] = "Expiring Soon"
+                    c_info["badge_variant"] = "warning"
+                else:
+                    c_info["cycle_status"] = "ACTIVE"
+                    c_info["status_label"] = "Active"
+                    c_info["badge_variant"] = "success"
+                c_info["status_subtext"] = f"{multi_days}d remaining across {len(stu_periods)} cycles"
         if teacher_mode:
             c_info["payment_status"] = "HIDDEN"
             items.append({
