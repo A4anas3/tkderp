@@ -15,6 +15,8 @@ import { useAuth } from '../../context/AuthContext';
 import { cleanMobileInput } from '../../utils/phoneUtils';
 import { compressImage } from '../../utils/imageCompressor';
 
+const PAGE_SIZE = 50;
+
 export default function TeachersPage() {
   const navigate = useNavigate();
   const { success, error } = useToast();
@@ -22,6 +24,7 @@ export default function TeachersPage() {
   const [teachers, setTeachers] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(true);
@@ -75,13 +78,14 @@ export default function TeachersPage() {
     try {
       const res = await teacherApi.list({
         page,
-        page_size: 15,
+        page_size: PAGE_SIZE,
         search: search.trim() || undefined,
         status: statusFilter || undefined,
         status_filter: statusFilter || undefined,
       });
       setTeachers(res.items || []);
       setTotal(res.total || 0);
+      setPageSize(res.page_size || PAGE_SIZE);
     } catch (err) {
       error(err.message || 'Failed to fetch teachers');
     } finally {
@@ -529,6 +533,15 @@ export default function TeachersPage() {
     },
   ];
 
+  const totalPages = Math.max(1, Math.ceil(total / (pageSize || PAGE_SIZE)));
+
+  const handleViewModeChange = (mode) => {
+    if (mode !== viewMode) {
+      setViewMode(mode);
+      setPage(1);
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Odoo Control Panel Header */}
@@ -544,7 +557,7 @@ export default function TeachersPage() {
           {/* View Mode Toggle - Odoo style */}
           <div className="inline-flex rounded-md border border-slate-300 bg-slate-100 p-0.5 shadow-2xs">
             <button
-              onClick={() => setViewMode('table')}
+              onClick={() => handleViewModeChange('table')}
               className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded transition ${
                 viewMode === 'table'
                   ? 'bg-white text-odoo-700 shadow-2xs'
@@ -555,7 +568,7 @@ export default function TeachersPage() {
               <span>List</span>
             </button>
             <button
-              onClick={() => setViewMode('kanban')}
+              onClick={() => handleViewModeChange('kanban')}
               className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded transition ${
                 viewMode === 'kanban'
                   ? 'bg-white text-odoo-700 shadow-2xs'
@@ -595,7 +608,8 @@ export default function TeachersPage() {
           data={teachers}
           total={total}
           page={page}
-          pageSize={15}
+          pageSize={pageSize}
+          alwaysShowPagination
           onPageChange={(p) => setPage(p)}
           searchValue={search}
           onSearchChange={(val) => {
@@ -757,31 +771,29 @@ export default function TeachersPage() {
             </div>
           )}
 
-          {Math.ceil(total / 15) > 1 && (
-            <div className="bg-white border border-slate-200 rounded-lg p-2.5 shadow-2xs flex items-center justify-between text-xs">
-              <span className="text-slate-600">
-                Page <span className="font-semibold text-black">{page}</span> of <span className="font-semibold text-black">{Math.ceil(total / 15)}</span>
-              </span>
-              <div className="flex items-center gap-1.5">
-                <Button
-                  size="xs"
-                  variant="secondary"
-                  disabled={page <= 1}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                >
-                  Previous
-                </Button>
-                <Button
-                  size="xs"
-                  variant="secondary"
-                  disabled={page >= Math.ceil(total / 15)}
-                  onClick={() => setPage((p) => Math.min(Math.ceil(total / 15), p + 1))}
-                >
-                  Next
-                </Button>
-              </div>
+          <div className="bg-white border border-slate-200 rounded-lg p-2.5 shadow-2xs flex items-center justify-between text-xs">
+            <span className="text-slate-600">
+              Page <span className="font-semibold text-black">{page}</span> of <span className="font-semibold text-black">{totalPages}</span>
+            </span>
+            <div className="flex items-center gap-1.5">
+              <Button
+                size="xs"
+                variant="secondary"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                Previous
+              </Button>
+              <Button
+                size="xs"
+                variant="secondary"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                Next
+              </Button>
             </div>
-          )}
+          </div>
         </div>
       )}
 
