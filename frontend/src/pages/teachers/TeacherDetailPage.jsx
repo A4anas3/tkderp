@@ -813,7 +813,7 @@ export default function TeacherDetailPage() {
                       <th className="p-2.5">Demo Ref #</th>
                       <th className="p-2.5">Student</th>
                       <th className="p-2.5">Demo Subject → Enrolled Subject</th>
-                      <th className="p-2.5">Admission</th>
+                      <th className="p-2.5">Batch Purchase</th>
                       <th className="p-2.5">Demo Date</th>
                     </tr>
                   </thead>
@@ -892,7 +892,7 @@ export default function TeacherDetailPage() {
           }`}
         >
           <History className="w-4 h-4" />
-          <span>Subject History & Lifecycle Events ({historyMetrics.total_events})</span>
+          <span>Batch Purchase ({historyMetrics.total_events})</span>
         </button>
 
         <button
@@ -995,7 +995,7 @@ export default function TeacherDetailPage() {
                       : 'bg-white text-blue-800 border border-blue-200 hover:bg-blue-50'
                   }`}
                 >
-                  Admissions ({historyMetrics.admissions_count})
+                  Batch Purchases ({historyMetrics.admissions_count})
                 </button>
                 <button
                   type="button"
@@ -1108,7 +1108,7 @@ export default function TeacherDetailPage() {
                                 : 'bg-rose-100 text-rose-900 border border-rose-300'
                             }`}
                           >
-                            ● {ev.event_type}
+                            ● {ev.event_type === 'ADMISSION' ? 'BATCH PURCHASE' : ev.event_type}
                           </span>
                           <span className="block font-mono text-[11px] text-slate-500 mt-1">
                             {formatIndianDate(ev.event_date)}
@@ -1191,7 +1191,9 @@ export default function TeacherDetailPage() {
                             </Badge>
                           </div>
                           <p className="text-[11px] text-slate-600 line-clamp-2">
-                            {ev.reason_or_notes || ev.event_title}
+                            {ev.event_type === 'ADMISSION'
+                              ? (ev.reason_or_notes || ev.event_title || '').replace(/^Admitted to\s+/, 'Purchased ')
+                              : ev.reason_or_notes || ev.event_title}
                           </p>
                         </td>
                       </tr>
