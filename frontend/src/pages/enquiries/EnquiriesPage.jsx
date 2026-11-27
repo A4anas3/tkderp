@@ -59,8 +59,8 @@ export default function EnquiriesPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { success, error } = useToast();
-  const { isAdmin } = useAuth();
-  const canEdit = isAdmin;
+  const { isAdmin, isCashier } = useAuth();
+  const canEdit = isAdmin || isCashier;
 
   // Active Main View Tab: 'enquiries' | 'demos' | 'analytics'
   const requestedTab = searchParams.get('tab') || 'enquiries';

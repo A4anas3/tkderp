@@ -1009,7 +1009,7 @@ async def check_student_by_mobile_for_demo(
 async def register_student_before_demo(
     payload: RegisterStudentStandaloneRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     """
     Register-first endpoint used before creating a demo when the student is not yet registered.
@@ -1313,7 +1313,7 @@ async def create_enquiry_with_demos(
 async def create_enquiry(
     payload: EnquiryCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     """
     Creates master enquiry ticket and automatically creates individual child
@@ -1499,7 +1499,7 @@ async def update_demo_item_status(
     demo_item_id: uuid.UUID,
     payload: EnquiryDemoItemStatusUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     """Update status of individual subject demo item (e.g. ATTENDED, DROPPED with reason)."""
     d_res = await db.execute(select(EnquiryDemoItem).where(EnquiryDemoItem.id == demo_item_id))
@@ -1539,7 +1539,7 @@ async def update_enquiry(
     enquiry_id: uuid.UUID,
     payload: EnquiryUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     res = await db.execute(select(Enquiry).where(Enquiry.id == enquiry_id))
     enquiry = res.scalar_one_or_none()
@@ -1581,7 +1581,7 @@ async def register_student_from_enquiry(
     enquiry_id: uuid.UUID,
     payload: Optional[RegisterStudentFromEnquiryRequest] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     """
     Registers a student from enquiry at demo time, before any course purchase,
@@ -1734,7 +1734,7 @@ async def convert_enquiry_to_student(
     enquiry_id: uuid.UUID,
     payload: Optional[ConvertEnquiryRequest] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(require_cashier_or_admin)
 ):
     """
     Converts enquiry to student profile and updates child demo items to CONVERTED.
