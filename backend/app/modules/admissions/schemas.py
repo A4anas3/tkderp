@@ -112,6 +112,7 @@ class InitialPaymentData(BaseModel):
 class AdmissionCreate(BaseModel):
     student_id: uuid.UUID
     enquiry_id: Optional[uuid.UUID] = None
+    demo_item_ids: Optional[List[uuid.UUID]] = None
     admission_date: date = Field(default_factory=date.today)
     items: List[AdmissionItemCreate] = Field(..., min_length=1)
     overall_discount_type: str = Field(default="NONE", pattern="^(NONE|FIXED|PERCENTAGE)$")

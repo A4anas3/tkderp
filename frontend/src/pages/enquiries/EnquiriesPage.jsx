@@ -94,6 +94,7 @@ export default function EnquiriesPage() {
     INTERESTED: 0,
     PENDING: 0,
     CONVERTED: 0,
+    converted_demo_items: 0,
     EXPIRED: 0,
     NOT_INTERESTED: 0,
   });
@@ -713,6 +714,20 @@ export default function EnquiriesPage() {
   };
 
   const today = new Date().toISOString().split('T')[0];
+
+  // Urgent deadline cards: only active (SCHEDULED/ATTENDED) unconverted demos; omit cards with 0 active demos
+  const activeDeadlines = useMemo(() => {
+    return (deadlines || [])
+      .map((d) => {
+        const activeItems = (d.demo_items || []).filter(
+          (item) =>
+            ['SCHEDULED', 'ATTENDED'].includes((item.status || '').toUpperCase()) &&
+            !item.converted_admission_item_id
+        );
+        return { ...d, demo_items: activeItems };
+      })
+      .filter((d) => d.demo_items.length > 0);
+  }, [deadlines]);
 
   // ==========================================
   // TAB 1: ALL ENQUIRIES COLUMNS
@@ -1650,6 +1665,11 @@ export default function EnquiriesPage() {
               <div className={`text-lg font-black mt-0.5 ${enquiryStatusFilter === 'CONVERTED' ? 'text-white' : 'text-emerald-950'}`}>
                 {summary.CONVERTED}
               </div>
+              {summary.converted_demo_items > 0 && (
+                <div className={`text-[10px] font-medium mt-0.5 ${enquiryStatusFilter === 'CONVERTED' ? 'text-emerald-100' : 'text-emerald-700'}`}>
+                  {summary.converted_demo_items} demo item{summary.converted_demo_items === 1 ? '' : 's'} converted
+                </div>
+              )}
             </div>
 
             <div
@@ -1676,7 +1696,7 @@ export default function EnquiriesPage() {
           </div>
 
           {/* Urgent Demo Deadlines Section */}
-          {deadlines.length > 0 && (
+          {activeDeadlines.length > 0 && (
             <div className="bg-amber-50/70 border border-amber-300 rounded-lg p-3 sm:p-4 shadow-2xs">
               <div className="flex items-center justify-between border-b border-amber-200/80 pb-2 mb-3">
                 <div className="flex items-center gap-2">
@@ -1686,15 +1706,19 @@ export default function EnquiriesPage() {
                   </h2>
                 </div>
                 <span className="text-[11px] text-amber-900 font-bold bg-amber-100 px-2 py-0.5 rounded border border-amber-300">
-                  {deadlines.length} Requiring Decision
+                  {activeDeadlines.length} Requiring Decision
                 </span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                {deadlines.map((d) => {
+                {activeDeadlines.map((d) => {
                   const isOverdue = d.demo_deadline < today;
                   const isToday = d.demo_deadline === today;
                   const isInterested = d.status === 'INTERESTED';
+                  const activeSubjects = d.demo_items
+                    .map((item) => item.subject_name_snapshot)
+                    .filter(Boolean)
+                    .join(', ');
                   return (
                     <div
                       key={d.id}
@@ -1732,12 +1756,9 @@ export default function EnquiriesPage() {
                               : 'Active'}
                           </Badge>
                         </div>
-                        {((d.demo_items && d.demo_items.length > 0) || d.demo_reference_number) && (
+                        {d.demo_items.length > 0 && (
                           <div className="flex flex-wrap items-center gap-1 mt-1">
-                            {(d.demo_items && d.demo_items.length > 0
-                              ? d.demo_items
-                              : [{ id: d.id, demo_reference_number: d.demo_reference_number }]
-                            ).map((item, idx) => (
+                            {d.demo_items.map((item, idx) => (
                               <span
                                 key={item.id || item.demo_reference_number || idx}
                                 className="font-mono font-bold text-[10px] px-1.5 py-0.5 rounded bg-purple-50 border border-purple-200 text-odoo-900 inline-block"
@@ -1750,7 +1771,7 @@ export default function EnquiriesPage() {
                         )}
                         <div className="flex items-center justify-between mt-1">
                           <p className="text-[11px] text-slate-600">
-                            Subject: <strong className="text-black">{d.interested_subject || 'General'}</strong>
+                            Subject: <strong className="text-black">{activeSubjects || d.interested_subject || 'General'}</strong>
                           </p>
                           {canEdit && (
                             <button
@@ -1813,7 +1834,7 @@ export default function EnquiriesPage() {
                               size="xs"
                               variant="primary"
                               className={DEMO_CARD_ACTION_BTN_CLASS}
-                              onClick={() => handleConvertToAdmission(d)}
+                              onClick={() => handleConvertToAdmission(d, null, activeSubjects || d.interested_subject)}
                               title="Convert to full student enrollment"
                             >
                               Enroll ↗

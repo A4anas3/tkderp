@@ -21,6 +21,7 @@ import {
   Tag,
   DollarSign,
   ShieldCheck,
+  X,
 } from 'lucide-react';
 import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
@@ -39,7 +40,7 @@ import {
 import { useToast } from '../../context/ToastContext';
 import QuickStudentModal from '../../components/modals/QuickStudentModal';
 import AdmissionReceiptModal from '../../components/receipts/AdmissionReceiptModal';
-import { computeRollingCycle, formatValidityDuration, computeDaysRemaining, computeDaysRemainingForPeriods } from '../../utils/dateCycleUtils';
+import { computeRollingCycle, formatValidityDuration, computeDaysRemaining, computeDaysRemainingForPeriods, formatIndianDate } from '../../utils/dateCycleUtils';
 import { cleanMobileInput } from '../../utils/phoneUtils';
 
 export default function NewAdmissionPage() {
@@ -84,9 +85,12 @@ export default function NewAdmissionPage() {
   const [billingMonths, setBillingMonths] = useState(1);
   const [lastFeePeriodInfo, setLastFeePeriodInfo] = useState(null);
 
-  // Step 2: Selected Items
+  // Step 2: Selected Items & Active Student Demos
   const [items, setItems] = useState([]);
   const [enquiryDetails, setEnquiryDetails] = useState(null);
+  const [studentDemos, setStudentDemos] = useState([]);
+  const [loadingDemos, setLoadingDemos] = useState(false);
+  const [selectedDemoIds, setSelectedDemoIds] = useState([]);
 
   // Step 3: Discounts & GST
   const [overallDiscountType, setOverallDiscountType] = useState('NONE');
@@ -342,6 +346,11 @@ export default function NewAdmissionPage() {
     loadReferences();
   }, [loadReferences]);
 
+  // Reset linked demo selection when student changes
+  useEffect(() => {
+    setSelectedDemoIds([]);
+  }, [studentId]);
+
   // Fetch student history & active enrollment
   useEffect(() => {
     if (!studentId) {
@@ -349,20 +358,30 @@ export default function NewAdmissionPage() {
       setLastFeePeriodInfo(null);
       setActiveEnrollment(null);
       setSelectedStudentObj(null);
+      setStudentDemos([]);
+      setLoadingDemos(false);
       return;
     }
 
     studentApi.get(studentId).then(setSelectedStudentObj).catch(console.warn);
 
     const fetchStudentHistory = async () => {
+      setLoadingDemos(true);
       try {
-        const [admRes, periodRes, activeRes] = await Promise.all([
+        const [admRes, periodRes, activeRes, demosRes] = await Promise.all([
           admissionApi.list({ student_id: studentId, page_size: 20 }),
           studentApi.getLastFeePeriod(studentId),
           studentApi.getActiveEnrollment(studentId).catch(() => null),
+          studentApi.getDemos(studentId).catch(() => []),
         ]);
         setExistingAdmissions(admRes.items || []);
         setActiveEnrollment(activeRes || null);
+        const activeDemos = (demosRes || []).filter(
+          (d) =>
+            ['SCHEDULED', 'ATTENDED'].includes((d.status || '').toUpperCase()) &&
+            !d.converted_admission_item_id
+        );
+        setStudentDemos(activeDemos);
 
         if (periodRes && periodRes.has_previous) {
           setLastFeePeriodInfo(periodRes);
@@ -375,6 +394,8 @@ export default function NewAdmissionPage() {
         }
       } catch (e) {
         console.error('Failed to load student history:', e);
+      } finally {
+        setLoadingDemos(false);
       }
     };
     fetchStudentHistory();
@@ -882,6 +903,7 @@ export default function NewAdmissionPage() {
       const payload = {
         student_id: studentId,
         enquiry_id: paramEnquiryId || null,
+        demo_item_ids: selectedDemoIds,
         admission_date: admissionDate,
         valid_from: finalOverallFrom,
         valid_to: finalOverallTo,
@@ -898,7 +920,7 @@ export default function NewAdmissionPage() {
       const res = await admissionApi.create(payload);
       success(`Admission confirmed: ${res.purchase_transaction_id || res.admission_number}`);
 
-      if (paramEnquiryId) {
+      if (paramEnquiryId && selectedDemoIds.length === 0) {
         try {
           await enquiryApi.convert(paramEnquiryId, { admission_id: res.id });
         } catch {
@@ -1268,6 +1290,99 @@ export default function NewAdmissionPage() {
                 </Button>
               </div>
             </div>
+
+            {/* Link Active Demo (Optional) — shown at top of Step 2 once a student is selected */}
+            {studentId && (
+              <div className="p-3 bg-purple-50/70 border border-purple-200 rounded-lg space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <label
+                    htmlFor="link-active-demo-select"
+                    className="text-xs font-bold text-odoo-900 flex items-center gap-1.5"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-odoo-600" />
+                    <span>Link Active Demo (Optional)</span>
+                  </label>
+                  {selectedDemoIds.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDemoIds([])}
+                      className="text-[11px] font-semibold text-odoo-700 hover:text-odoo-900 underline cursor-pointer"
+                    >
+                      Clear selection ({selectedDemoIds.length})
+                    </button>
+                  )}
+                </div>
+
+                {loadingDemos ? (
+                  <p className="text-[11px] text-slate-600">Loading active demos for this student...</p>
+                ) : studentDemos.length === 0 ? (
+                  <div className="px-2.5 py-2 rounded border border-dashed border-purple-200 bg-white text-[11px] text-slate-500">
+                    No active demo for this student
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <select
+                      id="link-active-demo-select"
+                      value={selectedDemoIds.length === 1 ? selectedDemoIds[0] : ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (!val) {
+                          setSelectedDemoIds([]);
+                        } else {
+                          setSelectedDemoIds((prev) => (prev.includes(val) ? prev : [...prev, val]));
+                        }
+                      }}
+                      className="w-full rounded border border-purple-300 bg-white px-2.5 py-1.5 text-xs text-black font-semibold focus:outline-none focus:border-odoo-600 min-h-[36px]"
+                    >
+                      <option value="">
+                        {selectedDemoIds.length === 0
+                          ? '-- No demo linked (optional) --'
+                          : selectedDemoIds.length === 1
+                          ? '-- Clear linked demo --'
+                          : `-- ${selectedDemoIds.length} active demos linked (select another to add, or clear) --`}
+                      </option>
+                      {studentDemos.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.subject_name || 'General Demo'} • {d.demo_reference_number} ({formatIndianDate(d.demo_start_date)} → {formatIndianDate(d.demo_end_date)})
+                        </option>
+                      ))}
+                    </select>
+
+                    {selectedDemoIds.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {selectedDemoIds.map((did) => {
+                          const d = studentDemos.find((x) => x.id === did);
+                          if (!d) return null;
+                          return (
+                            <span
+                              key={did}
+                              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white border border-purple-300 text-[11px] font-semibold text-odoo-900"
+                            >
+                              <span className="font-mono font-bold">{d.demo_reference_number}</span>
+                              <span>• {d.subject_name || 'General Demo'}</span>
+                              <span className="text-slate-500 text-[10px]">
+                                ({formatIndianDate(d.demo_start_date)} → {formatIndianDate(d.demo_end_date)})
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedDemoIds((prev) => prev.filter((id) => id !== did))}
+                                className="text-slate-400 hover:text-rose-600 cursor-pointer"
+                                title="Remove demo link"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <p className="text-[10px] text-slate-600">
+                      Select one or more active demos to mark them CONVERTED and link to this enrollment. Leave empty to enroll without linking a demo.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Items List */}
             {items.length === 0 ? (

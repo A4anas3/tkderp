@@ -419,7 +419,16 @@ async def create_admission(
 
     await db.flush()
 
-    # Link enquiry demo items if enquiry_id provided or matching enquiry exists for student
+    # Link enquiry demo items:
+    # 1) Explicit demo_item_ids selected in New Enrollment Step 2 dropdown
+    # 2) Explicit enquiry_id (from Enquiry -> Enroll flow) when demo_item_ids not specified
+    # 3) When neither is provided (or demo_item_ids is empty with no enquiry_id), leave demos unlinked
+    def _last_10_digits(val: Optional[str]) -> Optional[str]:
+        if not val:
+            return None
+        digits = "".join(ch for ch in str(val) if ch.isdigit())
+        return digits[-10:] if len(digits) >= 10 else None
+
     def _demo_matches_item(d: EnquiryDemoItem, ai: AdmissionItem, strict_subject_id: bool) -> bool:
         if d.converted_admission_item_id is not None or d.status == "CONVERTED":
             return False
@@ -431,8 +440,86 @@ async def create_admission(
         ai_name = (ai.item_name_snapshot or "").strip().lower()
         return bool(d_name and ai_name and (d_name in ai_name or ai_name in d_name))
 
-    candidate_enquiries: List[Enquiry] = []
-    if payload.enquiry_id:
+    touched_enquiries = set()
+    used_ai_ids = set()
+
+    if payload.demo_item_ids and len(payload.demo_item_ids) > 0:
+        demo_res = await db.execute(
+            select(EnquiryDemoItem)
+            .options(selectinload(EnquiryDemoItem.enquiry).selectinload(Enquiry.demo_items))
+            .where(EnquiryDemoItem.id.in_(payload.demo_item_ids))
+        )
+        selected_demos_by_id = {d.id: d for d in demo_res.scalars().all()}
+        student_mob10 = _last_10_digits(student.mobile)
+
+        for did in payload.demo_item_ids:
+            d = selected_demos_by_id.get(did)
+            if not d:
+                raise HTTPException(status_code=404, detail="Selected demo item not found")
+            enq = d.enquiry
+            belongs_to_student = bool(
+                enq and (
+                    enq.converted_student_id == student.id
+                    or (payload.enquiry_id and enq.id == payload.enquiry_id)
+                    or (
+                        enq.converted_student_id is None
+                        and student_mob10
+                        and _last_10_digits(enq.mobile) == student_mob10
+                    )
+                )
+            )
+            if not belongs_to_student:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Selected demo does not belong to the chosen student",
+                )
+            if d.converted_admission_item_id is not None or d.status not in ("SCHEDULED", "ATTENDED"):
+                continue
+
+            # Pick best matching AdmissionItem in this admission:
+            # exact subject_id (preferring unlinked item) -> name overlap -> first unlinked item -> first item
+            matched_ai = None
+            for ai in db_items:
+                if ai.id not in used_ai_ids and ai.subject_id and d.subject_id and ai.subject_id == d.subject_id:
+                    matched_ai = ai
+                    break
+            if not matched_ai:
+                for ai in db_items:
+                    if ai.subject_id and d.subject_id and ai.subject_id == d.subject_id:
+                        matched_ai = ai
+                        break
+            if not matched_ai:
+                d_name = (d.subject_name_snapshot or "").strip().lower()
+                for prefer_unused in (True, False):
+                    for ai in db_items:
+                        if prefer_unused and ai.id in used_ai_ids:
+                            continue
+                        ai_name = (ai.item_name_snapshot or "").strip().lower()
+                        if d_name and ai_name and (d_name in ai_name or ai_name in d_name):
+                            matched_ai = ai
+                            break
+                    if matched_ai:
+                        break
+            if not matched_ai:
+                for ai in db_items:
+                    if ai.id not in used_ai_ids:
+                        matched_ai = ai
+                        break
+            if not matched_ai and db_items:
+                matched_ai = db_items[0]
+
+            if matched_ai:
+                d.converted_admission_item_id = matched_ai.id
+                d.status = "CONVERTED"
+                if matched_ai.id not in used_ai_ids:
+                    matched_ai.demo_item = d
+                    used_ai_ids.add(matched_ai.id)
+                if enq:
+                    if enq.converted_student_id is None:
+                        enq.converted_student_id = student.id
+                    touched_enquiries.add(enq)
+    elif payload.enquiry_id:
+        candidate_enquiries: List[Enquiry] = []
         enq_res = await db.execute(
             select(Enquiry).options(selectinload(Enquiry.demo_items)).where(Enquiry.id == payload.enquiry_id)
         )
@@ -441,33 +528,32 @@ async def create_admission(
             explicit_enq.converted_student_id = student.id
             candidate_enquiries.append(explicit_enq)
 
-    enq_check = await db.execute(
-        select(Enquiry).options(selectinload(Enquiry.demo_items))
-        .where(Enquiry.converted_student_id == student.id)
-        .order_by(desc(Enquiry.created_at))
-    )
-    for stu_enq in enq_check.scalars().all():
-        if all(existing.id != stu_enq.id for existing in candidate_enquiries):
-            candidate_enquiries.append(stu_enq)
+        enq_check = await db.execute(
+            select(Enquiry).options(selectinload(Enquiry.demo_items))
+            .where(Enquiry.converted_student_id == student.id)
+            .order_by(desc(Enquiry.created_at))
+        )
+        for stu_enq in enq_check.scalars().all():
+            if all(existing.id != stu_enq.id for existing in candidate_enquiries):
+                candidate_enquiries.append(stu_enq)
 
-    touched_enquiries = set()
-    for ai in db_items:
-        matched_d = None
-        for strict in (True, False):
-            for cand_enq in candidate_enquiries:
-                for d in cand_enq.demo_items:
-                    if _demo_matches_item(d, ai, strict_subject_id=strict):
-                        matched_d = d
-                        touched_enquiries.add(cand_enq)
+        for ai in db_items:
+            matched_d = None
+            for strict in (True, False):
+                for cand_enq in candidate_enquiries:
+                    for d in cand_enq.demo_items:
+                        if _demo_matches_item(d, ai, strict_subject_id=strict):
+                            matched_d = d
+                            touched_enquiries.add(cand_enq)
+                            break
+                    if matched_d:
                         break
                 if matched_d:
                     break
             if matched_d:
-                break
-        if matched_d:
-            matched_d.converted_admission_item_id = ai.id
-            matched_d.status = "CONVERTED"
-            ai.demo_item = matched_d
+                matched_d.converted_admission_item_id = ai.id
+                matched_d.status = "CONVERTED"
+                ai.demo_item = matched_d
 
     for cand_enq in touched_enquiries:
         if cand_enq.demo_items and all(d.status == "CONVERTED" for d in cand_enq.demo_items):

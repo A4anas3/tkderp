@@ -6,7 +6,7 @@ from datetime import date, timedelta
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_, and_, desc, case
+from sqlalchemy import select, func, or_, and_, desc, case, exists
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
@@ -304,6 +304,33 @@ def _format_demo_item_response(
     )
 
 
+def _converted_enquiry_condition():
+    """
+    Matches enquiries representing real conversions:
+    - parent status is CONVERTED, OR
+    - at least one child demo item is CONVERTED / linked to an admission item, OR
+    - linked student has at least one non-cancelled admission.
+    """
+    return or_(
+        Enquiry.status == "CONVERTED",
+        Enquiry.demo_items.any(
+            or_(
+                EnquiryDemoItem.status == "CONVERTED",
+                EnquiryDemoItem.converted_admission_item_id.isnot(None),
+            )
+        ),
+        and_(
+            Enquiry.converted_student_id.isnot(None),
+            exists(
+                select(Admission.id).where(
+                    Admission.student_id == Enquiry.converted_student_id,
+                    Admission.status != "CANCELLED",
+                )
+            ),
+        ),
+    )
+
+
 @router.get("", response_model=PageResponse[EnquiryResponse])
 async def list_enquiries(
     page: int = Query(1, ge=1),
@@ -350,8 +377,13 @@ async def list_enquiries(
     # Status filter
     effective_status = status_filter or status
     if effective_status:
-        query = query.where(Enquiry.status == effective_status)
-        count_query = count_query.where(Enquiry.status == effective_status)
+        if effective_status == "CONVERTED":
+            converted_cond = _converted_enquiry_condition()
+            query = query.where(converted_cond)
+            count_query = count_query.where(converted_cond)
+        else:
+            query = query.where(Enquiry.status == effective_status)
+            count_query = count_query.where(Enquiry.status == effective_status)
 
     # Month / Date range filtering
     f_date, t_date = _resolve_month_date_range(from_date, to_date, month, year)
@@ -817,14 +849,29 @@ async def get_enquiry_summary(
     stmt = select(Enquiry.status, func.count(Enquiry.id)).group_by(Enquiry.status)
     res = await db.execute(stmt)
     status_counts = dict(res.all())
-    
+
+    converted_count = (
+        await db.execute(select(func.count(Enquiry.id)).where(_converted_enquiry_condition()))
+    ).scalar_one() or 0
+    converted_demo_items_count = (
+        await db.execute(
+            select(func.count(EnquiryDemoItem.id)).where(
+                or_(
+                    EnquiryDemoItem.status == "CONVERTED",
+                    EnquiryDemoItem.converted_admission_item_id.isnot(None),
+                )
+            )
+        )
+    ).scalar_one() or 0
+
     total = sum(status_counts.values())
     resp = {
         "total": total,
         "ACTIVE_DEMO": status_counts.get("ACTIVE_DEMO", 0),
         "INTERESTED": status_counts.get("INTERESTED", 0),
         "PENDING": status_counts.get("PENDING", 0),
-        "CONVERTED": status_counts.get("CONVERTED", 0),
+        "CONVERTED": converted_count,
+        "converted_demo_items": converted_demo_items_count,
         "EXPIRED": status_counts.get("EXPIRED", 0),
         "NOT_INTERESTED": status_counts.get("NOT_INTERESTED", 0),
     }
@@ -856,10 +903,15 @@ async def get_upcoming_demo_deadlines(
 
     response_items = []
     for item in items:
+        raw_demos = list(item.demo_items) if hasattr(item, 'demo_items') and item.demo_items else []
+        active_demos = [
+            d for d in raw_demos
+            if d.status in ("SCHEDULED", "ATTENDED") and d.converted_admission_item_id is None
+        ]
+        if not active_demos:
+            continue
         rem_days = (item.demo_deadline - today).days if item.demo_deadline else None
-        formatted_demo_items = []
-        if hasattr(item, 'demo_items') and item.demo_items:
-            formatted_demo_items = [_format_demo_item_response(d, today) for d in item.demo_items]
+        formatted_demo_items = [_format_demo_item_response(d, today) for d in active_demos]
 
         response_items.append(
             EnquiryResponse(
