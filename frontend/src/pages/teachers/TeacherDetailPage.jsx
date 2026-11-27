@@ -986,6 +986,260 @@ export default function TeacherDetailPage() {
       {/* ========================================================================= */}
       {activeTab === 'HISTORY' && (
         <div className="space-y-5">
+          {/* Assigned Course Enrollments Roster */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-2xs space-y-4 p-4 sm:p-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
+              <div>
+                <h3 className="font-bold text-black text-sm flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-odoo-600" />
+                  <span>Assigned Course Enrollments Roster ({rosterTotal})</span>
+                </h3>
+                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                  Complete active and expired student course cycles with direct collection & ledger actions
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Badge variant="primary" size="xs">Live Roster</Badge>
+              </div>
+            </div>
+
+            {/* Roster Filter Bar */}
+            <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStatusFilter('ALL');
+                    setRosterPage(1);
+                  }}
+                  className={`min-h-[32px] px-3 py-1 rounded-md text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+                    statusFilter === 'ALL'
+                      ? 'bg-black text-white shadow-2xs'
+                      : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  All ({rosterMetrics.total_enrollments})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStatusFilter('ACTIVE');
+                    setRosterPage(1);
+                  }}
+                  className={`min-h-[32px] px-3 py-1 rounded-md text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+                    statusFilter === 'ACTIVE'
+                      ? 'bg-emerald-700 text-white shadow-2xs'
+                      : 'bg-white text-emerald-800 border border-emerald-200 hover:bg-emerald-50'
+                  }`}
+                >
+                  Active ({rosterMetrics.active_enrollments})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStatusFilter('INACTIVE');
+                    setRosterPage(1);
+                  }}
+                  className={`min-h-[32px] px-3 py-1 rounded-md text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+                    statusFilter === 'INACTIVE'
+                      ? 'bg-rose-700 text-white shadow-2xs'
+                      : 'bg-white text-rose-800 border border-rose-200 hover:bg-rose-50'
+                  }`}
+                >
+                  Inactive / Expired ({rosterMetrics.inactive_enrollments})
+                </button>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                {subjectOptions.length > 1 && (
+                  <select
+                    value={subjectFilter}
+                    onChange={(e) => {
+                      setSubjectFilter(e.target.value);
+                      setRosterPage(1);
+                    }}
+                    className="px-2.5 py-1 text-xs bg-white border border-slate-300 rounded-lg text-black font-semibold focus:outline-none shadow-2xs"
+                  >
+                    <option value="">All Subjects</option>
+                    {subjectOptions.map((opt) => (
+                      <option key={opt.id} value={opt.id}>
+                        {opt.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                <div className="relative flex-1 sm:w-64">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search student, code, course..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-8 pr-7 py-1 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-odoo-500 text-black placeholder:text-slate-400 font-medium shadow-2xs"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Roster Table */}
+            {rosterLoading ? (
+              <div className="py-10 text-center text-xs text-slate-500 animate-pulse">
+                <RefreshCw className="w-5 h-5 animate-spin text-odoo-600 mx-auto mb-2" />
+                <span>Loading enrollments...</span>
+              </div>
+            ) : rosterItems.length === 0 ? (
+              <div className="py-8 text-center text-xs text-slate-500 bg-slate-50 rounded-lg border border-dashed border-slate-200">
+                No course enrollments matching filter.
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-lg border border-slate-200">
+                <table className="w-full text-left text-xs min-w-[800px]">
+                  <thead className="bg-slate-50 text-slate-800 font-bold border-b border-slate-200">
+                    <tr>
+                      <th className="p-3">Scholar Details</th>
+                      <th className="p-3">Course / Subject</th>
+                      <th className="p-3">Hall</th>
+                      <th className="p-3">Rolling Billing Cycle</th>
+                      <th className="p-3 text-center">Cycle Status</th>
+                      <th className="p-3 text-right">Fee Billed</th>
+                      <th className="p-3 text-right text-emerald-800">Collected</th>
+                      <th className="p-3 text-right text-rose-700">Due</th>
+                      <th className="p-3 text-center">Payment</th>
+                      <th className="p-3 text-center">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {rosterItems.map((s) => (
+                      <tr key={s.item_id} className="hover:bg-purple-50/40 transition">
+                        <td className="p-3">
+                          <Link
+                            to={`/students/${s.student_id}`}
+                            className="font-bold text-black hover:text-odoo-600 block"
+                          >
+                            {s.student_name}
+                          </Link>
+                          <span className="text-[10px] text-slate-500 font-mono">
+                            #{s.student_code} • {s.mobile || '—'}
+                          </span>
+                        </td>
+                        <td className="p-3">
+                          <span className="font-semibold text-black block">{s.subject_name}</span>
+                          {s.subject_code && (
+                            <span className="text-[10px] text-slate-500 font-mono">{s.subject_code}</span>
+                          )}
+                        </td>
+                        <td className="p-3 text-slate-700">
+                          {s.hall_number || 'Main Hall'}
+                        </td>
+                        <td className="p-3 font-mono text-[11px] text-slate-700">
+                          {s.cycle_period_label}
+                        </td>
+                        <td className="p-3 text-center">
+                          <Badge
+                            size="xs"
+                            variant={
+                              s.cycle_status === 'ACTIVE'
+                                ? 'success'
+                                : s.cycle_status === 'INACTIVE'
+                                ? 'danger'
+                                : 'neutral'
+                            }
+                          >
+                            {s.cycle_status}
+                          </Badge>
+                        </td>
+                        <td className="p-3 text-right font-mono font-bold text-black">
+                          ₹{Number(s.fee_billed || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="p-3 text-right font-mono font-bold text-emerald-800">
+                          ₹{Number(s.fee_collected || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="p-3 text-right font-mono font-bold text-rose-700">
+                          ₹{Number(s.balance_due || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="p-3 text-center">
+                          <Badge
+                            size="xs"
+                            variant={
+                              s.payment_status === 'PAID'
+                                ? 'success'
+                                : s.payment_status === 'PARTIALLY_PAID' || s.payment_status === 'PARTIAL'
+                                ? 'warning'
+                                : 'danger'
+                            }
+                          >
+                            {s.payment_status}
+                          </Badge>
+                        </td>
+                        <td className="p-3 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            {s.balance_due > 0 && (
+                              <button
+                                onClick={() => setPayAdmissionId(s.admission_id)}
+                                className="h-8 min-h-[32px] px-2.5 py-1 text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-900 font-bold rounded-md border border-emerald-300 inline-flex items-center gap-1 cursor-pointer whitespace-nowrap shadow-2xs"
+                                title="Collect balance fee"
+                              >
+                                <CreditCard className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                                <span>Collect</span>
+                              </button>
+                            )}
+                            <Link
+                              to={`/students/${s.student_id}`}
+                              className="h-8 min-h-[32px] px-2.5 py-1 text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold rounded-md border border-blue-300 inline-flex items-center gap-1 cursor-pointer whitespace-nowrap shadow-2xs"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                              <span>Profile</span>
+                            </Link>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Roster Pagination */}
+            {rosterTotalPages > 1 && (
+              <div className="flex items-center justify-between pt-3 border-t border-slate-200 text-xs">
+                <span className="text-slate-500">
+                  Showing {(rosterPage - 1) * ROSTER_PAGE_SIZE + 1} to{' '}
+                  {Math.min(rosterPage * ROSTER_PAGE_SIZE, rosterTotal)} of {rosterTotal} enrollments
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setRosterPage((p) => Math.max(1, p - 1))}
+                    disabled={rosterPage === 1}
+                    className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+                  <span className="px-2 font-bold text-black">
+                    Page {rosterPage} of {rosterTotalPages}
+                  </span>
+                  <button
+                    onClick={() => setRosterPage((p) => Math.min(rosterTotalPages, p + 1))}
+                    disabled={rosterPage === rosterTotalPages}
+                    className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Chronological History Ledger */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-2xs space-y-4 p-4 sm:p-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
@@ -1257,260 +1511,6 @@ export default function TeacherDetailPage() {
                   <button
                     onClick={() => setHistoryPage((p) => Math.min(historyTotalPages, p + 1))}
                     disabled={historyPage === historyTotalPages}
-                    className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
-                  >
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Assigned Course Enrollments Roster */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xs space-y-4 p-4 sm:p-5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
-              <div>
-                <h3 className="font-bold text-black text-sm flex items-center gap-2">
-                  <BookOpen className="w-4 h-4 text-odoo-600" />
-                  <span>Assigned Course Enrollments Roster ({rosterTotal})</span>
-                </h3>
-                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-                  Complete active and expired student course cycles with direct collection & ledger actions
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Badge variant="primary" size="xs">Live Roster</Badge>
-              </div>
-            </div>
-
-            {/* Roster Filter Bar */}
-            <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStatusFilter('ALL');
-                    setRosterPage(1);
-                  }}
-                  className={`min-h-[32px] px-3 py-1 rounded-md text-xs font-bold transition whitespace-nowrap cursor-pointer ${
-                    statusFilter === 'ALL'
-                      ? 'bg-black text-white shadow-2xs'
-                      : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  All ({rosterMetrics.total_enrollments})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStatusFilter('ACTIVE');
-                    setRosterPage(1);
-                  }}
-                  className={`min-h-[32px] px-3 py-1 rounded-md text-xs font-bold transition whitespace-nowrap cursor-pointer ${
-                    statusFilter === 'ACTIVE'
-                      ? 'bg-emerald-700 text-white shadow-2xs'
-                      : 'bg-white text-emerald-800 border border-emerald-200 hover:bg-emerald-50'
-                  }`}
-                >
-                  Active ({rosterMetrics.active_enrollments})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStatusFilter('INACTIVE');
-                    setRosterPage(1);
-                  }}
-                  className={`min-h-[32px] px-3 py-1 rounded-md text-xs font-bold transition whitespace-nowrap cursor-pointer ${
-                    statusFilter === 'INACTIVE'
-                      ? 'bg-rose-700 text-white shadow-2xs'
-                      : 'bg-white text-rose-800 border border-rose-200 hover:bg-rose-50'
-                  }`}
-                >
-                  Inactive / Expired ({rosterMetrics.inactive_enrollments})
-                </button>
-              </div>
-
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                {subjectOptions.length > 1 && (
-                  <select
-                    value={subjectFilter}
-                    onChange={(e) => {
-                      setSubjectFilter(e.target.value);
-                      setRosterPage(1);
-                    }}
-                    className="px-2.5 py-1 text-xs bg-white border border-slate-300 rounded-lg text-black font-semibold focus:outline-none shadow-2xs"
-                  >
-                    <option value="">All Subjects</option>
-                    {subjectOptions.map((opt) => (
-                      <option key={opt.id} value={opt.id}>
-                        {opt.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-
-                <div className="relative flex-1 sm:w-64">
-                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    placeholder="Search student, code, course..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-8 pr-7 py-1 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-odoo-500 text-black placeholder:text-slate-400 font-medium shadow-2xs"
-                  />
-                  {searchQuery && (
-                    <button
-                      type="button"
-                      onClick={() => setSearchQuery('')}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Roster Table */}
-            {rosterLoading ? (
-              <div className="py-10 text-center text-xs text-slate-500 animate-pulse">
-                <RefreshCw className="w-5 h-5 animate-spin text-odoo-600 mx-auto mb-2" />
-                <span>Loading enrollments...</span>
-              </div>
-            ) : rosterItems.length === 0 ? (
-              <div className="py-8 text-center text-xs text-slate-500 bg-slate-50 rounded-lg border border-dashed border-slate-200">
-                No course enrollments matching filter.
-              </div>
-            ) : (
-              <div className="overflow-x-auto rounded-lg border border-slate-200">
-                <table className="w-full text-left text-xs min-w-[800px]">
-                  <thead className="bg-slate-50 text-slate-800 font-bold border-b border-slate-200">
-                    <tr>
-                      <th className="p-3">Scholar Details</th>
-                      <th className="p-3">Course / Subject</th>
-                      <th className="p-3">Hall</th>
-                      <th className="p-3">Rolling Billing Cycle</th>
-                      <th className="p-3 text-center">Cycle Status</th>
-                      <th className="p-3 text-right">Fee Billed</th>
-                      <th className="p-3 text-right text-emerald-800">Collected</th>
-                      <th className="p-3 text-right text-rose-700">Due</th>
-                      <th className="p-3 text-center">Payment</th>
-                      <th className="p-3 text-center">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {rosterItems.map((s) => (
-                      <tr key={s.item_id} className="hover:bg-purple-50/40 transition">
-                        <td className="p-3">
-                          <Link
-                            to={`/students/${s.student_id}`}
-                            className="font-bold text-black hover:text-odoo-600 block"
-                          >
-                            {s.student_name}
-                          </Link>
-                          <span className="text-[10px] text-slate-500 font-mono">
-                            #{s.student_code} • {s.mobile || '—'}
-                          </span>
-                        </td>
-                        <td className="p-3">
-                          <span className="font-semibold text-black block">{s.subject_name}</span>
-                          {s.subject_code && (
-                            <span className="text-[10px] text-slate-500 font-mono">{s.subject_code}</span>
-                          )}
-                        </td>
-                        <td className="p-3 text-slate-700">
-                          {s.hall_number || 'Main Hall'}
-                        </td>
-                        <td className="p-3 font-mono text-[11px] text-slate-700">
-                          {s.cycle_period_label}
-                        </td>
-                        <td className="p-3 text-center">
-                          <Badge
-                            size="xs"
-                            variant={
-                              s.cycle_status === 'ACTIVE'
-                                ? 'success'
-                                : s.cycle_status === 'INACTIVE'
-                                ? 'danger'
-                                : 'neutral'
-                            }
-                          >
-                            {s.cycle_status}
-                          </Badge>
-                        </td>
-                        <td className="p-3 text-right font-mono font-bold text-black">
-                          ₹{Number(s.fee_billed || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                        </td>
-                        <td className="p-3 text-right font-mono font-bold text-emerald-800">
-                          ₹{Number(s.fee_collected || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                        </td>
-                        <td className="p-3 text-right font-mono font-bold text-rose-700">
-                          ₹{Number(s.balance_due || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                        </td>
-                        <td className="p-3 text-center">
-                          <Badge
-                            size="xs"
-                            variant={
-                              s.payment_status === 'PAID'
-                                ? 'success'
-                                : s.payment_status === 'PARTIALLY_PAID' || s.payment_status === 'PARTIAL'
-                                ? 'warning'
-                                : 'danger'
-                            }
-                          >
-                            {s.payment_status}
-                          </Badge>
-                        </td>
-                        <td className="p-3 text-center">
-                          <div className="flex items-center justify-center gap-1.5">
-                            {s.balance_due > 0 && (
-                              <button
-                                onClick={() => setPayAdmissionId(s.admission_id)}
-                                className="h-8 min-h-[32px] px-2.5 py-1 text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-900 font-bold rounded-md border border-emerald-300 inline-flex items-center gap-1 cursor-pointer whitespace-nowrap shadow-2xs"
-                                title="Collect balance fee"
-                              >
-                                <CreditCard className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-                                <span>Collect</span>
-                              </button>
-                            )}
-                            <Link
-                              to={`/students/${s.student_id}`}
-                              className="h-8 min-h-[32px] px-2.5 py-1 text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold rounded-md border border-blue-300 inline-flex items-center gap-1 cursor-pointer whitespace-nowrap shadow-2xs"
-                            >
-                              <ExternalLink className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                              <span>Profile</span>
-                            </Link>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* Roster Pagination */}
-            {rosterTotalPages > 1 && (
-              <div className="flex items-center justify-between pt-3 border-t border-slate-200 text-xs">
-                <span className="text-slate-500">
-                  Showing {(rosterPage - 1) * ROSTER_PAGE_SIZE + 1} to{' '}
-                  {Math.min(rosterPage * ROSTER_PAGE_SIZE, rosterTotal)} of {rosterTotal} enrollments
-                </span>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setRosterPage((p) => Math.max(1, p - 1))}
-                    disabled={rosterPage === 1}
-                    className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
-                  >
-                    <ChevronLeft className="w-3.5 h-3.5" />
-                  </button>
-                  <span className="px-2 font-bold text-black">
-                    Page {rosterPage} of {rosterTotalPages}
-                  </span>
-                  <button
-                    onClick={() => setRosterPage((p) => Math.min(rosterTotalPages, p + 1))}
-                    disabled={rosterPage === rosterTotalPages}
                     className="p-1 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
                   >
                     <ChevronRight className="w-3.5 h-3.5" />
