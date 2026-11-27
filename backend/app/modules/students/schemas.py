@@ -128,6 +128,7 @@ class StudentDemoItemResponse(BaseModel):
     teacher_id: Optional[uuid.UUID] = None
     teacher_name: Optional[str] = None
     hall: Optional[str] = None
+    timing: Optional[str] = None
     demo_start_date: date
     demo_end_date: date
     demo_duration_days: int

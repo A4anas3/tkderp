@@ -56,9 +56,39 @@ class EnquiryDemoItem(BaseModel):
     converted_admission_item_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("admission_items.id", ondelete="SET NULL"), nullable=True)
 
     enquiry: Mapped["Enquiry"] = relationship("Enquiry", back_populates="demo_items")
+    subject: Mapped[Optional["app.modules.subjects.models.Subject"]] = relationship(
+        "app.modules.subjects.models.Subject",
+        lazy="joined"
+    )
+    batch: Mapped[Optional["app.modules.batches.models.Batch"]] = relationship(
+        "app.modules.batches.models.Batch",
+        lazy="joined"
+    )
     admission_item: Mapped[Optional["app.modules.admissions.models.AdmissionItem"]] = relationship(
         "app.modules.admissions.models.AdmissionItem",
         back_populates="demo_item",
         foreign_keys=[converted_admission_item_id],
         lazy="selectin"
     )
+
+
+def resolve_demo_timing_and_hall(
+    itm: EnquiryDemoItem,
+    subject: Optional[object] = None,
+    batch: Optional[object] = None,
+) -> tuple[Optional[str], str]:
+    """Resolve demo timing from subject/batch schedule and hall with snapshot -> batch -> subject fallback."""
+    sub = subject if subject is not None else itm.__dict__.get("subject")
+    bch = batch if batch is not None else itm.__dict__.get("batch")
+
+    sub_sched = (getattr(sub, "schedule", None) or "").strip() if sub else ""
+    bch_sched = (getattr(bch, "schedule", None) or "").strip() if bch else ""
+    itm_sched = (getattr(itm, "schedule", None) or "").strip()
+    timing = sub_sched or bch_sched or itm_sched or None
+
+    snap_hall = (getattr(itm, "hall_number_snapshot", None) or "").strip()
+    bch_hall = (getattr(bch, "hall_number", None) or "").strip() if bch else ""
+    sub_hall = (getattr(sub, "hall_number", None) or "").strip() if sub else ""
+    hall = snap_hall or bch_hall or sub_hall or "Main Hall"
+
+    return timing, hall

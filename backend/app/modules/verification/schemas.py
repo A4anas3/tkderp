@@ -46,6 +46,7 @@ class IDCardDemoItem(BaseModel):
     subject_name: str
     teacher_name: Optional[str] = None
     hall_number: Optional[str] = None
+    timing: Optional[str] = None
     demo_start_date: Optional[date] = None
     demo_end_date: Optional[date] = None
     days_remaining: Optional[int] = None

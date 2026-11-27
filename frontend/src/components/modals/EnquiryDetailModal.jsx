@@ -215,10 +215,16 @@ export default function EnquiryDetailModal({
                           {item.subject_name_snapshot || 'Subject Demo'}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-1">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-500 mt-1">
                         <span>Faculty: <strong className="text-slate-700">{item.teacher_name_snapshot || 'Assigned'}</strong></span>
                         <span>•</span>
-                        <span>Room: <strong className="text-slate-700">{item.hall_number_snapshot || 'Main Hall'}</strong></span>
+                        <span>Hall: <strong className="text-slate-700">{item.hall_number_snapshot || 'Main Hall'}</strong></span>
+                        {(item.timing || item.schedule) && (
+                          <>
+                            <span>•</span>
+                            <span>Timing: <strong className="text-slate-700">{item.timing || item.schedule}</strong></span>
+                          </>
+                        )}
                       </div>
                     </div>
                     <div className="text-right">

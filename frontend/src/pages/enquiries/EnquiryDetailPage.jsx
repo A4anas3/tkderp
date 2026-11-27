@@ -638,8 +638,17 @@ export default function EnquiryDetailPage() {
                     <span>•</span>
                     <span className="flex items-center gap-1">
                       <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                      <span>Room: <strong className="text-black">{item.hall_number_snapshot || 'Main Hall'}</strong></span>
+                      <span>Hall: <strong className="text-black">{item.hall_number_snapshot || 'Main Hall'}</strong></span>
                     </span>
+                    {(item.timing || item.schedule) && (
+                      <>
+                        <span>•</span>
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5 text-slate-400" />
+                          <span>Timing: <strong className="text-black">{item.timing || item.schedule}</strong></span>
+                        </span>
+                      </>
+                    )}
                   </div>
                 </div>
 

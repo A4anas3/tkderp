@@ -206,8 +206,14 @@ export default function DemoPassModal({
                       </span>
                       <span className="flex items-center gap-1 font-medium">
                         <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                        <span>Room: <strong className="text-black">{item.hall_number || item.hall_number_snapshot || 'Classroom'}</strong></span>
+                        <span>Hall: <strong className="text-black">{item.hall_number || item.hall_number_snapshot || 'Classroom'}</strong></span>
                       </span>
+                      {(item.timing || item.schedule) && (
+                        <span className="flex items-center gap-1 font-medium">
+                          <Clock className="w-3.5 h-3.5 text-slate-400" />
+                          <span>Timing: <strong className="text-black">{item.timing || item.schedule}</strong></span>
+                        </span>
+                      )}
                     </div>
                   </div>
 

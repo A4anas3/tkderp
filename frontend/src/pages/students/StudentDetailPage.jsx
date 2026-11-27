@@ -709,7 +709,7 @@ export default function StudentDetailPage() {
                   <th className="p-3">Demo ID</th>
                   <th className="p-3">Subject</th>
                   <th className="p-3">Teacher</th>
-                  <th className="p-3">Hall</th>
+                  <th className="p-3">Hall & Timing</th>
                   <th className="p-3">Trial Dates</th>
                   <th className="p-3 text-center">Status</th>
                   <th className="p-3">Purchased Course</th>
@@ -740,9 +740,17 @@ export default function StudentDetailPage() {
                         </div>
                       </td>
                       <td className="p-3">
-                        <div className="text-slate-700 flex items-center gap-1">
-                          <MapPin className="w-3 h-3 text-slate-400" />
-                          {d.hall || 'Main Hall'}
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-slate-700">
+                          <span className="flex items-center gap-1">
+                            <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                            <span>Hall: <strong className="text-black">{d.hall || d.hall_number || 'Main Hall'}</strong></span>
+                          </span>
+                          {(d.timing || d.schedule) && (
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                              <span>Timing: <strong className="text-black">{d.timing || d.schedule}</strong></span>
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="p-3">

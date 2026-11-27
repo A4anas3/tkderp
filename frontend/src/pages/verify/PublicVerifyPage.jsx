@@ -346,14 +346,22 @@ export default function PublicVerifyPage() {
                       </div>
 
                       {/* Course Details */}
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-700 font-medium">
-                        {course.teacher_name && (
-                          <span>Faculty: <strong className="text-black">{course.teacher_name}</strong></span>
-                        )}
-                        {course.hall_number && (
-                          <span>Hall: <strong className="text-black">{course.hall_number}</strong></span>
-                        )}
-                      </div>
+                      {((course.schedule || course.timing) || course.hall_number || course.teacher_name) && (
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-700 font-medium">
+                          {(course.schedule || course.timing) && (
+                            <span className="inline-flex items-center gap-1">
+                              <Clock className="w-3 h-3 text-slate-500 shrink-0" />
+                              <span>Timing: <strong className="text-black">{course.schedule || course.timing}</strong></span>
+                            </span>
+                          )}
+                          {course.hall_number && (
+                            <span>Hall: <strong className="text-black">{course.hall_number}</strong></span>
+                          )}
+                          {course.teacher_name && (
+                            <span>Faculty: <strong className="text-black">{course.teacher_name}</strong></span>
+                          )}
+                        </div>
+                      )}
 
                       {/* Prominent Validity Period(s) */}
                       <div className="flex flex-wrap items-start justify-between gap-2 pt-1 border-t border-slate-100">

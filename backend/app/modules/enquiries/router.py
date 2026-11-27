@@ -31,6 +31,7 @@ from app.common.teacher_scope import (
     active_demo_filter,
 )
 from app.database.models import Enquiry, EnquiryDemoItem, Student, User, Teacher, Subject, Batch, Admission, AdmissionItem, AuditLog
+from app.modules.enquiries.models import resolve_demo_timing_and_hall
 from app.modules.enquiries.schemas import (
     EnquiryCreate, EnquiryUpdate, EnquiryResponse, ConvertEnquiryRequest,
     EnquiryDemoItemResponse, EnquiryDemoItemStatusUpdate, EnquiryDemoRegisterItem,
@@ -243,7 +244,12 @@ async def _create_student_from_enquiry(
     )
 
 
-def _format_demo_item_response(itm: EnquiryDemoItem, today: date) -> EnquiryDemoItemResponse:
+def _format_demo_item_response(
+    itm: EnquiryDemoItem,
+    today: date,
+    subject: Optional[Subject] = None,
+    batch: Optional[Batch] = None,
+) -> EnquiryDemoItemResponse:
     rem = (itm.demo_end_date - today).days
     if itm.status == "CONVERTED":
         lbl, var = "Enrolled", "success"
@@ -269,6 +275,8 @@ def _format_demo_item_response(itm: EnquiryDemoItem, today: date) -> EnquiryDemo
             if not c_adm_id:
                 c_adm_id = getattr(adm_parent, "id", None)
 
+    timing, hall_no = resolve_demo_timing_and_hall(itm, subject=subject, batch=batch)
+
     return EnquiryDemoItemResponse(
         id=itm.id,
         enquiry_id=itm.enquiry_id,
@@ -278,7 +286,8 @@ def _format_demo_item_response(itm: EnquiryDemoItem, today: date) -> EnquiryDemo
         teacher_id=itm.teacher_id,
         subject_name_snapshot=itm.subject_name_snapshot,
         teacher_name_snapshot=itm.teacher_name_snapshot,
-        hall_number_snapshot=itm.hall_number_snapshot,
+        hall_number_snapshot=hall_no,
+        timing=timing,
         demo_start_date=itm.demo_start_date,
         demo_end_date=itm.demo_end_date,
         demo_duration_days=itm.demo_duration_days,
@@ -609,6 +618,8 @@ async def list_individual_demo_items(
             if ditm.admission_item.admission:
                 c_adm_no = ditm.admission_item.admission.admission_number
 
+        timing, hall_no = resolve_demo_timing_and_hall(ditm)
+
         items.append(EnquiryDemoRegisterItem(
             demo_item_id=ditm.id,
             enquiry_id=enq.id,
@@ -624,7 +635,8 @@ async def list_individual_demo_items(
             batch_name=None,
             teacher_id=ditm.teacher_id,
             teacher_name=ditm.teacher_name_snapshot,
-            hall_number=ditm.hall_number_snapshot,
+            hall_number=hall_no,
+            timing=timing,
             demo_start_date=ditm.demo_start_date,
             demo_end_date=ditm.demo_end_date,
             demo_duration_days=ditm.demo_duration_days,
@@ -1120,6 +1132,7 @@ async def create_enquiry_with_demos(
 
     # Create child EnquiryDemoItem records (only when creating a demo)
     child_items = []
+    created_relations = {}
     if is_demo_request:
         if demo_items and len(demo_items) > 0:
             for idx, itm in enumerate(demo_items):
@@ -1175,6 +1188,7 @@ async def create_enquiry_with_demos(
                 )
                 db.add(demo_item)
                 child_items.append(demo_item)
+                created_relations[id(demo_item)] = (sub, bch)
         else:
             # Create 1 default demo item so that every demo receives a verifiable demo slip
             ref_no = await _generate_demo_reference_number(db)
@@ -1231,7 +1245,15 @@ async def create_enquiry_with_demos(
     )
 
     today = date.today()
-    formatted_children = [_format_demo_item_response(d, today) for d in child_items]
+    formatted_children = [
+        _format_demo_item_response(
+            d,
+            today,
+            subject=created_relations.get(id(d), (None, None))[0],
+            batch=created_relations.get(id(d), (None, None))[1],
+        )
+        for d in child_items
+    ]
     return await _resolve_single_enquiry_response(db, enquiry, formatted_children, today)
 
 

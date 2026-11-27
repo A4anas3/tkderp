@@ -28,6 +28,7 @@ from app.database.session import get_db
 from app.modules.users.models import User
 from app.modules.students.models import Student
 from app.database.models import Teacher, Subject, Enquiry, EnquiryDemoItem
+from app.modules.enquiries.models import resolve_demo_timing_and_hall
 from app.modules.admissions.models import Admission, AdmissionItem
 from app.modules.payments.models import Payment, Refund, PaymentAllocation, FinancialTransaction
 from app.modules.batches.models import Batch
@@ -700,6 +701,7 @@ async def _get_demos_for_student(
                 subject=ditm.admission_item.item_name_snapshot,
                 admission_number=adm_no
             )
+        timing, hall_no = resolve_demo_timing_and_hall(ditm)
         demos.append(StudentDemoItemResponse(
             id=ditm.id,
             demo_reference_number=ditm.demo_reference_number,
@@ -707,7 +709,8 @@ async def _get_demos_for_student(
             subject_name=ditm.subject_name_snapshot,
             teacher_id=ditm.teacher_id,
             teacher_name=ditm.teacher_name_snapshot,
-            hall=ditm.hall_number_snapshot,
+            hall=hall_no,
+            timing=timing,
             demo_start_date=ditm.demo_start_date,
             demo_end_date=ditm.demo_end_date,
             demo_duration_days=ditm.demo_duration_days,

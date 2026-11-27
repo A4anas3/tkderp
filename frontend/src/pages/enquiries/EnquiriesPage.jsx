@@ -1163,16 +1163,24 @@ export default function EnquiriesPage() {
       ),
     },
     {
-      header: 'Subject & Room',
+      header: 'Subject, Hall & Timing',
       render: (d) => (
         <div>
           <span className="font-bold text-black text-xs block">
             {d.subject_name || d.subject_name_snapshot || 'Academic Subject'}
           </span>
-          <span className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
-            <MapPin className="w-3 h-3 text-slate-400" />
-            {d.hall_number || d.hall_number_snapshot || 'Main Hall'}
-          </span>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-slate-700 mt-0.5">
+            <span className="flex items-center gap-1">
+              <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+              <span>Hall: <strong className="text-black">{d.hall_number || d.hall_number_snapshot || 'Main Hall'}</strong></span>
+            </span>
+            {(d.timing || d.schedule) && (
+              <span className="flex items-center gap-1">
+                <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                <span>Timing: <strong className="text-black">{d.timing || d.schedule}</strong></span>
+              </span>
+            )}
+          </div>
         </div>
       ),
     },
@@ -2905,8 +2913,16 @@ export default function EnquiriesPage() {
                   <span className="font-bold text-slate-900">{detailDemoItem.teacher_name || detailDemoItem.teacher_name_snapshot || '—'}</span>
                 </div>
                 <div>
-                  <span className="text-[11px] text-slate-500 block">Classroom / Hall</span>
-                  <span className="font-bold text-slate-900">{detailDemoItem.hall_number || detailDemoItem.hall_number_snapshot || 'Main Hall'}</span>
+                  <span className="text-[11px] text-slate-500 block">Hall & Timing</span>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-700 mt-0.5">
+                    <span>Hall: <strong className="text-black">{detailDemoItem.hall_number || detailDemoItem.hall_number_snapshot || 'Main Hall'}</strong></span>
+                    {(detailDemoItem.timing || detailDemoItem.schedule) && (
+                      <span className="inline-flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-slate-500 shrink-0" />
+                        <span>Timing: <strong className="text-black">{detailDemoItem.timing || detailDemoItem.schedule}</strong></span>
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <span className="text-[11px] text-slate-500 block">Duration</span>

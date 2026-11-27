@@ -185,13 +185,22 @@ export function extractActiveCourses(student, enrollmentData) {
   return courses;
 }
 
+function normalizeDemoItem(item) {
+  return {
+    ...item,
+    hall_number: item.hall_number || item.hall_number_snapshot || item.hall || null,
+    timing: item.timing || item.schedule || null,
+    schedule: item.schedule || item.timing || null,
+  };
+}
+
 export function extractActiveDemos(student, enrollmentData, demos) {
   // If active_demos already pre-filtered on student or enrollmentData
   if (Array.isArray(student?.active_demos) && student.active_demos.length > 0) {
-    return student.active_demos;
+    return student.active_demos.map(normalizeDemoItem);
   }
   if (Array.isArray(enrollmentData?.active_demos) && enrollmentData.active_demos.length > 0) {
-    return enrollmentData.active_demos;
+    return enrollmentData.active_demos.map(normalizeDemoItem);
   }
 
   const rawList = demos || student?.demos || [];
@@ -243,6 +252,8 @@ export function extractActiveDemos(student, enrollmentData, demos) {
       subject_name: item.subject_name || item.subject_name_snapshot || item.subject || 'Demo Trial',
       teacher_name: item.teacher_name || item.teacher_name_snapshot || null,
       hall_number: item.hall_number || item.hall_number_snapshot || item.hall || null,
+      timing: item.timing || item.schedule || null,
+      schedule: item.schedule || item.timing || null,
       demo_start_date: item.demo_start_date,
       demo_end_date: item.demo_end_date,
       days_remaining: daysRemaining,
@@ -280,7 +291,12 @@ export function buildWhatsAppShareUrl({ student, admissionNo, activeCourses, act
         ? c.validity_periods
         : [{ valid_from: c.valid_from, valid_to: c.valid_to }];
       const periodLines = periods.map((p) => formatValidityPeriod(p.valid_from, p.valid_to)).join('\n   ');
-      msg += `${idx + 1}. *${c.course_name}*\n   ${periodLines}\n`;
+      const cTiming = c.schedule || c.timing;
+      const cDetails = [
+        cTiming ? `Timing: ${cTiming}` : null,
+        c.hall_number ? `Hall: ${c.hall_number}` : null,
+      ].filter(Boolean).join(' | ');
+      msg += `${idx + 1}. *${c.course_name}*${cDetails ? `\n   ${cDetails}` : ''}\n   ${periodLines}\n`;
     });
   } else {
     msg += `• No active courses currently.\n`;
@@ -290,7 +306,8 @@ export function buildWhatsAppShareUrl({ student, admissionNo, activeCourses, act
     msg += `\n*Active Trial Demos:*\n`;
     activeDemos.forEach((d, idx) => {
       const period = formatDemoDates(d.demo_start_date, d.demo_end_date);
-      msg += `${idx + 1}. *${d.subject_name}* (${d.demo_reference_number})\n   Dates: ${period}${d.teacher_name ? ` | Teacher: ${d.teacher_name}` : ''}${d.hall_number ? ` | Hall: ${d.hall_number}` : ''}\n`;
+      const dTiming = d.schedule || d.timing;
+      msg += `${idx + 1}. *${d.subject_name}* (${d.demo_reference_number})\n   Dates: ${period}${dTiming ? ` | Timing: ${dTiming}` : ''}${d.hall_number ? ` | Hall: ${d.hall_number}` : ''}${d.teacher_name ? ` | Teacher: ${d.teacher_name}` : ''}\n`;
     });
   }
 

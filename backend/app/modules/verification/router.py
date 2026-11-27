@@ -14,7 +14,7 @@ from app.modules.students.models import Student
 from app.modules.admissions.models import Admission, AdmissionItem
 from app.modules.batches.models import Batch
 from app.modules.subjects.models import Subject
-from app.modules.enquiries.models import Enquiry, EnquiryDemoItem
+from app.modules.enquiries.models import Enquiry, EnquiryDemoItem, resolve_demo_timing_and_hall
 from app.modules.settings.models import InstituteSetting
 from app.modules.verification.schemas import (
     PublicVerificationResponse,
@@ -250,6 +250,7 @@ async def get_student_and_active_courses(
                     teacher_name=teach_name,
                     hall_number=hall_num,
                     schedule=class_sched,
+                    timing=class_sched,
                     valid_from=v_from,
                     valid_to=v_to,
                     validity_period=format_period(v_from, v_to),
@@ -507,13 +508,15 @@ async def _get_active_demos_for_student(
 
         seen_refs.add(ref_no)
         days_rem = compute_days_remaining(ditm.demo_end_date, ditm.demo_start_date, today)
+        timing, hall_no = resolve_demo_timing_and_hall(ditm)
 
         active_demos.append(
             IDCardDemoItem(
                 demo_reference_number=ref_no,
                 subject_name=ditm.subject_name_snapshot,
                 teacher_name=ditm.teacher_name_snapshot,
-                hall_number=ditm.hall_number_snapshot,
+                hall_number=hall_no,
+                timing=timing,
                 demo_start_date=ditm.demo_start_date,
                 demo_end_date=ditm.demo_end_date,
                 days_remaining=days_rem,
@@ -608,6 +611,7 @@ async def get_public_id_card(
             teacher_name=c.teacher_name,
             hall_number=c.hall_number,
             schedule=c.schedule,
+            timing=c.timing or c.schedule,
             valid_from=c.valid_from,
             valid_to=c.valid_to,
             validity_period=c.validity_period,

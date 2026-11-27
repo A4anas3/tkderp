@@ -159,6 +159,7 @@ export default function DemosPage() {
         const tName = (d.teacher_name || d.teacher_name_snapshot || '').toLowerCase();
         const subj = (d.subject_name || d.subject_name_snapshot || '').toLowerCase();
         const hall = (d.hall_number || d.hall_number_snapshot || '').toLowerCase();
+        const timing = (d.timing || d.schedule || '').toLowerCase();
 
         if (
           !refNo.includes(q) &&
@@ -166,7 +167,8 @@ export default function DemosPage() {
           !mobile.includes(q) &&
           !tName.includes(q) &&
           !subj.includes(q) &&
-          !hall.includes(q)
+          !hall.includes(q) &&
+          !timing.includes(q)
         ) {
           return false;
         }
@@ -348,7 +350,7 @@ export default function DemosPage() {
                   <th className="py-3 px-3.5">Student Name</th>
                   <th className="py-3 px-3.5">Subject</th>
                   <th className="py-3 px-3.5">Assigned Teacher</th>
-                  <th className="py-3 px-3.5">Hall / Room</th>
+                  <th className="py-3 px-3.5">Hall & Timing</th>
                   <th className="py-3 px-3.5">Demo Dates</th>
                   <th className="py-3 px-3.5 text-center">Status</th>
                   <th className="py-3 px-3.5 text-right">Actions</th>
@@ -410,12 +412,20 @@ export default function DemosPage() {
                         </span>
                       </td>
 
-                      {/* 5. Hall */}
+                      {/* 5. Hall & Timing */}
                       <td className="py-3 px-3.5">
-                        <span className="text-slate-700 flex items-center gap-1">
-                          <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span>{d.hall_number || d.hall_number_snapshot || 'Main Hall'}</span>
-                        </span>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-700">
+                          <span className="flex items-center gap-1">
+                            <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span>Hall: <strong className="text-black">{d.hall_number || d.hall_number_snapshot || 'Main Hall'}</strong></span>
+                          </span>
+                          {(d.timing || d.schedule) && (
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <span>Timing: <strong className="text-black">{d.timing || d.schedule}</strong></span>
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* 6. Demo Dates */}
@@ -489,6 +499,7 @@ export default function DemosPage() {
                                 subject_name_snapshot: d.subject_name || d.subject_name_snapshot,
                                 teacher_name_snapshot: d.teacher_name || d.teacher_name_snapshot,
                                 hall_number_snapshot: d.hall_number || d.hall_number_snapshot,
+                                timing: d.timing || d.schedule,
                                 demo_start_date: d.demo_start_date,
                                 demo_end_date: d.demo_end_date,
                                 demo_duration_days: d.demo_duration_days,
@@ -596,11 +607,19 @@ export default function DemosPage() {
                   </span>
                 </div>
                 <div>
-                  <span className="text-[11px] text-slate-500 block">Classroom / Hall</span>
-                  <span className="font-bold text-slate-900 flex items-center gap-1">
-                    <MapPin className="w-3.5 h-3.5 text-slate-500" />
-                    {detailItem.hall_number || detailItem.hall_number_snapshot || 'Main Hall'}
-                  </span>
+                  <span className="text-[11px] text-slate-500 block">Hall & Timing</span>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-700 mt-0.5">
+                    <span className="font-bold text-slate-900 flex items-center gap-1">
+                      <MapPin className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                      <span>Hall: <strong className="text-black">{detailItem.hall_number || detailItem.hall_number_snapshot || 'Main Hall'}</strong></span>
+                    </span>
+                    {(detailItem.timing || detailItem.schedule) && (
+                      <span className="font-bold text-slate-900 flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                        <span>Timing: <strong className="text-black">{detailItem.timing || detailItem.schedule}</strong></span>
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <span className="text-[11px] text-slate-500 block">Trial Window</span>
@@ -647,6 +666,7 @@ export default function DemosPage() {
                     subject_name_snapshot: detailItem.subject_name || detailItem.subject_name_snapshot,
                     teacher_name_snapshot: detailItem.teacher_name || detailItem.teacher_name_snapshot,
                     hall_number_snapshot: detailItem.hall_number || detailItem.hall_number_snapshot,
+                    timing: detailItem.timing || detailItem.schedule,
                     demo_start_date: detailItem.demo_start_date,
                     demo_end_date: detailItem.demo_end_date,
                     demo_duration_days: detailItem.demo_duration_days,

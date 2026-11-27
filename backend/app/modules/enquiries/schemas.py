@@ -27,6 +27,7 @@ class EnquiryDemoItemResponse(BaseModel):
     subject_name_snapshot: str
     teacher_name_snapshot: Optional[str] = None
     hall_number_snapshot: Optional[str] = None
+    timing: Optional[str] = None
     demo_start_date: date
     demo_end_date: date
     demo_duration_days: int
@@ -132,6 +133,7 @@ class EnquiryDemoRegisterItem(BaseModel):
     teacher_id: Optional[uuid.UUID] = None
     teacher_name: Optional[str] = None
     hall_number: Optional[str] = None
+    timing: Optional[str] = None
     demo_start_date: date
     demo_end_date: date
     demo_duration_days: int

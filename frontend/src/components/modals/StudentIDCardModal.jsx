@@ -379,17 +379,23 @@ export default function StudentIDCardModal({
                           </span>
                         </div>
 
-                        {/* Teacher & Hall */}
-                        {(demo.teacher_name || demo.hall_number) && (
+                        {/* Class Timing, Hall Number & Teacher Name */}
+                        {((demo.schedule || demo.timing) || demo.hall_number || demo.teacher_name) && (
                           <div className="text-[10px] text-slate-700 font-medium flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
-                            {demo.teacher_name && (
-                              <span>
-                                Teacher: <strong className="text-black">{demo.teacher_name}</strong>
-                              </span>
+                            {(demo.schedule || demo.timing) && (
+                              <div className="flex items-center gap-1">
+                                <Clock className="w-3 h-3 text-slate-500 shrink-0" />
+                                <span>Timing: <strong className="text-black">{demo.schedule || demo.timing}</strong></span>
+                              </div>
                             )}
                             {demo.hall_number && (
                               <span>
                                 Hall: <strong className="text-black">{demo.hall_number}</strong>
+                              </span>
+                            )}
+                            {demo.teacher_name && (
+                              <span>
+                                Teacher: <strong className="text-black">{demo.teacher_name}</strong>
                               </span>
                             )}
                           </div>

@@ -13,6 +13,7 @@ from app.database.models import (
     Student, Batch, Teacher, Enquiry, EnquiryDemoItem, Admission, Payment, Expense, SalaryRecord,
     AdmissionItem, User, Subject, Refund
 )
+from app.modules.enquiries.models import resolve_demo_timing_and_hall
 from app.common.active_student import active_student_subject_filter, today_kolkata
 from app.common.teacher_scope import (
     is_teacher_user,
@@ -387,8 +388,10 @@ async def get_teacher_dashboard(
     if teacher_id:
         demos_query = demos_query.where(teacher_demo_ownership_filter(teacher_id, sub_ids))
     demo_rows = (await db.execute(demos_query)).all()
-    active_demos = [
-        {
+    active_demos = []
+    for ditm, enq in demo_rows:
+        timing, hall_no = resolve_demo_timing_and_hall(ditm)
+        active_demos.append({
             "demo_item_id": str(ditm.id),
             "enquiry_id": str(enq.id),
             "demo_reference_number": ditm.demo_reference_number,
@@ -396,13 +399,12 @@ async def get_teacher_dashboard(
             "mobile": enq.mobile,
             "subject_id": str(ditm.subject_id) if ditm.subject_id else None,
             "subject_name": ditm.subject_name_snapshot,
-            "hall_number": ditm.hall_number_snapshot,
+            "hall_number": hall_no,
+            "timing": timing,
             "demo_start_date": str(ditm.demo_start_date),
             "demo_end_date": str(ditm.demo_end_date),
             "status": ditm.status,
-        }
-        for ditm, enq in demo_rows
-    ]
+        })
 
     resp = {
         "teacher_name": teacher.name if teacher else current_user.full_name,
