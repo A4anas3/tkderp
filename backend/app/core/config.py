@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List
 import os
@@ -8,16 +9,30 @@ class Settings(BaseSettings):
     # Environment ("production" disables public API docs; set "development" to enable them)
     ENV: str = "production"
     
-    # Database
-    DATABASE_URL: str = "postgresql+asyncpg://brightloop_user:brightloop_password@localhost:5432/thakurdwara_erp"
+    # Database (must be provided via environment)
+    DATABASE_URL: str
     
     # Redis Cache
     REDIS_URL: str = "redis://localhost:6379/0"
     REDIS_ENABLED: bool = True
     CACHE_DEFAULT_TTL: int = 180 # seconds (3 minutes safety-net TTL)
 
-    # JWT & Auth
-    SECRET_KEY: str = "ThakurdwaraErpSuperSecretKeyMustBeVeryStrongAndSecure2026"
+    # JWT & Auth (SECRET_KEY must be provided via environment; no fallback)
+    SECRET_KEY: str
+
+    @field_validator("SECRET_KEY")
+    @classmethod
+    def validate_secret_key(cls, value: str) -> str:
+        if not value or not value.strip():
+            raise ValueError("SECRET_KEY environment variable must be set and non-empty")
+        return value
+
+    @field_validator("DATABASE_URL")
+    @classmethod
+    def validate_database_url(cls, value: str) -> str:
+        if not value or not value.strip():
+            raise ValueError("DATABASE_URL environment variable must be set and non-empty")
+        return value
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 8  # 8 hours
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30

@@ -1,4 +1,5 @@
 import asyncio
+import os
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 import uuid
@@ -32,9 +33,15 @@ async def seed_data():
         # -------------------------------------------------------------
         # 1. System Users & Roles
         # -------------------------------------------------------------
-        admin_pwd = get_password_hash("Admin@1234")
-        cashier_pwd = get_password_hash("Cashier@1234")
-        teacher_pwd = get_password_hash("Teacher@1234")
+        def _require_seed_password(env_var: str) -> str:
+            val = os.environ.get(env_var, "").strip()
+            if not val:
+                raise RuntimeError(f"{env_var} environment variable must be set to seed default users")
+            return val
+
+        admin_pwd = get_password_hash(_require_seed_password("SEED_ADMIN_PASSWORD"))
+        cashier_pwd = get_password_hash(_require_seed_password("SEED_CASHIER_PASSWORD"))
+        teacher_pwd = get_password_hash(_require_seed_password("SEED_TEACHER_PASSWORD"))
 
         admin_user = User(
             id=uuid.UUID("11111111-1111-1111-1111-111111111101"),

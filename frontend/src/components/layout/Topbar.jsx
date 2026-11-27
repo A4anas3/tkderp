@@ -282,7 +282,7 @@ export default function Topbar({ onOpenAppMenu, onQuickStudent, onQuickPayment }
                     {user?.full_name || 'Staff User'}
                   </p>
                   <p className="text-[11px] text-slate-500 font-mono">
-                    ID: {user?.employee_id || user?.username || 'ADM001'}
+                    ID: {user?.employee_id || user?.username || '—'}
                   </p>
                   <span className="inline-block mt-1 px-1.5 py-0.5 text-[10px] font-semibold bg-purple-100 text-purple-900 rounded capitalize">
                     {role || 'ADMIN'} Access
