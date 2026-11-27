@@ -29,6 +29,8 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
   const [photoSizeKb, setPhotoSizeKb] = useState(null);
   const [existingStudent, setExistingStudent] = useState(null);
   const [checkingMobile, setCheckingMobile] = useState(false);
+  const [mobileTouched, setMobileTouched] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     mobile: '',
@@ -43,7 +45,7 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
     if (isOpen) {
       setFormData({
         name: initialData?.name || '',
-        mobile: initialData?.mobile || '',
+        mobile: cleanMobileInput(initialData?.mobile || ''),
         father_name: initialData?.father_name || '',
         email: initialData?.email || '',
         address: initialData?.address || '',
@@ -53,6 +55,8 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
       setPhotoFile(null);
       setPhotoPreview(initialData?.photo_url || null);
       setExistingStudent(null);
+      setMobileTouched(false);
+      setSubmitAttempted(false);
     }
   }, [isOpen, initialData]);
 
@@ -126,18 +130,17 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setSubmitAttempted(true);
+
     if (!formData.name.trim()) {
       error('Student name is required');
       return;
     }
 
-    // Strictly validate 10 numeric digits if mobile is provided
-    if (formData.mobile) {
-      const clean = cleanMobileInput(formData.mobile);
-      if (clean.length !== 10 || !/^\d{10}$/.test(clean)) {
-        error('Mobile number must be exactly 10 numeric digits');
-        return;
-      }
+    const cleanMobile = cleanMobileInput(formData.mobile);
+    if (!isValid10DigitMobile(cleanMobile, true)) {
+      error(cleanMobile ? 'Mobile number must be exactly 10 numeric digits' : 'Mobile number is required');
+      return;
     }
 
     if (existingStudent) {
@@ -165,7 +168,7 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
 
       const payload = {
         name: formData.name.trim(),
-        mobile: formData.mobile.trim() || null,
+        mobile: cleanMobile,
         father_name: formData.father_name.trim() || null,
         email: formData.email.trim() || null,
         photo_url: uploadedPhotoUrl,
@@ -186,6 +189,8 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
         notes: '',
       });
       setExistingStudent(null);
+      setMobileTouched(false);
+      setSubmitAttempted(false);
       handleRemovePhoto();
       if (onSuccess) onSuccess(res);
       onClose();
@@ -196,6 +201,14 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
     }
   };
 
+  const cleanMobile = cleanMobileInput(formData.mobile);
+  const mobileError = !cleanMobile
+    ? (mobileTouched || submitAttempted ? 'Mobile number is required' : null)
+    : !isValid10DigitMobile(cleanMobile, true)
+    ? `Must be exactly 10 numeric digits (${cleanMobile.length}/10)`
+    : existingStudent
+    ? 'This phone number is already registered'
+    : null;
   const emailError = getEmailValidationError(formData.email);
 
   return (
@@ -265,7 +278,7 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <Input
-              label="Mobile Number (Optional)"
+              label="Mobile Number"
               name="mobile"
               type="tel"
               inputMode="numeric"
@@ -273,18 +286,12 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
               maxLength={10}
               value={formData.mobile}
               onChange={handleChange}
+              onBlur={() => setMobileTouched(true)}
+              required
               placeholder="10-digit mobile"
-              error={
-                formData.mobile && formData.mobile.length < 10
-                  ? `Must be exactly 10 numeric digits (${formData.mobile.length}/10)`
-                  : existingStudent
-                  ? 'This phone number is already registered'
-                  : null
-              }
+              error={mobileError}
               helperText={
-                !formData.mobile
-                  ? 'Optional 10-digit mobile number'
-                  : formData.mobile.length === 10 && !existingStudent && !checkingMobile
+                cleanMobile.length === 10 && !existingStudent && !checkingMobile
                   ? '✓ Valid 10-digit mobile'
                   : null
               }
@@ -417,21 +424,15 @@ export default function QuickStudentModal({ isOpen, onClose, onSuccess, initialD
             type="submit"
             variant="primary"
             loading={loading}
-            disabled={loading || !!existingStudent || (Boolean(formData.mobile) && formData.mobile.length !== 10)}
+            disabled={loading || !!existingStudent}
             className="w-full sm:w-auto"
             title={
               existingStudent
                 ? 'Mobile number already registered'
-                : formData.mobile && formData.mobile.length !== 10
-                ? 'Mobile number must be 10 digits'
                 : 'Register new student'
             }
           >
-            {existingStudent
-              ? 'Mobile Already Registered'
-              : formData.mobile && formData.mobile.length !== 10
-              ? 'Enter 10-Digit Mobile'
-              : 'Confirm Admission'}
+            {existingStudent ? 'Mobile Already Registered' : 'Confirm Admission'}
           </Button>
         </div>
       </form>

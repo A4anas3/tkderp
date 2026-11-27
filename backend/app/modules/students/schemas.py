@@ -26,7 +26,12 @@ class StudentBase(BaseModel):
         return validate_mobile_10_digits(v, required=False)
 
 class StudentCreate(StudentBase):
-    pass
+    mobile: str
+
+    @field_validator("mobile", mode="before")
+    @classmethod
+    def validate_mobile(cls, v):
+        return validate_mobile_10_digits(v, required=True)
 
 class StudentUpdate(BaseModel):
     name: Optional[str] = None
