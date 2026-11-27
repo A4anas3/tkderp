@@ -83,15 +83,19 @@ export default function StudentsPage() {
         <div className="flex items-center gap-2.5 min-w-[160px]">
           <Avatar src={s.photo_url} name={s.name} size="sm" status={s.status} />
           <div>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                navigate(`/students/${s.id}`);
-              }}
-              className="font-bold text-black hover:text-odoo-600 transition text-left block"
-            >
-              {s.name}
-            </button>
+            {isTeacher ? (
+              <span className="font-bold text-black block">{s.name}</span>
+            ) : (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/students/${s.id}`);
+                }}
+                className="font-bold text-black hover:text-odoo-600 transition text-left block"
+              >
+                {s.name}
+              </button>
+            )}
             {s.father_name && (
               <span className="text-[10px] text-slate-600 block">S/O {s.father_name}</span>
             )}
@@ -99,37 +103,41 @@ export default function StudentsPage() {
         </div>
       ),
     },
-    {
-      header: 'Student Code / Purchase ID',
-      className: 'w-44 whitespace-nowrap',
-      render: (s) => (
-        <div>
-          <span className="font-mono font-bold text-odoo-700 block">{s.student_code}</span>
-          {s.latest_admission_number && (
-            <span className="font-mono text-[10px] text-emerald-800 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-200 inline-block mt-0.5">
-              Txn: {s.latest_admission_number}
-            </span>
-          )}
-        </div>
-      ),
-    },
-    {
-      header: 'Mobile Contact',
-      className: 'w-36 whitespace-nowrap',
-      render: (s) =>
-        s.mobile ? (
-          <a
-            href={`tel:${s.mobile}`}
-            onClick={(e) => e.stopPropagation()}
-            className="flex items-center gap-1.5 font-mono text-xs font-semibold text-slate-900 hover:text-odoo-600"
-          >
-            <Phone className="w-3.5 h-3.5 text-odoo-600 shrink-0" />
-            {s.mobile}
-          </a>
-        ) : (
-          <span className="text-slate-500 text-xs italic">No mobile</span>
-        ),
-    },
+    ...(!isTeacher
+      ? [
+          {
+            header: 'Student Code / Purchase ID',
+            className: 'w-44 whitespace-nowrap',
+            render: (s) => (
+              <div>
+                <span className="font-mono font-bold text-odoo-700 block">{s.student_code}</span>
+                {s.latest_admission_number && (
+                  <span className="font-mono text-[10px] text-emerald-800 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-200 inline-block mt-0.5">
+                    Txn: {s.latest_admission_number}
+                  </span>
+                )}
+              </div>
+            ),
+          },
+          {
+            header: 'Mobile Contact',
+            className: 'w-36 whitespace-nowrap',
+            render: (s) =>
+              s.mobile ? (
+                <a
+                  href={`tel:${s.mobile}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex items-center gap-1.5 font-mono text-xs font-semibold text-slate-900 hover:text-odoo-600"
+                >
+                  <Phone className="w-3.5 h-3.5 text-odoo-600 shrink-0" />
+                  {s.mobile}
+                </a>
+              ) : (
+                <span className="text-slate-500 text-xs italic">No mobile</span>
+              ),
+          },
+        ]
+      : []),
     {
       header: 'Green Card Access',
       className: 'w-36 text-center whitespace-nowrap',
@@ -165,62 +173,66 @@ export default function StudentsPage() {
         </Badge>
       ),
     },
-    {
-      header: 'Actions',
-      className: 'text-right w-36 whitespace-nowrap',
-      render: (s) => (
-        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
-          {Number(s.total_balance_due || 0) > 0 && (
-            <button
-              type="button"
-              onClick={async (e) => {
-                e.stopPropagation();
-                try {
-                  const res = await remindersApi.sendStudentReminder(s.id);
-                  if (res?.whatsapp_url) {
-                    window.open(res.whatsapp_url, '_blank', 'noopener,noreferrer');
-                  }
-                } catch (err) {
-                  console.error('Failed to send reminder:', err);
-                }
-              }}
-              title={`Send WhatsApp due reminder (Due: ₹${Number(s.total_balance_due).toFixed(0)})`}
-              className="h-7 px-2 rounded bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-300 font-bold inline-flex items-center gap-1 text-[11px] shadow-2xs cursor-pointer"
-            >
-              <WhatsAppIcon className="w-3.5 h-3.5 text-emerald-700" />
-              <span>Remind</span>
-            </button>
-          )}
-          {canManageAdmissions && (
-            <Button
-              size="xs"
-              variant="amber"
-              icon={Edit2}
-              onClick={(e) => {
-                e.stopPropagation();
-                setEditingStudent(s);
-                setEditModalOpen(true);
-              }}
-              title="Edit Student Information"
-            >
-              Edit
-            </Button>
-          )}
-          <Button
-            size="xs"
-            variant="info"
-            icon={Eye}
-            onClick={(e) => {
-              e.stopPropagation();
-              navigate(`/students/${s.id}`);
-            }}
-            title="View Student Profile"
-          >
-            Profile
-          </Button>
-        </div>
-      ),
-    },
+    ...(!isTeacher
+      ? [
+          {
+            header: 'Actions',
+            className: 'text-right w-36 whitespace-nowrap',
+            render: (s) => (
+              <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                {Number(s.total_balance_due || 0) > 0 && (
+                  <button
+                    type="button"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      try {
+                        const res = await remindersApi.sendStudentReminder(s.id);
+                        if (res?.whatsapp_url) {
+                          window.open(res.whatsapp_url, '_blank', 'noopener,noreferrer');
+                        }
+                      } catch (err) {
+                        console.error('Failed to send reminder:', err);
+                      }
+                    }}
+                    title={`Send WhatsApp due reminder (Due: ₹${Number(s.total_balance_due).toFixed(0)})`}
+                    className="h-7 px-2 rounded bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-300 font-bold inline-flex items-center gap-1 text-[11px] shadow-2xs cursor-pointer"
+                  >
+                    <WhatsAppIcon className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>Remind</span>
+                  </button>
+                )}
+                {canManageAdmissions && (
+                  <Button
+                    size="xs"
+                    variant="amber"
+                    icon={Edit2}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingStudent(s);
+                      setEditModalOpen(true);
+                    }}
+                    title="Edit Student Information"
+                  >
+                    Edit
+                  </Button>
+                )}
+                <Button
+                  size="xs"
+                  variant="info"
+                  icon={Eye}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/students/${s.id}`);
+                  }}
+                  title="View Student Profile"
+                >
+                  Profile
+                </Button>
+              </div>
+            ),
+          },
+        ]
+      : []),
   ];
 
   const totalPages = Math.max(1, Math.ceil(total / (viewMode === 'kanban' ? 24 : 15)));
@@ -318,8 +330,12 @@ export default function StudentsPage() {
           }}
           onRefresh={loadStudents}
           loading={loading}
-          onRowClick={(s) => navigate(`/students/${s.id}`)}
-          searchPlaceholder="Search by student name, mobile no, student code, or admission no..."
+          onRowClick={isTeacher ? undefined : (s) => navigate(`/students/${s.id}`)}
+          searchPlaceholder={
+            isTeacher
+              ? 'Search by student name...'
+              : 'Search by student name, mobile no, student code, or admission no...'
+          }
           emptyMessage="No students found."
         />
       ) : (
@@ -335,7 +351,11 @@ export default function StudentsPage() {
                   setSearch(e.target.value);
                   setPage(1);
                 }}
-                placeholder="Search by student name, code, phone, or admission no..."
+                placeholder={
+                  isTeacher
+                    ? 'Search by student name...'
+                    : 'Search by student name, code, phone, or admission no...'
+                }
                 className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-xs sm:text-sm text-black placeholder-slate-400 focus:outline-none focus:border-odoo-600 focus:ring-1 focus:ring-odoo-600 shadow-2xs bg-white"
               />
             </div>
@@ -374,17 +394,28 @@ export default function StudentsPage() {
                           className="shrink-0"
                         />
                         <div className="min-w-0 flex-1">
-                          <button
-                            onClick={() => navigate(`/students/${s.id}`)}
-                            className="font-bold text-black text-sm hover:text-odoo-700 truncate block text-left w-full transition-colors"
-                            title={s.name}
-                          >
-                            {s.name}
-                          </button>
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="font-mono text-[10px] font-bold text-odoo-800 bg-purple-50 border border-odoo-200 px-1.5 py-0.5 rounded-full">
-                              {s.student_code}
+                          {isTeacher ? (
+                            <span
+                              className="font-bold text-black text-sm truncate block text-left w-full"
+                              title={s.name}
+                            >
+                              {s.name}
                             </span>
+                          ) : (
+                            <button
+                              onClick={() => navigate(`/students/${s.id}`)}
+                              className="font-bold text-black text-sm hover:text-odoo-700 truncate block text-left w-full transition-colors"
+                              title={s.name}
+                            >
+                              {s.name}
+                            </button>
+                          )}
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            {!isTeacher && s.student_code && (
+                              <span className="font-mono text-[10px] font-bold text-odoo-800 bg-purple-50 border border-odoo-200 px-1.5 py-0.5 rounded-full">
+                                {s.student_code}
+                              </span>
+                            )}
                             <Badge
                               size="xs"
                               variant={isRev ? 'danger' : s.status === 'ACTIVE' ? 'success' : 'neutral'}
@@ -404,22 +435,24 @@ export default function StudentsPage() {
                           </div>
                         )}
 
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-slate-700 font-semibold">Mobile:</span>
-                          {s.mobile ? (
-                            <a
-                              href={`tel:${s.mobile}`}
-                              className="font-mono font-bold text-black hover:text-odoo-600 flex items-center gap-1"
-                            >
-                              <Phone className="w-3 h-3 text-odoo-600" />
-                              {s.mobile}
-                            </a>
-                          ) : (
-                            <span className="text-slate-500 italic">None</span>
-                          )}
-                        </div>
+                        {!isTeacher && (
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-slate-700 font-semibold">Mobile:</span>
+                            {s.mobile ? (
+                              <a
+                                href={`tel:${s.mobile}`}
+                                className="font-mono font-bold text-black hover:text-odoo-600 flex items-center gap-1"
+                              >
+                                <Phone className="w-3 h-3 text-odoo-600" />
+                                {s.mobile}
+                              </a>
+                            ) : (
+                              <span className="text-slate-500 italic">None</span>
+                            )}
+                          </div>
+                        )}
 
-                        {s.latest_admission_number && (
+                        {!isTeacher && s.latest_admission_number && (
                           <div className="flex items-center justify-between text-xs">
                             <span className="text-slate-700 font-semibold">Purchase ID:</span>
                             <span className="font-mono font-bold text-odoo-900 bg-purple-50 px-1.5 py-0.5 rounded border border-odoo-200">
@@ -459,47 +492,49 @@ export default function StudentsPage() {
                     </div>
 
                     {/* Bottom Card Actions */}
-                    <div className="mt-3.5 pt-2 border-t border-slate-100 flex items-center gap-1.5">
-                      {canManageAdmissions && (
+                    {!isTeacher && (
+                      <div className="mt-3.5 pt-2 border-t border-slate-100 flex items-center gap-1.5">
+                        {canManageAdmissions && (
+                          <Button
+                            size="xs"
+                            variant="amber"
+                            icon={Edit2}
+                            onClick={() => {
+                              setEditingStudent(s);
+                              setEditModalOpen(true);
+                            }}
+                            title="Edit Student Information"
+                          >
+                            Edit
+                          </Button>
+                        )}
                         <Button
                           size="xs"
-                          variant="amber"
-                          icon={Edit2}
-                          onClick={() => {
-                            setEditingStudent(s);
-                            setEditModalOpen(true);
-                          }}
-                          title="Edit Student Information"
-                        >
-                          Edit
-                        </Button>
-                      )}
-                      <Button
-                        size="xs"
-                        variant="info"
-                        className="flex-1 justify-center"
-                        icon={Eye}
-                        onClick={() => navigate(`/students/${s.id}`)}
-                      >
-                        Profile
-                      </Button>
-                      {canManageAdmissions && !isRev && (
-                        <Button
-                          size="xs"
-                          variant="primary"
+                          variant="info"
                           className="flex-1 justify-center"
-                          icon={Plus}
-                          onClick={() =>
-                            navigate(
-                              `/enrollments/new?student_id=${s.id}&name=${encodeURIComponent(s.name)}`
-                            )
-                          }
-                          title="Purchase / Renew Subject Fee"
+                          icon={Eye}
+                          onClick={() => navigate(`/students/${s.id}`)}
                         >
-                          + Enrol
+                          Profile
                         </Button>
-                      )}
-                    </div>
+                        {canManageAdmissions && !isRev && (
+                          <Button
+                            size="xs"
+                            variant="primary"
+                            className="flex-1 justify-center"
+                            icon={Plus}
+                            onClick={() =>
+                              navigate(
+                                `/enrollments/new?student_id=${s.id}&name=${encodeURIComponent(s.name)}`
+                              )
+                            }
+                            title="Purchase / Renew Subject Fee"
+                          >
+                            + Enrol
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}

@@ -597,7 +597,7 @@ export default function SubjectDetailPage() {
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="Search student, code, mobile..."
+                  placeholder={isTeacher ? 'Search by student name...' : 'Search student, code, mobile...'}
                   value={rosterSearch}
                   onChange={(e) => {
                     setRosterSearch(e.target.value);
@@ -671,16 +671,16 @@ export default function SubjectDetailPage() {
                     {!isTeacher && <th className="p-3 text-right text-emerald-800">Collected</th>}
                     {!isTeacher && <th className="p-3 text-right text-rose-700">Due</th>}
                     {!isTeacher && <th className="p-3 text-center">Payment</th>}
-                    <th className="p-3 text-center">Actions</th>
+                    {!isTeacher && <th className="p-3 text-center">Actions</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {pagedStudents.map((s, idx) => (
                     <tr
                       key={idx}
-                      onClick={() => navigate(`/students/${s.student_id}`)}
-                      className="hover:bg-purple-50/40 cursor-pointer transition-colors"
-                      title="Click to view full student profile & ledger"
+                      onClick={!isTeacher ? () => navigate(`/students/${s.student_id}`) : undefined}
+                      className={!isTeacher ? 'hover:bg-purple-50/40 cursor-pointer transition-colors' : 'hover:bg-slate-50/60 transition-colors'}
+                      title={!isTeacher ? 'Click to view full student profile & ledger' : undefined}
                     >
                       {/* Student Info */}
                       <td className="p-3">
@@ -696,13 +696,15 @@ export default function SubjectDetailPage() {
                             }
                           />
                           <div>
-                            <div className="font-bold text-black hover:text-odoo-600 transition">
+                            <div className={`font-bold text-black ${!isTeacher ? 'hover:text-odoo-600 transition' : ''}`}>
                               {s.student_name}
                             </div>
-                            <div className="font-mono text-[11px] text-slate-600 font-semibold">
-                              {s.student_code}
-                            </div>
-                            {s.mobile && (
+                            {!isTeacher && s.student_code && (
+                              <div className="font-mono text-[11px] text-slate-600 font-semibold">
+                                {s.student_code}
+                              </div>
+                            )}
+                            {!isTeacher && s.mobile && (
                               <div className="text-[11px] text-slate-600 font-mono">
                                 📞 {s.mobile}
                               </div>
@@ -793,40 +795,42 @@ export default function SubjectDetailPage() {
                       )}
 
                       {/* Actions */}
-                      <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-center gap-1.5 whitespace-nowrap">
-                          {!isTeacher && Number(s.balance_due || 0) > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => handleSendStudentReminder(s.student_id)}
-                              className="h-8 min-h-[32px] px-2.5 py-1 text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold rounded-md border border-emerald-300 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shadow-2xs transition-colors"
-                              title={`Send WhatsApp due reminder to ${s.student_name}`}
-                            >
-                              <WhatsAppIcon className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-                              <span>Remind</span>
-                            </button>
-                          )}
+                      {!isTeacher && (
+                        <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-center gap-1.5 whitespace-nowrap">
+                            {Number(s.balance_due || 0) > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => handleSendStudentReminder(s.student_id)}
+                                className="h-8 min-h-[32px] px-2.5 py-1 text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold rounded-md border border-emerald-300 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shadow-2xs transition-colors"
+                                title={`Send WhatsApp due reminder to ${s.student_name}`}
+                              >
+                                <WhatsAppIcon className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                                <span>Remind</span>
+                              </button>
+                            )}
 
-                          {!isTeacher && Number(s.balance_due || 0) > 0 && (
-                            <button
-                              onClick={() => setPayAdmissionId(s.admission_id)}
-                              className="h-8 min-h-[32px] px-2.5 py-1 text-xs bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 text-emerald-900 font-bold rounded-md border border-emerald-300 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shadow-2xs transition-colors"
-                              title="Collect balance payment"
-                            >
-                              <CreditCard className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-                              <span>Collect</span>
-                            </button>
-                          )}
+                            {Number(s.balance_due || 0) > 0 && (
+                              <button
+                                onClick={() => setPayAdmissionId(s.admission_id)}
+                                className="h-8 min-h-[32px] px-2.5 py-1 text-xs bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 text-emerald-900 font-bold rounded-md border border-emerald-300 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shadow-2xs transition-colors"
+                                title="Collect balance payment"
+                              >
+                                <CreditCard className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                                <span>Collect</span>
+                              </button>
+                            )}
 
-                          <Link
-                            to={`/students/${s.student_id}`}
-                            className="h-8 min-h-[32px] px-2.5 py-1 text-xs bg-blue-50 hover:bg-blue-100 active:bg-blue-200 text-blue-700 hover:text-blue-800 font-semibold rounded-md border border-blue-300 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shadow-2xs transition-colors"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                            <span>Profile</span>
-                          </Link>
-                        </div>
-                      </td>
+                            <Link
+                              to={`/students/${s.student_id}`}
+                              className="h-8 min-h-[32px] px-2.5 py-1 text-xs bg-blue-50 hover:bg-blue-100 active:bg-blue-200 text-blue-700 hover:text-blue-800 font-semibold rounded-md border border-blue-300 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shadow-2xs transition-colors"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                              <span>Profile</span>
+                            </Link>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

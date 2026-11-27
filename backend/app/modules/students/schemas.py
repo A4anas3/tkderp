@@ -50,7 +50,7 @@ class StudentRevokeRequest(BaseModel):
 
 class StudentResponse(StudentBase):
     id: uuid.UUID
-    student_code: str
+    student_code: Optional[str] = None
     latest_admission_number: Optional[str] = None
     revoke_reason: Optional[str] = None
     revoked_at: Optional[datetime] = None

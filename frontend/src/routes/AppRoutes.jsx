@@ -194,7 +194,7 @@ export default function AppRoutes() {
         <Route
           path="students/:id"
           element={
-            <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER', 'TEACHER']}>
+            <ProtectedRoute allowedRoles={['ADMIN', 'CASHIER']}>
               <StudentDetailPage />
             </ProtectedRoute>
           }

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, and_, desc
 from sqlalchemy.exc import IntegrityError
@@ -129,12 +130,15 @@ async def list_students(
     db: AsyncSession = Depends(get_db),
     user = Depends(require_staff)
 ):
+    teacher_mode = is_teacher_user(user)
     cache_key = make_cache_key(
         "students", "list", user_scope(user),
         page=page, page_size=page_size, search=search, status=status,
     )
     hit, cached = await cache_get(cache_key)
     if hit:
+        if teacher_mode:
+            return JSONResponse(content=cached)
         return cached
     query = select(Student)
     count_query = select(func.count(Student.id))
@@ -142,23 +146,26 @@ async def list_students(
     if search:
         clean_search = search.strip()
         search_pattern = f"%{clean_search}%"
-        norm_search = normalize_mobile(clean_search)
-        # Subquery to match student by admission number
-        adm_subquery = select(Admission.student_id).where(Admission.admission_number.ilike(search_pattern))
-        pay_subquery = select(Payment.student_id).where(Payment.payment_number.ilike(search_pattern))
+        if teacher_mode:
+            search_filter = Student.name.ilike(search_pattern)
+        else:
+            norm_search = normalize_mobile(clean_search)
+            # Subquery to match student by admission number
+            adm_subquery = select(Admission.student_id).where(Admission.admission_number.ilike(search_pattern))
+            pay_subquery = select(Payment.student_id).where(Payment.payment_number.ilike(search_pattern))
 
-        clauses = [
-            Student.name.ilike(search_pattern),
-            Student.student_code.ilike(search_pattern),
-            Student.mobile.ilike(search_pattern),
-            Student.father_name.ilike(search_pattern),
-            Student.id.in_(adm_subquery),
-            Student.id.in_(pay_subquery)
-        ]
-        if norm_search and norm_search != clean_search:
-            clauses.append(Student.mobile.ilike(f"%{norm_search}%"))
+            clauses = [
+                Student.name.ilike(search_pattern),
+                Student.student_code.ilike(search_pattern),
+                Student.mobile.ilike(search_pattern),
+                Student.father_name.ilike(search_pattern),
+                Student.id.in_(adm_subquery),
+                Student.id.in_(pay_subquery)
+            ]
+            if norm_search and norm_search != clean_search:
+                clauses.append(Student.mobile.ilike(f"%{norm_search}%"))
 
-        search_filter = or_(*clauses)
+            search_filter = or_(*clauses)
         query = query.where(search_filter)
         count_query = count_query.where(search_filter)
 
@@ -234,21 +241,20 @@ async def list_students(
             query = query.where(Student.status == status)
             count_query = count_query.where(Student.status == status)
 
-    teacher_mode = is_teacher_user(user)
     teacher_sub_ids: List[uuid.UUID] = []
     if teacher_mode:
         teacher = await resolve_teacher_for_user(db, user)
         teacher_sub_ids = await get_teacher_subject_ids(db, teacher.id) if teacher else []
         if not teacher or not teacher_sub_ids:
-            resp = PageResponse(
-                items=[],
-                total=0,
-                page=page,
-                page_size=page_size,
-                total_pages=0,
-            )
-            await cache_set(cache_key, resp, ttl=TTL_MEDIUM, model=PageResponse[StudentResponse])
-            return resp
+            resp_dict = {
+                "items": [],
+                "total": 0,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": 0,
+            }
+            await cache_set(cache_key, resp_dict, ttl=TTL_MEDIUM)
+            return JSONResponse(content=resp_dict)
         today = today_kolkata()
         teacher_students_stmt = (
             select(Admission.student_id)
@@ -268,60 +274,63 @@ async def list_students(
     query = query.order_by(Student.registration_date.desc(), Student.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
     items = (await db.execute(query)).scalars().all()
 
+    if teacher_mode:
+        stripped_items = []
+        for s in items:
+            resp = StudentResponse.model_validate(s)
+            resp.has_green_card = False
+            resp.green_card_expiry = None
+            resp.latest_admission_number = None
+            item_data = resp.model_dump(mode="json")
+            item_data.pop("mobile", None)
+            item_data.pop("student_code", None)
+            item_data.pop("latest_admission_number", None)
+            stripped_items.append(item_data)
+        resp_dict = {
+            "items": stripped_items,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages,
+        }
+        await cache_set(cache_key, resp_dict, ttl=TTL_MEDIUM)
+        return JSONResponse(content=resp_dict)
+
     # Map latest admission number for display in student search dropdown
     student_ids = [s.id for s in items]
     adm_map = {}
     if student_ids:
-        if teacher_mode:
-            today = today_kolkata()
-            adm_stmt_teacher = (
-                select(Admission.student_id, Admission.admission_number)
-                .join(AdmissionItem, AdmissionItem.admission_id == Admission.id)
-                .where(
-                    Admission.student_id.in_(student_ids),
-                    AdmissionItem.subject_id.in_(teacher_sub_ids),
-                    active_teacher_student_item_filter(today),
-                )
-                .order_by(Admission.admission_date.desc(), Admission.created_at.desc())
+        # Prioritize active, non-void admissions (consistent with get_student)
+        adm_stmt_active = (
+            select(Admission.student_id, Admission.admission_number)
+            .where(
+                Admission.student_id.in_(student_ids),
+                Admission.status == "ACTIVE",
+                Admission.document_status != "VOID"
             )
-            for s_id, adm_no in (await db.execute(adm_stmt_teacher)).all():
-                if s_id not in adm_map:
-                    adm_map[s_id] = adm_no
-        else:
-            # Prioritize active, non-void admissions (consistent with get_student)
-            adm_stmt_active = (
-                select(Admission.student_id, Admission.admission_number)
-                .where(
-                    Admission.student_id.in_(student_ids),
-                    Admission.status == "ACTIVE",
-                    Admission.document_status != "VOID"
-                )
-                .order_by(Admission.admission_date.desc(), Admission.created_at.desc())
-            )
-            adm_res_active = await db.execute(adm_stmt_active)
-            for s_id, adm_no in adm_res_active.all():
-                if s_id not in adm_map:
-                    adm_map[s_id] = adm_no
+            .order_by(Admission.admission_date.desc(), Admission.created_at.desc())
+        )
+        adm_res_active = await db.execute(adm_stmt_active)
+        for s_id, adm_no in adm_res_active.all():
+            if s_id not in adm_map:
+                adm_map[s_id] = adm_no
 
-            # For students without an active valid admission, fallback to latest admission
-            remaining_ids = [s_id for s_id in student_ids if s_id not in adm_map]
-            if remaining_ids:
-                adm_stmt_fallback = (
-                    select(Admission.student_id, Admission.admission_number)
-                    .where(Admission.student_id.in_(remaining_ids))
-                    .order_by(Admission.admission_date.desc(), Admission.created_at.desc())
-                )
-                adm_res_fallback = await db.execute(adm_stmt_fallback)
-                for s_id, adm_no in adm_res_fallback.all():
-                    if s_id not in adm_map:
-                        adm_map[s_id] = adm_no
+        # For students without an active valid admission, fallback to latest admission
+        remaining_ids = [s_id for s_id in student_ids if s_id not in adm_map]
+        if remaining_ids:
+            adm_stmt_fallback = (
+                select(Admission.student_id, Admission.admission_number)
+                .where(Admission.student_id.in_(remaining_ids))
+                .order_by(Admission.admission_date.desc(), Admission.created_at.desc())
+            )
+            adm_res_fallback = await db.execute(adm_stmt_fallback)
+            for s_id, adm_no in adm_res_fallback.all():
+                if s_id not in adm_map:
+                    adm_map[s_id] = adm_no
 
     response_items = []
     for s in items:
         resp = StudentResponse.model_validate(s)
-        if teacher_mode:
-            resp.has_green_card = False
-            resp.green_card_expiry = None
         resp.latest_admission_number = adm_map.get(s.id)
         response_items.append(resp)
 
@@ -390,7 +399,20 @@ async def check_student_by_mobile(
     return resp
 
 @router.get("/{student_id}", response_model=StudentDetailResponse)
-async def get_student(student_id: uuid.UUID, db: AsyncSession = Depends(get_db), user = Depends(require_staff)):
+async def get_student(student_id: str, db: AsyncSession = Depends(get_db), user = Depends(require_staff)):
+    if is_teacher_user(user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: teachers cannot view student profiles",
+        )
+    try:
+        student_uuid = uuid.UUID(student_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid student ID",
+        )
+    student_id = student_uuid
     cache_key = make_cache_key("students", "profile", student_id, user_scope(user))
     hit, cached = await cache_get(cache_key)
     if hit:
@@ -726,10 +748,23 @@ async def _get_demos_for_student(
 
 @router.get("/{student_id}/demos", response_model=List[StudentDemoItemResponse])
 async def get_student_demos(
-    student_id: uuid.UUID,
+    student_id: str,
     db: AsyncSession = Depends(get_db),
     user = Depends(require_staff)
 ):
+    if is_teacher_user(user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: teachers cannot view student profiles",
+        )
+    try:
+        student_uuid = uuid.UUID(student_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid student ID",
+        )
+    student_id = student_uuid
     cache_key = make_cache_key("students", "demos", student_id, user_scope(user))
     hit, cached = await cache_get(cache_key)
     if hit:
@@ -1424,10 +1459,23 @@ async def get_student_renewals_due(
 
 @router.get("/{student_id}/active-enrollment")
 async def get_student_active_enrollment(
-    student_id: uuid.UUID,
+    student_id: str,
     db: AsyncSession = Depends(get_db),
     user = Depends(require_staff)
 ):
+    if is_teacher_user(user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: teachers cannot view student profiles",
+        )
+    try:
+        student_uuid = uuid.UUID(student_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid student ID",
+        )
+    student_id = student_uuid
     cache_key = make_cache_key("students", "active_enr", student_id, user_scope(user))
     hit, cached = await cache_get(cache_key)
     if hit:

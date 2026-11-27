@@ -313,13 +313,19 @@ async def get_teacher_dashboard(
                 continue
             seen_stu_in_sub.add(row[1])
             total_students_set.add(row[1])
-            roster.append({
-                "student_id": str(row[1]),
-                "student_name": row[2],
-                "mobile": row[3],
-                "registration_no": row[4],
-                "status": "ACTIVE",
-            })
+            if teacher_mode:
+                roster.append({
+                    "student_name": row[2],
+                    "status": "ACTIVE",
+                })
+            else:
+                roster.append({
+                    "student_id": str(row[1]),
+                    "student_name": row[2],
+                    "mobile": row[3],
+                    "registration_no": row[4],
+                    "status": "ACTIVE",
+                })
 
         batch_list.append({
             "id": str(s.id),
@@ -391,12 +397,11 @@ async def get_teacher_dashboard(
     active_demos = []
     for ditm, enq in demo_rows:
         timing, hall_no = resolve_demo_timing_and_hall(ditm)
-        active_demos.append({
+        demo_entry = {
             "demo_item_id": str(ditm.id),
             "enquiry_id": str(enq.id),
             "demo_reference_number": ditm.demo_reference_number,
             "student_name": enq.student_name,
-            "mobile": enq.mobile,
             "subject_id": str(ditm.subject_id) if ditm.subject_id else None,
             "subject_name": ditm.subject_name_snapshot,
             "hall_number": hall_no,
@@ -404,7 +409,10 @@ async def get_teacher_dashboard(
             "demo_start_date": str(ditm.demo_start_date),
             "demo_end_date": str(ditm.demo_end_date),
             "status": ditm.status,
-        })
+        }
+        if not teacher_mode:
+            demo_entry["mobile"] = enq.mobile
+        active_demos.append(demo_entry)
 
     resp = {
         "teacher_name": teacher.name if teacher else current_user.full_name,

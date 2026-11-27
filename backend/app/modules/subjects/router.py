@@ -283,13 +283,19 @@ async def get_subject_roster(
 
     if search and search.strip():
         pat = f"%{search.strip()}%"
-        search_clause = or_(
-            Student.name.ilike(pat),
-            Student.student_code.ilike(pat),
-            Student.mobile.ilike(pat),
-            AdmissionItem.teacher_name_snapshot.ilike(pat),
-            Admission.admission_number.ilike(pat),
-        )
+        if teacher_mode:
+            search_clause = or_(
+                Student.name.ilike(pat),
+                AdmissionItem.teacher_name_snapshot.ilike(pat),
+            )
+        else:
+            search_clause = or_(
+                Student.name.ilike(pat),
+                Student.student_code.ilike(pat),
+                Student.mobile.ilike(pat),
+                AdmissionItem.teacher_name_snapshot.ilike(pat),
+                Admission.admission_number.ilike(pat),
+            )
         q_items = q_items.where(search_clause)
         q_count = q_count.where(search_clause)
 
@@ -323,24 +329,38 @@ async def get_subject_roster(
         )
         if teacher_mode:
             c_info["payment_status"] = "HIDDEN"
-        items.append({
-            "item_id": str(itm.id),
-            "admission_id": str(adm.id),
-            "admission_number": adm.admission_number,
-            "admission_date": str(adm.admission_date),
-            "student_id": str(stu.id),
-            "student_code": stu.student_code,
-            "student_name": stu.name,
-            "mobile": stu.mobile or "",
-            "father_name": stu.father_name or "",
-            "photo_url": stu.photo_url,
-            "batch_id": str(bch.id) if bch else None,
-            "batch_name": bch.name if bch else (itm.item_name_snapshot or "Direct Subject"),
-            "teacher_id": str(itm.teacher_id) if itm.teacher_id else (str(bch.teacher_id) if bch and bch.teacher_id else None),
-            "teacher_name": itm.teacher_name_snapshot or (bch.teacher_name_snapshot if bch else "Faculty"),
-            "hall_number": itm.hall_number_snapshot or (bch.hall_number if bch else "Main"),
-            **c_info
-        })
+            items.append({
+                "item_id": str(itm.id),
+                "admission_date": str(adm.admission_date),
+                "student_name": stu.name,
+                "father_name": stu.father_name or "",
+                "photo_url": stu.photo_url,
+                "batch_id": str(bch.id) if bch else None,
+                "batch_name": bch.name if bch else (itm.item_name_snapshot or "Direct Subject"),
+                "teacher_id": str(itm.teacher_id) if itm.teacher_id else (str(bch.teacher_id) if bch and bch.teacher_id else None),
+                "teacher_name": itm.teacher_name_snapshot or (bch.teacher_name_snapshot if bch else "Faculty"),
+                "hall_number": itm.hall_number_snapshot or (bch.hall_number if bch else "Main"),
+                **c_info
+            })
+        else:
+            items.append({
+                "item_id": str(itm.id),
+                "admission_id": str(adm.id),
+                "admission_number": adm.admission_number,
+                "admission_date": str(adm.admission_date),
+                "student_id": str(stu.id),
+                "student_code": stu.student_code,
+                "student_name": stu.name,
+                "mobile": stu.mobile or "",
+                "father_name": stu.father_name or "",
+                "photo_url": stu.photo_url,
+                "batch_id": str(bch.id) if bch else None,
+                "batch_name": bch.name if bch else (itm.item_name_snapshot or "Direct Subject"),
+                "teacher_id": str(itm.teacher_id) if itm.teacher_id else (str(bch.teacher_id) if bch and bch.teacher_id else None),
+                "teacher_name": itm.teacher_name_snapshot or (bch.teacher_name_snapshot if bch else "Faculty"),
+                "hall_number": itm.hall_number_snapshot or (bch.hall_number if bch else "Main"),
+                **c_info
+            })
 
     resp = {
         "items": items,
