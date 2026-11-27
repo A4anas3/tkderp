@@ -16,6 +16,7 @@ export default function DataTable({
   headerActions,
   emptyMessage = 'No records found.',
   onRowClick,
+  alwaysShowPagination = false,
 }) {
   const [localSearch, setLocalSearch] = useState(searchValue);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -134,12 +135,21 @@ export default function DataTable({
       </div>
 
       {/* Pagination Footer */}
-      {total > 0 && onPageChange && (
+      {(alwaysShowPagination || total > 0) && onPageChange && (
         <div className="px-3.5 py-2.5 border-t border-slate-200 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs text-slate-700 font-medium">
           <div className="text-center sm:text-left">
-            Showing <span className="font-bold text-black">{(page - 1) * pageSize + 1}</span> to{' '}
-            <span className="font-bold text-black">{Math.min(page * pageSize, total)}</span> of{' '}
-            <span className="font-bold text-black">{total}</span> records
+            {total === 0 ? (
+              <>
+                Showing <span className="font-bold text-black">0</span> of{' '}
+                <span className="font-bold text-black">0</span> records
+              </>
+            ) : (
+              <>
+                Showing <span className="font-bold text-black">{(page - 1) * pageSize + 1}</span> to{' '}
+                <span className="font-bold text-black">{Math.min(page * pageSize, total)}</span> of{' '}
+                <span className="font-bold text-black">{total}</span> records
+              </>
+            )}
           </div>
 
           <div className="flex items-center gap-1.5">

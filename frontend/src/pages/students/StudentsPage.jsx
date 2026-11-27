@@ -26,6 +26,8 @@ import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
 import { WhatsAppIcon } from '../../utils/whatsappHelpers';
 
+const PAGE_SIZE = 50;
+
 export default function StudentsPage() {
   const navigate = useNavigate();
   const { error } = useToast();
@@ -33,6 +35,7 @@ export default function StudentsPage() {
   const [students, setStudents] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [viewMode, setViewMode] = useState(() => {
@@ -59,18 +62,19 @@ export default function StudentsPage() {
     try {
       const res = await studentApi.list({
         page,
-        page_size: viewMode === 'kanban' ? 24 : 15,
+        page_size: PAGE_SIZE,
         search: search.trim() || undefined,
         status: statusFilter || undefined,
       });
       setStudents(res.items || []);
       setTotal(res.total || 0);
+      setPageSize(res.page_size || PAGE_SIZE);
     } catch (err) {
       error(err.message || 'Failed to load students');
     } finally {
       setLoading(false);
     }
-  }, [page, search, statusFilter, viewMode]);
+  }, [page, search, statusFilter]);
 
   useEffect(() => {
     loadStudents();
@@ -235,7 +239,7 @@ export default function StudentsPage() {
       : []),
   ];
 
-  const totalPages = Math.max(1, Math.ceil(total / (viewMode === 'kanban' ? 24 : 15)));
+  const totalPages = Math.max(1, Math.ceil(total / (pageSize || PAGE_SIZE)));
 
   return (
     <div className="space-y-4">
@@ -321,7 +325,8 @@ export default function StudentsPage() {
           data={students}
           total={total}
           page={page}
-          pageSize={15}
+          pageSize={pageSize}
+          alwaysShowPagination
           onPageChange={(p) => setPage(p)}
           searchValue={search}
           onSearchChange={(val) => {
@@ -542,33 +547,31 @@ export default function StudentsPage() {
           )}
 
           {/* Kanban Pagination */}
-          {totalPages > 1 && (
-            <div className="bg-white border border-slate-200 rounded-lg p-2.5 shadow-2xs flex items-center justify-between text-xs">
-              <span className="text-slate-700">
-                Page <span className="font-bold text-black">{page}</span> of <span className="font-bold text-black">{totalPages}</span>
-              </span>
-              <div className="flex items-center gap-1.5">
-                <Button
-                  size="xs"
-                  variant="secondary"
-                  disabled={page <= 1}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  className="min-h-[30px]"
-                >
-                  Previous
-                </Button>
-                <Button
-                  size="xs"
-                  variant="secondary"
-                  disabled={page >= totalPages}
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  className="min-h-[30px]"
-                >
-                  Next
-                </Button>
-              </div>
+          <div className="bg-white border border-slate-200 rounded-lg p-2.5 shadow-2xs flex items-center justify-between text-xs">
+            <span className="text-slate-700">
+              Page <span className="font-bold text-black">{page}</span> of <span className="font-bold text-black">{totalPages}</span>
+            </span>
+            <div className="flex items-center gap-1.5">
+              <Button
+                size="xs"
+                variant="secondary"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="min-h-[30px]"
+              >
+                Previous
+              </Button>
+              <Button
+                size="xs"
+                variant="secondary"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                className="min-h-[30px]"
+              >
+                Next
+              </Button>
             </div>
-          )}
+          </div>
         </div>
       )}
 
