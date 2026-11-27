@@ -42,7 +42,7 @@ export default function LoginPage() {
   const performLogin = async (u, p) => {
     setErrorMessage('');
     if (!u.trim() || !p) {
-      setErrorMessage('Please enter both Employee ID and Password.');
+      setErrorMessage('Please enter both Employee ID / Email / Phone and Password.');
       return;
     }
 
@@ -105,10 +105,10 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input
-              label="Employee ID or Staff Email"
+              label="Employee ID, Email or Phone"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="e.g. ADM001 or CSH001"
+              placeholder="e.g. ADM001, staff@institute.com or 9876543210"
               required
               autoFocus
             />

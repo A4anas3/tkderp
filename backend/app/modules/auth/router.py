@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 import logging
+import re
 from typing import Optional
 import uuid
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
@@ -137,12 +138,23 @@ async def _resolve_user_id_from_request(request: Request, db: AsyncSession) -> O
     return None
 
 
+def _normalize_phone_identifier(identifier: str) -> Optional[str]:
+    """Normalize a phone-like login identifier to its last 10 digits, or return None."""
+    if not identifier or not re.fullmatch(r"[\d\s+\-().]+", identifier):
+        return None
+    digits = re.sub(r"\D", "", identifier)
+    if len(digits) < 10:
+        return None
+    return digits[-10:]
+
+
 @router.post("/login", response_model=TokenResponse)
 async def login(request: Request, login_data: LoginRequest, db: AsyncSession = Depends(get_db)):
-    # Support login with Employee ID or Email
+    # Support login with Employee ID, Email, or Phone
     client_ip = get_client_ip(request)
     identifier = login_data.username.strip()
-    username_key = identifier.lower() or "_empty"
+    normalized_phone = _normalize_phone_identifier(identifier)
+    username_key = normalized_phone or identifier.lower() or "_empty"
 
     try:
         await login_ip_limiter.check(client_ip)
@@ -155,20 +167,33 @@ async def login(request: Request, login_data: LoginRequest, db: AsyncSession = D
         )
         raise
 
-    stmt = select(User).where(
-        or_(
-            User.employee_id.ilike(identifier),
-            User.email.ilike(identifier)
+    lookup_clauses = [
+        User.employee_id.ilike(identifier),
+        User.email.ilike(identifier),
+    ]
+    if normalized_phone:
+        lookup_clauses.append(
+            User.phone.in_((normalized_phone, f"0{normalized_phone}", f"+91{normalized_phone}"))
         )
-    )
+
+    stmt = select(User).where(or_(*lookup_clauses))
     result = await db.execute(stmt)
-    user = result.scalar_one_or_none()
+    matched_users = result.scalars().all()
+    if len(matched_users) > 1:
+        logger.warning(
+            "Multiple users matched login identifier=%r (count=%d); treating as invalid credentials",
+            identifier,
+            len(matched_users),
+        )
+        user = None
+    else:
+        user = matched_users[0] if matched_users else None
 
     if not user or not verify_password(login_data.password, user.password_hash):
         await _record_failed_login(client_ip, identifier, username_key, reason="invalid_credentials")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect Employee ID / Email or Password"
+            detail="Incorrect Employee ID / Email / Phone or Password"
         )
 
     if user.status != "ACTIVE":
