@@ -3512,11 +3512,13 @@ export default function StudentDetailPage() {
                         >
                           <Eye className="w-3 h-3" /> Inspect
                         </button>
-                  </tbody>
-                </table>
+                      </div>
+                    </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
           {/* Audit Pagination Controls (Always visible) */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-3 border-t border-slate-200 text-xs">
