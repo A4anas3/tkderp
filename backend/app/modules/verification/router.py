@@ -1,4 +1,5 @@
 from datetime import date, datetime, timezone
+import logging
 import re
 import uuid
 from decimal import Decimal
@@ -31,12 +32,50 @@ from app.common.validators import normalize_mobile
 from app.core.rate_limit import RateLimiter
 
 router = APIRouter(tags=["Public Verification & ID Card"])
+logger = logging.getLogger("app.verification")
 
 # Rate limiter for public ID card lookup: 10 requests per minute per IP
 id_card_rate_limiter = RateLimiter(times=10, seconds=60, prefix="id_card")
 
 # Unified 404 message so attackers cannot distinguish unknown identifiers from inactive/expired students
 PUBLIC_NOT_FOUND_DETAIL = "No matching student or admission record found"
+
+
+def _has_control_chars(value: str) -> bool:
+    """Return True if value contains NUL (0x00), ASCII control chars (< 0x20), or DEL (0x7F)."""
+    return any(ord(ch) < 0x20 or ord(ch) == 0x7F for ch in value)
+
+
+def _extract_and_validate_identifier(
+    *raw_candidates: Optional[str],
+    empty_detail: str,
+    endpoint_label: str,
+) -> str:
+    """
+    Validate public lookup identifier inputs before any cache or DB lookup.
+    Rejects null bytes / ASCII control characters (ord < 0x20 or ord == 0x7F) with HTTP 400
+    without echoing user input, and logs only the rejected identifier length.
+    """
+    for candidate in raw_candidates:
+        if candidate is not None and _has_control_chars(candidate):
+            logger.warning(
+                "Rejected public %s lookup containing control characters (identifier_length=%d)",
+                endpoint_label,
+                len(candidate),
+            )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid identifier format.",
+            )
+
+    raw_ident = next((c for c in raw_candidates if c), None)
+    target_ident = raw_ident.strip() if raw_ident else ""
+    if not target_ident:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=empty_detail,
+        )
+    return target_ident
 
 
 async def _get_institute_profile(db: AsyncSession) -> dict:
@@ -408,11 +447,15 @@ async def verify_student_credential(
     if request:
         await id_card_rate_limiter(request)
 
-    target_ident = identifier or admission_no or student_id or phone or ident_param
-    if not target_ident or not target_ident.strip():
-        raise HTTPException(status_code=400, detail="Identifier cannot be empty")
-
-    target_ident = target_ident.strip()
+    target_ident = _extract_and_validate_identifier(
+        identifier,
+        admission_no,
+        student_id,
+        phone,
+        ident_param,
+        empty_detail="Identifier cannot be empty",
+        endpoint_label="verify",
+    )
     cache_key = make_cache_key("verify", "v2", target_ident.lower())
     hit, cached = await cache_get(cache_key)
     if hit:
@@ -576,12 +619,15 @@ async def get_public_id_card(
     If the student has no active subject, returns 404 with a clear message and leaks no student data.
     Equipped with rate limiting and returns only non-sensitive card-visible attributes (no phone numbers or fee/payment history; includes only total active due_balance).
     """
-    target_ident = (identifier or admission_no or student_id or phone or ident_param or "").strip()
-    if not target_ident:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Identifier (admission number or student ID) cannot be empty."
-        )
+    target_ident = _extract_and_validate_identifier(
+        identifier,
+        admission_no,
+        student_id,
+        phone,
+        ident_param,
+        empty_detail="Identifier (admission number or student ID) cannot be empty.",
+        endpoint_label="id-card",
+    )
 
     cache_key = make_cache_key("idcard", target_ident.lower())
     hit, cached = await cache_get(cache_key)
